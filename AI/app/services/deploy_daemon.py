@@ -143,6 +143,8 @@ class DeployServiceDaemon:
                         cwd=cwd,
                         env=env,
                         text=True,
+                        encoding='utf-8',
+                        errors='replace',  # 遇到无法解码的字符时用替换字符代替
                         bufsize=1
                     )
                     

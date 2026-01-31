@@ -318,7 +318,7 @@ def create_app():
         app.register_blueprint(ocr.ocr_bp, url_prefix='/model/ocr')
         app.register_blueprint(speech.speech_bp, url_prefix='/model/speech')
         app.register_blueprint(deploy.deploy_service_bp, url_prefix='/model/deploy_service')
-        app.register_blueprint(auto_label.auto_label_bp, url_prefix='/dataset')
+        app.register_blueprint(auto_label.auto_label_bp, url_prefix='/model/dataset')  # 与其他模块保持一致，使用 /model/ 前缀
         
         # 注册集群推理接口（使用不同的路由，不影响原有推理接口）
         from app.blueprints import cluster

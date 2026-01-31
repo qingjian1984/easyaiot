@@ -1,37 +1,14 @@
 <template>
   <div class="device-wrapper">
     <div class="device-tab">
-      <Tabs
-        :animated="{ inkBar: true, tabPane: true }"
-        :activeKey="state.activeKey"
-        :tabBarGutter="60"
-        @tabClick="handleTabClick"
-      >
-        <TabPane key="list" tab="数据集列表">
-          <DatasetList></DatasetList>
-        </TabPane>
-        <TabPane key="auto-label" tab="自动化标注">
-          <AutoLabel></AutoLabel>
-        </TabPane>
-      </Tabs>
+      <DatasetList></DatasetList>
     </div>
   </div>
 </template>
 <script lang="ts" setup name="noticeSetting">
-import {reactive} from 'vue';
-import {TabPane, Tabs} from 'ant-design-vue';
 import DatasetList from "@/views/dataset/components/DatasetList/index.vue";
-import AutoLabel from "@/views/dataset/components/AutoLabel/index.vue";
 
 defineOptions({name: 'DATASET'})
-
-const state = reactive({
-  activeKey: 'list'
-});
-
-const handleTabClick = (activeKey: string) => {
-  state.activeKey = activeKey;
-};
 </script>
 
 <style lang="less" scoped>

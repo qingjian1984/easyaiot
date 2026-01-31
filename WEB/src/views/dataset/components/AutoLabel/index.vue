@@ -15,8 +15,8 @@
             <template #icon><Icon icon="ant-design:robot-outlined" /></template>
             AI标注
           </Button>
-          <Button 
-            type="primary" 
+          <Button
+            type="primary"
             :disabled="!currentImageId"
             :loading="aiLabelLoading"
             @click="handleLabelCurrentImage"
@@ -236,8 +236,8 @@ import {
   getAutoLabelTask,
   labelSingleImage,
 } from '@/api/device/auto-label';
-import { 
-  getDatasetImagePage, 
+import {
+  getDatasetImagePage,
   getDatasetTagPage,
   createDatasetTag,
   updateDatasetTag,
@@ -265,7 +265,7 @@ const searchKeyword = ref('');
 const imageList = ref<any[]>([]);
 const filteredImageList = computed(() => {
   if (!searchKeyword.value) return imageList.value;
-  return imageList.value.filter(img => 
+  return imageList.value.filter(img =>
     img.name?.toLowerCase().includes(searchKeyword.value.toLowerCase())
   );
 });
@@ -324,27 +324,57 @@ const aiLabelForm = reactive({
 const currentTaskId = ref<number | undefined>(undefined);
 const taskProgressTimer = ref<any>(null);
 const taskProgress = ref<any>(null);
+const aiLabelLoading = ref(false);
 
 // 加载数据集图片
 const loadDatasetImages = async () => {
   if (!datasetId.value) return;
-  
+
   try {
     const res = await getDatasetImagePage({
       datasetId: datasetId.value,
       pageNo: 1,
-      pageSize: 1000,
+      pageSize: 100,  // 修改为100，符合后端限制
     });
-    
-    if (res.code === 0) {
-      imageList.value = (res.data?.list || []).map((img: any) => ({
-        ...img,
-        annotations: img.annotations ? (typeof img.annotations === 'string' ? JSON.parse(img.annotations) : img.annotations) : []
-      }));
+
+    console.log('图片接口返回:', res);
+
+    // 处理响应数据 - 与AnnotationTool保持一致
+    if (res && res.list) {
+      imageList.value = res.list.map((img: any) => {
+        // 处理标注数据
+        let annotations: any[] = [];
+        if (img.annotations) {
+          try {
+            annotations = typeof img.annotations === 'string'
+              ? JSON.parse(img.annotations)
+              : img.annotations;
+          } catch (e) {
+            annotations = [];
+          }
+        }
+
+        return {
+          id: img.id,
+          name: img.name,
+          path: img.path,  // 直接使用相对路径，浏览器会自动处理
+          annotations,
+          completed: img.completed || 0,
+          modificationCount: img.modificationCount || 0,
+          lastModified: img.lastModified ? new Date(img.lastModified) : null
+        };
+      });
+
+      console.log('处理后的图片列表:', imageList.value);
+      console.log('图片数量:', imageList.value.length);
+
       // 如果有图片，默认选中第一张
       if (imageList.value.length > 0 && !currentImageId.value) {
         selectImage(imageList.value[0]);
       }
+    } else {
+      console.warn('接口返回数据格式不正确:', res);
+      imageList.value = [];
     }
   } catch (error) {
     console.error('加载图片列表失败:', error);
@@ -355,22 +385,30 @@ const loadDatasetImages = async () => {
 // 加载标签列表
 const loadLabels = async () => {
   if (!datasetId.value) return;
-  
+
   try {
     const res = await getDatasetTagPage({
       datasetId: datasetId.value,
       pageNo: 1,
-      pageSize: 1000,
+      pageSize: 100,  // 修改为100，符合后端限制
     });
-    
-    if (res.code === 0) {
-      labels.value = (res.data?.list || []).map((tag: any) => ({
+
+    console.log('标签接口返回:', res);
+
+    // 处理响应数据 - 与AnnotationTool保持一致
+    if (res && res.list) {
+      labels.value = res.list.map((tag: any) => ({
         id: tag.id,
         name: tag.name,
         color: tag.color || '#52c41a',
         shortcut: tag.shortcut,
         description: tag.description
       }));
+
+      console.log('处理后的标签列表:', labels.value);
+    } else {
+      console.warn('标签接口返回数据格式不正确:', res);
+      labels.value = [];
     }
   } catch (error) {
     console.error('加载标签列表失败:', error);
@@ -423,40 +461,67 @@ const selectImage = (image: any) => {
 // 加载图片标注
 const loadImageAnnotations = async (imageId: number) => {
   try {
+    console.log('开始加载图片标注, imageId:', imageId);
     const res = await getDatasetImage({ id: imageId });
-    if (res.code === 0 && res.data) {
-      const image = res.data;
+    console.log('获取图片详情响应:', res);
+
+    // 处理响应 - 可能直接返回数据对象，也可能包装在 code/data 中
+    const image = res.data || res;
+
+    if (image && image.id) {
       let annotations: any[] = [];
       if (image.annotations) {
         try {
-          annotations = typeof image.annotations === 'string' 
-            ? JSON.parse(image.annotations) 
+          annotations = typeof image.annotations === 'string'
+            ? JSON.parse(image.annotations)
             : image.annotations;
+          console.log('解析后的标注数据:', annotations);
         } catch (e) {
           console.error('解析标注数据失败:', e);
           annotations = [];
         }
+      } else {
+        console.log('图片没有标注数据');
       }
-      
+
       // 将标注数据转换为显示格式
       currentAnnotations.value = annotations.map((ann: any, index: number) => {
-        const label = labels.value.find(l => l.name === ann.class || l.id === ann.labelId);
+        // 获取标签名称 - 兼容多种格式
+        const labelName = ann.label || ann.class || '';
+
+        // 查找标签对象 - 可能通过名称、shortcut或ID匹配
+        const labelObj = labels.value.find(l =>
+          l.name === labelName ||
+          String(l.shortcut) === labelName ||
+          l.id === ann.labelId
+        );
+
+        // 最终显示的标签名称
+        const displayLabel = labelObj?.name || labelName || '';
+
+        console.log(`标注 #${index + 1}: 原始label="${ann.label}", class="${ann.class}", 匹配到标签="${displayLabel}"`);
+
         return {
           id: ann.id || index,
-          label: ann.class || ann.label || '',
-          labelId: ann.labelId,
-          color: label?.color || '#52c41a',
+          label: displayLabel,  // 使用匹配到的标签名称
+          labelId: ann.labelId || labelObj?.id,
+          color: ann.color || labelObj?.color || '#52c41a',
           points: ann.points || [],
           confidence: ann.confidence,
           bbox: ann.bbox,
           type: ann.type || 'rectangle'
         };
       });
-      
+
+      console.log('转换后的标注数据:', currentAnnotations.value);
+
       // 绘制标注框
       nextTick(() => {
+        console.log('准备绘制标注框');
         drawAnnotations();
       });
+    } else {
+      console.warn('获取图片详情失败，响应格式不正确:', res);
     }
   } catch (error) {
     console.error('加载图片标注失败:', error);
@@ -487,19 +552,19 @@ const handleImageLoad = () => {
 // 初始化Canvas
 const initCanvas = () => {
   if (!annotationCanvas.value || !imageElement.value) return;
-  
+
   const canvas = annotationCanvas.value;
   const img = imageElement.value;
-  
+
   // 使用图片的实际显示尺寸
   const rect = img.getBoundingClientRect();
   canvas.width = rect.width;
   canvas.height = rect.height;
-  
+
   // 设置canvas样式以匹配图片位置
   canvas.style.width = `${rect.width}px`;
   canvas.style.height = `${rect.height}px`;
-  
+
   canvasContext = canvas.getContext('2d');
   if (canvasContext) {
     canvasContext.strokeStyle = '#52c41a';
@@ -511,52 +576,67 @@ const initCanvas = () => {
 // 绘制标注框
 const drawAnnotations = () => {
   if (!canvasContext || !annotationCanvas.value || !imageElement.value) return;
-  
+
   const ctx = canvasContext;
   const canvas = annotationCanvas.value;
   const img = imageElement.value;
-  
+
   // 清空画布
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  
+
   // 获取图片的实际显示尺寸和原始尺寸
   const displayWidth = img.offsetWidth || img.clientWidth;
   const displayHeight = img.offsetHeight || img.clientHeight;
   const naturalWidth = img.naturalWidth || displayWidth;
   const naturalHeight = img.naturalHeight || displayHeight;
-  
+
   // 计算缩放比例
   const scaleX = displayWidth / naturalWidth;
   const scaleY = displayHeight / naturalHeight;
-  
+
+  console.log('绘制标注框, 标注数量:', currentAnnotations.value.length);
+  console.log('图片尺寸 - 显示:', displayWidth, 'x', displayHeight, '原始:', naturalWidth, 'x', naturalHeight);
+
   // 绘制标注框
-  currentAnnotations.value.forEach((anno) => {
+  currentAnnotations.value.forEach((anno, index) => {
+    console.log(`绘制第${index + 1}个标注:`, anno);
+
     if (!anno.points || anno.points.length === 0) {
       // 如果有bbox，转换为points
       if (anno.bbox && Array.isArray(anno.bbox) && anno.bbox.length >= 4) {
         const [x1, y1, x2, y2] = anno.bbox;
         anno.points = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
       } else {
+        console.warn('标注没有points或bbox:', anno);
         return;
       }
     }
-    
+
     ctx.strokeStyle = anno.color || '#52c41a';
     ctx.lineWidth = 2;
     ctx.font = 'bold 12px Arial';
-    
+
     if (anno.type === 'rectangle' && anno.points.length >= 4) {
-      // 矩形框
-      const xs = anno.points.map((p: number[]) => p[0] * scaleX);
-      const ys = anno.points.map((p: number[]) => p[1] * scaleY);
+      // 矩形框 - 兼容两种格式: [{x, y}] 和 [[x, y]]
+      const xs = anno.points.map((p: any) => {
+        const x = (typeof p === 'object' && 'x' in p) ? p.x : p[0];
+        return x * naturalWidth * scaleX;
+      });
+      const ys = anno.points.map((p: any) => {
+        const y = (typeof p === 'object' && 'y' in p) ? p.y : p[1];
+        return y * naturalHeight * scaleY;
+      });
+
       const x = Math.min(...xs);
       const y = Math.min(...ys);
       const width = Math.max(...xs) - x;
       const height = Math.max(...ys) - y;
-      
+
+      console.log(`矩形框坐标: x=${x}, y=${y}, width=${width}, height=${height}`);
+
       // 绘制矩形框
       ctx.strokeRect(x, y, width, height);
-      
+
       // 绘制标签文字背景
       const labelText = anno.label || '';
       const confidenceText = anno.confidence ? ` (${(anno.confidence * 100).toFixed(1)}%)` : '';
@@ -564,44 +644,51 @@ const drawAnnotations = () => {
       const textMetrics = ctx.measureText(fullText);
       const textHeight = 16;
       const textPadding = 4;
-      
+
       ctx.fillStyle = anno.color || '#52c41a';
       ctx.fillRect(x, y - textHeight, textMetrics.width + textPadding * 2, textHeight);
-      
+
       // 绘制标签文字
       ctx.fillStyle = '#fff';
       ctx.fillText(fullText, x + textPadding, y - textHeight + 3);
     } else if (anno.points.length >= 2) {
-      // 多边形
+      // 多边形 - 兼容两种格式
       ctx.beginPath();
-      anno.points.forEach((point: number[], index: number) => {
-        const x = point[0] * scaleX;
-        const y = point[1] * scaleY;
+      anno.points.forEach((point: any, index: number) => {
+        const x = (typeof point === 'object' && 'x' in point) ? point.x : point[0];
+        const y = (typeof point === 'object' && 'y' in point) ? point.y : point[1];
+        const scaledX = x * naturalWidth * scaleX;
+        const scaledY = y * naturalHeight * scaleY;
+
         if (index === 0) {
-          ctx.moveTo(x, y);
+          ctx.moveTo(scaledX, scaledY);
         } else {
-          ctx.lineTo(x, y);
+          ctx.lineTo(scaledX, scaledY);
         }
       });
       ctx.closePath();
       ctx.stroke();
-      
+
       // 绘制标签文字
       if (anno.points.length > 0) {
         const firstPoint = anno.points[0];
-        const x = firstPoint[0] * scaleX;
-        const y = firstPoint[1] * scaleY;
+        const x = (typeof firstPoint === 'object' && 'x' in firstPoint) ? firstPoint.x : firstPoint[0];
+        const y = (typeof firstPoint === 'object' && 'y' in firstPoint) ? firstPoint.y : firstPoint[1];
+        const scaledX = x * naturalWidth * scaleX;
+        const scaledY = y * naturalHeight * scaleY;
         const labelText = anno.label || '';
         const textMetrics = ctx.measureText(labelText);
-        
+
         ctx.fillStyle = anno.color || '#52c41a';
-        ctx.fillRect(x, y - 16, textMetrics.width + 8, 16);
-        
+        ctx.fillRect(scaledX, scaledY - 16, textMetrics.width + 8, 16);
+
         ctx.fillStyle = '#fff';
-        ctx.fillText(labelText, x + 4, y - 13);
+        ctx.fillText(labelText, scaledX + 4, scaledY - 13);
       }
     }
   });
+
+  console.log('标注框绘制完成');
 };
 
 // Canvas鼠标事件
@@ -628,18 +715,18 @@ const handleAddLabel = async () => {
     createMessage.warning('请输入标签名称');
     return;
   }
-  
+
   if (!datasetId.value) {
     createMessage.warning('请先选择数据集');
     return;
   }
-  
+
   try {
     // 生成快捷键（使用下一个可用的数字）
-    const maxShortcut = labels.value.length > 0 
+    const maxShortcut = labels.value.length > 0
       ? Math.max(...labels.value.map(l => l.shortcut || 0))
       : 0;
-    
+
     const res = await createDatasetTag({
       datasetId: datasetId.value,
       name: newLabelName.value.trim(),
@@ -647,7 +734,7 @@ const handleAddLabel = async () => {
       shortcut: maxShortcut + 1,
       description: `标签: ${newLabelName.value.trim()}`
     });
-    
+
     if (res.code === 0) {
       createMessage.success('标签添加成功');
       newLabelName.value = '';
@@ -667,7 +754,7 @@ const handleEditLabel = async (label: any) => {
   editingLabel.value = { ...label };
   newLabelName.value = label.name;
   newLabelColor.value = label.color;
-  
+
   // 使用模态框或直接编辑
   // 这里简化处理，直接更新
   try {
@@ -679,7 +766,7 @@ const handleEditLabel = async (label: any) => {
       shortcut: label.shortcut,
       description: label.description || ''
     });
-    
+
     if (res.code === 0) {
       createMessage.success('标签更新成功');
       await loadLabels();
@@ -752,12 +839,12 @@ const handleSave = async () => {
     createMessage.warning('请先选择一张图片');
     return;
   }
-  
+
   if (!datasetId.value) {
     createMessage.warning('请先选择数据集');
     return;
   }
-  
+
   try {
     // 将标注数据转换为后端格式
     const annotationsData = currentAnnotations.value.map(ann => ({
@@ -769,7 +856,7 @@ const handleSave = async () => {
       type: ann.type || 'rectangle',
       auto: ann.auto || false
     }));
-    
+
     const res = await updateDatasetImage({
       id: currentImageId.value,
       datasetId: datasetId.value,
@@ -777,7 +864,7 @@ const handleSave = async () => {
       completed: currentAnnotations.value.length > 0 ? 1 : 0,
       modificationCount: (currentImage.value?.modificationCount || 0) + 1
     });
-    
+
     if (res.code === 0) {
       createMessage.success('保存成功');
       // 更新图片列表中的标注状态
@@ -786,12 +873,12 @@ const handleSave = async () => {
         imageList.value[imageIndex].annotations = annotationsData;
         imageList.value[imageIndex].completed = currentAnnotations.value.length > 0 ? 1 : 0;
       }
-      
+
       // 如果设置了自动切换，切换到下一张
       if (aiLabelForm.autoSwitchNext) {
         switchToNextImage();
       }
-      
+
       // 更新全局表单数据
       (window as any).__currentAILabelForm__ = aiLabelForm;
     } else {
@@ -860,66 +947,76 @@ const handleLabelCurrentImage = async () => {
     createMessage.warning('请先选择一张图片');
     return;
   }
-  
+
   if (!datasetId.value) {
     createMessage.warning('请先选择数据集');
     return;
   }
-  
-  // 如果没有选择模型，先打开AI标注模态框
+
+  // 如果没有选择模型，提示用户先配置
   if (!aiLabelForm.model_service_id) {
-    (window as any).__currentDatasetId__ = datasetId.value;
-    aiLabelModalRef.value?.loadAIServiceList();
-    aiLabelModalRef.value?.openModal();
+    createMessage.warning('请先点击"AI标注"按钮选择模型服务');
     return;
   }
-  
+
   try {
     aiLabelLoading.value = true;
+    console.log('开始单张图片AI标注:', {
+      datasetId: datasetId.value,
+      imageId: currentImageId.value,
+      model_service_id: aiLabelForm.model_service_id,
+      confidence_threshold: aiLabelForm.confidence_threshold,
+    });
+
     const res = await labelSingleImage(datasetId.value, currentImageId.value, {
       model_service_id: aiLabelForm.model_service_id,
       confidence_threshold: aiLabelForm.confidence_threshold,
     });
-    
-    if (res.code === 0) {
-      createMessage.success(`AI标注完成，检测到 ${res.data?.count || 0} 个对象`);
-      
+
+    console.log('单张图片AI标注响应:', res);
+
+    // 检查响应格式 - 可能直接返回数据，也可能包装在code/data中
+    const responseData = res.data || res;
+    const annotations = responseData.annotations || [];
+
+    if (annotations && Array.isArray(annotations)) {
+      createMessage.success(`AI标注完成，检测到 ${annotations.length} 个对象`);
+
       // 将AI标注结果转换为显示格式
-      if (res.data?.annotations && Array.isArray(res.data.annotations)) {
-        const aiAnnotations = res.data.annotations.map((ann: any, index: number) => {
-          const label = labels.value.find(l => l.name === ann.class);
-          return {
-            id: ann.id || Date.now() + index,
-            label: ann.class || '',
-            labelId: ann.labelId,
-            color: label?.color || '#52c41a',
-            points: ann.points || [],
-            confidence: ann.confidence,
-            bbox: ann.bbox,
-            type: ann.type || 'rectangle',
-            auto: true
-          };
-        });
-        
-        // 合并现有标注和AI标注（避免重复）
-        const existingLabels = currentAnnotations.value.map(a => a.label);
-        const newAnnotations = aiAnnotations.filter((a: any) => !existingLabels.includes(a.label));
-        currentAnnotations.value = [...currentAnnotations.value, ...newAnnotations];
-        
-        // 重新绘制标注框
-        nextTick(() => {
-          drawAnnotations();
-        });
-      }
-      
+      const aiAnnotations = annotations.map((ann: any, index: number) => {
+        const label = labels.value.find(l => l.name === ann.class);
+        return {
+          id: ann.id || Date.now() + index,
+          label: ann.class || '',
+          labelId: ann.labelId,
+          color: label?.color || '#52c41a',
+          points: ann.points || [],
+          confidence: ann.confidence,
+          bbox: ann.bbox,
+          type: ann.type || 'rectangle',
+          auto: true
+        };
+      });
+
+      // 替换当前标注（不是合并，而是完全替换为AI标注结果）
+      currentAnnotations.value = aiAnnotations;
+
+      // 重新绘制标注框
+      nextTick(() => {
+        drawAnnotations();
+      });
+
+      // 自动保存标注结果
+      await handleSave();
+
       // 刷新图片列表
       await loadDatasetImages();
     } else {
-      createMessage.error(res.msg || 'AI标注失败');
+      createMessage.error(res.msg || 'AI标注失败：未返回标注数据');
     }
   } catch (error) {
     console.error('AI标注失败:', error);
-    createMessage.error('AI标注失败');
+    createMessage.error('AI标注失败: ' + ((error as any)?.message || '未知错误'));
   } finally {
     aiLabelLoading.value = false;
   }
@@ -927,32 +1024,90 @@ const handleLabelCurrentImage = async () => {
 
 // 监听任务进度
 const startTaskProgressMonitoring = (taskId: number) => {
+  console.log('开始监听任务进度, taskId:', taskId);
+
   if (taskProgressTimer.value) {
     clearInterval(taskProgressTimer.value);
   }
-  
+
   taskProgressTimer.value = setInterval(async () => {
     try {
+      console.log('轮询任务状态, taskId:', taskId);
       const res = await getAutoLabelTask(datasetId.value!, taskId);
-      if (res.code === 0) {
-        taskProgress.value = res.data;
-        
+      console.log('任务状态响应:', res);
+
+      // 处理响应 - 可能直接返回数据对象，也可能包装在 code/data 中
+      const taskData = res.data || res;
+
+      if (taskData && taskData.id) {
+        taskProgress.value = taskData;
+        console.log('当前任务状态:', taskData.status, '进度:', taskData.processed_images, '/', taskData.total_images);
+
         // 如果任务完成，停止监听
-        if (res.data.status === 'COMPLETED' || res.data.status === 'FAILED') {
+        if (taskData.status === 'COMPLETED' || taskData.status === 'FAILED') {
+          console.log('✅ 任务完成，状态:', taskData.status);
+          console.log('当前图片ID:', currentImageId.value);
+
           if (taskProgressTimer.value) {
             clearInterval(taskProgressTimer.value);
             taskProgressTimer.value = null;
           }
-          
-          if (res.data.status === 'COMPLETED') {
-            createMessage.success(`标注任务完成！成功: ${res.data.success_count}, 失败: ${res.data.failed_count}`);
+
+          if (taskData.status === 'COMPLETED') {
+            createMessage.success(`标注任务完成！成功: ${taskData.success_count}, 失败: ${taskData.failed_count}`);
           } else {
-            createMessage.error(`标注任务失败: ${res.data.error_message || '未知错误'}`);
+            createMessage.error(`标注任务失败: ${taskData.error_message || '未知错误'}`);
           }
-          
+
           // 刷新图片列表
+          console.log('开始刷新图片列表...');
           await loadDatasetImages();
+          console.log('图片列表刷新完成');
+
+          const annotatedImages = imageList.value.filter(img => img.completed === 1);
+          const unannotatedImages = imageList.value.filter(img => img.completed === 0);
+
+          console.log('=== 图片标注统计 ===');
+          console.log('总图片数:', imageList.value.length);
+          console.log('已标注图片数:', annotatedImages.length);
+          console.log('未标注图片数:', unannotatedImages.length);
+          console.log('已标注的图片:', annotatedImages.map(img => ({
+            id: img.id,
+            name: img.name,
+            annotationCount: img.annotations?.length || 0
+          })));
+          console.log('未标注的图片:', unannotatedImages.map(img => ({
+            id: img.id,
+            name: img.name
+          })));
+          console.log('==================');
+
+          // 重新加载当前图片的标注数据
+          if (currentImageId.value) {
+            console.log('开始重新加载当前图片标注, imageId:', currentImageId.value);
+            await loadImageAnnotations(currentImageId.value);
+            console.log('当前图片标注加载完成');
+
+            // 如果当前图片没有标注，自动切换到第一张有标注的图片
+            if (currentAnnotations.value.length === 0) {
+              console.log('当前图片没有标注，查找第一张有标注的图片...');
+              const firstAnnotatedImage = imageList.value.find(img => img.completed === 1);
+              if (firstAnnotatedImage) {
+                console.log('找到有标注的图片:', firstAnnotatedImage.id, firstAnnotatedImage.name);
+                selectImage(firstAnnotatedImage);
+              } else {
+                console.warn('⚠️ 警告：任务显示已完成，但没有找到任何已标注的图片！');
+                console.warn('这可能意味着：');
+                console.warn('1. Python后端AI标注没有正确保存数据到数据库');
+                console.warn('2. 或者标注数据保存到了其他数据集');
+              }
+            }
+          } else {
+            console.warn('当前没有选中的图片');
+          }
         }
+      } else {
+        console.warn('任务状态响应格式不正确:', res);
       }
     } catch (error) {
       console.error('获取任务进度失败:', error);
@@ -994,12 +1149,12 @@ onMounted(() => {
     loadDatasetImages();
     loadLabels();
   }
-  
+
   // 恢复AI标注表单数据
   if ((window as any).__currentAILabelForm__) {
     Object.assign(aiLabelForm, (window as any).__currentAILabelForm__);
   }
-  
+
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize);
 });
@@ -1011,7 +1166,7 @@ onUnmounted(() => {
     clearInterval(taskProgressTimer.value);
     taskProgressTimer.value = null;
   }
-  
+
   // 移除事件监听
   window.removeEventListener('resize', handleResize);
 });
@@ -1050,7 +1205,7 @@ onUnmounted(() => {
       background: #1890ff;
       border-color: #1890ff;
       color: #fff;
-      
+
       &:hover {
         background: #40a9ff;
         border-color: #40a9ff;
@@ -1098,48 +1253,48 @@ onUnmounted(() => {
     overflow-y: auto;
     padding: 8px 0;
 
-      .image-item {
-        display: flex;
-        align-items: center;
-        padding: 8px 16px;
-        cursor: pointer;
-        transition: all 0.2s;
-        position: relative;
-        border-left: 3px solid transparent;
+    .image-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      border-left: 3px solid transparent;
 
-        &:hover {
-          background: #f5f5f5;
-        }
+      &:hover {
+        background: #f5f5f5;
+      }
 
-        &.active {
-          background: #e6f7ff;
-          color: #1890ff;
-          font-weight: 500;
-          border-left-color: #1890ff;
-          
-          .image-checkbox {
-            :deep(.ant-checkbox-checked .ant-checkbox-inner) {
-              background-color: #1890ff;
-              border-color: #1890ff;
-            }
+      &.active {
+        background: #e6f7ff;
+        color: #1890ff;
+        font-weight: 500;
+        border-left-color: #1890ff;
+
+        .image-checkbox {
+          :deep(.ant-checkbox-checked .ant-checkbox-inner) {
+            background-color: #1890ff;
+            border-color: #1890ff;
           }
         }
+      }
 
-        &.selected {
-          background: #f0f0f0;
-        }
+      &.selected {
+        background: #f0f0f0;
+      }
 
-        &.annotated {
-          .image-name::after {
-            content: ' ✓';
-            color: #52c41a;
-            font-weight: bold;
-          }
+      &.annotated {
+        .image-name::after {
+          content: ' ✓';
+          color: #52c41a;
+          font-weight: bold;
         }
+      }
 
       .image-checkbox {
         margin-right: 8px;
-        
+
         :deep(.ant-checkbox-inner) {
           border-radius: 4px;
         }

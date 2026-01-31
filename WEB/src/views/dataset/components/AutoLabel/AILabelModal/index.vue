@@ -13,7 +13,7 @@
         AI自动标注设置
       </span>
     </template>
-    
+
     <div class="modal-content">
       <Form
         :model="form"
@@ -37,14 +37,14 @@
               :key="model.id"
               :value="model.id"
             >
-              {{ model.name || `模型 ${model.id}` }}
+              {{ model.name }}
             </SelectOption>
           </Select>
           <div class="form-hint">
             请先在设置中安装YOLO11并下载或上传模型
           </div>
         </FormItem>
-        
+
         <!-- 置信度阈值 -->
         <FormItem>
           <div class="form-label">置信度阈值:</div>
@@ -62,7 +62,7 @@
             置信度越高,检测越严格,框越少
           </div>
         </FormItem>
-        
+
         <!-- 自动切换选项 -->
         <FormItem>
           <Checkbox v-model:checked="form.autoSwitchNext">
@@ -71,7 +71,7 @@
         </FormItem>
       </Form>
     </div>
-    
+
     <template #footer>
       <div class="modal-footer-custom">
         <Button class="start-ai-label-btn" @click="handleStart" :loading="loading">
@@ -93,7 +93,7 @@ import { BasicModal, useModal } from '@/components/Modal';
 import { Icon } from '@/components/Icon';
 import { Form, FormItem, Select, SelectOption, Slider, Checkbox, Button } from 'ant-design-vue';
 import { useMessage } from '@/hooks/web/useMessage';
-import { startAutoLabel } from '@/api/device/auto-label';
+import { startAutoLabel, getAIServiceList } from '@/api/device/auto-label';
 
 defineOptions({ name: 'AILabelModal' });
 
@@ -113,22 +113,54 @@ const form = reactive({
 
 const [register, { openModal, closeModal }] = useModal();
 
-// 加载小样本模型列表（暂时不调用后端，接口还没有）
+// 加载AI服务列表（已部署的模型服务）
 async function loadFewShotModelList() {
   try {
     modelLoading.value = true;
-    // TODO: 等后端接口准备好后，调用接口加载小样本模型列表
-    // const response = await getFewShotModelList();
-    // const res = response?.data || response;
-    // if (res && res.code === 0) {
-    //   fewShotModelList.value = res.data?.list || res.data || [];
-    // }
-    
-    // 暂时使用空列表
-    fewShotModelList.value = [];
+    // 调用后端接口获取AI服务列表
+    const response = await getAIServiceList({ status: 'running' });
+
+    console.log('AI服务列表原始响应:', response);
+    console.log('response.data:', response?.data);
+    console.log('response.data.data:', response?.data?.data);
+
+    // 处理响应数据
+    let serviceList = [];
+
+    // response是完整的axios响应对象
+    // response.data 是后端返回的数据: { code: 0, data: [...], msg: "success", total: 1 }
+    const backendData = response?.data;
+
+    if (backendData?.code === 0 && backendData?.data) {
+      if (Array.isArray(backendData.data)) {
+        // 格式: { code: 0, data: [...] }
+        serviceList = backendData.data;
+      } else if (backendData.data.list && Array.isArray(backendData.data.list)) {
+        // 格式: { code: 0, data: { list: [...] } }
+        serviceList = backendData.data.list;
+      }
+    }
+
+    console.log('解析后的服务列表:', serviceList);
+    console.log('服务列表长度:', serviceList.length);
+
+    // 映射为下拉选项格式
+    fewShotModelList.value = serviceList.map((service: any) => ({
+      id: service.id,
+      name: service.model_name || service.service_name || `模型服务 ${service.id}`,
+      model_id: service.model_id,
+      model_name: service.model_name,
+      service_name: service.service_name,
+      format: service.format,
+      status: service.status
+    }));
+
+    console.log('最终的模型列表:', fewShotModelList.value);
+
   } catch (error: any) {
-    console.error('加载小样本模型列表失败:', error);
-    createMessage.error('加载小样本模型列表失败');
+    console.error('加载AI服务列表失败:', error);
+    createMessage.error('加载AI服务列表失败');
+    fewShotModelList.value = [];
   } finally {
     modelLoading.value = false;
   }
@@ -142,24 +174,36 @@ const filterModelOption = (input: string, option: any) => {
 // 开始AI标注
 async function handleStart() {
   if (!form.few_shot_model_id) {
-    createMessage.warning('请选择小样本模型');
+    createMessage.warning('请选择AI服务');
     return;
   }
-  
+
   const datasetId = (window as any).__currentDatasetId__;
   if (!datasetId) {
     createMessage.warning('请先选择数据集');
     return;
   }
-  
+
   try {
     loading.value = true;
     const res = await startAutoLabel(datasetId, {
-      few_shot_model_id: form.few_shot_model_id,
+      model_service_id: form.few_shot_model_id,  // 修改参数名
       confidence_threshold: form.confidence_threshold,
     });
-    
-    if (res.code === 0) {
+
+    console.log('AI标注接口返回:', res);
+
+    // axios 拦截器已经处理过响应，直接返回 data 部分
+    if (res && (res.task_id || res.data?.task_id)) {
+      const taskId = res.task_id || res.data?.task_id;
+      createMessage.success('AI自动标注任务已启动');
+      closeModal();
+      emits('success', {
+        taskId: taskId,
+        form: { ...form }
+      });
+    } else if (res && res.code === 0) {
+      // 兼容旧格式
       createMessage.success('AI自动标注任务已启动');
       closeModal();
       emits('success', {
@@ -167,11 +211,13 @@ async function handleStart() {
         form: { ...form }
       });
     } else {
-      createMessage.error(res.msg || '启动AI自动标注失败');
+      createMessage.error(res?.msg || '启动AI自动标注失败');
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('启动AI自动标注失败:', error);
-    createMessage.error('启动AI自动标注失败');
+    // 显示详细的错误信息
+    const errorMsg = error?.response?.data?.msg || error?.message || '启动AI自动标注失败';
+    createMessage.error(errorMsg);
   } finally {
     loading.value = false;
   }
@@ -200,10 +246,10 @@ function handleCancel() {
 <style lang="less" scoped>
 .modal-content {
   padding: 24px;
-  
+
   :deep(.ant-form-item) {
     margin-bottom: 24px;
-    
+
     &:last-child {
       margin-bottom: 0;
     }
@@ -220,25 +266,25 @@ function handleCancel() {
 
 .model-select {
   width: 100%;
-  
+
   :deep(.ant-select-selector) {
     height: 32px;
     border-radius: 4px;
     border: 1px solid #d9d9d9;
-    
+
     &:hover {
       border-color: #40a9ff;
     }
-    
+
     .ant-select-selection-item {
       line-height: 30px;
     }
-    
+
     .ant-select-selection-placeholder {
       line-height: 30px;
     }
   }
-  
+
   :deep(.ant-select-focused .ant-select-selector) {
     border-color: #40a9ff;
     box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
@@ -257,42 +303,42 @@ function handleCancel() {
   padding-right: 50px;
   padding-top: 8px;
   padding-bottom: 8px;
-  
+
   .confidence-slider {
     :deep(.ant-slider) {
       margin: 0;
-      
+
       .ant-slider-rail {
         height: 4px;
         background-color: #f0f0f0;
         border-radius: 2px;
       }
-      
+
       .ant-slider-track {
         height: 4px;
         background-color: #1890ff;
         border-radius: 2px;
       }
-      
+
       .ant-slider-handle {
         width: 14px;
         height: 14px;
         border: 2px solid #1890ff;
         background-color: #fff;
         margin-top: -5px;
-        
+
         &:focus {
           border-color: #1890ff;
           box-shadow: 0 0 0 5px rgba(24, 144, 255, 0.12);
         }
-        
+
         &:hover {
           border-color: #40a9ff;
         }
       }
     }
   }
-  
+
   .confidence-value {
     position: absolute;
     top: 8px;
@@ -310,20 +356,20 @@ function handleCancel() {
   font-size: 14px;
   color: #333;
   line-height: 22px;
-  
+
   .ant-checkbox {
     .ant-checkbox-inner {
       width: 16px;
       height: 16px;
       border-radius: 2px;
       border-color: #d9d9d9;
-      
+
       &:after {
         width: 5.71428571px;
         height: 9.14285714px;
       }
     }
-    
+
     &.ant-checkbox-checked .ant-checkbox-inner {
       background-color: #1890ff;
       border-color: #1890ff;
@@ -335,7 +381,7 @@ function handleCancel() {
   display: flex;
   align-items: center;
   gap: 8px;
-  
+
   .title-icon {
     font-size: 18px;
     color: #333;
@@ -348,7 +394,7 @@ function handleCancel() {
   gap: 12px;
   padding: 16px 24px;
   border-top: 1px solid #e8e8e8;
-  
+
   .start-ai-label-btn {
     background: #1890ff !important;
     border-color: #1890ff !important;
@@ -360,25 +406,25 @@ function handleCancel() {
     display: flex;
     align-items: center;
     gap: 6px;
-    
+
     :deep(.anticon) {
       color: #fff;
       font-size: 14px;
     }
-    
+
     &:hover,
     &:focus {
       background: #40a9ff !important;
       border-color: #40a9ff !important;
       color: #fff !important;
     }
-    
+
     &:active {
       background: #1890ff !important;
       border-color: #1890ff !important;
     }
   }
-  
+
   .cancel-btn {
     background: #fff !important;
     border-color: #d9d9d9 !important;
@@ -390,18 +436,18 @@ function handleCancel() {
     display: flex;
     align-items: center;
     gap: 6px;
-    
+
     :deep(.anticon) {
       color: #666;
       font-size: 14px;
     }
-    
+
     &:hover,
     &:focus {
       background: #fff !important;
       border-color: #40a9ff !important;
       color: #40a9ff !important;
-      
+
       :deep(.anticon) {
         color: #40a9ff;
       }
