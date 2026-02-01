@@ -1,8 +1,9 @@
-package com.basiclab.iot.sink.service.product;
+package com.basiclab.iot.sink.service.product.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.basiclab.iot.sink.dal.dataobject.ProductScriptDO;
 import com.basiclab.iot.sink.dal.mapper.ProductScriptMapper;
+import com.basiclab.iot.sink.service.product.ProductScriptService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 

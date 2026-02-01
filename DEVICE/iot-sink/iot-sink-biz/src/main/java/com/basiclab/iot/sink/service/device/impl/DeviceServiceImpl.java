@@ -1,11 +1,11 @@
-package com.basiclab.iot.sink.service.device;
+package com.basiclab.iot.sink.service.device.impl;
 
-import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.lang.Assert;
 import com.basiclab.iot.common.core.KeyValue;
 import com.basiclab.iot.sink.biz.dto.IotDeviceRespDTO;
 import com.basiclab.iot.sink.dal.dataobject.DeviceDO;
 import com.basiclab.iot.sink.dal.mapper.DeviceMapper;
+import com.basiclab.iot.sink.service.device.DeviceService;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import lombok.extern.slf4j.Slf4j;

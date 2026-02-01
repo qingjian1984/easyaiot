@@ -1,4 +1,4 @@
-package com.basiclab.iot.sink.auth.service;
+package com.basiclab.iot.sink.auth.service.impl;
 
 import com.basiclab.iot.device.RemoteDeviceService;
 import com.basiclab.iot.device.RemoteProductService;
@@ -9,6 +9,7 @@ import com.basiclab.iot.common.domain.R;
 import com.basiclab.iot.common.utils.SignUtils;
 import com.basiclab.iot.sink.auth.dto.RegisterResp;
 import com.basiclab.iot.sink.auth.enums.SignMethod;
+import com.basiclab.iot.sink.auth.service.DeviceRegisterService;
 import com.basiclab.iot.sink.config.IotGatewayProperties;
 import com.basiclab.iot.sink.dal.dataobject.AppDO;
 import com.basiclab.iot.sink.dal.mapper.AppMapper;
@@ -22,7 +23,6 @@ import javax.annotation.Resource;
 import java.time.LocalDateTime;
 
 import static com.basiclab.iot.common.exception.util.ServiceExceptionUtil.exception;
-import static com.basiclab.iot.sink.enums.ErrorCodeConstants.DEVICE_AUTH_FAIL;
 
 /**
  * DeviceRegisterServiceImpl
