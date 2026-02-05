@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 514UTGdllHDJRrPq5M7gcBVdjchVy357G3BLPSdpoKXI4sxJcglUiGeeTGaouZi
+\restrict 7HI19Np2RPk6WPbb2ziOBmHQhbYaqmJBtxgChBYbxXDzugK9MV5CSndvgp9KH3L
 
 -- Dumped from database version 18.1 (Debian 18.1-1.pgdg13+2)
 -- Dumped by pg_dump version 18.1 (Debian 18.1-1.pgdg13+2)
@@ -27,10 +27,10 @@ DROP DATABASE IF EXISTS "iot-video20";
 CREATE DATABASE "iot-video20" WITH TEMPLATE = template0 ENCODING = 'UTF8' LOCALE_PROVIDER = libc LOCALE = 'en_US.utf8';
 
 
-\unrestrict 514UTGdllHDJRrPq5M7gcBVdjchVy357G3BLPSdpoKXI4sxJcglUiGeeTGaouZi
+\unrestrict 7HI19Np2RPk6WPbb2ziOBmHQhbYaqmJBtxgChBYbxXDzugK9MV5CSndvgp9KH3L
 \encoding SQL_ASCII
 \connect -reuse-previous=on "dbname='iot-video20'"
-\restrict 514UTGdllHDJRrPq5M7gcBVdjchVy357G3BLPSdpoKXI4sxJcglUiGeeTGaouZi
+\restrict 7HI19Np2RPk6WPbb2ziOBmHQhbYaqmJBtxgChBYbxXDzugK9MV5CSndvgp9KH3L
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -279,11 +279,6 @@ CREATE TABLE public.algorithm_task (
     space_id integer,
     cron_expression character varying(255),
     frame_skip integer NOT NULL,
-    llm_enabled boolean,
-    llm_model_id integer,
-    llm_frame_interval integer,
-    regulation_rule_ids text,
-    regulation_rules_content text,
     status smallint NOT NULL,
     is_enabled boolean NOT NULL,
     run_status character varying(20) NOT NULL,
@@ -445,41 +440,6 @@ COMMENT ON COLUMN public.algorithm_task.cron_expression IS 'Cron表达式（仅�
 --
 
 COMMENT ON COLUMN public.algorithm_task.frame_skip IS '抽帧间隔（每N帧抓一次，仅抓拍算法任务）';
-
-
---
--- Name: COLUMN algorithm_task.llm_enabled; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.algorithm_task.llm_enabled IS '是否启用大模型实时分析';
-
-
---
--- Name: COLUMN algorithm_task.llm_model_id; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.algorithm_task.llm_model_id IS '关联的大模型ID';
-
-
---
--- Name: COLUMN algorithm_task.llm_frame_interval; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.algorithm_task.llm_frame_interval IS '大模型分析频率（每N帧分析一次，如25抽1帧）';
-
-
---
--- Name: COLUMN algorithm_task.regulation_rule_ids; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.algorithm_task.regulation_rule_ids IS '关联的监管规则ID列表（JSON格式，如[1,2,3]）';
-
-
---
--- Name: COLUMN algorithm_task.regulation_rules_content; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.algorithm_task.regulation_rules_content IS '监管规则内容（从监管规则详情列表获取，用分号拼接，用于大模型分析）';
 
 
 --
@@ -805,6 +765,8 @@ CREATE TABLE public.device (
     source text NOT NULL,
     rtmp_stream text NOT NULL,
     http_stream text NOT NULL,
+    ai_rtmp_stream text,
+    ai_http_stream text,
     stream smallint,
     ip character varying(45),
     port smallint,
@@ -827,6 +789,20 @@ CREATE TABLE public.device (
     created_at timestamp without time zone,
     updated_at timestamp without time zone
 );
+
+
+--
+-- Name: COLUMN device.ai_rtmp_stream; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.device.ai_rtmp_stream IS 'AI推流地址（用于算法任务）';
+
+
+--
+-- Name: COLUMN device.ai_http_stream; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.device.ai_http_stream IS 'AI HTTP地址（用于算法任务）';
 
 
 --
@@ -3421,7 +3397,7 @@ COPY public.algorithm_model_service (id, task_id, service_name, service_url, ser
 -- Data for Name: algorithm_task; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.algorithm_task (id, task_name, task_code, task_type, model_ids, model_names, extract_interval, rtmp_input_url, rtmp_output_url, tracking_enabled, tracking_similarity_threshold, tracking_max_age, tracking_smooth_alpha, alert_event_enabled, alert_notification_enabled, alert_notification_config, alarm_suppress_time, last_notify_time, space_id, cron_expression, frame_skip, llm_enabled, llm_model_id, llm_frame_interval, regulation_rule_ids, regulation_rules_content, status, is_enabled, run_status, exception_reason, service_server_ip, service_port, service_process_id, service_last_heartbeat, service_log_path, total_frames, total_detections, total_captures, last_process_time, last_success_time, last_capture_time, description, defense_mode, defense_schedule, created_at, updated_at) FROM stdin;
+COPY public.algorithm_task (id, task_name, task_code, task_type, model_ids, model_names, extract_interval, rtmp_input_url, rtmp_output_url, tracking_enabled, tracking_similarity_threshold, tracking_max_age, tracking_smooth_alpha, alert_event_enabled, alert_notification_enabled, alert_notification_config, alarm_suppress_time, last_notify_time, space_id, cron_expression, frame_skip, status, is_enabled, run_status, exception_reason, service_server_ip, service_port, service_process_id, service_last_heartbeat, service_log_path, total_frames, total_detections, total_captures, last_process_time, last_success_time, last_capture_time, description, defense_mode, defense_schedule, created_at, updated_at) FROM stdin;
 \.
 
 
@@ -3430,6 +3406,7 @@ COPY public.algorithm_task (id, task_name, task_code, task_type, model_ids, mode
 --
 
 COPY public.algorithm_task_device (task_id, device_id, created_at) FROM stdin;
+6	1770324865416716433	2026-02-05 20:59:17.98074
 \.
 
 
@@ -3445,7 +3422,7 @@ COPY public.detection_region (id, task_id, region_name, region_type, points, ima
 -- Data for Name: device; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.device (id, name, source, rtmp_stream, http_stream, stream, ip, port, username, password, mac, manufacturer, model, firmware_version, serial_number, hardware_id, support_move, support_zoom, nvr_id, nvr_channel, enable_forward, auto_snap_enabled, directory_id, cover_image_path, created_at, updated_at) FROM stdin;
+COPY public.device (id, name, source, rtmp_stream, http_stream, ai_rtmp_stream, ai_http_stream, stream, ip, port, username, password, mac, manufacturer, model, firmware_version, serial_number, hardware_id, support_move, support_zoom, nvr_id, nvr_channel, enable_forward, auto_snap_enabled, directory_id, cover_image_path, created_at, updated_at) FROM stdin;
 \.
 
 
@@ -3534,6 +3511,7 @@ COPY public.pusher (id, pusher_name, pusher_code, video_stream_enabled, video_st
 --
 
 COPY public.record_space (id, space_name, space_code, bucket_name, save_mode, save_time, description, device_id, created_at, updated_at) FROM stdin;
+1	大门设备	RECORD_59E49615	record-space	0	0	设备 1770324865416716433 的自动创建监控录像空间	1770324865416716433	2026-02-05 20:54:25.457386	2026-02-05 20:54:25.457388
 \.
 
 
@@ -3566,6 +3544,7 @@ COPY public.regulation_rule_detail (id, regulation_rule_id, rule_name, rule_desc
 --
 
 COPY public.snap_space (id, space_name, space_code, bucket_name, save_mode, save_time, description, device_id, created_at, updated_at) FROM stdin;
+1	大门设备	SPACE_D7233361	snap-space	0	0	设备 1770324865416716433 的自动创建抓拍空间	1770324865416716433	2026-02-05 20:54:25.440241	2026-02-05 20:54:25.440242
 \.
 
 
@@ -3590,6 +3569,7 @@ COPY public.sorter (id, sorter_name, sorter_code, sorter_type, sort_order, descr
 --
 
 COPY public.stream_forward_task (id, task_name, task_code, output_format, output_quality, output_bitrate, status, is_enabled, exception_reason, service_server_ip, service_port, service_process_id, service_last_heartbeat, service_log_path, total_streams, last_process_time, last_success_time, description, created_at, updated_at) FROM stdin;
+1	大门设备-推流转发	STREAM_FORWARD_87D0E23D	rtmp	high	\N	0	f	所有缓流器线程已退出	192.168.43.143	6000	713	2026-02-05 20:56:57.086987	/app/logs/stream_forward_task_1	1	\N	2026-02-05 20:54:25.493647	为设备 大门设备 自动创建的推流转发任务	2026-02-05 20:54:25.468493	2026-02-05 20:56:58.04288
 \.
 
 
@@ -3598,6 +3578,7 @@ COPY public.stream_forward_task (id, task_name, task_code, output_format, output
 --
 
 COPY public.stream_forward_task_device (stream_forward_task_id, device_id, created_at) FROM stdin;
+1	1770324865416716433	2026-02-05 20:54:25.47242
 \.
 
 
@@ -3719,7 +3700,7 @@ SELECT pg_catalog.setval('public.pusher_id_seq', 1, false);
 -- Name: record_space_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.record_space_id_seq', 1, false);
+SELECT pg_catalog.setval('public.record_space_id_seq', 1, true);
 
 
 --
@@ -3747,7 +3728,7 @@ SELECT pg_catalog.setval('public.regulation_rule_id_seq', 1, false);
 -- Name: snap_space_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.snap_space_id_seq', 1, false);
+SELECT pg_catalog.setval('public.snap_space_id_seq', 1, true);
 
 
 --
@@ -3768,7 +3749,7 @@ SELECT pg_catalog.setval('public.sorter_id_seq', 1, false);
 -- Name: stream_forward_task_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.stream_forward_task_id_seq', 1, false);
+SELECT pg_catalog.setval('public.stream_forward_task_id_seq', 1, true);
 
 
 --
@@ -4099,38 +4080,6 @@ ALTER TABLE ONLY public.tracking_target
 
 
 --
--- Name: algorithm_model_service algorithm_model_service_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.algorithm_model_service
-    ADD CONSTRAINT algorithm_model_service_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.algorithm_task(id) ON DELETE CASCADE;
-
-
---
--- Name: algorithm_task_device algorithm_task_device_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.algorithm_task_device
-    ADD CONSTRAINT algorithm_task_device_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.device(id) ON DELETE CASCADE;
-
-
---
--- Name: algorithm_task_device algorithm_task_device_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.algorithm_task_device
-    ADD CONSTRAINT algorithm_task_device_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.algorithm_task(id) ON DELETE CASCADE;
-
-
---
--- Name: algorithm_task algorithm_task_llm_model_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.algorithm_task
-    ADD CONSTRAINT algorithm_task_llm_model_id_fkey FOREIGN KEY (llm_model_id) REFERENCES public.llm_config(id) ON DELETE SET NULL;
-
-
---
 -- Name: algorithm_task algorithm_task_space_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4144,14 +4093,6 @@ ALTER TABLE ONLY public.algorithm_task
 
 ALTER TABLE ONLY public.detection_region
     ADD CONSTRAINT detection_region_image_id_fkey FOREIGN KEY (image_id) REFERENCES public.image(id) ON DELETE SET NULL;
-
-
---
--- Name: device_detection_region device_detection_region_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.device_detection_region
-    ADD CONSTRAINT device_detection_region_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.device(id) ON DELETE CASCADE;
 
 
 --
@@ -4187,35 +4128,11 @@ ALTER TABLE ONLY public.device
 
 
 --
--- Name: device_storage_config device_storage_config_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.device_storage_config
-    ADD CONSTRAINT device_storage_config_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.device(id) ON DELETE CASCADE;
-
-
---
--- Name: image image_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.image
-    ADD CONSTRAINT image_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.device(id);
-
-
---
 -- Name: llm_inference_record llm_inference_record_llm_model_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.llm_inference_record
     ADD CONSTRAINT llm_inference_record_llm_model_id_fkey FOREIGN KEY (llm_model_id) REFERENCES public.llm_config(id) ON DELETE SET NULL;
-
-
---
--- Name: record_space record_space_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.record_space
-    ADD CONSTRAINT record_space_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.device(id) ON DELETE SET NULL;
 
 
 --
@@ -4235,22 +4152,6 @@ ALTER TABLE ONLY public.regulation_rule_detail
 
 
 --
--- Name: snap_space snap_space_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.snap_space
-    ADD CONSTRAINT snap_space_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.device(id) ON DELETE SET NULL;
-
-
---
--- Name: snap_task snap_task_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.snap_task
-    ADD CONSTRAINT snap_task_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.device(id) ON DELETE CASCADE;
-
-
---
 -- Name: snap_task snap_task_pusher_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4264,14 +4165,6 @@ ALTER TABLE ONLY public.snap_task
 
 ALTER TABLE ONLY public.snap_task
     ADD CONSTRAINT snap_task_space_id_fkey FOREIGN KEY (space_id) REFERENCES public.snap_space(id) ON DELETE CASCADE;
-
-
---
--- Name: stream_forward_task_device stream_forward_task_device_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.stream_forward_task_device
-    ADD CONSTRAINT stream_forward_task_device_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.device(id) ON DELETE CASCADE;
 
 
 --
@@ -4291,16 +4184,8 @@ ALTER TABLE ONLY public.streaming_session
 
 
 --
--- Name: tracking_target tracking_target_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.tracking_target
-    ADD CONSTRAINT tracking_target_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.algorithm_task(id) ON DELETE CASCADE;
-
-
---
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 514UTGdllHDJRrPq5M7gcBVdjchVy357G3BLPSdpoKXI4sxJcglUiGeeTGaouZi
+\unrestrict 7HI19Np2RPk6WPbb2ziOBmHQhbYaqmJBtxgChBYbxXDzugK9MV5CSndvgp9KH3L
 
