@@ -27,6 +27,7 @@ from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
+import concurrent.futures
 
 # 添加VIDEO模块路径
 video_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
