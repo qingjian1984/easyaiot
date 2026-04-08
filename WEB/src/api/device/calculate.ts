@@ -95,6 +95,16 @@ export const generatePlayback = (params) => {
   return commonApi('post', Api.Alarm + '/generatePlayback', {params});
 };
 
+// 清空任务的所有告警记录（通过task_name）
+export const clearAlertsByTaskName = (task_name: string) => {
+  return commonApi('delete', Api.Alarm + '/clear', { params: { task_name } });
+};
+
+// 清空所有告警记录
+export const clearAllAlerts = () => {
+  return commonApi('delete', Api.Alarm + '/clear/all');
+};
+
 // 获取仪表板统计信息（统一接口，带请求去重）
 export const getDashboardStatistics = async () => {
   const url = Api.Alarm + '/statistics';

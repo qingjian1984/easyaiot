@@ -6,6 +6,9 @@
           <a-button type="default" @click="handleClickSwap"
                     preIcon="ant-design:swap-outlined">切换视图
           </a-button>
+          <a-button type="primary" danger @click="handleClearAllAlerts"
+                    preIcon="ant-design:delete-outlined">一键清空告警
+          </a-button>
         </div>
       </template>
       <template #bodyCell="{ column, record }">
@@ -59,6 +62,9 @@
             <a-button type="default" @click="handleClickSwap"
                       preIcon="ant-design:swap-outlined">切换视图
             </a-button>
+            <a-button type="primary" danger @click="handleClearAllAlerts"
+                      preIcon="ant-design:delete-outlined">一键清空告警
+            </a-button>
           </div>
         </template>
       </AlertCards>
@@ -75,7 +81,7 @@ import {BasicTable, TableAction, useTable} from '@/components/Table';
 import {useMessage} from '@/hooks/web/useMessage';
 import {getBasicColumns, getFormConfig} from "./Data";
 import {useRouter} from "vue-router";
-import {queryAlarmList, queryAlertRecord} from "@/api/device/calculate";
+import {queryAlarmList, queryAlertRecord, clearAllAlerts} from "@/api/device/calculate";
 import {Icon} from "@/components/Icon";
 import AlertCards from "@/views/alert/components/AlertCards/index.vue";
 import ImageModal from "@/views/alert/components/ImageModal/index.vue";
@@ -126,7 +132,7 @@ function handleCardViewVideo(record) {
   handleViewVideo(record);
 }
 
-const {createMessage} = useMessage();
+const {createMessage, createConfirm} = useMessage();
 const [
   registerTable,
   {
@@ -342,4 +348,24 @@ async function handleCopy(record: object) {
   }
   createMessage.success('复制成功');
 }
+
+// 一键清空所有告警
+const handleClearAllAlerts = () => {
+  createConfirm({
+    title: '清空告警',
+    iconType: 'warning',
+    content: '确定要清空所有告警记录吗？此操作不可恢复！',
+    async onOk() {
+      try {
+        await clearAllAlerts();
+        createMessage.success('清空告警成功');
+        reload();
+        cardListReload();
+      } catch (error: any) {
+        const errorMsg = error?.response?.data?.message || error?.message || '清空告警失败，请稍后重试';
+        createMessage.error(errorMsg);
+      }
+    },
+  });
+};
 </script>

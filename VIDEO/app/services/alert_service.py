@@ -454,3 +454,47 @@ def get_dashboard_statistics() -> dict:
             'algorithm_count': 0,
             'model_count': 0
         }
+
+
+def clear_all_alerts() -> dict:
+    """清空所有告警记录
+
+    Returns:
+        dict: 包含删除数量的字典
+    """
+    alerts = Alert.query.all()
+    delete_count = len(alerts)
+
+    for alert in alerts:
+        db.session.delete(alert)
+
+    db.session.commit()
+    logger.info(f'清空所有告警成功: deleted_count={delete_count}')
+
+    return {
+        'deleted_count': delete_count,
+    }
+
+
+def clear_alerts_by_task_name(task_name: str) -> dict:
+    """按任务名称清空告警记录
+
+    说明：当前工程中 task_name 对应告警表的 object 字段。
+    """
+    task_name = (task_name or '').strip()
+    if not task_name:
+        raise ValueError('task_name参数不能为空')
+
+    alerts = Alert.query.filter(Alert.object == task_name).all()
+    delete_count = len(alerts)
+
+    for alert in alerts:
+        db.session.delete(alert)
+
+    db.session.commit()
+    logger.info(f'清空任务告警成功: task_name={task_name}, deleted_count={delete_count}')
+
+    return {
+        'deleted_count': delete_count,
+        'task_name': task_name,
+    }

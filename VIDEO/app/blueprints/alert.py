@@ -13,7 +13,9 @@ from app.services.alert_service import (
     get_alert_list,
     get_alert_count,
     create_alert,
-    get_dashboard_statistics
+    get_dashboard_statistics,
+    clear_all_alerts,
+    clear_alerts_by_task_name
 )
 from app.services.alert_hook_service import process_alert_hook
 
@@ -333,6 +335,34 @@ def _do_query_alert_record(device_id, alert_time_str, time_range):
         'device_id': playback.device_id,
         'device_name': playback.device_name
     })
+
+
+@alert_bp.route('/clear', methods=['DELETE'])
+def clear_alerts_by_task_name_route():
+    """清空任务的所有告警记录（通过task_name）"""
+    try:
+        task_name = request.args.get('task_name')
+        if not task_name:
+            return api_response(400, 'task_name参数不能为空')
+
+        result = clear_alerts_by_task_name(task_name)
+        return api_response(200, 'success', result)
+    except ValueError as e:
+        return api_response(400, str(e))
+    except Exception as e:
+        logger.error(f'清空任务告警失败: {str(e)}', exc_info=True)
+        return api_response(500, f'清空失败: {str(e)}')
+
+
+@alert_bp.route('/clear/all', methods=['DELETE'])
+def clear_all_alerts_route():
+    """清空所有告警记录"""
+    try:
+        result = clear_all_alerts()
+        return api_response(200, 'success', result)
+    except Exception as e:
+        logger.error(f'清空所有告警失败: {str(e)}', exc_info=True)
+        return api_response(500, f'清空失败: {str(e)}')
 
 
 
