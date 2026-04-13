@@ -338,16 +338,31 @@ def run_inference(model_id):
         return jsonify({'code': 400, 'msg': f'不支持的推理类型: {inference_type}'}), 400
     
     # 验证并处理 model_id
-    # 如果 model_id 为 0 或不存在于数据库中，设置为 None（表示使用默认模型）
+    # 约定优先按模型 ID 解析；若模型不存在，则兼容将该值按推理任务 ID 解析
     actual_model_id = None
-    model = None
     if model_id > 0:
-        # 验证 model_id 是否存在
         model = Model.query.get(model_id)
         if model:
             actual_model_id = model_id
         else:
-            return jsonify({'code': 400, 'msg': f'模型 ID {model_id} 不存在'}), 400
+            # 兼容历史/误用场景：路径上传入的是推理任务 ID
+            task = InferenceTask.query.get(model_id)
+            if task:
+                if task.model_id and Model.query.get(task.model_id):
+                    actual_model_id = task.model_id
+                    logger.warning(
+                        f"run_inference 接口收到推理任务ID({model_id})，自动映射为模型ID({actual_model_id})执行"
+                    )
+                elif task.model_id is None:
+                    # 历史任务使用的是默认模型
+                    actual_model_id = None
+                    logger.warning(
+                        f"run_inference 接口收到推理任务ID({model_id})，该任务为默认模型，自动使用默认模型执行"
+                    )
+                else:
+                    return jsonify({'code': 400, 'msg': f'推理任务 {model_id} 关联的模型 ID {task.model_id} 不存在'}), 400
+            else:
+                return jsonify({'code': 400, 'msg': f'模型 ID {model_id} 不存在'}), 400
     else:
         # model_id 为 0 或负数，使用默认模型
         logger.info(f"使用默认模型（model_id={model_id}）")

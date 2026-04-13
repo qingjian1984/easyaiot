@@ -138,8 +138,10 @@ class InferenceService:
                 logging.info(f"从MinIO下载用户模型: {downloaded_model}")
                 return self._load_model(downloaded_model)
             
-            # 如果用户模型不存在，直接抛出异常，不再使用默认模型
-            raise Exception(f"模型 ID {self.model_id} 不存在，无法进行推理")
+            # 模型记录存在，但本地与MinIO都无法获取可用模型文件
+            raise Exception(
+                f"模型 ID {self.model_id} 的模型文件不可用，请检查模型路径或先完成训练/上传后再推理"
+            )
 
         # 3. 使用默认模型（当 model_id 为 None 或 <= 0 时）
         # 3.1 查找AI目录下的默认模型文件（yolov8n.pt或yolo11n.pt）
