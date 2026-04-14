@@ -3,6 +3,7 @@
 通过Nacos发现services实例并实现集群推理
 """
 import os
+import uuid
 import logging
 import requests
 import tempfile
@@ -85,8 +86,15 @@ class ClusterInferenceService:
         elif file_obj:
             # 重置文件指针
             file_obj.seek(0)
-            files['file'] = (file_obj.filename, file_obj.stream, file_obj.content_type)
-            logger.info(f"准备上传文件对象: {file_obj.filename}")
+            # requests 对 multipart 文件名按 latin-1 编码，中文原名会导致 UnicodeEncodeError
+            ext = os.path.splitext(file_obj.filename or '')[1][:12]
+            ascii_name = f"{uuid.uuid4().hex}{ext}"
+            files['file'] = (
+                ascii_name,
+                file_obj.stream,
+                file_obj.content_type or 'application/octet-stream',
+            )
+            logger.info(f"准备上传文件对象: {file_obj.filename} (multipart 使用 ASCII 文件名: {ascii_name})")
         
         if not files:
             raise Exception("未提供文件")

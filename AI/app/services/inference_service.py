@@ -26,6 +26,20 @@ from ultralytics import YOLO
 from app.services.minio_service import ModelService
 from db_models import Model, InferenceTask, db
 from app.utils.onnx_inference import ONNXInference
+from app.utils.yolo_chinese_font import ensure_ultralytics_chinese_plot_font
+
+
+def _save_yolo_annotated_image(result, out_path: str) -> None:
+    """保存 Ultralytics Results 可视化图；通过本机/环境变量字体映射支持中文类别名。"""
+    ensure_ultralytics_chinese_plot_font()
+    try:
+        result.save(filename=out_path)
+    except UnicodeEncodeError:
+        logging.warning(
+            "检测结果图保存仍出现编码错误，已改为仅绘制框线（不绘制文字标签）；"
+            "可设置环境变量 YOLO_RESULT_FONT_PATH 指向可用的 .ttf/.ttc"
+        )
+        result.save(filename=out_path, labels=False)
 
 
 class InferenceService:
@@ -564,7 +578,7 @@ class InferenceService:
             else:
                 # YOLO推理结果
                 # 保存结果图像到临时文件
-                results[0].save(filename=result_image_path)
+                _save_yolo_annotated_image(results[0], result_image_path)
 
                 # 提取检测结果
                 detections = []
