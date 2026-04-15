@@ -1,372 +1,575 @@
-# 人/车数据 Flink + Doris 四层大数据架构（可落地实现方案）
+# 人/车大数据 Flink + Doris 四层宽表架构（人脸与车牌完全分离·可落地版）
 
-本文档面向 **VIDEO 侧产生的结构化检测/轨迹事件**（人、车、ReID、车牌、设备与时间），给出 **ODS → DWD → DWS → ADS** 四层在 **Apache Flink** 与 **Apache Doris** 上的具体落地方案：包含 **Kafka Topic 规划、Flink SQL 作业形态、Doris 表模型与导入方式、关键归因/串联算法在流上的实现要点**。
-
-> **推荐组件版本（生产常用组合，可按你们基线调整）**  
-> - Flink：1.17+（支持 `kafka`、`upsert-kafka`、`doris-connector` 生态成熟）  
-> - Doris：2.0+（主键模型/部分列更新、Routine Load、物化视图）  
-> - Kafka：3.x  
+> 版本：v3.0  
+> 适用范围：**人脸**（人脸检测、人脸特征）与 **车牌**（车辆检测、车牌识别）独立处理  
+> 技术栈：Apache Flink 1.17+ · Apache Doris 2.0+ · Apache Kafka 3.x  
+> 设计原则：**人脸归人脸，车牌归车牌，仅通过摄像头 ID 关联，不做跨目标类型关联**
 
 ---
 
-## 0. 数据域与 ID 体系（先定契约，再建四层）
+## 文档导引
 
-### 0.1 事件类型（建议统一为「事实表行」）
+本方案面向 **VIDEO 侧产生的结构化事件**，针对 **人脸** 与 **车牌** 两类数据分别构建独立的四层数据管道。所有字段均来自算法可输出的实际内容，无任何不切实际的假设。架构特点：
 
-| 事件类型 | 说明 | 最小字段 |
-|---------|------|---------|
-| `person_detection` | 人体检测框 | `event_id, device_id, ts, track_id, bbox, score, frame_no` |
-| `vehicle_detection` | 车辆检测框 | 同上 + `vehicle_type` |
-| `person_reid` | 人体 ReID 向量或特征 ID | `event_id, device_id, ts, track_id, reid_id, reid_score` |
-| `plate_ocr` | 车牌识别 | `event_id, device_id, ts, track_id, plate_no, plate_score, plate_color` |
-| `geo_fence`（可选） | 地理围栏/区域 ID | `device_id, ts, region_id` |
+- **人脸与车牌完全分离**：各自拥有完整的 ODS → DWD → DWS → ADS 四层表。
+- **每层一张宽表**：每张表字段铺平，无需跨表 Join 即可满足绝大部分查询。
+- **跨摄像头串联**：基于 `global_face_id` / `global_plate_id` 以及设备拓扑关系实现。
+- **查询时动态聚合**：同一摄像头下多人脸或多车牌的业务告警，直接通过 SQL 聚合实现，无需额外建表。
 
-### 0.2 全局键（归因与串联的核心）
+---
 
-- **`event_id`**：UUID，幂等写入与重放去重。  
-- **`device_id`**：摄像头/边缘盒子 ID（与现有 VIDEO 模块一致）。  
-- **`ts`**：事件时间（毫秒），**必须**用于水印与窗口；接入时间放 `ingest_ts`。  
-- **`track_id`**：单路视频内短期跟踪 ID（算法产生，可能断裂）。  
-- **`global_person_id` / `global_vehicle_id`**：在 **DWD 层** 通过规则 + 图/状态生成的跨设备长期 ID（业务主键）。  
-
-### 0.3 Kafka Topic 命名（示例）
+## 1. 总体数据流
 
 ```
-ods.person_vehicle.raw          # VIDEO 服务直接写入的原始 JSON（或 Avro）
-dwd.person_vehicle.event_std    # Flink 清洗后的标准行（可选，便于回放）
-dws.person_vehicle.signal       # 宽表/会话中间信号（可选）
-# ADS 通常不落 Kafka，直接查 Doris；如需推送告警可单独 topic
+┌─────────────────────────────────────────┐
+│           VIDEO 算法侧                    │
+│  - 人脸检测 / 人脸特征                     │
+│  - 车牌检测 / 车牌识别                     │
+└──────────────┬──────────────────────────┘
+               │ Kafka (两个 Topic)
+               ▼
+┌─────────────────────────────────────────┐
+│ Flink Job : ods_sanity (可选)            │
+└──────────────┬──────────────────────────┘
+               │ Routine Load / Doris Connector
+               ▼
+┌─────────────────────┐  ┌─────────────────────┐
+│  ODS 人脸表          │  │  ODS 车牌表          │
+│  ods_face_event     │  │  ods_plate_event    │
+└──────────┬──────────┘  └──────────┬──────────┘
+           │                        │
+           ▼                        ▼
+┌─────────────────────┐  ┌─────────────────────┐
+│ Flink Job :          │  │ Flink Job :          │
+│ dwd_face_attribution │  │ dwd_plate_attribution│
+└──────────┬──────────┘  └──────────┬──────────┘
+           │                        │
+           ▼                        ▼
+┌─────────────────────┐  ┌─────────────────────┐
+│ DWD 人脸明细表        │  │ DWD 车牌明细表        │
+│ dwd_face_detail     │  │ dwd_plate_detail    │
+└──────────┬──────────┘  └──────────┬──────────┘
+           │                        │
+           ▼                        ▼
+┌─────────────────────┐  ┌─────────────────────┐
+│ Flink Job :          │  │ Flink Job :          │
+│ dws_face_session     │  │ dws_plate_session    │
+└──────────┬──────────┘  └──────────┬──────────┘
+           │                        │
+           ▼                        ▼
+┌─────────────────────┐  ┌─────────────────────┐
+│ DWS 人脸轨迹小时表    │  │ DWS 车牌轨迹小时表    │
+│ dws_face_trace_1h   │  │ dws_plate_trace_1h  │
+└──────────┬──────────┘  └──────────┬──────────┘
+           │                        │
+           ▼                        ▼
+┌─────────────────────┐  ┌─────────────────────┐
+│ ADS 人脸应用表        │  │ ADS 车牌应用表        │
+│ ads_face_app        │  │ ads_plate_app       │
+└─────────────────────┘  └─────────────────────┘
+           │                        │
+           └──────────┬─────────────┘
+                      ▼
+              大屏 / API / 告警
 ```
 
 ---
 
-## 第一层：ODS（贴源层）——原始接入、保序、可重放
+## 2. 数据契约与 Kafka Topic 定义
 
-### 1.1 目标
+### 2.1 Kafka Topic 规划
 
-- **原样保留** VIDEO 算法输出与设备元数据，支持 **合规审计、问题追溯、任务重放**。  
-- **不做业务归因**，只做格式校验、必填字段补齐、分区键统一。
+| Topic 名称 | 内容 | 消息格式 |
+|-----------|------|---------|
+| `ods.face.raw` | 人脸检测、人脸特征事件 | JSON（字段铺平） |
+| `ods.plate.raw` | 车辆检测、车牌识别事件 | JSON（字段铺平） |
 
-### 1.2 Doris 落地（建议 DUPLICATE + 分区）
+### 2.2 人脸事件 Schema（供 VIDEO 侧对齐）
 
-**模型**：`DUPLICATE KEY`（append-only，吞吐最高，适合海量原始日志）。
-
-```sql
-CREATE TABLE IF NOT EXISTS ods_person_vehicle_raw (
-    event_id        VARCHAR(64),
-    event_type      VARCHAR(32),
-    device_id       VARCHAR(64),
-    ts              BIGINT,
-    ingest_ts       BIGINT,
-    payload         JSON,
-    kafka_partition INT,
-    kafka_offset    BIGINT
-)
-DUPLICATE KEY(event_id)
-PARTITION BY RANGE (ts) ()
-DISTRIBUTED BY HASH(device_id) BUCKETS 32
-PROPERTIES (
-    "replication_allocation" = "tag.location.default: 3",
-    "enable_unique_key_merge_on_write" = "false"
-);
--- 上线后通过 ADMIN 命令按天 add partition，例如按 ts 换算到日期分区
-```
-
-**导入方式（二选一或并存）**：
-
-1. **Routine Load from Kafka**（最省事）：  
-   - 消费 `ods.person_vehicle.raw`，JSON 解析到列，`event_id` 做去重在后续层处理（ODS 可不去重）。  
-2. **Flink Doris Connector 流写**：适合已在 Flink 做复杂解析时直接写入。
-
-**Kafka 消息体示例（VIDEO 服务写入）**：
+#### 2.2.1 人脸检测事件（face_detection）
 
 ```json
 {
-  "event_id": "uuid-...",
-  "event_type": "person_detection",
-  "device_id": "cam-001",
-  "ts": 1710000000123,
-  "payload": { "track_id": "t-12", "bbox": [100,200,50,80], "score": 0.91 }
+  "event_id": "uuid-face-001",
+  "event_type": "face_detection",
+  "device_id": "cam_01",
+  "ts": 1734256800123,
+  "track_id": "face_track_001",
+  "bbox_x": 200,
+  "bbox_y": 150,
+  "bbox_w": 60,
+  "bbox_h": 80,
+  "score": 0.95,
+  "face_gender": "male",
+  "face_age": 30,
+  "face_glasses": false,
+  "face_mask": false,
+  "face_quality": 0.88
 }
 ```
 
-### 1.3 Flink 落地（轻量校验作业 `job_ods_sanity`）
+#### 2.2.2 人脸特征事件（face_feature）
 
-**职责**：读取 raw → 校验字段 → 写回「标准 ODS」或直写 Doris（若不在 Kafka 留副本）。
-
-```sql
--- 伪代码：Flink SQL，实际表名与 catalog 按环境配置
-CREATE TABLE kafka_raw (
-  event_id STRING,
-  event_type STRING,
-  `device_id` STRING,
-  `ts` BIGINT,
-  payload STRING,
-  proc_time AS PROCTIME()
-) WITH (
-  'connector' = 'kafka',
-  'topic' = 'ods.person_vehicle.raw',
-  'properties.bootstrap.servers' = '${KAFKA_BOOTSTRAP}',
-  'properties.group.id' = 'flink_ods_sanity',
-  'format' = 'json',
-  'scan.startup.mode' = 'group-offsets'
-);
-
-CREATE TABLE kafka_ods_std WITH (
-  'connector' = 'kafka',
-  'topic' = 'ods.person_vehicle.std',
-  ...
-) LIKE kafka_raw;
-
-INSERT INTO kafka_ods_std
-SELECT event_id, event_type, device_id, ts, payload
-FROM kafka_raw
-WHERE event_id IS NOT NULL AND device_id IS NOT NULL AND ts > 0;
+```json
+{
+  "event_id": "uuid-face-002",
+  "event_type": "face_feature",
+  "device_id": "cam_01",
+  "ts": 1734256800456,
+  "track_id": "face_track_001",
+  "feature_id": "feat_abc123",
+  "feature_score": 0.92,
+  "feature_version": "v2"
+}
 ```
 
-**运维要点**：  
-- **保留周期**：ODS 表 7～30 天热数据 + 冷存（OSS/HDFS）归档 `payload` 原文。  
-- **监控**：Kafka lag、Routine Load `ErrorLog`。
+### 2.3 车牌事件 Schema
+
+#### 2.3.1 车辆检测事件（vehicle_detection）
+
+```json
+{
+  "event_id": "uuid-plate-001",
+  "event_type": "vehicle_detection",
+  "device_id": "cam_01",
+  "ts": 1734256800234,
+  "track_id": "car_track_001",
+  "bbox_x": 300,
+  "bbox_y": 200,
+  "bbox_w": 150,
+  "bbox_h": 120,
+  "score": 0.96,
+  "vehicle_type": "car",
+  "vehicle_color": "red",
+  "vehicle_brand": "Toyota"
+}
+```
+
+#### 2.3.2 车牌识别事件（plate_ocr）
+
+```json
+{
+  "event_id": "uuid-plate-002",
+  "event_type": "plate_ocr",
+  "device_id": "cam_01",
+  "ts": 1734256800345,
+  "track_id": "car_track_001",
+  "plate_no": "沪A12345",
+  "plate_score": 0.98,
+  "plate_color": "blue"
+}
+```
 
 ---
 
-## 第二层：DWD（明细层）——标准化、去重、跨字段归因（人-车-牌-ReID）
-
-### 2.1 目标
-
-- **一行一事件** 或 **一行一 track 快照**（二选一，建议事件行 + 小时拉链补表）。  
-- 产出 **`global_vehicle_id` / `global_person_id`** 的初版（可迭代）：  
-  - 车：**车牌** 强绑定；无牌车用 **设备+轨迹特征+时间** 软绑定。  
-  - 人：**ReID** 强绑定；无 ReID 用 **设备+track+时间** 软绑定。  
-- **时间对齐**：同一 `device_id` 下车与人检测做 **Interval Join**（例如 ±300ms）。
-
-### 2.2 Doris 落地
-
-**2.2.1 明细事实表（UNIQUE 主键，便于幂等与状态修正）**
+## 3. 维度表：设备拓扑（人工维护）
 
 ```sql
-CREATE TABLE IF NOT EXISTS dwd_person_vehicle_event (
+CREATE TABLE IF NOT EXISTS dim_device_topo (
+    from_device_id  VARCHAR(64),
+    to_device_id    VARCHAR(64),
+    relation        VARCHAR(16) DEFAULT 'adjacent',
+    avg_transit_sec INT COMMENT '平均转移秒数（可选）'
+)
+UNIQUE KEY(from_device_id, to_device_id)
+DISTRIBUTED BY HASH(from_device_id) BUCKETS 8;
+```
+
+---
+
+## 4. 第一层：ODS 贴源层（两张表）
+
+### 4.1 人脸 ODS 表 `ods_face_event`
+
+```sql
+CREATE TABLE IF NOT EXISTS ods_face_event (
+    event_id            VARCHAR(64)   COMMENT '事件唯一ID',
+    event_type          VARCHAR(32)   COMMENT 'face_detection / face_feature',
+    device_id           VARCHAR(64)   COMMENT '摄像头ID',
+    ts                  BIGINT        COMMENT '事件时间戳(毫秒)',
+    ingest_ts           BIGINT        COMMENT '接入时间戳(毫秒)',
+    kafka_partition     INT           COMMENT 'Kafka分区',
+    kafka_offset        BIGINT        COMMENT 'Kafka偏移量',
+    
+    track_id            VARCHAR(64)   COMMENT '单路跟踪ID',
+    bbox_x              INT,
+    bbox_y              INT,
+    bbox_w              INT,
+    bbox_h              INT,
+    score               DOUBLE        COMMENT '检测置信度',
+    
+    feature_id          VARCHAR(64)   COMMENT '人脸特征ID（face_feature事件）',
+    feature_score       DOUBLE        COMMENT '特征匹配置信度',
+    feature_version     VARCHAR(16)   COMMENT '特征版本',
+    
+    face_gender         VARCHAR(8)    COMMENT 'male/female/unknown',
+    face_age            INT           COMMENT '年龄估计值',
+    face_glasses        BOOLEAN       COMMENT '是否戴眼镜',
+    face_mask           BOOLEAN       COMMENT '是否戴口罩',
+    face_quality        DOUBLE        COMMENT '人脸质量分'
+)
+DUPLICATE KEY(event_id)
+PARTITION BY RANGE(ts) ()
+DISTRIBUTED BY HASH(device_id) BUCKETS 32
+PROPERTIES ("replication_num" = "3");
+```
+
+### 4.2 车牌 ODS 表 `ods_plate_event`
+
+```sql
+CREATE TABLE IF NOT EXISTS ods_plate_event (
+    event_id            VARCHAR(64),
+    event_type          VARCHAR(32)   COMMENT 'vehicle_detection / plate_ocr',
+    device_id           VARCHAR(64),
+    ts                  BIGINT,
+    ingest_ts           BIGINT,
+    kafka_partition     INT,
+    kafka_offset        BIGINT,
+    
+    track_id            VARCHAR(64),
+    bbox_x              INT,
+    bbox_y              INT,
+    bbox_w              INT,
+    bbox_h              INT,
+    score               DOUBLE,
+    
+    plate_no            VARCHAR(16)   COMMENT '车牌号码',
+    plate_score         DOUBLE        COMMENT '车牌识别置信度',
+    plate_color         VARCHAR(16)   COMMENT '车牌颜色',
+    
+    vehicle_type        VARCHAR(16)   COMMENT 'car/truck/bus/motor',
+    vehicle_color       VARCHAR(16),
+    vehicle_brand       VARCHAR(32)
+)
+DUPLICATE KEY(event_id)
+PARTITION BY RANGE(ts) ()
+DISTRIBUTED BY HASH(device_id) BUCKETS 32
+PROPERTIES ("replication_num" = "3");
+```
+
+### 4.3 ODS 数据导入（Routine Load）
+
+```sql
+-- 人脸
+CREATE ROUTINE LOAD ods_face_load ON ods_face_event
+COLUMNS(event_id, event_type, device_id, ts, track_id, bbox_x, bbox_y, bbox_w, bbox_h, score,
+        feature_id, feature_score, feature_version, face_gender, face_age, face_glasses, face_mask, face_quality,
+        ingest_ts=unix_timestamp()*1000, kafka_partition, kafka_offset)
+PROPERTIES ("desired_concurrent_number" = "3", "format" = "json")
+FROM KAFKA ("kafka_broker_list" = "kafka:9092", "kafka_topic" = "ods.face.raw", "property.group.id" = "doris_ods_face");
+
+-- 车牌
+CREATE ROUTINE LOAD ods_plate_load ON ods_plate_event
+COLUMNS(event_id, event_type, device_id, ts, track_id, bbox_x, bbox_y, bbox_w, bbox_h, score,
+        plate_no, plate_score, plate_color, vehicle_type, vehicle_color, vehicle_brand,
+        ingest_ts=unix_timestamp()*1000, kafka_partition, kafka_offset)
+PROPERTIES ("desired_concurrent_number" = "3", "format" = "json")
+FROM KAFKA ("kafka_broker_list" = "kafka:9092", "kafka_topic" = "ods.plate.raw", "property.group.id" = "doris_ods_plate");
+```
+
+---
+
+## 5. 第二层：DWD 明细层（两张表）
+
+### 5.1 人脸 DWD 表 `dwd_face_detail`
+
+```sql
+CREATE TABLE IF NOT EXISTS dwd_face_detail (
     event_id            VARCHAR(64),
     event_type          VARCHAR(32),
     device_id           VARCHAR(64),
     ts                  BIGINT,
     track_id            VARCHAR(64),
-    global_person_id    VARCHAR(64),
-    global_vehicle_id   VARCHAR(64),
-    plate_no            VARCHAR(16),
-    reid_id             VARCHAR(64),
+    
+    global_face_id      VARCHAR(64)   COMMENT '跨设备人脸唯一ID（有特征ID时等于特征ID，否则规则生成）',
+    
+    bbox_x              INT,
+    bbox_y              INT,
+    bbox_w              INT,
+    bbox_h              INT,
+    center_x            INT           COMMENT '框中心X',
+    center_y            INT           COMMENT '框中心Y',
     score               DOUBLE,
+    
+    feature_id          VARCHAR(64),
+    feature_score       DOUBLE,
+    feature_version     VARCHAR(16),
+    
+    face_gender         VARCHAR(8),
+    face_age            INT,
+    face_glasses        BOOLEAN,
+    face_mask           BOOLEAN,
+    face_quality        DOUBLE,
+    
+    attrs               JSON          COMMENT '其他未展开字段'
+)
+UNIQUE KEY(event_id)
+DISTRIBUTED BY HASH(device_id) BUCKETS 32
+PROPERTIES (
+    "enable_unique_key_merge_on_write" = "true",
+    "replication_num" = "3"
+);
+```
+
+### 5.2 车牌 DWD 表 `dwd_plate_detail`
+
+```sql
+CREATE TABLE IF NOT EXISTS dwd_plate_detail (
+    event_id            VARCHAR(64),
+    event_type          VARCHAR(32),
+    device_id           VARCHAR(64),
+    ts                  BIGINT,
+    track_id            VARCHAR(64),
+    
+    global_plate_id     VARCHAR(64)   COMMENT '跨设备车牌唯一ID（有车牌号时等于MD5(plate_no)，否则规则生成）',
+    
+    bbox_x              INT,
+    bbox_y              INT,
+    bbox_w              INT,
+    bbox_h              INT,
+    center_x            INT,
+    center_y            INT,
+    score               DOUBLE,
+    
+    plate_no            VARCHAR(16),
+    plate_score         DOUBLE,
+    plate_color         VARCHAR(16),
+    
+    vehicle_type        VARCHAR(16),
+    vehicle_color       VARCHAR(16),
+    vehicle_brand       VARCHAR(32),
+    
     attrs               JSON
 )
 UNIQUE KEY(event_id)
 DISTRIBUTED BY HASH(device_id) BUCKETS 32
 PROPERTIES (
-    "enable_unique_key_merge_on_write" = "true"
+    "enable_unique_key_merge_on_write" = "true",
+    "replication_num" = "3"
 );
 ```
 
-**2.2.2 人-车关联宽表（可选，便于分析）**
+### 5.3 DWD 层 global_id 生成规则
 
-```sql
-CREATE TABLE IF NOT EXISTS dwd_person_vehicle_assoc (
-    assoc_id            VARCHAR(64),
-    device_id           VARCHAR(64),
-    ts                  BIGINT,
-    person_event_id     VARCHAR(64),
-    vehicle_event_id    VARCHAR(64),
-    relation_type       VARCHAR(16),  -- e.g. 'near', 'onboard_infer'
-    confidence          DOUBLE
-)
-UNIQUE KEY(assoc_id)
-DISTRIBUTED BY HASH(device_id) BUCKETS 32;
-```
+| 类型 | 强 ID 来源 | 弱 ID 生成规则（当强 ID 缺失时） |
+|------|-----------|-------------------------------|
+| 人脸 | `feature_id`（特征 ID）非空且 score > 阈值 | `MD5(device_id + track_id + 属性哈希)` |
+| 车牌 | `plate_no`（车牌号）非空且 score > 阈值 | `MD5(device_id + track_id + vehicle_type + vehicle_color)` |
 
-### 2.3 Flink 落地（核心作业 `job_dwd_attribution`）
-
-**2.3.1 水印与事件时间**
-
-```sql
-CREATE TABLE person_det (
-  event_id STRING,
-  device_id STRING,
-  ts BIGINT,
-  track_id STRING,
-  WATERMARK FOR ts AS ts - INTERVAL '2' SECOND
-) WITH ('connector' = 'kafka', 'topic' = '...person...', ...);
-
-CREATE TABLE vehicle_det ( ... ) LIKE person_det;
-CREATE TABLE plate_ocr ( ... ) LIKE person_det;
-```
-
-**2.3.2 车 + 牌：先按 `device_id + track_id` 做窗口聚合，再合并车牌**
-
-- 使用 **10s 滚动窗口** 或 **会话窗口（gap 5s）** 收集同一 track 下最高分的 `plate_no`。  
-- 产出 `global_vehicle_id = md5(plate_no)`（有牌）；无牌则 `md5(device_id + track_session_id)`。
-
-**2.3.3 人 + ReID：`global_person_id = reid_id`（有）否则 `md5(device_id + track_id + session)`**
-
-**2.3.4 人-车空间邻近（落地规则示例）**
-
-- 若算法输出 **bbox**：在 **KeyedProcessFunction** 中维护 `MapState<vehicle_track, bbox>` 与 `person_track`，计算 **IoU 或中心点距离 < 阈值** 且时间差 < 300ms → 写入 `dwd_person_vehicle_assoc`。  
-- 若只有 **检测结果无几何**：退化为 **同设备同秒级共现**（置信度降低，写入 `confidence`）。
-
-**写入 Doris**：  
-- 使用 **Flink Doris Connector**（`doris.sink`）批量 `stream load`；`event_id` 作为幂等键。  
-- 或 Flink 写 Kafka `dwd.*`，由 Doris **Routine Load** 消费（解耦更好）。
+**Flink 作业要点**：
+- 源表水印：`WATERMARK FOR ts AS ts - INTERVAL '2' SECOND`
+- 使用 KeyedProcessFunction 维护状态，对同一 `track_id` 合并检测事件与特征/识别事件，补全字段。
+- 计算 `center_x` / `center_y` 并生成 `global_*_id`。
+- 通过 Doris Connector Upsert 写入 DWD 表。
 
 ---
 
-## 第三层：DWS（汇总层）——轨迹串联、会话、跨镜融合指标
+## 6. 第三层：DWS 汇总层（两张表）
 
-### 3.1 目标
-
-- **轨迹分段（trip/session）**：同一 `global_*_id` 下，时间间隔 > **T_gap（如 30min）** 或空间跳跃异常则新开 session。  
-- **跨设备串联**：依赖 **ReID / 车牌 / 时间转移矩阵**（路口拓扑可后续增强）。  
-- 产出 **小时/天级** 汇总：出现次数、首次/末次出现设备、路径熵、同行人等。
-
-### 3.2 Doris 落地
-
-**3.2.1 轨迹点聚合表（AGGREGATE 或 DUPLICATE + 物化视图）**
+### 6.1 人脸 DWS 表 `dws_face_trace_1h`
 
 ```sql
-CREATE TABLE IF NOT EXISTS dws_trajectory_point_hour (
+CREATE TABLE IF NOT EXISTS dws_face_trace_1h (
+    stat_date           DATE          COMMENT '统计日期',
+    stat_hour           TINYINT       COMMENT '统计小时',
+    global_face_id      VARCHAR(64)   COMMENT '人脸全局ID',
+    device_id           VARCHAR(64)   COMMENT '设备ID',
+    
+    first_ts            BIGINT        COMMENT '该小时首次出现时间',
+    last_ts             BIGINT        COMMENT '该小时末次出现时间',
+    appear_cnt          BIGINT        COMMENT '出现次数',
+    
+    avg_center_x        DOUBLE        COMMENT '平均中心X',
+    avg_center_y        DOUBLE        COMMENT '平均中心Y',
+    
+    face_gender         VARCHAR(8),
+    face_age            INT           COMMENT '年龄中位数',
+    face_glasses        BOOLEAN       COMMENT '是否戴眼镜（众数）',
+    face_mask           BOOLEAN       COMMENT '是否戴口罩（众数）',
+    
+    session_id          VARCHAR(64)   COMMENT '所属会话ID'
+)
+DUPLICATE KEY(stat_date, stat_hour, global_face_id, device_id)
+PARTITION BY RANGE(stat_date) ()
+DISTRIBUTED BY HASH(global_face_id) BUCKETS 32
+PROPERTIES ("replication_num" = "3");
+```
+
+### 6.2 车牌 DWS 表 `dws_plate_trace_1h`
+
+```sql
+CREATE TABLE IF NOT EXISTS dws_plate_trace_1h (
     stat_date           DATE,
     stat_hour           TINYINT,
-    global_entity_id    VARCHAR(64),
-    entity_type         VARCHAR(8),   -- 'person' / 'vehicle'
+    global_plate_id     VARCHAR(64),
     device_id           VARCHAR(64),
-    first_ts            BIGINT REPLACE,
-    last_ts             BIGINT REPLACE,
-    appear_cnt          BIGINT SUM
-)
-AGGREGATE KEY(stat_date, stat_hour, global_entity_id, entity_type, device_id)
-PARTITION BY RANGE (stat_date) ()
-DISTRIBUTED BY HASH(global_entity_id) BUCKETS 32;
-```
-
-**3.2.2 会话表（UNIQUE）**
-
-```sql
-CREATE TABLE IF NOT EXISTS dws_entity_session (
-    session_id          VARCHAR(64),
-    global_entity_id    VARCHAR(64),
-    entity_type         VARCHAR(8),
-    start_ts            BIGINT,
-    end_ts              BIGINT,
-    device_seq          JSON,
-    path_signature      VARCHAR(256)
-)
-UNIQUE KEY(session_id)
-DISTRIBUTED BY HASH(global_entity_id) BUCKETS 32;
-```
-
-**跨镜融合（Doris 侧离线补齐）**：  
-- 定时 SQL（**INSERT INTO dws_... SELECT ...**）按 `global_entity_id` 合并多设备轨迹；或用 **物化视图** 维护小时rollup。
-
-### 3.3 Flink 落地（作业 `job_dws_session`）
-
-- **KeyedProcessFunction + ValueState**：  
-  - `last_ts`, `current_session_id`, `device_list`  
-  - 每条事件：`if (ts - last_ts > T_gap) { flush session; new session }`  
-- **侧输出**：异常轨迹（时间倒流、设备跳变过大）到 **质检 topic**。  
-- **输出**：  
-  1. 实时写 `dws_entity_session`（Flink → Doris）；  
-  2. 同时写 **Kafka changelog** 供下游实时大屏（可选）。
-
----
-
-## 第四层：ADS（应用层）——面向 VIDEO/运营/告警的指标与接口表
-
-### 4.1 目标
-
-- **低延迟查询**（< 1s）：设备维度、区域维度、车辆维度。  
-- **强约束字段类型**，便于 **WEB 大屏 / API**。  
-- 与 **权限** 结合：按租户/项目行级过滤（可在同步任务或视图层做）。
-
-### 4.2 Doris 落地
-
-**示例：设备实时在线人车流量（分钟级）**
-
-```sql
-CREATE TABLE IF NOT EXISTS ads_device_flow_minute (
-    stat_time           DATETIME,
-    device_id           VARCHAR(64),
-    person_in_cnt       BIGINT,
-    vehicle_in_cnt      BIGINT,
-    alert_cnt           BIGINT
-)
-DUPLICATE KEY(stat_time, device_id)
-PARTITION BY RANGE (stat_time) ()
-DISTRIBUTED BY HASH(device_id) BUCKETS 16;
-```
-
-**示例：重点车辆布控命中（车牌维度）**
-
-```sql
-CREATE TABLE IF NOT EXISTS ads_plate_watch_hit (
-    stat_date           DATE,
+    
+    first_ts            BIGINT,
+    last_ts             BIGINT,
+    appear_cnt          BIGINT,
+    
+    avg_center_x        DOUBLE,
+    avg_center_y        DOUBLE,
+    
     plate_no            VARCHAR(16),
-    hit_cnt             BIGINT,
-    last_device_id      VARCHAR(64),
-    last_ts             BIGINT
+    vehicle_type        VARCHAR(16),
+    vehicle_color       VARCHAR(16),
+    vehicle_brand       VARCHAR(32),
+    
+    session_id          VARCHAR(64)
 )
-UNIQUE KEY(stat_date, plate_no)
-DISTRIBUTED BY HASH(plate_no) BUCKETS 8;
+DUPLICATE KEY(stat_date, stat_hour, global_plate_id, device_id)
+PARTITION BY RANGE(stat_date) ()
+DISTRIBUTED BY HASH(global_plate_id) BUCKETS 32
+PROPERTIES ("replication_num" = "3");
 ```
 
-**从 DWS 刷新 ADS（调度）**：  
-- 使用 **Doris Insert Job / 外部调度（Airflow / DolphinScheduler）** 每分钟/每小时执行聚合 SQL。  
-- 或对 `dws_trajectory_point_hour` 建 **ROLLUP / 物化视图** 直接查询以降低 ADS 冗余。
+### 6.3 DWS 层 Flink 会话作业逻辑
 
-### 4.3 Flink 落地（可选 `job_ads_realtime`）
-
-- 若大屏要 **秒级**：Flink **滑动窗口 1min** 直接写 `ads_device_flow_minute`。  
-- 若 **分钟级可接受**：仅用 Doris 定时任务更简单、运维成本更低。
+| 功能 | 描述 |
+|------|------|
+| **会话切割** | 按 `global_*_id` 分区。若相邻事件时间差 > 30 分钟，或设备切换不满足 `dim_device_topo` 且属性变化过大，则开启新会话。 |
+| **跨摄像头合并** | 利用广播的 `dim_device_topo` 及属性相似度（人脸：性别+年龄区间+眼镜口罩；车牌：车型+颜色）将临时 ID 合并为同一 `global_*_id`。 |
+| **小时聚合** | 1 小时滚动窗口聚合，输出至 DWS 表。 |
 
 ---
 
-## 端到端数据流（落地拓扑简图）
+## 7. 第四层：ADS 应用层（两张表）
 
+### 7.1 人脸 ADS 表 `ads_face_app`
+
+```sql
+CREATE TABLE IF NOT EXISTS ads_face_app (
+    ts                  BIGINT        COMMENT '事件时间',
+    date                DATE          COMMENT '日期',
+    global_face_id      VARCHAR(64),
+    device_id           VARCHAR(64),
+    
+    face_gender         VARCHAR(8),
+    face_age            INT,
+    face_glasses        BOOLEAN,
+    face_mask           BOOLEAN,
+    
+    session_id          VARCHAR(64),
+    session_start_ts    BIGINT,
+    session_end_ts      BIGINT,
+    
+    companion_face_id   VARCHAR(64)   COMMENT '同行人脸global_id（离线计算填充）'
+)
+DUPLICATE KEY(global_face_id, ts)
+PARTITION BY RANGE(date) ()
+DISTRIBUTED BY HASH(global_face_id) BUCKETS 16
+PROPERTIES ("replication_num" = "3");
 ```
-VIDEO 服务 --JSON--> Kafka(ods.raw)
-        |                               \
-        v                                --> Flink(job_ods_sanity) --> Kafka(ods.std) --> Routine Load --> Doris(ods_*)
-        \-->（可选）Flink(job_dwd) ----------------------------------------> Doris(dwd_*)
-                              \
-                               v
-                        Flink(job_dws_session) --> Doris(dws_*)
-                              \
-                               v
-             DolphinScheduler / Doris Insert Job --> Doris(ads_*)
-                              \
-                               v
-                          WEB / API / 告警
+
+### 7.2 车牌 ADS 表 `ads_plate_app`
+
+```sql
+CREATE TABLE IF NOT EXISTS ads_plate_app (
+    ts                  BIGINT,
+    date                DATE,
+    global_plate_id     VARCHAR(64),
+    plate_no            VARCHAR(16),
+    device_id           VARCHAR(64),
+    
+    vehicle_type        VARCHAR(16),
+    vehicle_color       VARCHAR(16),
+    vehicle_brand       VARCHAR(32),
+    
+    session_id          VARCHAR(64),
+    session_start_ts    BIGINT,
+    session_end_ts      BIGINT,
+    
+    companion_plate     VARCHAR(16)   COMMENT '伴随车牌',
+    companion_global_id VARCHAR(64)
+)
+DUPLICATE KEY(global_plate_id, ts)
+PARTITION BY RANGE(date) ()
+DISTRIBUTED BY HASH(global_plate_id) BUCKETS 16
+PROPERTIES ("replication_num" = "3");
+```
+
+### 7.3 ADS 数据刷新
+
+- **实时部分**：Flink DWS 作业直接将会话信息（`session_id`, `session_start_ts`, `session_end_ts`）连同明细写入 ADS 表。
+- **离线部分**：每日调度 SQL 计算伴随关系等复杂指标，更新 ADS 表相应字段。
+
+---
+
+## 8. 查询示例
+
+### 8.1 查询某人脸跨摄像头轨迹
+
+```sql
+SELECT device_id, ts, face_gender, face_age
+FROM ads_face_app
+WHERE global_face_id = 'xxx'
+ORDER BY ts;
+```
+
+### 8.2 查询某车牌完整行驶路径
+
+```sql
+SELECT device_id, ts, vehicle_color, plate_no
+FROM ads_plate_app
+WHERE plate_no = '沪A12345'
+ORDER BY ts;
+```
+
+### 8.3 人脸聚集告警（同摄像头短时间内多人脸）
+
+```sql
+SELECT device_id, DATE_TRUNC('second', FROM_UNIXTIME(ts/1000)) AS sec, COUNT(*) AS face_cnt
+FROM dwd_face_detail
+WHERE device_id = 'cam_01' AND ts > UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE)*1000
+GROUP BY device_id, sec
+HAVING face_cnt >= 5;
+```
+
+### 8.4 车牌伴随分析（同摄像头短时间多车）
+
+```sql
+SELECT a.plate_no AS car_a, b.plate_no AS car_b, COUNT(*) AS meet_times
+FROM dwd_plate_detail a
+JOIN dwd_plate_detail b 
+  ON a.device_id = b.device_id 
+  AND ABS(a.ts - b.ts) < 5000
+  AND a.plate_no != b.plate_no
+WHERE a.ts > UNIX_TIMESTAMP(NOW() - INTERVAL 1 DAY)*1000
+GROUP BY a.plate_no, b.plate_no
+HAVING meet_times >= 3;
 ```
 
 ---
 
-## 工程落地清单（按优先级）
+## 9. 落地执行清单
 
-| 顺序 | 任务 | 产出 |
-|-----|------|------|
-| 1 | VIDEO 写 Kafka 统一 Schema + `event_id` | 可重放日志 |
-| 2 | Doris 建 ODS/DWD 表 + Routine Load | 可查可存 |
-| 3 | Flink `job_dwd_attribution` 水印 + 车牌合并 + 人车间隔/几何关联 | `global_*_id`、assoc 表 |
-| 4 | Flink `job_dws_session` 会话状态机 | `dws_entity_session` |
-| 5 | 调度聚合 SQL + ADS 表 | 大屏与接口 |
-| 6 | 监控：Flink Checkpoint、Kafka Lag、Doris Stream Load 错误率、数据延迟 P99 | SLA |
-
----
-
-## 与现有 VIDEO 模块的衔接建议
-
-- **接入点**：在现有算法回调或 `alert_hook` / Kafka 推送路径上，增加 **标准化 JSON 发送** 到 `ods.person_vehicle.raw`（与本文 0.1 字段对齐）。  
-- **不要在 ODS 做重计算**：避免拖慢视频链路；归因放在 Flink 并行扩展。  
-- **回放**：按 `event_id` + Kafka 时间戳重放，可验证归因规则迭代效果。
+| 序号 | 任务 | 负责角色 | 产出物 |
+|------|------|---------|-------|
+| 1 | 确认人脸、车牌消息 Schema 并推送至 Kafka | 算法/后端 | 两个 Topic 正常生产 |
+| 2 | 人工录入设备拓扑表 `dim_device_topo` | 现场工程 | 拓扑数据初始化 |
+| 3 | 创建 ODS 表及 Routine Load | 数据开发 | 两张 ODS 表 + 两个 Routine Load |
+| 4 | 开发 Flink `job_dwd_attribution`（人脸/车牌各一个作业） | 数据开发 | 可运行 Flink 任务 |
+| 5 | 创建 DWD 表 | 数据开发 | 两张 DWD 表 |
+| 6 | 开发 Flink `job_dws_session`（人脸/车牌各一个作业） | 数据开发 | 会话切割与小时聚合 |
+| 7 | 创建 DWS 表 | 数据开发 | 两张 DWS 表 |
+| 8 | 创建 ADS 表并配置刷新调度 | 数据开发 | 两张 ADS 表及配套 SQL |
+| 9 | 配置监控告警 | 运维/开发 | Kafka Lag、Flink Checkpoint、Doris 导入延迟 |
 
 ---
 
-## 文档维护
+## 10. 监控指标
 
-- **路径**：`VIDEO/docs/flink_doris_person_vehicle_four_layers.md`  
-- **变更记录**：随你们选定的 Flink/Doris 版本升级，调整 Connector 参数与 Doris 属性名。
+| 指标 | 告警阈值 | 查看方式 |
+|------|---------|---------|
+| Kafka 消费延迟 | > 5000 条 | Kafka Manager |
+| Flink Checkpoint 失败率 | > 5% | Flink Web UI |
+| Doris Routine Load 错误行数 | 持续增长 | `SHOW ROUTINE LOAD` |
+| DWD global_id 生成率（强 ID 占比） | 低于 60% 需关注弱 ID 合并准确性 | 自定义 Metric |
+| DWS 会话数量波动 | 偏离 7 日均值 50% | Doris SQL |
+
+---
+
+**文档版本**：v3.0  
+**最后更新**：2026-04-15  
+**适用范围**：人脸与车牌大数据独立四层架构落地实施
