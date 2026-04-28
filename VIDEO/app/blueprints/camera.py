@@ -74,11 +74,43 @@ class FFmpegDaemon:
                     v = (os.getenv(name) or "").strip()
                     return v if v else default
 
-                source_fps = _env_int("SOURCE_FPS", 25)
+                def _parse_bitrate_to_k(value: str) -> Optional[int]:
+                    """
+                    解析形如 '3500k' / '3500000' 的码率为 k 单位整数。
+                    返回 None 表示无法解析。
+                    """
+                    try:
+                        v = (value or "").strip().lower()
+                        if not v:
+                            return None
+                        if v.endswith("k"):
+                            return int(float(v[:-1]))
+                        if v.endswith("m"):
+                            return int(float(v[:-1]) * 1000)
+                        # 纯数字：按 bps 估算为 k
+                        if v.isdigit():
+                            return max(1, int(int(v) / 1000))
+                        return None
+                    except Exception:
+                        return None
+
+                # 观看链路参数：优先 VIEW_*，回退到历史通用变量
+                source_fps = _env_int("VIEW_SOURCE_FPS", _env_int("SOURCE_FPS", 25))
                 # GOP 默认：2秒一个关键帧（与服务内其他实现保持一致），避免重连后长时间等IDR
-                gop_size = _env_int("FFMPEG_GOP_SIZE", max(1, source_fps * 2))
-                preset = _env_str("FFMPEG_PRESET", "veryfast")
-                bitrate = _env_str("FFMPEG_VIDEO_BITRATE", "1500k")
+                gop_size = _env_int("VIEW_FFMPEG_GOP_SIZE", _env_int("FFMPEG_GOP_SIZE", max(1, source_fps * 2)))
+                preset = _env_str("VIEW_FFMPEG_PRESET", _env_str("FFMPEG_PRESET", "veryfast"))
+                # 默认码率提升到 3500k（与 .env high 档一致），避免客户反馈“更糊”
+                bitrate = _env_str("VIEW_FFMPEG_VIDEO_BITRATE", _env_str("FFMPEG_VIDEO_BITRATE", "3500k"))
+                # 可选：恒定质量模式（更直观地控制“清晰度”）。例如 FFMPEG_CRF=23/21/19（越小越清晰）
+                crf = (os.getenv("VIEW_FFMPEG_CRF") or os.getenv("FFMPEG_CRF") or "").strip()
+
+                # 码控缓冲：默认 2x bitrate，避免 bufsize 过小导致画质波动/发糊
+                bufsize_env = (os.getenv("VIEW_FFMPEG_VIDEO_BUFSIZE") or os.getenv("FFMPEG_VIDEO_BUFSIZE") or "").strip()
+                if bufsize_env:
+                    bufsize = bufsize_env
+                else:
+                    k = _parse_bitrate_to_k(bitrate)
+                    bufsize = f"{max(1, (k or 3500) * 2)}k"
 
                 rtsp_open_timeout_us = _env_int("FFMPEG_RTSP_OPEN_TIMEOUT_US", 10_000_000)  # 10s
                 rtsp_io_timeout_us = _env_int("FFMPEG_RTSP_IO_TIMEOUT_US", 5_000_000)  # 5s
@@ -115,12 +147,22 @@ class FFmpegDaemon:
                     preset,
                     "-tune",
                     "zerolatency",
-                    "-b:v",
-                    bitrate,
-                    "-maxrate",
-                    bitrate,
-                    "-bufsize",
-                    bitrate,
+                ]
+
+                # 优先使用 CRF（恒定质量）；否则使用 ABR/CBR（码率）
+                if crf:
+                    ffmpeg_cmd.extend(["-crf", crf])
+                else:
+                    ffmpeg_cmd.extend([
+                        "-b:v",
+                        bitrate,
+                        "-maxrate",
+                        bitrate,
+                        "-bufsize",
+                        bufsize,
+                    ])
+
+                ffmpeg_cmd.extend([
                     "-pix_fmt",
                     "yuv420p",
                     "-profile:v",
@@ -140,7 +182,7 @@ class FFmpegDaemon:
                     "-flvflags",
                     "no_duration_filesize",
                     device.rtmp_stream,
-                ]
+                ])
 
                 # 启动进程并捕获错误流
                 self.process = subprocess.Popen(
