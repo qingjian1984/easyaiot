@@ -141,12 +141,12 @@ alert_time_lock = threading.Lock()  # 告警时间戳锁（已废弃，不再使
 
 # 配置参数（从数据库读取，支持环境变量覆盖以降低CPU占用）
 # 帧率：降低可减少CPU占用
-SOURCE_FPS = int(os.getenv('SOURCE_FPS', '15'))  # 默认15fps（原25fps）
+SOURCE_FPS = int(os.getenv('SOURCE_FPS', '25'))  # 默认25fps（高清流畅）
 # 分辨率：降低可大幅减少CPU占用
-TARGET_WIDTH = int(os.getenv('TARGET_WIDTH', '640'))  # 默认640（原1280）
-TARGET_HEIGHT = int(os.getenv('TARGET_HEIGHT', '360'))  # 默认360（原720）
+TARGET_WIDTH = int(os.getenv('TARGET_WIDTH', '1280'))  # 默认1280（高清）
+TARGET_HEIGHT = int(os.getenv('TARGET_HEIGHT', '720'))  # 默认720（高清）
 TARGET_RESOLUTION = (TARGET_WIDTH, TARGET_HEIGHT)
-EXTRACT_INTERVAL = int(os.getenv('EXTRACT_INTERVAL', '5'))
+EXTRACT_INTERVAL = int(os.getenv('EXTRACT_INTERVAL', '2'))
 BUFFER_SIZE = int(os.getenv('BUFFER_SIZE', '70'))
 MIN_BUFFER_FRAMES = int(os.getenv('MIN_BUFFER_FRAMES', '15'))
 MAX_WAIT_TIME = float(os.getenv('MAX_WAIT_TIME', '0.08'))
@@ -154,13 +154,42 @@ MAX_WAIT_TIME = float(os.getenv('MAX_WAIT_TIME', '0.08'))
 # FFmpeg编码参数（优化以降低CPU占用）
 # 注意：抓拍算法任务不推流，不需要FFmpeg编码参数
 # YOLO检测参数（优化以降低CPU占用）
-YOLO_IMG_SIZE = int(os.getenv('YOLO_IMG_SIZE', '416'))  # 检测分辨率：降低可减少CPU占用（原640）
+YOLO_IMG_SIZE = int(os.getenv('YOLO_IMG_SIZE', '640'))  # 高清场景下提升小目标检测和叠框细节
 # 队列大小配置（优化以处理高负载）
 DETECTION_QUEUE_SIZE = int(os.getenv('DETECTION_QUEUE_SIZE', '100'))  # 检测队列大小（默认100，原50）
 PUSH_QUEUE_SIZE = int(os.getenv('PUSH_QUEUE_SIZE', '100'))  # 推帧队列大小（默认100，原50）
 EXTRACT_QUEUE_SIZE = int(os.getenv('EXTRACT_QUEUE_SIZE', '1'))  # 抽帧队列大小（默认1，每个摄像头只保留1帧）
 # 检测工作线程数量（优化以提升处理能力）
 YOLO_WORKER_THREADS = int(os.getenv('YOLO_WORKER_THREADS', '2'))  # YOLO检测线程数（默认2，原1）
+# 画质分档（low/medium/high）
+VIDEO_QUALITY_PROFILE = os.getenv('VIDEO_QUALITY_PROFILE', '').strip().lower()
+QUALITY_PROFILE_PRESETS = {
+    'low': {
+        'source_fps': 15,
+        'target_width': 640,
+        'target_height': 360,
+        'yolo_img_size': 416,
+    },
+    'medium': {
+        'source_fps': 20,
+        'target_width': 1280,
+        'target_height': 720,
+        'yolo_img_size': 512,
+    },
+    'high': {
+        'source_fps': 25,
+        'target_width': 1280,
+        'target_height': 720,
+        'yolo_img_size': 640,
+    },
+}
+if VIDEO_QUALITY_PROFILE in QUALITY_PROFILE_PRESETS:
+    selected_profile = QUALITY_PROFILE_PRESETS[VIDEO_QUALITY_PROFILE]
+    SOURCE_FPS = selected_profile['source_fps']
+    TARGET_WIDTH = selected_profile['target_width']
+    TARGET_HEIGHT = selected_profile['target_height']
+    TARGET_RESOLUTION = (TARGET_WIDTH, TARGET_HEIGHT)
+    YOLO_IMG_SIZE = selected_profile['yolo_img_size']
 # 抓拍结果最大等待时长（秒）：超过该时长仍未返回检测结果则丢弃，避免延迟累积
 SNAPSHOT_RESULT_MAX_WAIT_SEC = float(os.getenv('SNAPSHOT_RESULT_MAX_WAIT_SEC', '5.0'))
 
@@ -1605,7 +1634,7 @@ def buffer_streamer_worker(device_id: str):
             # 立即缩放到目标分辨率
             original_height, original_width = frame.shape[:2]
             if (original_width, original_height) != TARGET_RESOLUTION:
-                frame = cv2.resize(frame, TARGET_RESOLUTION, interpolation=cv2.INTER_LINEAR)
+                frame = cv2.resize(frame, TARGET_RESOLUTION, interpolation=cv2.INTER_CUBIC)
 
             # 将帧发送到抽帧队列进行分析（队列容量为1，新帧会顶掉旧帧）
             pending_frames.add(frame_count)

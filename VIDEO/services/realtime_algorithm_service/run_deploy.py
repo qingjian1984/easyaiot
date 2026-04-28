@@ -159,23 +159,23 @@ alert_time_lock = threading.Lock()  # 告警时间戳锁，确保线程安全
 
 # 配置参数（从数据库读取，支持环境变量覆盖以降低CPU占用）
 # 帧率：降低可减少CPU占用和推流速度
-SOURCE_FPS = int(os.getenv('SOURCE_FPS', '15'))  # 默认15fps（原25fps）
+SOURCE_FPS = int(os.getenv('SOURCE_FPS', '25'))  # 默认25fps（高清流畅）
 # 分辨率：降低可大幅减少CPU占用和推流速度
-TARGET_WIDTH = int(os.getenv('TARGET_WIDTH', '640'))  # 默认640（原1280）
-TARGET_HEIGHT = int(os.getenv('TARGET_HEIGHT', '360'))  # 默认360（原720）
+TARGET_WIDTH = int(os.getenv('TARGET_WIDTH', '1280'))  # 默认1280（高清）
+TARGET_HEIGHT = int(os.getenv('TARGET_HEIGHT', '720'))  # 默认720（高清）
 TARGET_RESOLUTION = (TARGET_WIDTH, TARGET_HEIGHT)
-EXTRACT_INTERVAL = int(os.getenv('EXTRACT_INTERVAL', '5'))
+EXTRACT_INTERVAL = int(os.getenv('EXTRACT_INTERVAL', '2'))
 BUFFER_SIZE = int(os.getenv('BUFFER_SIZE', '70'))
 MIN_BUFFER_FRAMES = int(os.getenv('MIN_BUFFER_FRAMES', '15'))
 MAX_WAIT_TIME = float(os.getenv('MAX_WAIT_TIME', '0.08'))
 # FFmpeg编码参数（优化以降低CPU占用）
 # FFmpeg编码参数（优化以降低CPU占用）
 # 处理空字符串的情况，确保参数有效
-FFMPEG_PRESET_ENV = os.getenv('FFMPEG_PRESET', 'ultrafast')
-FFMPEG_PRESET = FFMPEG_PRESET_ENV.strip() if FFMPEG_PRESET_ENV and FFMPEG_PRESET_ENV.strip() else 'ultrafast'  # 编码预设：ultrafast最快，CPU占用最低
+FFMPEG_PRESET_ENV = os.getenv('FFMPEG_PRESET', 'veryfast')
+FFMPEG_PRESET = FFMPEG_PRESET_ENV.strip() if FFMPEG_PRESET_ENV and FFMPEG_PRESET_ENV.strip() else 'veryfast'  # 高清优先：veryfast 在质量和延迟间平衡
 
-FFMPEG_VIDEO_BITRATE_ENV = os.getenv('FFMPEG_VIDEO_BITRATE', '500k')
-FFMPEG_VIDEO_BITRATE = FFMPEG_VIDEO_BITRATE_ENV.strip() if FFMPEG_VIDEO_BITRATE_ENV and FFMPEG_VIDEO_BITRATE_ENV.strip() else '500k'  # 视频比特率：降低可减少推流速度（原1500k）
+FFMPEG_VIDEO_BITRATE_ENV = os.getenv('FFMPEG_VIDEO_BITRATE', '3500k')
+FFMPEG_VIDEO_BITRATE = FFMPEG_VIDEO_BITRATE_ENV.strip() if FFMPEG_VIDEO_BITRATE_ENV and FFMPEG_VIDEO_BITRATE_ENV.strip() else '3500k'  # 高清优先：720p建议>=3000k
 
 # 编码线程数：None表示自动，可设置为较小值降低CPU
 # 处理空字符串的情况，确保只有有效的数字字符串才会被使用
@@ -190,13 +190,122 @@ FFMPEG_HWACCEL_ENV = os.getenv('FFMPEG_HWACCEL', 'auto').strip().lower()
 FFMPEG_HWACCEL = FFMPEG_HWACCEL_ENV if FFMPEG_HWACCEL_ENV in ['auto', 'nvenc', 'cuvid', 'none'] else 'auto'
 
 # YOLO检测参数（优化以降低CPU占用）
-YOLO_IMG_SIZE = int(os.getenv('YOLO_IMG_SIZE', '416'))  # 检测分辨率：降低可减少CPU占用（原640）
+YOLO_IMG_SIZE = int(os.getenv('YOLO_IMG_SIZE', '640'))  # 高清场景下提升小目标检测和叠框细节
 # 队列大小配置（优化以处理高负载）
 DETECTION_QUEUE_SIZE = int(os.getenv('DETECTION_QUEUE_SIZE', '100'))  # 检测队列大小（默认100，原50）
 PUSH_QUEUE_SIZE = int(os.getenv('PUSH_QUEUE_SIZE', '100'))  # 推帧队列大小（默认100，原50）
 EXTRACT_QUEUE_SIZE = int(os.getenv('EXTRACT_QUEUE_SIZE', '50'))  # 抽帧队列大小（默认50）
 # 检测工作线程数量（优化以提升处理能力）
 YOLO_WORKER_THREADS = int(os.getenv('YOLO_WORKER_THREADS', '2'))  # YOLO检测线程数（默认2，原1）
+# 画质分档（low/medium/high）
+VIDEO_QUALITY_PROFILE = os.getenv('VIDEO_QUALITY_PROFILE', '').strip().lower()
+QUALITY_PROFILE_PRESETS = {
+    'low': {
+        'source_fps': 15,
+        'target_width': 640,
+        'target_height': 360,
+        'ffmpeg_video_bitrate': '1000k',
+        'yolo_img_size': 416,
+    },
+    'medium': {
+        'source_fps': 20,
+        'target_width': 1280,
+        'target_height': 720,
+        'ffmpeg_video_bitrate': '2500k',
+        'yolo_img_size': 512,
+    },
+    'high': {
+        'source_fps': 25,
+        'target_width': 1280,
+        'target_height': 720,
+        'ffmpeg_video_bitrate': '3500k',
+        'yolo_img_size': 640,
+    },
+}
+if VIDEO_QUALITY_PROFILE in QUALITY_PROFILE_PRESETS:
+    selected_profile = QUALITY_PROFILE_PRESETS[VIDEO_QUALITY_PROFILE]
+    SOURCE_FPS = selected_profile['source_fps']
+    TARGET_WIDTH = selected_profile['target_width']
+    TARGET_HEIGHT = selected_profile['target_height']
+    TARGET_RESOLUTION = (TARGET_WIDTH, TARGET_HEIGHT)
+    FFMPEG_VIDEO_BITRATE = selected_profile['ffmpeg_video_bitrate']
+    YOLO_IMG_SIZE = selected_profile['yolo_img_size']
+    if not FFMPEG_GOP_SIZE_ENV:
+        FFMPEG_GOP_SIZE = SOURCE_FPS * 2
+# 自适应画质配置：根据推流稳定性自动升降档
+AUTO_QUALITY_ENABLED = os.getenv('AUTO_QUALITY_ENABLED', 'true').strip().lower() in ('1', 'true', 'yes', 'on')
+AUTO_QUALITY_FAILURE_THRESHOLD = int(os.getenv('AUTO_QUALITY_FAILURE_THRESHOLD', '5'))
+AUTO_QUALITY_RECOVERY_SECONDS = int(os.getenv('AUTO_QUALITY_RECOVERY_SECONDS', '180'))
+AUTO_QUALITY_SWITCH_COOLDOWN_SECONDS = int(os.getenv('AUTO_QUALITY_SWITCH_COOLDOWN_SECONDS', '30'))
+QUALITY_PROFILE_ORDER = ['low', 'medium', 'high']
+AUTO_QUALITY_LOCK_PROFILE = os.getenv('AUTO_QUALITY_LOCK_PROFILE', '').strip().lower()
+_quality_profile_lock = threading.Lock()
+_quality_current_index = QUALITY_PROFILE_ORDER.index(VIDEO_QUALITY_PROFILE) if VIDEO_QUALITY_PROFILE in QUALITY_PROFILE_ORDER else QUALITY_PROFILE_ORDER.index('high')
+_quality_last_switch_ts = 0.0
+_quality_last_failure_ts = 0.0
+_quality_failure_count = 0
+
+
+def _get_effective_quality_profile_name() -> str:
+    with _quality_profile_lock:
+        return QUALITY_PROFILE_ORDER[_quality_current_index]
+
+
+def _get_effective_realtime_stream_params():
+    profile_name = AUTO_QUALITY_LOCK_PROFILE if AUTO_QUALITY_LOCK_PROFILE in QUALITY_PROFILE_PRESETS else _get_effective_quality_profile_name()
+    preset = QUALITY_PROFILE_PRESETS.get(profile_name, QUALITY_PROFILE_PRESETS['high'])
+    source_fps = int(preset['source_fps'])
+    target_width = int(preset['target_width'])
+    target_height = int(preset['target_height'])
+    bitrate = str(preset['ffmpeg_video_bitrate'])
+    gop_size = int(FFMPEG_GOP_SIZE) if FFMPEG_GOP_SIZE_ENV else max(1, source_fps * 2)
+    return profile_name, source_fps, target_width, target_height, bitrate, gop_size
+
+
+def _mark_quality_failure(reason: str):
+    if AUTO_QUALITY_LOCK_PROFILE in QUALITY_PROFILE_PRESETS:
+        return
+    if not AUTO_QUALITY_ENABLED:
+        return
+    global _quality_failure_count, _quality_last_switch_ts, _quality_last_failure_ts, _quality_current_index
+    now = time.time()
+    with _quality_profile_lock:
+        _quality_last_failure_ts = now
+        _quality_failure_count += 1
+        if _quality_failure_count < AUTO_QUALITY_FAILURE_THRESHOLD:
+            return
+        if now - _quality_last_switch_ts < AUTO_QUALITY_SWITCH_COOLDOWN_SECONDS:
+            return
+        if _quality_current_index <= 0:
+            _quality_failure_count = 0
+            return
+        _quality_current_index -= 1
+        _quality_last_switch_ts = now
+        _quality_failure_count = 0
+        new_profile = QUALITY_PROFILE_ORDER[_quality_current_index]
+    logger.warning(f"⚠️ 自动降档到 {new_profile}（原因: {reason}）")
+
+
+def _mark_quality_success():
+    if AUTO_QUALITY_LOCK_PROFILE in QUALITY_PROFILE_PRESETS:
+        return
+    if not AUTO_QUALITY_ENABLED:
+        return
+    global _quality_failure_count, _quality_last_switch_ts, _quality_current_index
+    now = time.time()
+    with _quality_profile_lock:
+        if _quality_failure_count > 0:
+            _quality_failure_count -= 1
+        if now - _quality_last_failure_ts < AUTO_QUALITY_RECOVERY_SECONDS:
+            return
+        if now - _quality_last_switch_ts < AUTO_QUALITY_SWITCH_COOLDOWN_SECONDS:
+            return
+        if _quality_current_index >= len(QUALITY_PROFILE_ORDER) - 1:
+            return
+        _quality_current_index += 1
+        _quality_last_switch_ts = now
+        new_profile = QUALITY_PROFILE_ORDER[_quality_current_index]
+    logger.info(f"✅ 自动升档到 {new_profile}（链路稳定）")
 # 插值框复用阈值：限制旧检测结果复用时长，避免低延迟模式下出现拖影
 INTERPOLATED_DETECTION_MAX_AGE_MS = int(os.getenv('INTERPOLATED_DETECTION_MAX_AGE_MS', '200'))
 INTERPOLATED_DETECTION_MAX_AGE_SEC = max(0.0, INTERPOLATED_DETECTION_MAX_AGE_MS / 1000.0)
@@ -1495,7 +1604,8 @@ def buffer_streamer_worker(device_id: str):
         device_codec_locks[device_id] = threading.Lock()
 
     # 流畅度优化：基于时间戳的帧率控制
-    frame_interval = 1.0 / SOURCE_FPS
+    _profile_name, _effective_fps, _effective_w, _effective_h, _effective_bitrate, _effective_gop = _get_effective_realtime_stream_params()
+    frame_interval = 1.0 / _effective_fps
     last_frame_time = time.time()
     last_processed_frame = None
     last_processed_detections = []
@@ -1613,13 +1723,16 @@ def buffer_streamer_worker(device_id: str):
             # 更新该设备的帧计数
             frame_counts[device_id] += 1
             frame_count = frame_counts[device_id]
+            profile_name, effective_fps, effective_w, effective_h, effective_bitrate, effective_gop = _get_effective_realtime_stream_params()
+            frame_interval = 1.0 / max(1, effective_fps)
 
             # 立即缩放到目标分辨率
             original_height, original_width = frame.shape[:2]
-            if (original_width, original_height) != TARGET_RESOLUTION:
-                frame = cv2.resize(frame, TARGET_RESOLUTION, interpolation=cv2.INTER_LINEAR)
+            effective_resolution = (effective_w, effective_h)
+            if (original_width, original_height) != effective_resolution:
+                frame = cv2.resize(frame, effective_resolution, interpolation=cv2.INTER_CUBIC)
 
-            height, width = TARGET_HEIGHT, TARGET_WIDTH
+            height, width = effective_h, effective_w
 
             # 初始化推送进程（为该设备）- 只在需要时启动，避免频繁重启
             if pusher_process is None or pusher_process.poll() is not None:
@@ -1777,7 +1890,7 @@ def buffer_streamer_worker(device_id: str):
                         "-vcodec", "rawvideo",
                         "-pix_fmt", "bgr24",
                         "-s", f"{width}x{height}",
-                        "-r", str(SOURCE_FPS),
+                        "-r", str(effective_fps),
                         "-i", "-",
                     ]
                     
@@ -1789,14 +1902,14 @@ def buffer_streamer_worker(device_id: str):
                     # 获取设备实际使用的编码器（如果设备有失败记录，使用软件编码；否则使用全局配置）
                     with device_codec_locks[device_id]:
                         device_codec = device_codec_status.get(device_id, _hwaccel_codec)
-                    gop_size_for_low_latency = SOURCE_FPS
+                    gop_size_for_low_latency = max(1, effective_gop)
                     
                     # 根据编码器类型构建FFmpeg命令
                     if device_codec == 'h264_nvenc':
                         # 使用NVIDIA硬件编码器
                         ffmpeg_cmd.extend([
                             "-c:v", "h264_nvenc",
-                            "-b:v", FFMPEG_VIDEO_BITRATE,
+                            "-b:v", effective_bitrate,
                             "-pix_fmt", "yuv420p",
                             "-preset", "p4",  # NVENC预设：p1(最快)到p7(最慢)，p4为平衡
                             "-tune", "ll",  # 低延迟调优
@@ -1807,18 +1920,20 @@ def buffer_streamer_worker(device_id: str):
                             "-rc-lookahead", "0",  # 禁用lookahead以降低延迟
                             "-surfaces", "1",  # 最小表面数，降低延迟
                             "-delay", "0",  # 无延迟
+                            "-profile:v", "main",
                             "-f", "flv",
                         ])
                     else:
                         # 使用软件编码器
                         ffmpeg_cmd.extend([
                             "-c:v", "libx264",
-                            "-b:v", FFMPEG_VIDEO_BITRATE,  # 使用配置的比特率（默认500k）
+                            "-b:v", effective_bitrate,
                             "-pix_fmt", "yuv420p",
                             "-preset", FFMPEG_PRESET,  # 使用配置的预设（默认ultrafast）
                             "-tune", "zerolatency",
+                            "-profile:v", "main",
                             "-g", str(gop_size_for_low_latency),  # GOP 大小：1秒一个关键帧
-                            "-keyint_min", str(SOURCE_FPS),  # 最小关键帧间隔：1秒
+                            "-keyint_min", str(effective_fps),  # 最小关键帧间隔：1秒
                             "-f", "flv",
                         ])
                         # 如果配置了线程数限制，添加线程参数（仅软件编码）
@@ -1839,8 +1954,9 @@ def buffer_streamer_worker(device_id: str):
                     codec_info = f"硬件编码 ({device_codec})" if device_codec == 'h264_nvenc' else f"软件编码 ({device_codec})"
                     logger.info(f"🚀 启动设备 {device_id} 推送进程（优化模式：低CPU占用）")
                     logger.info(f"   📺 推流地址: {rtmp_url}")
-                    logger.info(f"   📐 尺寸: {width}x{height}, 帧率: {SOURCE_FPS}fps")
-                    logger.info(f"   🎬 编码器: {codec_info}, 比特率: {FFMPEG_VIDEO_BITRATE}, GOP: {gop_size_for_low_latency}")
+                    logger.info(f"   📐 尺寸: {width}x{height}, 帧率: {effective_fps}fps")
+                    logger.info(f"   🎬 编码器: {codec_info}, 比特率: {effective_bitrate}, GOP: {gop_size_for_low_latency}")
+                    logger.info(f"   🎯 画质档位: {profile_name}")
                     if device_codec != 'h264_nvenc' and FFMPEG_THREADS is not None and str(FFMPEG_THREADS).strip():
                         logger.info(f"   🧵 编码线程数: {FFMPEG_THREADS}")
                     logger.debug(f"   FFmpeg命令: {' '.join(ffmpeg_cmd)}")
@@ -1969,6 +2085,7 @@ def buffer_streamer_worker(device_id: str):
                             device_pusher_stderr_threads.pop(device_id, None)
 
                             pusher_retry_count += 1
+                            _mark_quality_failure("推流进程启动失败")
                             if pusher_retry_count >= pusher_max_retries:
                                 logger.error(
                                     f"❌ 设备 {device_id} 推送进程启动失败次数过多 ({pusher_retry_count}/{pusher_max_retries})，等待10秒后重置重试计数")
@@ -1979,6 +2096,7 @@ def buffer_streamer_worker(device_id: str):
                         else:
                             # 推送进程启动成功，重置重试计数
                             pusher_retry_count = 0
+                            _mark_quality_success()
                             device_pushers[device_id] = pusher_process
                             logger.info(f"✅ 设备 {device_id} 推送进程已启动 (PID: {pusher_process.pid})")
                             logger.info(f"   📺 推流地址: {rtmp_url}")
@@ -2240,8 +2358,11 @@ def buffer_streamer_worker(device_id: str):
                     try:
                         pusher_process.stdin.write(output_frame.tobytes())
                         pusher_process.stdin.flush()
+                        if next_output_frame % 150 == 0:
+                            _mark_quality_success()
                     except Exception as e:
                         logger.error(f"❌ 设备 {device_id} 推送帧失败: {str(e)}")
+                        _mark_quality_failure("推送帧失败")
                         if pusher_process.poll() is not None:
                             pusher_process = None
                             device_pushers.pop(device_id, None)

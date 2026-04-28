@@ -151,27 +151,134 @@ SessionLocal = sessionmaker(bind=engine)
 db_session = scoped_session(SessionLocal)
 
 # 配置参数
-SOURCE_FPS = int(os.getenv('SOURCE_FPS', '15'))  # 源流帧率
-TARGET_WIDTH = int(os.getenv('TARGET_WIDTH', '1280'))  # 目标宽度
-TARGET_HEIGHT = int(os.getenv('TARGET_HEIGHT', '720'))  # 目标高度
+SOURCE_FPS = int(os.getenv('SOURCE_FPS', '25'))  # 源流帧率（高清流畅）
+TARGET_WIDTH = int(os.getenv('TARGET_WIDTH', '1280'))  # 目标宽度（高清）
+TARGET_HEIGHT = int(os.getenv('TARGET_HEIGHT', '720'))  # 目标高度（高清）
 TARGET_RESOLUTION = (TARGET_WIDTH, TARGET_HEIGHT)
-EXTRACT_INTERVAL = int(os.getenv('EXTRACT_INTERVAL', '5'))  # 抽帧间隔（每N帧抽1帧）
+EXTRACT_INTERVAL = int(os.getenv('EXTRACT_INTERVAL', '2'))  # 抽帧间隔（每N帧抽1帧）
 # 计算实际推流帧率（抽帧后的帧率）
 TARGET_FPS = max(1, SOURCE_FPS // EXTRACT_INTERVAL)  # 实际推流帧率，至少1fps
 BUFFER_QUEUE_SIZE = int(os.getenv('BUFFER_QUEUE_SIZE', '50'))  # 缓流器队列大小
 
 # FFmpeg编码参数
-FFMPEG_PRESET_ENV = os.getenv('FFMPEG_PRESET', 'ultrafast')
-FFMPEG_PRESET = FFMPEG_PRESET_ENV.strip() if FFMPEG_PRESET_ENV and FFMPEG_PRESET_ENV.strip() else 'ultrafast'
-FFMPEG_VIDEO_BITRATE_ENV = os.getenv('FFMPEG_VIDEO_BITRATE', '500k')
-FFMPEG_VIDEO_BITRATE = FFMPEG_VIDEO_BITRATE_ENV.strip() if FFMPEG_VIDEO_BITRATE_ENV and FFMPEG_VIDEO_BITRATE_ENV.strip() else '500k'
+FFMPEG_PRESET_ENV = os.getenv('FFMPEG_PRESET', 'veryfast')
+FFMPEG_PRESET = FFMPEG_PRESET_ENV.strip() if FFMPEG_PRESET_ENV and FFMPEG_PRESET_ENV.strip() else 'veryfast'
+FFMPEG_VIDEO_BITRATE_ENV = os.getenv('FFMPEG_VIDEO_BITRATE', '3500k')
+FFMPEG_VIDEO_BITRATE = FFMPEG_VIDEO_BITRATE_ENV.strip() if FFMPEG_VIDEO_BITRATE_ENV and FFMPEG_VIDEO_BITRATE_ENV.strip() else '3500k'
 FFMPEG_THREADS_ENV = os.getenv('FFMPEG_THREADS', None)
 FFMPEG_THREADS = None if not FFMPEG_THREADS_ENV or FFMPEG_THREADS_ENV.strip() == '' else FFMPEG_THREADS_ENV.strip()
 FFMPEG_GOP_SIZE_ENV = os.getenv('FFMPEG_GOP_SIZE', None)
 # 优化：减小GOP大小，提高关键帧频率，减少首帧加载时间
 # 默认GOP设为实际推流帧率（约1秒一个关键帧），而不是源流帧率的2倍
 # 这样可以更快地开始播放，减少转圈时间
-FFMPEG_GOP_SIZE = int(FFMPEG_GOP_SIZE_ENV) if FFMPEG_GOP_SIZE_ENV else max(1, TARGET_FPS)
+FFMPEG_GOP_SIZE = int(FFMPEG_GOP_SIZE_ENV) if FFMPEG_GOP_SIZE_ENV else max(1, SOURCE_FPS * 2)
+# 画质分档（low/medium/high）
+VIDEO_QUALITY_PROFILE = os.getenv('VIDEO_QUALITY_PROFILE', '').strip().lower()
+QUALITY_PROFILE_PRESETS = {
+    'low': {
+        'source_fps': 15,
+        'target_width': 640,
+        'target_height': 360,
+        'ffmpeg_video_bitrate': '1000k',
+    },
+    'medium': {
+        'source_fps': 20,
+        'target_width': 1280,
+        'target_height': 720,
+        'ffmpeg_video_bitrate': '2500k',
+    },
+    'high': {
+        'source_fps': 25,
+        'target_width': 1280,
+        'target_height': 720,
+        'ffmpeg_video_bitrate': '3500k',
+    },
+}
+if VIDEO_QUALITY_PROFILE in QUALITY_PROFILE_PRESETS:
+    selected_profile = QUALITY_PROFILE_PRESETS[VIDEO_QUALITY_PROFILE]
+    SOURCE_FPS = selected_profile['source_fps']
+    TARGET_WIDTH = selected_profile['target_width']
+    TARGET_HEIGHT = selected_profile['target_height']
+    TARGET_RESOLUTION = (TARGET_WIDTH, TARGET_HEIGHT)
+    FFMPEG_VIDEO_BITRATE = selected_profile['ffmpeg_video_bitrate']
+    TARGET_FPS = max(1, SOURCE_FPS // EXTRACT_INTERVAL)
+    if not FFMPEG_GOP_SIZE_ENV:
+        FFMPEG_GOP_SIZE = max(1, SOURCE_FPS * 2)
+
+# 自适应画质配置：根据推流稳定性自动升降档
+AUTO_QUALITY_ENABLED = os.getenv('AUTO_QUALITY_ENABLED', 'true').strip().lower() in ('1', 'true', 'yes', 'on')
+AUTO_QUALITY_FAILURE_THRESHOLD = int(os.getenv('AUTO_QUALITY_FAILURE_THRESHOLD', '5'))
+AUTO_QUALITY_RECOVERY_SECONDS = int(os.getenv('AUTO_QUALITY_RECOVERY_SECONDS', '180'))
+AUTO_QUALITY_SWITCH_COOLDOWN_SECONDS = int(os.getenv('AUTO_QUALITY_SWITCH_COOLDOWN_SECONDS', '30'))
+QUALITY_PROFILE_ORDER = ['low', 'medium', 'high']
+AUTO_QUALITY_LOCK_PROFILE = os.getenv('AUTO_QUALITY_LOCK_PROFILE', '').strip().lower()
+_quality_profile_lock = threading.Lock()
+_quality_current_index = QUALITY_PROFILE_ORDER.index(VIDEO_QUALITY_PROFILE) if VIDEO_QUALITY_PROFILE in QUALITY_PROFILE_ORDER else QUALITY_PROFILE_ORDER.index('high')
+_quality_last_switch_ts = 0.0
+_quality_last_failure_ts = 0.0
+_quality_failure_count = 0
+
+
+def _get_effective_quality_profile_name() -> str:
+    with _quality_profile_lock:
+        return QUALITY_PROFILE_ORDER[_quality_current_index]
+
+
+def _get_effective_stream_params():
+    profile_name = AUTO_QUALITY_LOCK_PROFILE if AUTO_QUALITY_LOCK_PROFILE in QUALITY_PROFILE_PRESETS else _get_effective_quality_profile_name()
+    preset = QUALITY_PROFILE_PRESETS.get(profile_name, QUALITY_PROFILE_PRESETS['high'])
+    source_fps = int(preset['source_fps'])
+    target_width = int(preset['target_width'])
+    target_height = int(preset['target_height'])
+    bitrate = str(preset['ffmpeg_video_bitrate'])
+    gop_size = int(FFMPEG_GOP_SIZE) if FFMPEG_GOP_SIZE_ENV else max(1, source_fps * 2)
+    return profile_name, source_fps, target_width, target_height, bitrate, gop_size
+
+
+def _mark_quality_failure(reason: str):
+    if AUTO_QUALITY_LOCK_PROFILE in QUALITY_PROFILE_PRESETS:
+        return
+    if not AUTO_QUALITY_ENABLED:
+        return
+    global _quality_failure_count, _quality_last_switch_ts, _quality_last_failure_ts, _quality_current_index
+    now = time.time()
+    with _quality_profile_lock:
+        _quality_last_failure_ts = now
+        _quality_failure_count += 1
+        if _quality_failure_count < AUTO_QUALITY_FAILURE_THRESHOLD:
+            return
+        if now - _quality_last_switch_ts < AUTO_QUALITY_SWITCH_COOLDOWN_SECONDS:
+            return
+        if _quality_current_index <= 0:
+            _quality_failure_count = 0
+            return
+        _quality_current_index -= 1
+        _quality_last_switch_ts = now
+        _quality_failure_count = 0
+        new_profile = QUALITY_PROFILE_ORDER[_quality_current_index]
+    logger.warning(f"⚠️ 自动降档到 {new_profile}（原因: {reason}）")
+
+
+def _mark_quality_success():
+    if AUTO_QUALITY_LOCK_PROFILE in QUALITY_PROFILE_PRESETS:
+        return
+    if not AUTO_QUALITY_ENABLED:
+        return
+    global _quality_failure_count, _quality_last_switch_ts, _quality_current_index
+    now = time.time()
+    with _quality_profile_lock:
+        if _quality_failure_count > 0:
+            _quality_failure_count -= 1
+        if now - _quality_last_failure_ts < AUTO_QUALITY_RECOVERY_SECONDS:
+            return
+        if now - _quality_last_switch_ts < AUTO_QUALITY_SWITCH_COOLDOWN_SECONDS:
+            return
+        if _quality_current_index >= len(QUALITY_PROFILE_ORDER) - 1:
+            return
+        _quality_current_index += 1
+        _quality_last_switch_ts = now
+        new_profile = QUALITY_PROFILE_ORDER[_quality_current_index]
+    logger.info(f"✅ 自动升档到 {new_profile}（链路稳定）")
 
 # 硬件加速配置
 FFMPEG_HWACCEL_ENV = os.getenv('FFMPEG_HWACCEL', 'auto').strip().lower()
@@ -575,6 +682,7 @@ def pusher_worker():
     device_pusher_processes = {}  # {device_id: subprocess.Popen}
     # 跟踪每个设备使用的编码器（用于自动回退）
     device_codec_fallback = {}  # {device_id: bool} True表示已回退到软件编码
+    device_push_success_counts = {}  # {device_id: int}
     
     while not stop_event.is_set():
         try:
@@ -625,8 +733,10 @@ def pusher_worker():
                                 # 硬件编码失败，回退到软件编码
                                 logger.warning(f"⚠️  设备 {device_id} 硬件编码失败，自动回退到软件编码")
                                 device_codec_fallback[device_id] = True
+                                _mark_quality_failure("硬件编码异常")
                             
                             logger.warning(f"⚠️  设备 {device_id} 推送进程异常退出 (退出码: {exit_code})")
+                            _mark_quality_failure(f"FFmpeg进程退出({exit_code})")
                             
                             # 提取关键错误信息
                             if stderr_lines:
@@ -654,11 +764,13 @@ def pusher_worker():
                         # 检查RTMP服务器连接
                         if not check_rtmp_server_connection(rtmp_url):
                             logger.warning(f"⚠️  设备 {device_id} RTMP服务器不可用: {rtmp_url}")
+                            _mark_quality_failure("RTMP服务器不可用")
                             time.sleep(2)
                             continue
                         
                         # 获取帧的实际尺寸（让FFmpeg处理resize）
                         frame_height, frame_width = frame.shape[:2]
+                        profile_name, effective_fps, effective_w, effective_h, effective_bitrate, effective_gop = _get_effective_stream_params()
                         
                         # 决定使用哪个编码器（如果硬件编码失败过，使用软件编码）
                         use_hardware = (_hwaccel_codec == 'h264_nvenc' and 
@@ -666,12 +778,12 @@ def pusher_worker():
                         
                         # 如果使用硬件编码，确保分辨率对齐到16的倍数
                         if use_hardware:
-                            aligned_width, aligned_height = align_resolution(TARGET_WIDTH, TARGET_HEIGHT, 16)
-                            if aligned_width != TARGET_WIDTH or aligned_height != TARGET_HEIGHT:
-                                logger.debug(f"设备 {device_id} 分辨率对齐: {TARGET_WIDTH}x{TARGET_HEIGHT} -> {aligned_width}x{aligned_height}")
+                            aligned_width, aligned_height = align_resolution(effective_w, effective_h, 16)
+                            if aligned_width != effective_w or aligned_height != effective_h:
+                                logger.debug(f"设备 {device_id} 分辨率对齐: {effective_w}x{effective_h} -> {aligned_width}x{aligned_height}")
                             target_w, target_h = aligned_width, aligned_height
                         else:
-                            target_w, target_h = TARGET_WIDTH, TARGET_HEIGHT
+                            target_w, target_h = effective_w, effective_h
                         
                         # 构建FFmpeg命令（简化，让FFmpeg处理resize和编码）
                         ffmpeg_cmd = [
@@ -683,9 +795,9 @@ def pusher_worker():
                             "-vcodec", "rawvideo",
                             "-pix_fmt", "rgb24",  # 使用RGB格式输入，确保颜色正确
                             "-s", f"{frame_width}x{frame_height}",  # 使用实际帧尺寸
-                            "-r", str(SOURCE_FPS),  # 使用源流帧率
+                            "-r", str(effective_fps),  # 使用当前档位帧率
                             "-i", "-",
-                            "-vf", f"scale={target_w}:{target_h}:flags=fast_bilinear",  # 让FFmpeg处理resize，自动转换颜色空间
+                            "-vf", f"scale={target_w}:{target_h}:flags=lanczos",  # 高清优先：使用lanczos缩放减少模糊
                         ]
                         
                         # 根据硬件加速配置选择编码器
@@ -693,14 +805,14 @@ def pusher_worker():
                             # 使用硬件编码 h264_nvenc
                             ffmpeg_cmd.extend([
                                 "-c:v", "h264_nvenc",
-                                "-b:v", FFMPEG_VIDEO_BITRATE,
+                                "-b:v", effective_bitrate,
                                 "-preset", "p3",  # p3是低延迟预设
                                 "-tune", "ll",  # 低延迟调优
                                 "-gpu", "0",  # 使用GPU 0
                                 "-rc", "vbr",  # 可变比特率
-                                "-profile:v", "baseline",
+                                "-profile:v", "main",
                                 "-level", "4.0",
-                                "-g", str(FFMPEG_GOP_SIZE),
+                                "-g", str(effective_gop),
                                 "-bf", "0",  # 无B帧
                                 "-pix_fmt", "yuv420p",  # 输出像素格式
                                 "-colorspace", "bt709",  # 使用BT.709颜色空间
@@ -711,11 +823,11 @@ def pusher_worker():
                             # 使用软件编码 libx264
                             ffmpeg_cmd.extend([
                                 "-c:v", "libx264",
-                                "-b:v", FFMPEG_VIDEO_BITRATE,
+                                "-b:v", effective_bitrate,
                                 "-preset", FFMPEG_PRESET,
                                 "-tune", "zerolatency",
-                                "-profile:v", "baseline",
-                                "-g", str(FFMPEG_GOP_SIZE),
+                                "-profile:v", "main",
+                                "-g", str(effective_gop),
                                 "-bf", "0",
                                 "-pix_fmt", "yuv420p",  # 输出像素格式
                                 "-colorspace", "bt709",  # 使用BT.709颜色空间
@@ -788,12 +900,14 @@ def pusher_worker():
                                     # 硬件编码失败，回退到软件编码
                                     logger.warning(f"⚠️  设备 {device_id} 硬件编码失败，自动回退到软件编码")
                                     device_codec_fallback[device_id] = True
+                                    _mark_quality_failure("硬件编码启动失败")
                                     # 清理失败的进程
                                     pusher_process = None
                                     # 继续循环，下次会使用软件编码重试
                                     continue
                                 else:
                                     logger.error(f"❌ 设备 {device_id} 推送进程启动失败 (退出码: {exit_code})")
+                                    _mark_quality_failure(f"推流进程启动失败({exit_code})")
                                     
                                     if error_lines:
                                         key_errors = []
@@ -817,8 +931,9 @@ def pusher_worker():
                             codec_info = f"硬件编码 ({actual_codec})" if actual_codec == 'h264_nvenc' else f"软件编码 ({actual_codec})"
                             logger.info(f"✅ 设备 {device_id} 推送进程已启动 (PID: {pusher_process.pid})")
                             logger.info(f"   📺 推流地址: {rtmp_url}")
-                            logger.info(f"   📐 推流参数: {target_w}x{target_h} @ {SOURCE_FPS} fps")
-                            logger.info(f"   🎬 编码器: {codec_info}, 比特率: {FFMPEG_VIDEO_BITRATE}")
+                            logger.info(f"   📐 推流参数: {target_w}x{target_h} @ {effective_fps} fps")
+                            logger.info(f"   🎬 编码器: {codec_info}, 比特率: {effective_bitrate}")
+                            logger.info(f"   🎯 画质档位: {profile_name}, GOP: {effective_gop}")
                             
                         except Exception as e:
                             logger.error(f"❌ 设备 {device_id} 启动推送进程失败: {str(e)}", exc_info=True)
@@ -835,6 +950,7 @@ def pusher_worker():
                             pusher_process.stdin.flush()
                         except (BrokenPipeError, OSError, IOError) as e:
                             logger.error(f"❌ 设备 {device_id} 推送帧失败: {str(e)}")
+                            _mark_quality_failure("写入推流进程失败")
                             if pusher_process.poll() is not None:
                                 stderr_lines = []
                                 if device_id in device_pusher_stderr_buffers:
@@ -857,6 +973,7 @@ def pusher_worker():
                                     # 硬件编码失败，回退到软件编码
                                     logger.warning(f"⚠️  设备 {device_id} 硬件编码失败，自动回退到软件编码")
                                     device_codec_fallback[device_id] = True
+                                    _mark_quality_failure("硬件编码运行失败")
                                 
                                 logger.warning(f"⚠️  设备 {device_id} 推送进程异常退出 (退出码: {exit_code})")
                                 
@@ -875,6 +992,11 @@ def pusher_worker():
                                 pusher_process = None
                                 device_pusher_processes.pop(device_id, None)
                                 device_pushers.pop(device_id, None)
+                        else:
+                            device_push_success_counts[device_id] = device_push_success_counts.get(device_id, 0) + 1
+                            if device_push_success_counts[device_id] >= 150:
+                                _mark_quality_success()
+                                device_push_success_counts[device_id] = 0
                         except Exception as e:
                             logger.error(f"❌ 设备 {device_id} 推送帧失败: {str(e)}")
                             if pusher_process and pusher_process.poll() is not None:
