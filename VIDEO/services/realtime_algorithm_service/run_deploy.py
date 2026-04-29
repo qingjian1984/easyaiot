@@ -1674,6 +1674,34 @@ def read_ffmpeg_stderr(device_id: str, stderr_pipe, stderr_buffer: list, stderr_
         stderr_pipe.close()
 
 
+def _is_likely_rtsp_flat_corrupt_frame(
+    frame,
+    std_max: float = 4.0,
+    mean_lo: float = 80.0,
+    mean_hi: float = 180.0,
+) -> bool:
+    """
+    判断整帧是否像解码失败后的灰屏/塌缩（OpenCV 仍可能 ret=True）。
+    子码流 H.265+UDP 丢参考帧时常见全图近常数或低方差中灰。
+    """
+    if frame is None or frame.size == 0:
+        return True
+    try:
+        if len(frame.shape) == 2:
+            gray = frame
+        else:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        _mean, _std = cv2.meanStdDev(gray)
+        m, s = float(_mean[0][0]), float(_std[0][0])
+        if s < 2.0:
+            return True
+        if s < std_max and mean_lo < m < mean_hi:
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def buffer_streamer_worker(device_id: str):
     """缓流器工作线程：为指定摄像头缓冲源流，接收推帧器插入的帧，输出到目标流"""
     logger.info(f"💾 缓流器线程启动 [设备: {device_id}]")
@@ -1736,6 +1764,24 @@ def buffer_streamer_worker(device_id: str):
     last_processed_detections = []
     last_processed_detection_timestamp = 0.0
     last_processed_detection_frame_number = 0
+
+    # 灰屏/解码塌缩检测（环境变量可调，见 AI_RTSP_GRAY_*）
+    _gray_reconnect = (os.getenv("AI_RTSP_GRAY_RECONNECT", "1").strip().lower() not in ("0", "false", "no", "off"))
+    try:
+        _gray_streak_need = max(1, int((os.getenv("AI_RTSP_GRAY_STREAK", "3").strip() or "3")))
+    except Exception:
+        _gray_streak_need = 3
+
+    def _gray_float(name: str, default: float) -> float:
+        try:
+            return float((os.getenv(name) or "").strip() or default)
+        except Exception:
+            return default
+
+    _gray_std_max = _gray_float("AI_RTSP_GRAY_STD_MAX", 4.0)
+    _gray_mean_lo = _gray_float("AI_RTSP_GRAY_MEAN_LO", 80.0)
+    _gray_mean_hi = _gray_float("AI_RTSP_GRAY_MEAN_HI", 180.0)
+    gray_bad_streak = 0
 
     while not stop_event.is_set():
         try:
@@ -1842,8 +1888,32 @@ def buffer_streamer_worker(device_id: str):
                     cap.release()
                     cap = None
                     device_caps.pop(device_id, None)
+                gray_bad_streak = 0
                 time.sleep(1)
                 continue
+
+            # RTSP：连续多帧疑似灰屏/解码塌缩则重连（ret 仍为 True 时原有逻辑不会处理）
+            if rtsp_url.startswith("rtsp://") and _gray_reconnect:
+                if _is_likely_rtsp_flat_corrupt_frame(
+                    frame, _gray_std_max, _gray_mean_lo, _gray_mean_hi
+                ):
+                    gray_bad_streak += 1
+                    if gray_bad_streak >= _gray_streak_need:
+                        logger.warning(
+                            f"设备 {device_id} 连续 {gray_bad_streak} 帧疑似解码灰屏/塌缩，释放并重连 RTSP"
+                        )
+                        if cap is not None:
+                            try:
+                                cap.release()
+                            except Exception:
+                                pass
+                            cap = None
+                            device_caps.pop(device_id, None)
+                        gray_bad_streak = 0
+                        time.sleep(0.5)
+                        continue
+                    continue
+            gray_bad_streak = 0
 
             # 更新该设备的帧计数
             frame_counts[device_id] += 1
