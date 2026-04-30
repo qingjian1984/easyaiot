@@ -186,6 +186,7 @@ check_images_exist() {
         "iot-module-message-biz:latest"
         "iot-sink-biz:latest"
         "iot-gb28181-biz:latest"
+        "iot-video-biz:latest"
     )
     
     local missing_count=0
@@ -485,6 +486,7 @@ DEVICE模块 Docker Compose 管理脚本 (macOS 版本)
     - iot-message
     - iot-sink
     - iot-gb28181
+    - iot-video
 
 注意：
     - 此脚本需要 Docker Desktop for Mac

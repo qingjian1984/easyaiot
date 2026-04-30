@@ -195,6 +195,8 @@ sip:
   id: 44010200492000000001
   # [可选] 默认设备认证密码，后续扩展使用设备单独密码, 移除密码将不进行校验
   password: admin123
+  # [可选] 是否启用设备REGISTER密码鉴权；关闭后将跳过401挑战与密码校验（仅用于兼容不支持鉴权的设备）
+  register-password-auth: true
   # 是否存储alarm信息
   alarm: false
 

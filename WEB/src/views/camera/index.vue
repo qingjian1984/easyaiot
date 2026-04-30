@@ -30,6 +30,8 @@
                       </template>
                       新增直连设备
                     </a-button>
+                    <a-button @click="openSdkRegisterModal('dahua')">大华 SDK 注册</a-button>
+                    <a-button @click="openSdkRegisterModal('hikvision')">海康 SDK 注册</a-button>
                     <a-button @click="handleUpdateOnvifDevice">
                       <template #icon>
                         <SyncOutlined/>
@@ -93,6 +95,8 @@
                       </template>
                       新增直连设备
                     </a-button>
+                    <a-button @click="openSdkRegisterModal('dahua')">大华 SDK 注册</a-button>
+                    <a-button @click="openSdkRegisterModal('hikvision')">海康 SDK 注册</a-button>
                     <a-button @click="handleUpdateOnvifDevice">
                       <template #icon>
                         <SyncOutlined/>
@@ -112,6 +116,7 @@
               <DialogPlayer title="视频播放" @register="registerPlayerAddModel"
                             @success="handlePlayerSuccess"/>
               <VideoModal @register="registerAddModel" @success="handleSuccess"/>
+              <SdkVendorRegisterModal @register="registerSdkVendorModal" @success="handleSuccess"/>
             </TabPane>
             <TabPane key="gb28181" tab="国标设备">
               <Gb28181Video ref="gb28181VideoRef"/>
@@ -163,6 +168,8 @@ import {useMessage} from '@/hooks/web/useMessage';
 import {getBasicColumns, getFormConfig} from "./Data";
 import {useModal} from "@/components/Modal";
 import VideoModal from "./components/VideoModal/index.vue";
+import SdkVendorRegisterModal from "./components/SdkVendorRegisterModal/index.vue";
+import type { SdkVendor } from '@/api/device/iot_video_sdk';
 import {
   deleteDevice,
   DeviceInfo,
@@ -192,6 +199,12 @@ const route = useRoute();
 
 const {createMessage} = useMessage();
 const [registerAddModel, {openModal}] = useModal();
+
+const [registerSdkVendorModal, { openModal: openSdkVendorModal }] = useModal();
+
+function openSdkRegisterModal(vendor: SdkVendor) {
+  openSdkVendorModal(true, { vendor });
+}
 
 const [registerPlayerAddModel, {openModal: openPlayerAddModel}] = useModal();
 

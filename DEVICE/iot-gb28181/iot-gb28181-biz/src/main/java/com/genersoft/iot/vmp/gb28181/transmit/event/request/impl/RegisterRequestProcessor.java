@@ -137,18 +137,24 @@ public class RegisterRequestProcessor extends SIPRequestProcessorParent implemen
                 }
             }
 
-            AuthorizationHeader authHead = (AuthorizationHeader) request.getHeader(AuthorizationHeader.NAME);
-            if (authHead == null && !ObjectUtils.isEmpty(password)) {
-                log.info(title + " 设备：{}, 回复401: {}", deviceId, requestAddress);
-                response = getMessageFactory().createResponse(Response.UNAUTHORIZED, request);
-                new DigestServerAuthenticationHelper().generateChallenge(getHeaderFactory(), response, sipConfig.getDomain());
-                sipSender.transmitRequest(request.getLocalAddress().getHostAddress(), response);
-                return;
-            }
+            if (!sipConfig.isRegisterPasswordAuth()) {
+                // 兼容部分不支持REGISTER鉴权的设备（如部分海康型号），通过配置明确关闭鉴权
+                passwordCorrect = true;
+                log.warn("{} 设备：{}, 地址: {}, 已关闭REGISTER密码鉴权，请确认网络环境可信", title, deviceId, requestAddress);
+            } else {
+                AuthorizationHeader authHead = (AuthorizationHeader) request.getHeader(AuthorizationHeader.NAME);
+                if (authHead == null && !ObjectUtils.isEmpty(password)) {
+                    log.info(title + " 设备：{}, 回复401: {}", deviceId, requestAddress);
+                    response = getMessageFactory().createResponse(Response.UNAUTHORIZED, request);
+                    new DigestServerAuthenticationHelper().generateChallenge(getHeaderFactory(), response, sipConfig.getDomain());
+                    sipSender.transmitRequest(request.getLocalAddress().getHostAddress(), response);
+                    return;
+                }
 
-            // 校验密码是否正确
-            passwordCorrect = ObjectUtils.isEmpty(password) ||
-                    new DigestServerAuthenticationHelper().doAuthenticatePlainTextPassword(request, password);
+                // 校验密码是否正确
+                passwordCorrect = ObjectUtils.isEmpty(password) ||
+                        new DigestServerAuthenticationHelper().doAuthenticatePlainTextPassword(request, password);
+            }
 
             if (!passwordCorrect) {
                 // 注册失败

@@ -28,6 +28,12 @@ public class SipConfig {
 
 	private String password;
 
+	/**
+	 * 是否启用设备REGISTER密码鉴权，默认启用。
+	 * 关闭后将跳过401挑战与密码校验，仅用于兼容不支持鉴权的设备。
+	 */
+	private boolean registerPasswordAuth = true;
+
 	Integer ptzSpeed = 50;
 
 	Integer registerTimeInterval = 120;
