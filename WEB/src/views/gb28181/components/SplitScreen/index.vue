@@ -397,9 +397,40 @@ async function fetchTree() {
       pageNum: 1,
       pageSize: 10000,
     });
-    let tree = handleTree(res.data, 'deviceIdentification');
-    for (let i = 0; i < tree.length; i++) {
-      tree[i].deviceId = tree[i].deviceIdentification;
+    const raw = Array.isArray(res.data) ? res.data : [];
+    /** 补齐国标编号与标题，过滤无效行，避免 handleTree 因 undefined key 导致整棵树为空 */
+    const list = raw
+      .map((item: any) => {
+        const deviceIdentification = String(
+          item.deviceIdentification ?? item.deviceId ?? '',
+        ).trim();
+        return {
+          ...item,
+          deviceIdentification,
+          name:
+            item.name
+            || item.deviceName
+            || deviceIdentification
+            || '未命名设备',
+        };
+      })
+      .filter((item: any) => item.deviceIdentification);
+
+    let tree = handleTree(list, 'deviceIdentification', 'parentId');
+    /** 无层级关系或 handleTree 异常时退回扁平根节点，保证左侧列表可见 */
+    if (tree.length === 0 && list.length > 0) {
+      tree = list.map((node: any) => ({
+        ...node,
+        deviceId: node.deviceIdentification,
+        isLeaf: false,
+      }));
+    }
+    else {
+      for (let i = 0; i < tree.length; i++) {
+        tree[i].deviceId = tree[i].deviceIdentification;
+        if (!tree[i].children?.length)
+          tree[i].isLeaf = false;
+      }
     }
     treeData.value = tree;
   } catch (error) {
@@ -414,23 +445,33 @@ const onLoadData: TreeProps['loadData'] = (treeNode) => {
       resolve();
       return;
     }
-    
-    setTimeout(() => {
+
+    const sipId = String(
+      treeNode.dataRef.deviceIdentification ?? treeNode.dataRef.deviceId ?? '',
+    ).trim();
+    if (!sipId) {
       treeNode.isLeaf = true;
-      getDeviceChannels(treeNode.dataRef.deviceIdentification)
+      resolve();
+      return;
+    }
+
+    setTimeout(() => {
+      getDeviceChannels(sipId)
         .then((res) => {
           // 处理通道列表数据（可能含多级目录）
           const channels = res.data || res.list || [];
           const tmpLoop = handleTree(channels, 'deviceId');
-          assignGb28181SplitScreenKeys(tmpLoop, treeNode.dataRef.deviceIdentification);
+          assignGb28181SplitScreenKeys(tmpLoop, sipId);
 
           treeNode.dataRef.children = tmpLoop;
+          treeNode.isLeaf = !tmpLoop?.length;
           treeData.value = [...treeData.value];
           resolve();
         })
         .catch((error) => {
           console.error('加载通道列表失败:', error);
           createMessage.error('加载通道列表失败');
+          treeNode.isLeaf = true;
           resolve();
         });
     }, 300);

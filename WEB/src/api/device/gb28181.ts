@@ -34,7 +34,11 @@ const commonApi = (method: 'get' | 'post' | 'delete' | 'put', url: string, param
 const normalizePageResponse = (res: any) => {
   const body = res?.data ?? res;
   const page = body?.data ?? body;
-  const list = page?.list ?? (Array.isArray(page) ? page : []);
+  const list =
+    page?.list
+    ?? page?.records
+    ?? page?.rows
+    ?? (Array.isArray(page) ? page : []);
   const total = page?.total ?? body?.total ?? res?.total ?? 0;
   return { data: list, total };
 };
@@ -800,8 +804,8 @@ export const getDeviceChannels = async (deviceId: string) => {
     page: 1,
     count: 10000,
   }, false);
-  const { data } = normalizePageResponse(res);
-  return { data, list: data, total: res?.total ?? 0 };
+  const { data, total } = normalizePageResponse(res);
+  return { data, list: data, total };
 };
 
 // ====================== 其他工具接口 ======================
