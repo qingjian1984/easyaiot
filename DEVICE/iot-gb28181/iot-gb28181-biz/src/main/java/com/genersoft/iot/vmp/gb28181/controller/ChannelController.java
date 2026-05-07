@@ -120,6 +120,20 @@ public class ChannelController {
         return channel;
     }
 
+    @Operation(summary = "删除通道（数据库自增ID）", security = @SecurityRequirement(name = JwtUtils.HEADER))
+    @DeleteMapping("/delete")
+    public void deleteChannel(@RequestParam Integer id){
+        Assert.notNull(id, "通道ID不能为空");
+        channelService.delete(id);
+    }
+
+    @Operation(summary = "批量删除通道（数据库自增ID列表）", security = @SecurityRequirement(name = JwtUtils.HEADER))
+    @PostMapping("/batch/delete")
+    public void batchDeleteChannels(@RequestBody List<Integer> ids){
+        Assert.notEmpty(ids, "通道ID列表不能为空");
+        channelService.delete(ids);
+    }
+
     @Operation(summary = "获取通道列表", security = @SecurityRequirement(name = JwtUtils.HEADER))
     @Parameter(name = "page", description = "当前页", required = true)
     @Parameter(name = "count", description = "每页查询数量", required = true)

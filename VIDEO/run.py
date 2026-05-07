@@ -410,6 +410,42 @@ def create_app():
                     import traceback
                     traceback.print_exc()
                     db.session.rollback()
+
+                # GB28181 等设备 ID 超过原 VARCHAR(30)，会导致 iot-sink 写入 alert 失败，前端告警列表为空
+                try:
+                    widen_specs = [
+                        ('alert', 'device_id', 100),
+                        ('alert', 'device_name', 100),
+                        ('playback', 'device_id', 100),
+                        ('playback', 'device_name', 100),
+                        ('playback', 'file_path', 500),
+                        ('playback', 'thumbnail_path', 500),
+                    ]
+                    for tbl, col, target_len in widen_specs:
+                        result = db.session.execute(text("""
+                            SELECT character_maximum_length
+                            FROM information_schema.columns
+                            WHERE table_schema = 'public'
+                              AND table_name = :t
+                              AND column_name = :c
+                        """), {'t': tbl, 'c': col})
+                        row = result.fetchone()
+                        if row is None:
+                            continue
+                        cur = row[0]
+                        if cur is not None and cur < target_len:
+                            print(f"⚠️  {tbl}.{col} 当前长度 {cur}，正在扩展为 VARCHAR({target_len})...")
+                            db.session.execute(text(
+                                f'ALTER TABLE {tbl} ALTER COLUMN {col} TYPE VARCHAR({target_len})'
+                            ))
+                            db.session.commit()
+                            print(f"✅ {tbl}.{col} 扩展成功")
+                    print("✅ alert/playback 字符列长度检查完成（GB28181 长设备 ID / MinIO URL）")
+                except Exception as e:
+                    print(f"⚠️  alert/playback 字符列扩展失败: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    db.session.rollback()
                 
             except Exception as e:
                 print(f"⚠️  数据库迁移检查失败: {str(e)}")

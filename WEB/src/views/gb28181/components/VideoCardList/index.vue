@@ -253,7 +253,7 @@ function goChannel(record) {
   const params = {
     deviceIdentification: record.deviceIdentification,
   };
-  router.push({name: 'Channel', params});
+  router.push({name: 'Gb28181Channel', params});
 }
 </script>
 

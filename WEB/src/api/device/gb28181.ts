@@ -236,6 +236,20 @@ export const updateChannel = (channel: any) => {
 };
 
 /**
+ * 删除通道（WVP 通道表自增 id，与列表项 id / gbId 一致）
+ */
+export const deleteGbChannel = (id: number) => {
+  return commonApi('delete', `${CHANNEL_PREFIX}/delete`, { id });
+};
+
+/**
+ * 批量删除通道
+ */
+export const batchDeleteGbChannels = (ids: number[]) => {
+  return commonApi('post', `${CHANNEL_PREFIX}/batch/delete`, ids);
+};
+
+/**
  * 添加通道
  * @param channel 通道信息
  */

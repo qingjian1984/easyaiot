@@ -3,51 +3,31 @@
     @register="register"
     title="编辑通道"
     @cancel="handleCancel"
-    :width="700"
+    :width="560"
     @ok="handleOk"
     :canFullscreen="false"
   >
-    <div class="product-modal">
-      <Spin :spinning="state.editLoading">
+    <div class="channel-modal">
+      <Spin :spinning="state.loading">
         <Form
-          :labelCol="{ span: 3 }"
-          :model="validateInfos"
-          :wrapperCol="{ span: 21 }"
+          :labelCol="{ span: 6 }"
+          :wrapperCol="{ span: 16 }"
+          :model="modelRef"
         >
-          <FormItem label="产品模板" name="templateIdentification"
-                    v-bind=validateInfos.templateIdentification>
-            <Select
-              placeholder="产品模板"
-              :options="state.productTemplateList"
-              @change="handleCLickChange"
-              v-model:value="modelRef.templateIdentification"
-              allowClear
-            />
+          <FormItem label="通道名称" name="gbName">
+            <Input v-model:value="modelRef.gbName" placeholder="通道名称" allow-clear />
           </FormItem>
-          <FormItem label="应用场景" name="appId" v-bind=validateInfos.appId>
-            <Input v-model:value="modelRef.appId"/>
+          <FormItem label="国标编码" name="gbDeviceId">
+            <Input v-model:value="modelRef.gbDeviceId" disabled />
           </FormItem>
-          <FormItem label="产品名称" name="productName" v-bind=validateInfos.productName>
-            <Input v-model:value="modelRef.productName"/>
+          <FormItem label="厂商" name="gbManufacturer">
+            <Input v-model:value="modelRef.gbManufacturer" allow-clear />
           </FormItem>
-          <FormItem label="产品类型" name="productType" v-bind=validateInfos.productType>
-            <Select
-              placeholder="产品类型"
-              :options="productTypeList"
-              @change="handleCLickChange"
-              v-model:value="modelRef.productType"
-              allowClear
-            />
+          <FormItem label="型号" name="gbModel">
+            <Input v-model:value="modelRef.gbModel" allow-clear />
           </FormItem>
-          <FormItem label="厂商ID" name="manufacturerId" v-bind=validateInfos.manufacturerId>
-            <Input v-model:value="modelRef.manufacturerId"/>
-          </FormItem>
-          <FormItem label="厂商名称" name="manufacturerName"
-                    v-bind=validateInfos.manufacturerName>
-            <Input v-model:value="modelRef.manufacturerName"/>
-          </FormItem>
-          <FormItem label="产品型号" name="model" v-bind=validateInfos.model>
-            <Input v-model:value="modelRef.model"/>
+          <FormItem label="安装地址" name="gbAddress">
+            <Input v-model:value="modelRef.gbAddress" allow-clear />
           </FormItem>
         </Form>
       </Spin>
@@ -55,177 +35,96 @@
   </BasicModal>
 </template>
 <script lang="ts" setup>
-import {reactive, ref} from 'vue';
+import {reactive} from 'vue';
 import {BasicModal, useModalInner} from '@/components/Modal';
-import {Form, FormItem, Input, Select, Spin,} from 'ant-design-vue';
+import {Form, FormItem, Input, Spin} from 'ant-design-vue';
 import {useMessage} from '@/hooks/web/useMessage';
-import {batchAddDeviceTestList, fetchWhiteGroupList, fetchWhiteList} from "@/api/device/ota";
-import {useTable} from "@/components/Table";
-import {getBasicColumns, getFormConfig} from "./Data";
-import {useRoute} from "vue-router";
-import {productTypeList} from "@/views/product/Data";
+import {getChannel, updateChannel} from '@/api/device/gb28181';
 
-defineOptions({name: 'ChannelModal'})
+defineOptions({name: 'ChannelModal'});
 
 const {createMessage} = useMessage();
-const route = useRoute()
 
 const state = reactive({
-  groupList: [],
-  record: null,
-  fileList: [],
   loading: false,
-  editLoading: false,
-  defaultRule: [],
-  defaultRuleParams: {
-    pageSize: 30,
-    page: 1,
-    total: 0,
-  },
-  productTemplateList: [],
-  defaultQueue: [],
-  defaultQueueParams: {
-    pageSize: 30,
-    page: 1,
-    total: 0,
-  },
 });
 
 const modelRef = reactive({
-  groupId: '',
-  deviceIdentification: '',
+  gbId: 0,
+  gbName: '',
+  gbDeviceId: '',
+  gbManufacturer: '',
+  gbModel: '',
+  gbAddress: '',
 });
 
-const checkedKeys = ref<Array<string | number>>([]);
+function resetModel() {
+  modelRef.gbId = 0;
+  modelRef.gbName = '';
+  modelRef.gbDeviceId = '';
+  modelRef.gbManufacturer = '';
+  modelRef.gbModel = '';
+  modelRef.gbAddress = '';
+}
 
-const [
-  registerTable, {reload}
-] = useTable({
-  canResize: false,
-  showIndexColumn: false,
-  title: '',
-  api: fetchWhiteList,
-  beforeFetch(params) {
-    return {
-      ...params,
-      productIdentification: route.params.productIdentification,
-      deviceIdentification: modelRef.deviceIdentification,
-      groupId: modelRef.groupId,
-    };
-  },
-  columns: getBasicColumns(),
-  useSearchForm: false,
-  showTableSetting: false,
-  formConfig: getFormConfig(),
-  fetchSetting: {
-    listField: 'data',
-    totalField: 'total',
-  },
-  rowSelection: {
-    type: 'checkbox',
-    selectedRowKeys: checkedKeys,
-    onSelect: onSelect,
-    onSelectAll: onSelectAll,
-    getCheckboxProps(record) {
-      if (record.default || record.referencedByDevice) {
-        return {disabled: true};
-      } else {
-        return {disabled: false};
-      }
-    },
-  },
-  rowKey: 'deviceIdentification',
-});
-
-const [register, {closeModal}] = useModalInner((data) => {
-  initGroupList();
+const [register, {closeModal}] = useModalInner(async (data) => {
+  resetModel();
+  const row = data?.record;
+  if (!row?.id) {
+    return;
+  }
+  state.loading = true;
+  try {
+    const res: any = await getChannel(row.id);
+    const ch = res?.data ?? res;
+    if (!ch) {
+      return;
+    }
+    modelRef.gbId = ch.gbId ?? ch.id ?? row.id;
+    modelRef.gbName = ch.gbName ?? '';
+    modelRef.gbDeviceId = ch.gbDeviceId ?? '';
+    modelRef.gbManufacturer = ch.gbManufacturer ?? '';
+    modelRef.gbModel = ch.gbModel ?? '';
+    modelRef.gbAddress = ch.gbAddress ?? '';
+  } finally {
+    state.loading = false;
+  }
 });
 
 const emits = defineEmits(['success']);
 
-async function initGroupList() {
-  state.groupList = [];
-  const record = await fetchWhiteGroupList({
-    pageNo: 1,
-    pageSize: 100,
-    productIdentification: route.params.productIdentification
-  });
-  state.groupList = state.groupList.concat(
-    record.data.map((item) => {
-      item.value = item.id;
-      item.label = item.groupName;
-      return item;
-    }),
-  );
-}
-
-function onSelect(record, selected) {
-  if (selected) {
-    checkedKeys.value = [...checkedKeys.value, record.deviceIdentification];
-  } else {
-    checkedKeys.value = checkedKeys.value.filter((deviceIdentification) => deviceIdentification !== record.deviceIdentification);
-  }
-}
-
-function onSelectAll(selected, selectedRows, changeRows) {
-  const changeIds = changeRows.map((item) => item.deviceIdentification);
-  if (selected) {
-    checkedKeys.value = [...checkedKeys.value, ...changeIds];
-  } else {
-    checkedKeys.value = checkedKeys.value.filter((deviceIdentification) => {
-      return !changeIds.includes(deviceIdentification);
-    });
-  }
-}
-
-const rulesRef = reactive({
-  deviceVersion: [{required: true, message: '请输入设备版本号', trigger: ['change']}],
-});
-
-async function handleReload() {
-  reload();
-}
-
-const useForm = Form.useForm;
-const {validate, resetFields, validateInfos} = useForm(modelRef, rulesRef);
-
-async function handleGroupCLickChange(value) {
-  //console.log('handleCLickChange', value)
-  handleReload();
-}
-
 function handleCancel() {
-  //console.log('handleCancel');
-  resetFields();
+  resetModel();
 }
 
-function handleOk() {//alert(modelRef?.id);
-  if (checkedKeys === undefined || checkedKeys.value.length === 0) {
-    createMessage.warning('请选择设备标识');
+async function handleOk() {
+  if (!modelRef.gbId) {
+    createMessage.warning('未加载到通道数据');
     return;
   }
-  state.editLoading = true;
-  let dataList = [];
-  for (let i = 0; i < checkedKeys.value.length; i++) {
-    dataList.push(checkedKeys.value[i]);
-  }
-  let params = {};
-  params['versionId'] = route.params.versionId;
-  params['deviceIdentificationList'] = dataList;
-  batchAddDeviceTestList(params)
-    .then(() => {
-      createMessage.success('操作成功');
-      closeModal();
-      resetFields();
-      emits('success');
-    })
-    .finally(() => {
-      state.editLoading = false;
+  state.loading = true;
+  try {
+    await updateChannel({
+      gbId: modelRef.gbId,
+      gbName: modelRef.gbName,
+      gbDeviceId: modelRef.gbDeviceId,
+      gbManufacturer: modelRef.gbManufacturer,
+      gbModel: modelRef.gbModel,
+      gbAddress: modelRef.gbAddress,
     });
+    createMessage.success('保存成功');
+    closeModal();
+    resetModel();
+    emits('success');
+  } catch (e: any) {
+    createMessage.error(e?.message || '保存失败');
+  } finally {
+    state.loading = false;
+  }
 }
 </script>
 <style lang="less" scoped>
-.product-modal {
+.channel-modal {
   :deep(.ant-form-item-label) {
     & > label::after {
       content: '';

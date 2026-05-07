@@ -72,9 +72,8 @@ import ChannelCardList from "@/views/gb28181/components/ChannelCardList/index.vu
 import {useMessage} from "@/hooks/web/useMessage";
 import {useModal} from "@/components/Modal";
 import {useRoute, useRouter} from "vue-router";
-import {batchPushUpgradePackage, deleteOtaVerification} from "@/api/device/ota";
 import ChannelModal from "@/views/gb28181/components/ChannelModal/index.vue";
-import {queryChannelList, snapshot} from "@/api/device/gb28181";
+import {batchDeleteGbChannels, deleteGbChannel, queryChannelList, snapshot} from "@/api/device/gb28181";
 import DialogPlayer from "@/components/VideoPlayer/DialogPlayer.vue";
 import {downloadByA} from "@/utils";
 
@@ -169,24 +168,9 @@ function handleClickSwap() {
   state.isTableMode = !state.isTableMode;
 }
 
-// 批量测试
+// 批量测试（原 OTA 逻辑已移除；国标通道请使用 WVP/平台能力，勿调 /versions 接口）
 function batchValidation() {
-  if (state.totalTargetDevices === 0) {
-    createMessage.warn('请添加测试设备');
-    return;
-  }
-  if (state.totalTargetDevices === state.targetSuccess) {
-    createMessage.warn('不存在需要验证的设备');
-    return;
-  }
-  batchPushUpgradePackage({versionId: route.params.versionId})
-    .then(() => {
-      createMessage.success('批量推送成功');
-      handleSuccess();
-    })
-    .catch((e) => {
-      createMessage.error(e.message);
-    });
+  createMessage.warning('国标设备通道不支持 OTA 批量测试，请使用物联网平台「固件/版本」相关菜单');
 }
 
 function onSelect(record, selected) {
@@ -209,27 +193,33 @@ function onSelectAll(selected, selectedRows, changeRows) {
 }
 
 async function handleDeleteAll() {
-  // //console.log('checkedKeys ...', checkedKeys);
+  if (!checkedKeys.value.length) {
+    return;
+  }
   try {
-    await Promise.all([deleteOtaVerification(checkedKeys.value)]);
+    const ids = checkedKeys.value.map((k) => Number(k)).filter((n) => !Number.isNaN(n));
+    await batchDeleteGbChannels(ids);
     createMessage.success('删除成功');
-  }catch (error) {
-    console.error(error)
-    createMessage.error('删除失败');
+  } catch (error: any) {
+    console.error(error);
+    createMessage.error(error?.message || '删除失败');
   }
   reloadList();
 }
 
 async function handleDeleteProduct(record) {
   try {
-    const {id} = record;
-    await deleteOtaVerification([id]);
+    const id = Number(record.id);
+    if (Number.isNaN(id)) {
+      createMessage.error('无效的通道 ID');
+      return;
+    }
+    await deleteGbChannel(id);
     reloadList();
-    //console.log('ret ...', ret);
     createMessage.success('删除成功');
-  }catch (error) {
-    console.error(error)
-    createMessage.error('删除失败');
+  } catch (error: any) {
+    console.error(error);
+    createMessage.error(error?.message || '删除失败');
   }
 }
 
@@ -276,7 +266,7 @@ function handleDeviceRecord(record) {
     deviceId: record.deviceId,
     channelId: record.channelId,
   };
-  router.push({name: 'DeviceRecord', params});
+  router.push({name: 'Gb28181DeviceRecord', params});
 }
 
 function handleCloudRecord(record) {
@@ -284,7 +274,7 @@ function handleCloudRecord(record) {
     deviceId: record.deviceId,
     channelId: record.channelId,
   };
-  router.push({name: 'CloudRecord', params});
+  router.push({name: 'Gb28181CloudRecord', params});
 }
 
 function handleSnapshot(record) {

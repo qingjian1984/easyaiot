@@ -82,8 +82,9 @@ class Alert(db.Model):
     region = db.Column(db.String(30), nullable=True)
     information = db.Column(db.Text, nullable=True)
     time = db.Column(db.DateTime(timezone=True), nullable=False, server_default=db.text('NOW()'))
-    device_id = db.Column(db.String(30), nullable=False)
-    device_name = db.Column(db.String(30), nullable=False)
+    # 与 device.id 一致（GB28181 等设备 ID 可达约 50 字符）
+    device_id = db.Column(db.String(100), nullable=False)
+    device_name = db.Column(db.String(100), nullable=False)
     image_path = db.Column(db.String(200), nullable=True)
     record_path = db.Column(db.String(200), nullable=True)
     task_type = db.Column(db.String(20), nullable=True, comment='告警事件类型[realtime:实时算法任务,snap:抓拍算法任务]')
@@ -1002,12 +1003,13 @@ class Playback(db.Model):
     __tablename__ = 'playback'
     
     id = db.Column(db.Integer(), primary_key=True, nullable=False)  # 主键
-    file_path = db.Column(db.String(200), nullable=False)  # 文件路径
+    # MinIO 下载 API 等完整路径可能较长
+    file_path = db.Column(db.String(500), nullable=False)  # 文件路径
     event_time = db.Column(db.DateTime(timezone=True), nullable=False)  # 录制发生时间
-    device_id = db.Column(db.String(30), nullable=False)  # 设备id
-    device_name = db.Column(db.String(30), nullable=False)  # 设备名称
+    device_id = db.Column(db.String(100), nullable=False)  # 设备id（与 device.id 一致）
+    device_name = db.Column(db.String(100), nullable=False)  # 设备名称
     duration = db.Column(db.SmallInteger(), nullable=False)  # 时长/秒
-    thumbnail_path = db.Column(db.String(200), nullable=True)  # 封面图路径
+    thumbnail_path = db.Column(db.String(500), nullable=True)  # 封面图路径
     file_size = db.Column(db.BigInteger(), nullable=True)  # 文件大小（字节）
     # 使用带时区的本地时间（Asia/Shanghai，UTC+8）
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone(timedelta(hours=8))))  # 创建时间

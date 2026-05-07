@@ -72,9 +72,15 @@ const dateChange = (e: any) => {
 };
 
 const queryDeviceRecords = () => {
+  const deviceId = route.params.deviceId as string;
+  const channelId = route.params.channelId as string;
+  if (!deviceId || !channelId) {
+    createMessage.warning('路由缺少设备或通道参数，请从通道卡片重新进入云端录像');
+    return;
+  }
   getCloudRecordList({
     app: 'rtp',
-    stream: route.params.deviceId + '_' + route.params.channelId,
+    stream: `${deviceId}_${channelId}`,
     query: '',
     startTime: state.dateValue + " 00:00:00",
     endTime: state.dateValue + " 23:59:59",
@@ -83,6 +89,9 @@ const queryDeviceRecords = () => {
     count: 10000,
   }).then((res) => {
     state.recordList = res?.data ?? [];
+  }).catch((e: any) => {
+    console.error(e);
+    createMessage.error(e?.message || '加载云端录像列表失败');
   });
 };
 

@@ -252,8 +252,28 @@ const setPlayerRef = (el: any, index: number) => {
   }
 };
 
-async function handleSelect(keys: any) {
-  const keyStr = String(keys);
+/**
+ * WVP 通道：deviceId 为通道国标编码(DeviceID)，parentDeviceId 为所属 SIP 设备国标编号。
+ * 分屏树节点 key 需为「设备国标编号,通道国标编号」，供点播接口 /play/start/{deviceId}/{channelId} 使用。
+ * 目录树可能多层嵌套，必须递归写入；原先仅处理顶层会导致子节点 key 无逗号，点击即提示「无效摄像头」。
+ */
+function assignGb28181SplitScreenKeys(nodes: any[] | undefined, rootDeviceIdentification: string) {
+  if (!nodes?.length) return;
+  for (const node of nodes) {
+    if (node.children?.length) {
+      assignGb28181SplitScreenKeys(node.children, rootDeviceIdentification);
+    }
+    const sipDeviceId = String(node.parentDeviceId || rootDeviceIdentification || '').trim();
+    const channelGbId = String(node.gbDeviceId || node.deviceId || '').trim();
+    if (sipDeviceId && channelGbId) {
+      node.deviceId = `${sipDeviceId},${channelGbId}`;
+    }
+  }
+}
+
+async function handleSelect(selectedKeys: any, _info?: any) {
+  const rawKey = Array.isArray(selectedKeys) ? selectedKeys[0] : selectedKeys;
+  const keyStr = rawKey != null ? String(rawKey).trim() : '';
   if (!keyStr) {
     createMessage.warn('请选择一个摄像头');
     return;
@@ -262,8 +282,14 @@ async function handleSelect(keys: any) {
     createMessage.warn('无效摄像头');
     return;
   }
-  const [deviceId, channelId] = keyStr.split(',');
-  
+  const comma = keyStr.indexOf(',');
+  const deviceId = keyStr.slice(0, comma).trim();
+  const channelId = keyStr.slice(comma + 1).trim();
+  if (!deviceId || !channelId) {
+    createMessage.warn('无效摄像头');
+    return;
+  }
+
   // 检查当前选中的格子是否已有视频
   if (state.playUrls[state.playerIdx]) {
     createMessage.warn('当前通道已有视频，请先删除或选择其他通道');
@@ -393,21 +419,13 @@ const onLoadData: TreeProps['loadData'] = (treeNode) => {
       treeNode.isLeaf = true;
       getDeviceChannels(treeNode.dataRef.deviceIdentification)
         .then((res) => {
-          const tmpArr = treeNode.pos.split('-');
-          const tmpIndex = parseInt(tmpArr[tmpArr.length - 1]);
-          
-          // 处理通道列表数据
+          // 处理通道列表数据（可能含多级目录）
           const channels = res.data || res.list || [];
           const tmpLoop = handleTree(channels, 'deviceId');
-          
-          for (let i = 0; i < tmpLoop.length; i++) {
-            const channel = tmpLoop[i];
-            const deviceId = channel.deviceId || channel.deviceIdentification || treeNode.dataRef.deviceIdentification;
-            const channelId = channel.channelId || channel.deviceChannelId || channel.id;
-            tmpLoop[i].deviceId = `${deviceId},${channelId}`;
-          }
-          
-          treeData.value[tmpIndex].children = tmpLoop;
+          assignGb28181SplitScreenKeys(tmpLoop, treeNode.dataRef.deviceIdentification);
+
+          treeNode.dataRef.children = tmpLoop;
+          treeData.value = [...treeData.value];
           resolve();
         })
         .catch((error) => {

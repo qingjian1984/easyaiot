@@ -25,6 +25,50 @@ export const PAGE_NOT_FOUND_ROUTE: AppRouteRecordRaw = {
   ],
 }
 
+/** GB28181：按名称跳转（不依赖后台菜单是否配置了同名路由） */
+export const GB28181_ROUTE_MODULE: AppRouteRecordRaw = {
+  path: '/gb28181-view',
+  component: LAYOUT,
+  name: 'Gb28181ViewLayout',
+  meta: {
+    title: 'GB28181',
+    hideMenu: true,
+    hideBreadcrumb: true,
+  },
+  children: [
+    {
+      path: 'channel/:deviceIdentification',
+      name: 'Gb28181Channel',
+      component: () => import('@/views/gb28181/components/Channel/index.vue'),
+      meta: {
+        title: '通道管理',
+        hideMenu: true,
+        canTo: true,
+      },
+    },
+    {
+      path: 'cloud-record/:deviceId/:channelId',
+      name: 'Gb28181CloudRecord',
+      component: () => import('@/views/gb28181/components/CloudRecord/index.vue'),
+      meta: {
+        title: '云端录像',
+        hideMenu: true,
+        canTo: true,
+      },
+    },
+    {
+      path: 'device-record/:deviceId/:channelId',
+      name: 'Gb28181DeviceRecord',
+      component: () => import('@/views/gb28181/components/DeviceRecord/index.vue'),
+      meta: {
+        title: '设备录像',
+        hideMenu: true,
+        canTo: true,
+      },
+    },
+  ],
+}
+
 export const REDIRECT_ROUTE: AppRouteRecordRaw = {
   path: '/redirect',
   component: LAYOUT,

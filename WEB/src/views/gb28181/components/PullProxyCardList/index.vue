@@ -221,7 +221,7 @@ function handleCloudRecord(record) {
     deviceId: arr[arr.length - 1].split('_')[0],
     channelId: arr[arr.length - 1].split('_')[1],
   };
-  router.push({name: 'CloudRecord', params});
+  router.push({name: 'Gb28181CloudRecord', params});
 }
 
 async function handleEnable(record: object) {
