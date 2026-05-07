@@ -207,9 +207,14 @@ load_dotenv()
 # OpenCV FFmpeg 解码参数（用于降低延迟并尽量忽略/丢弃损坏包）
 # 说明：当上游流发生抖动/重连/丢包时，FFmpeg 解码常出现 "error while decoding MB..."；
 # 该配置倾向于“丢弃损坏数据继续跑”，避免花屏/撕裂持续时间过长。
-# RTSP 传输：默认 udp；需 tcp 时设 OPENCV_FFMPEG_RTSP_TRANSPORT=tcp 或 FFMPEG_RTSP_TRANSPORT=tcp
+# RTSP 传输：优先 AI_RTSP_TRANSPORT，其次 OPENCV_/FFMPEG_；默认 udp（与常见摄像头/海康子码流习惯一致；若灰屏/花屏多可设 AI_RTSP_TRANSPORT=tcp）
 if not os.getenv("OPENCV_FFMPEG_CAPTURE_OPTIONS"):
-    _rtsp_tr = (os.getenv("OPENCV_FFMPEG_RTSP_TRANSPORT") or os.getenv("FFMPEG_RTSP_TRANSPORT") or "udp").strip().lower()
+    _rtsp_tr = (
+        os.getenv("AI_RTSP_TRANSPORT")
+        or os.getenv("OPENCV_FFMPEG_RTSP_TRANSPORT")
+        or os.getenv("FFMPEG_RTSP_TRANSPORT")
+        or "udp"
+    ).strip().lower()
     if _rtsp_tr not in ("tcp", "udp"):
         _rtsp_tr = "udp"
     os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
@@ -1712,6 +1717,26 @@ def _is_likely_rtsp_flat_corrupt_frame(
         return False
 
 
+def _bgr_frame_to_ffmpeg_rgb24_bytes(frame: np.ndarray, expect_h: int, expect_w: int) -> Optional[bytes]:
+    """
+    将 OpenCV BGR 帧转为 FFmpeg rawvideo rgb24 写入字节，尺寸必须与启动 FFmpeg 时的 -s {W}x{H} 完全一致，
+    否则会出现整幅灰屏/花屏。
+    """
+    if frame is None or frame.size == 0:
+        return None
+    try:
+        if len(frame.shape) == 2:
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        elif frame.shape[2] == 4:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+        h, w = frame.shape[:2]
+        if h != expect_h or w != expect_w:
+            frame = cv2.resize(frame, (expect_w, expect_h), interpolation=cv2.INTER_LINEAR)
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).tobytes()
+    except Exception:
+        return None
+
+
 def buffer_streamer_worker(device_id: str):
     """缓流器工作线程：为指定摄像头缓冲源流，接收推帧器插入的帧，输出到目标流"""
     logger.info(f"💾 缓流器线程启动 [设备: {device_id}]")
@@ -2329,9 +2354,9 @@ def buffer_streamer_worker(device_id: str):
                         logger.error(f"❌ 设备 {device_id} 启动推送进程异常: {str(e)}", exc_info=True)
                         pusher_process = None
             elif frame_width is not None and (stdin_w != frame_width or stdin_h != frame_height):
-                # 源流分辨率变化，需要重启推送进程（与 stream_forward 行为一致）
+                # 源流分辨率变化：必须清空缓冲区，否则旧分辨率帧写入新 FFmpeg -s 会导致灰屏
                 logger.info(
-                    f"🔄 设备 {device_id} 源流分辨率变化 ({frame_width}x{frame_height} -> {stdin_w}x{stdin_h})，重启推送进程"
+                    f"🔄 设备 {device_id} 源流分辨率变化 ({frame_width}x{frame_height} -> {stdin_w}x{stdin_h})，重启推送进程并清空缓冲"
                 )
                 if pusher_process and pusher_process.poll() is None:
                     try:
@@ -2352,6 +2377,17 @@ def buffer_streamer_worker(device_id: str):
 
                 pusher_process = None
                 device_pushers.pop(device_id, None)
+
+                frame_width = stdin_w
+                frame_height = stdin_h
+                with buffer_locks[device_id]:
+                    frame_buffers[device_id].clear()
+                pending_frames.clear()
+                next_output_frame = frame_count
+                last_processed_frame = None
+                last_processed_detections = []
+                last_processed_detection_timestamp = 0.0
+                last_processed_detection_frame_number = 0
 
             # 将帧存入该设备的缓冲区
             with buffer_locks[device_id]:
@@ -2575,15 +2611,25 @@ def buffer_streamer_worker(device_id: str):
                             logger.debug(
                                 f"设备 {device_id} 检测到 {len(detections)} 个目标，但告警事件未启用（alert_event_enabled={task_config.alert_event_enabled if task_config else None}）")
 
-                # 推送到RTMP流
-                if pusher_process and pusher_process.poll() is None and rtmp_url:
+                # 推送到RTMP流（raw rgb 尺寸必须与 FFmpeg -s 一致）
+                if (
+                    pusher_process
+                    and pusher_process.poll() is None
+                    and rtmp_url
+                    and frame_width is not None
+                    and frame_height is not None
+                ):
                     try:
-                        pusher_process.stdin.write(
-                            cv2.cvtColor(output_frame, cv2.COLOR_BGR2RGB).tobytes()
+                        raw_bytes = _bgr_frame_to_ffmpeg_rgb24_bytes(
+                            output_frame, frame_height, frame_width
                         )
-                        pusher_process.stdin.flush()
-                        if next_output_frame % 150 == 0:
-                            _mark_quality_success()
+                        if raw_bytes is None:
+                            logger.warning(f"⚠️ 设备 {device_id} 帧 {next_output_frame} 无法编码为推流原始帧，跳过")
+                        else:
+                            pusher_process.stdin.write(raw_bytes)
+                            pusher_process.stdin.flush()
+                            if next_output_frame % 150 == 0:
+                                _mark_quality_success()
                     except Exception as e:
                         logger.error(f"❌ 设备 {device_id} 推送帧失败: {str(e)}")
                         _mark_quality_failure("推送帧失败")
@@ -2607,12 +2653,22 @@ def buffer_streamer_worker(device_id: str):
                 output_count += 1
 
             # 如果还有未输出的帧，使用插值帧
-            if output_count == 0 and last_processed_frame is not None and pusher_process and pusher_process.poll() is None and rtmp_url:
+            if (
+                output_count == 0
+                and last_processed_frame is not None
+                and pusher_process
+                and pusher_process.poll() is None
+                and rtmp_url
+                and frame_width is not None
+                and frame_height is not None
+            ):
                 try:
-                    pusher_process.stdin.write(
-                        cv2.cvtColor(last_processed_frame, cv2.COLOR_BGR2RGB).tobytes()
+                    raw_bytes = _bgr_frame_to_ffmpeg_rgb24_bytes(
+                        last_processed_frame, frame_height, frame_width
                     )
-                    pusher_process.stdin.flush()
+                    if raw_bytes:
+                        pusher_process.stdin.write(raw_bytes)
+                        pusher_process.stdin.flush()
                 except Exception as e:
                     logger.error(f"❌ 设备 {device_id} 推送插值帧失败: {str(e)}")
 

@@ -175,9 +175,14 @@ load_dotenv()
 
 # OpenCV FFmpeg 解码参数（与 stream_forward_service / realtime_algorithm_service 对齐）
 # 抓拍任务也会受上游流抖动影响，设置默认捕获选项可减少解码花屏/撕裂。
-# RTSP 传输：默认 udp；需 tcp 时设 OPENCV_FFMPEG_RTSP_TRANSPORT=tcp 或 FFMPEG_RTSP_TRANSPORT=tcp
+# RTSP 传输：优先 AI_RTSP_TRANSPORT，其次 OPENCV_/FFMPEG_；默认 udp（常见摄像头习惯；若灰屏/花屏多可设 AI_RTSP_TRANSPORT=tcp）
 if not os.getenv("OPENCV_FFMPEG_CAPTURE_OPTIONS"):
-    _rtsp_tr = (os.getenv("OPENCV_FFMPEG_RTSP_TRANSPORT") or os.getenv("FFMPEG_RTSP_TRANSPORT") or "udp").strip().lower()
+    _rtsp_tr = (
+        os.getenv("AI_RTSP_TRANSPORT")
+        or os.getenv("OPENCV_FFMPEG_RTSP_TRANSPORT")
+        or os.getenv("FFMPEG_RTSP_TRANSPORT")
+        or "udp"
+    ).strip().lower()
     if _rtsp_tr not in ("tcp", "udp"):
         _rtsp_tr = "udp"
     os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
