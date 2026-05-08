@@ -87,6 +87,78 @@ def _detect_visible_gpu_ids() -> List[int]:
         return []
 
 
+class AsyncVideoStream:
+    """
+    后台线程持续调用 VideoCapture.read() 解码，主线程只取锁内最新帧。
+    缓解 OpenCV read() 与缓流/推理串行导致的有效帧率被摄像头 fps 限制、灰屏误检等问题。
+    """
+
+    def __init__(self, capture: cv2.VideoCapture):
+        self._cap = capture
+        self._lock = threading.Lock()
+        self._frame = None
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+        self.read_failed = False
+
+    def isOpened(self) -> bool:
+        return self._cap is not None and self._cap.isOpened()
+
+    def set(self, prop, value):
+        return self._cap.set(prop, value)
+
+    def read(self):
+        """与 cv2.VideoCapture.read 一致，返回 (ret, frame)。"""
+        if self.read_failed:
+            return False, None
+        with self._lock:
+            if self._frame is None:
+                return False, None
+            return True, self._frame.copy()
+
+    def start(self):
+        self._running = True
+        self.read_failed = False
+        self._thread = threading.Thread(target=self._update_loop, daemon=True)
+        self._thread.start()
+        return self
+
+    def _update_loop(self):
+        try:
+            while self._running:
+                ret, frame = self._cap.read()
+                if not ret or frame is None:
+                    # 仅在仍视为“运行中”时标记失败，避免 release() 后 read 返回误触发重连
+                    if self._running:
+                        self.read_failed = True
+                    break
+                with self._lock:
+                    self._frame = frame
+        except Exception:
+            if self._running:
+                self.read_failed = True
+
+    def release(self):
+        self._running = False
+        cap = self._cap
+        if cap is not None:
+            try:
+                cap.release()
+            except Exception:
+                pass
+        if self._thread is not None:
+            self._thread.join(timeout=5.0)
+            self._thread = None
+        self._cap = None
+        with self._lock:
+            self._frame = None
+
+
+def _async_rtsp_read_enabled() -> bool:
+    v = (os.getenv("AI_RTSP_ASYNC_READ", "1") or "1").strip().lower()
+    return v not in ("0", "false", "no", "off")
+
+
 # GPU调度（按设备稳定映射到多张GPU，避免全部压到0号卡）
 _VISIBLE_GPU_IDS: List[int] = []
 _GPU_ASSIGNMENTS: Dict[str, Dict[str, int]] = {"infer": {}, "ffmpeg": {}}
@@ -286,8 +358,8 @@ frame_counts = {}  # {device_id: int}
 extract_queues = {}  # {device_id: queue.Queue}
 detection_queues = {}  # {device_id: queue.Queue}
 push_queues = {}  # {device_id: queue.Queue}
-# 摄像头流连接（VideoCapture对象）
-device_caps = {}  # {device_id: cv2.VideoCapture}
+# 摄像头流连接（VideoCapture 或 AsyncVideoStream）
+device_caps = {}  # {device_id: cv2.VideoCapture | AsyncVideoStream}
 # 摄像头推送进程（FFmpeg进程）
 device_pushers = {}  # {device_id: subprocess.Popen}
 # FFmpeg进程的stderr读取线程和错误信息
@@ -1935,15 +2007,33 @@ def buffer_streamer_worker(device_id: str):
                     continue
 
                 retry_count = 0
+                if (
+                    _async_rtsp_read_enabled()
+                    and (rtsp_url.startswith("rtsp://") or rtsp_url.startswith("rtmp://"))
+                ):
+                    cap = AsyncVideoStream(cap).start()
+                    logger.info(f"📌 设备 {device_id} 已启用异步拉流（后台解码，主线程取最新帧；可设 AI_RTSP_ASYNC_READ=0 关闭）")
                 device_caps[device_id] = cap
                 logger.info(f"✅ 设备 {device_id} {stream_type} 流连接成功")
                 if rtsp_url.startswith("rtsp://"):
                     last_rtsp_connect_time = time.time()
 
-            # 从源流读取帧
+            # 从源流读取帧（异步模式下由后台线程 decode，此处取缓冲区最新帧）
             ret, frame = cap.read()
 
             if not ret or frame is None:
+                if isinstance(cap, AsyncVideoStream):
+                    if cap.read_failed:
+                        logger.warning(f"设备 {device_id} 异步拉流结束或解码失败，重新连接...")
+                        if cap is not None:
+                            cap.release()
+                            cap = None
+                            device_caps.pop(device_id, None)
+                        gray_bad_streak = 0
+                        time.sleep(rtsp_read_fail_delay_sec)
+                        continue
+                    time.sleep(0.002)
+                    continue
                 logger.warning(f"设备 {device_id} 读取源流帧失败，重新连接...")
                 if cap is not None:
                     cap.release()
