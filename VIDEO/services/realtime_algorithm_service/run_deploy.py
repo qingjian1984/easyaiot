@@ -208,15 +208,15 @@ load_dotenv()
 # OpenCV FFmpeg 解码参数（用于降低延迟并尽量忽略/丢弃损坏包）
 # 说明：当上游流发生抖动/重连/丢包时，FFmpeg 解码常出现 "error while decoding MB..."；
 # 该配置倾向于“丢弃损坏数据继续跑”，避免花屏/撕裂持续时间过长。
-# RTSP 传输：优先 AI_RTSP_TRANSPORT，其次 OPENCV_/FFMPEG_；默认 tcp（抗丢包、Docker/跨主机更稳；局域网要低延迟可设 AI_RTSP_TRANSPORT=udp）
+# RTSP 传输：优先 AI_RTSP_TRANSPORT，其次 OPENCV_/FFMPEG_；默认 udp（低延迟）；易丢包/跨主机可设 AI_RTSP_TRANSPORT=tcp
 _EFFECTIVE_RTSP_TRANSPORT = (
     os.getenv("AI_RTSP_TRANSPORT")
     or os.getenv("OPENCV_FFMPEG_RTSP_TRANSPORT")
     or os.getenv("FFMPEG_RTSP_TRANSPORT")
-    or "tcp"
+    or "udp"
 ).strip().lower()
 if _EFFECTIVE_RTSP_TRANSPORT not in ("tcp", "udp"):
-    _EFFECTIVE_RTSP_TRANSPORT = "tcp"
+    _EFFECTIVE_RTSP_TRANSPORT = "udp"
 
 _OPENCV_FFMPEG_OPTIONS_CUSTOM = bool(os.getenv("OPENCV_FFMPEG_CAPTURE_OPTIONS"))
 if not _OPENCV_FFMPEG_OPTIONS_CUSTOM:
@@ -246,7 +246,7 @@ if _OPENCV_FFMPEG_OPTIONS_CUSTOM:
 else:
     logger.info(
         "OpenCV RTSP: rtsp_transport=%s（由 AI_RTSP_TRANSPORT / OPENCV_FFMPEG_RTSP_TRANSPORT / "
-        "FFMPEG_RTSP_TRANSPORT 决定；局域网极低延迟可试 udp）",
+        "FFMPEG_RTSP_TRANSPORT 决定；默认 udp；易丢包/跨主机可试 tcp）",
         _EFFECTIVE_RTSP_TRANSPORT,
     )
 

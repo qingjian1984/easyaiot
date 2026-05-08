@@ -176,15 +176,15 @@ load_dotenv()
 
 # OpenCV FFmpeg 解码参数（与 stream_forward_service / realtime_algorithm_service 对齐）
 # 抓拍任务也会受上游流抖动影响，设置默认捕获选项可减少解码花屏/撕裂。
-# RTSP 传输：优先 AI_RTSP_TRANSPORT，其次 OPENCV_/FFMPEG_；默认 tcp（抗丢包更稳；局域网要低延迟可设 AI_RTSP_TRANSPORT=udp）
+# RTSP 传输：优先 AI_RTSP_TRANSPORT，其次 OPENCV_/FFMPEG_；默认 udp（低延迟）；易丢包可设 AI_RTSP_TRANSPORT=tcp
 _EFFECTIVE_RTSP_TRANSPORT = (
     os.getenv("AI_RTSP_TRANSPORT")
     or os.getenv("OPENCV_FFMPEG_RTSP_TRANSPORT")
     or os.getenv("FFMPEG_RTSP_TRANSPORT")
-    or "tcp"
+    or "udp"
 ).strip().lower()
 if _EFFECTIVE_RTSP_TRANSPORT not in ("tcp", "udp"):
-    _EFFECTIVE_RTSP_TRANSPORT = "tcp"
+    _EFFECTIVE_RTSP_TRANSPORT = "udp"
 
 _OPENCV_FFMPEG_OPTIONS_CUSTOM = bool(os.getenv("OPENCV_FFMPEG_CAPTURE_OPTIONS"))
 if not _OPENCV_FFMPEG_OPTIONS_CUSTOM:
@@ -214,7 +214,7 @@ if _OPENCV_FFMPEG_OPTIONS_CUSTOM:
 else:
     logger.info(
         "OpenCV RTSP: rtsp_transport=%s（由 AI_RTSP_TRANSPORT / OPENCV_FFMPEG_RTSP_TRANSPORT / "
-        "FFMPEG_RTSP_TRANSPORT 决定；局域网极低延迟可试 udp）",
+        "FFMPEG_RTSP_TRANSPORT 决定；默认 udp；易丢包/跨主机可试 tcp）",
         _EFFECTIVE_RTSP_TRANSPORT,
     )
 
