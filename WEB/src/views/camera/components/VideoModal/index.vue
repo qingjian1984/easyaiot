@@ -10,13 +10,24 @@
   >
     <div class="product-modal">
       <Spin :spinning="state.editLoading">
+        <!-- 单机局域网 ONVIF 扫描：GET /video/camera/discovery，与 ONVIF 批量扫描接口无关 -->
+        <div v-if="state.type === 'onvif'" class="onvif-scan-modal-body">
+          <BasicTable @register="registerOnvifTable">
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.dataIndex === 'action'">
+                <a-button type="link" size="small" @click="openRegisterModal(record)">注册</a-button>
+              </template>
+            </template>
+          </BasicTable>
+          <VideoRegisterModal @register="registerVideoRegisterModal" @success="handleRegisterSuccess" />
+        </div>
         <!-- 直连设备表单（新增：摄像头类型选择） -->
         <Form
           :labelCol="{ span: 6 }"
           :model="validateInfos"
           :wrapperCol="{ span: 16 }"
           :disabled="state.isView"
-          v-if="state.type === 'source' && !state.isEdit && !state.isView"
+          v-else-if="state.type === 'source' && !state.isEdit && !state.isView"
         >
           <FormItem label="摄像头类型" name="cameraType" v-bind=validateInfos.cameraType>
             <Select
@@ -204,13 +215,16 @@
   </BasicModal>
 </template>
 <script lang="ts" setup>
-import {computed, reactive, ref} from 'vue';
+import {computed, nextTick, reactive, ref} from 'vue';
 import {BasicModal, useModal, useModalInner} from '@/components/Modal';
+import {BasicTable, useTable} from '@/components/Table';
+import VideoRegisterModal from '../VideoRegisterModal/index.vue';
 import {Col, Form, FormItem, Input, Row, Select, Spin,} from 'ant-design-vue';
 import {CopyOutlined} from '@ant-design/icons-vue';
 import {useMessage} from '@/hooks/web/useMessage';
 import {copyText} from '@/utils/copyTextToClipboard';
-import {getDeviceList, registerDevice, updateDevice} from "@/api/device/camera";
+import {discoverDevices, registerDevice, registerDeviceByOnvif, updateDevice} from "@/api/device/camera";
+import {getOnvifBasicColumns, getOnvifFormConfig} from './Data';
 import {ensureDeviceStreamForwardTask} from "@/api/device/stream_forward";
 defineOptions({name: 'VideoModal'})
 
@@ -273,7 +287,30 @@ const modelRef = reactive({
 
 
 const getTitle = computed(() => {
+  if (state.type === 'onvif') {
+    return '扫描局域网ONVIF设备';
+  }
   return state.isEdit ? '编辑视频设备' : state.isView ? '查看视频设备' : '新增视频设备';
+});
+
+const [registerVideoRegisterModal, {openModal: openVideoRegisterModal}] = useModal();
+
+const [registerOnvifTable, {reload: reloadOnvifTable}] = useTable({
+  canResize: true,
+  showIndexColumn: false,
+  title: '发现的设备',
+  api: discoverDevices,
+  columns: getOnvifBasicColumns(),
+  useSearchForm: true,
+  showTableSetting: false,
+  formConfig: getOnvifFormConfig(),
+  fetchSetting: {
+    listField: 'data',
+    totalField: 'total',
+  },
+  pagination: false,
+  rowKey: 'ip',
+  immediate: false,
 });
 
 const [register, {closeModal}] = useModalInner(async (data) => {
@@ -281,6 +318,11 @@ const [register, {closeModal}] = useModalInner(async (data) => {
   state.isEdit = isEdit;
   state.isView = isView;
   state.type = type;
+
+  if (type === 'onvif') {
+    await nextTick();
+    reloadOnvifTable();
+  }
 
   // 如果是新增直连设备，重置相关字段
   if (type === 'source' && !isEdit && !isView) {
@@ -540,7 +582,41 @@ function handleCancel() {
   resetFields();
 }
 
+function openRegisterModal(record: Record<string, unknown>) {
+  openVideoRegisterModal(true, {record});
+}
+
+async function handleRegisterSuccess(payload: Record<string, unknown>) {
+  const ip = String(payload.ip ?? '');
+  const password = String(payload.password ?? '');
+  if (!ip || !password) {
+    createMessage.error('IP 或密码不能为空');
+    return;
+  }
+  const rawPort = payload.port;
+  const port = rawPort !== undefined && rawPort !== null && rawPort !== ''
+    ? Number(rawPort)
+    : 80;
+  state.editLoading = true;
+  try {
+    await registerDeviceByOnvif({ip, port: Number.isFinite(port) ? port : 80, password});
+    createMessage.success('设备注册成功');
+    closeModal();
+    resetFields();
+    emits('success');
+  } catch (error: unknown) {
+    const err = error as { msg?: string; message?: string };
+    createMessage.error(err?.msg || err?.message || '注册失败');
+  } finally {
+    state.editLoading = false;
+  }
+}
+
 function handleOk() {
+  if (state.type === 'onvif') {
+    closeModal();
+    return;
+  }
   // 直连设备特殊处理：直接注册，不再通过ONVIF搜索
   if (state.type === 'source' && !state.isEdit && !state.isView) {
     // 先进行自定义验证
@@ -786,6 +862,10 @@ function handleOk() {
     }
   }
   
+  .onvif-scan-modal-body {
+    min-height: 200px;
+  }
+
   .rtsp-copy-icon {
     color: #1890ff;
     font-size: 16px;

@@ -18,11 +18,23 @@
               <BasicTable v-if="viewMode === 'table'" @register="registerTable">
                 <template #toolbar>
                   <div class="toolbar-buttons">
+                    <a-button type="primary" @click="handleScanOnvif">
+                      <template #icon>
+                        <RadarChartOutlined/>
+                      </template>
+                      扫描局域网ONVIF设备
+                    </a-button>
                     <a-button @click="openAddModal('source')">
                       <template #icon>
                         <VideoCameraAddOutlined/>
                       </template>
                       新增直连设备
+                    </a-button>
+                    <a-button @click="handleRefreshOnvifDevices">
+                      <template #icon>
+                        <SyncOutlined/>
+                      </template>
+                      更新ONVIF设备
                     </a-button>
                     <a-button @click="handleToggleViewMode" type="default">
                       <template #icon>
@@ -69,6 +81,18 @@
                   @toggleStream="handleCardToggleStream"
                 >
                   <template #header>
+                    <a-button type="primary" @click="handleScanOnvif">
+                      <template #icon>
+                        <RadarChartOutlined/>
+                      </template>
+                      扫描局域网ONVIF设备
+                    </a-button>
+                    <a-button @click="handleRefreshOnvifDevices">
+                      <template #icon>
+                        <SyncOutlined/>
+                      </template>
+                      更新ONVIF设备
+                    </a-button>
                     <a-button @click="openAddModal('source')">
                       <template #icon>
                         <VideoCameraAddOutlined/>
@@ -147,11 +171,12 @@ import {
   DeviceInfo,
   getDeviceList,
   getStreamStatus,
+  refreshDevices,
   startStreamForwarding,
   stopStreamForwarding,
   StreamStatusResponse
 } from '@/api/device/camera';
-import {VideoCameraAddOutlined, SwapOutlined} from '@ant-design/icons-vue';
+import {RadarChartOutlined, SwapOutlined, SyncOutlined, VideoCameraAddOutlined} from '@ant-design/icons-vue';
 import DialogPlayer from "@/components/VideoPlayer/DialogPlayer.vue";
 import DirectoryManage from "./components/DirectoryManage/index.vue";
 import SnapSpace from "./components/SnapSpace/index.vue";
@@ -562,6 +587,20 @@ const openAddModal = (type, record = null) => {
     isEdit: type === 'edit',
     isView: type === 'view'
   });
+};
+
+/** 单机实时 WS-Discovery（GET /video/camera/discovery），与 ONVIF 批量扫描 Tab 接口无关 */
+const handleScanOnvif = () => openAddModal('onvif');
+
+/** 后台刷新已录入设备的 IP（POST /video/camera/refresh） */
+const handleRefreshOnvifDevices = async () => {
+  try {
+    await refreshDevices();
+    createMessage.success('设备刷新任务已启动');
+  } catch (e) {
+    console.error(e);
+    createMessage.error('刷新失败');
+  }
 };
 
 // 刷新数据
