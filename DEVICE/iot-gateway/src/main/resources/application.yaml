@@ -32,6 +32,14 @@ spring:
             - RewritePath=/admin-api/admin-api/(?<segment>.*), /admin-api/$\{segment} # 移除重复的 /admin-api 前缀
             - StripPrefix=1
             - RewritePath=/admin-api/model/v3/api-docs, /v3/api-docs # 配置，保证转发到 /v3/api-docs
+        # 自动标注平台（AI/services/auto-labeling，Nacos: auto-labeling-server，Flask 根路径 /、/api/**、/static/**）
+        - id: auto-labeling-admin-api
+          uri: lb://auto-labeling-server
+          order: 0
+          predicates:
+            - Path=/admin-api/labeling/**
+          filters:
+            - RewritePath=/admin-api/labeling/(?<segment>.*), /$\{segment} # 去掉网关前缀，转发到标注服务实际路径
         # 模型实验服务
         - id: studio-admin-api
           uri: lb://studio-server

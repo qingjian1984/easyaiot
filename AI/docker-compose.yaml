@@ -121,6 +121,51 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  auto-labeling:
+    image: auto-labeling:latest
+    container_name: auto-labeling
+    user: root
+
+    env_file:
+      - ./services/auto-labeling/.env.docker
+
+    network_mode: host
+
+    volumes:
+      - ./services/auto-labeling/static:/app/static
+      - ./services/auto-labeling/plugins:/app/plugins
+      - ./services/auto-labeling/.env.docker:/app/.env.docker:ro
+
+    environment:
+      - PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-1}
+      - FLASK_RUN_PORT=${AUTO_LABELING_PORT:-8000}
+      - FLASK_RUN_HOST=0.0.0.0
+      - NACOS_SERVER=${NACOS_SERVER:-localhost:8848}
+      - NACOS_NAMESPACE=${NACOS_NAMESPACE:-}
+      - NACOS_USERNAME=${NACOS_USERNAME:-nacos}
+      - NACOS_PASSWORD=${NACOS_PASSWORD:-basiclab@iot78475418754}
+      - SERVICE_NAME=auto-labeling-server
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-localhost:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-basiclab@iot975248395}
+      - MINIO_SECURE=${MINIO_SECURE:-false}
+      - TZ=${TZ:-Asia/Shanghai}
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 # 注意：使用network_mode: host后，不再需要networks配置
 # 如果需要同时访问容器网络和宿主机网络，可以考虑以下替代方案：
 # 1. 使用macvlan网络（需要root权限）

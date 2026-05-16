@@ -349,7 +349,7 @@ def deploy_model(model_id: int, start_port: int = 8000) -> dict:
         logger.info(f'日志目录: {log_dir}')
         
         # 检查部署脚本是否存在
-        deploy_service_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'services')
+        deploy_service_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'services', 'ai_service')
         deploy_script = os.path.join(deploy_service_dir, 'run_deploy.py')
         logger.info(f'检查部署脚本: {deploy_script}')
         

@@ -62,8 +62,8 @@ class ServiceTester:
         if onnx_files:
             return str(onnx_files[0])
         
-        # 查找 services 目录下的模型文件
-        services_dir = ai_dir / "services"
+        # 查找 services/ai_service 目录下的模型文件
+        services_dir = ai_dir / "services" / "ai_service"
         if services_dir.exists():
             pt_files = list(services_dir.glob("*.pt"))
             if pt_files:
@@ -255,8 +255,8 @@ class ServiceTester:
         
         # 注意：不再设置 MODEL_FORMAT，因为服务会根据文件扩展名自动判断
         
-        # 获取 services 目录路径
-        services_dir = Path(__file__).parent.absolute() / "services"
+        # 获取 services/ai_service 目录路径
+        services_dir = Path(__file__).parent.absolute() / "services" / "ai_service"
         run_deploy_path = services_dir / "run_deploy.py"
         
         if not run_deploy_path.exists():

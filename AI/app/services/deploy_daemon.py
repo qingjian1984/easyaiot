@@ -333,7 +333,7 @@ class DeployServiceDaemon:
         self._log(f'模型路径: {self._model_path}', 'INFO')
         
         # 获取部署脚本路径
-        deploy_service_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'services')
+        deploy_service_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'services', 'ai_service')
         deploy_script = os.path.join(deploy_service_dir, 'run_deploy.py')
         
         self._log(f'部署脚本路径: {deploy_script}', 'DEBUG')

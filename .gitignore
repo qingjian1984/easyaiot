@@ -72,6 +72,9 @@ hs_err_pid*
 # 排除 postgresql 初始化脚本
 !.scripts/postgresql/00-init-databases.sh
 
+# auto-labeling 上传目录（运行时用户数据）
+/AI/services/auto-labeling/uploads/
+
 # CMake 构建目录
 TASK/build-linux/
 TASK/build/

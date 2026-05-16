@@ -22,8 +22,12 @@
         </div>
       </div>
       <Card class="device-tabs" ref="cardRef">
-        <Tabs v-model:activeKey="activeKey">
-          <TabPane v-for="item in tabPaneList" :key="item.componentName" :tab="item.label">
+        <Tabs v-model:activeKey="activeKey" :destroyInactiveTabPane="false">
+          <TabPane
+            v-for="item in tabPaneList"
+            :key="item.componentName"
+            :tab="item.label"
+          >
             <component :is="item.component" module="DATASET"/>
           </TabPane>
         </Tabs>
@@ -42,7 +46,6 @@ import DatasetImage from "@/views/dataset/components/DatasetImage/index.vue";
 import DatasetVideo from "@/views/dataset/components/DatasetVideo/index.vue";
 import DatasetFrameTask from "@/views/dataset/components/DatasetFrameTask/index.vue";
 import AnnotationTool from "@/views/dataset/components/AnnotationTool/index.vue";
-import AutoLabel from "@/views/dataset/components/AutoLabel/index.vue";
 
 defineOptions({name: 'DatasetDetail'})
 
@@ -81,7 +84,6 @@ const tabPaneList = reactive([
   {label: '视频数据集', componentName: 'DatasetVideo', component: markRaw(DatasetVideo)},
   {label: '视频流帧捕获', componentName: 'DatasetFrameTask', component: markRaw(DatasetFrameTask)},
   {label: '图像数据集标注', componentName: 'AnnotationTool', component: markRaw(AnnotationTool)},
-  {label: '自动化标注', componentName: 'AutoLabel', component: markRaw(AutoLabel)},
 ]);
 </script>
 <style lang="less" scoped>

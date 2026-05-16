@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="{{ request.script_root or '' }}/">
+    <title>自动标注平台 - 数据标注工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='all.min.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部导航栏 -->
+        <header class="navbar">
+            <div class="logo">
+                <h1 style="cursor: pointer;" onclick="window.location.href='/'">自动标注平台 <span class="version">v1.0</span></h1>
+            </div>
+            <div class="navbar-right">
+            <div class="annotation-progress">
+                <i class="fas fa-tasks"></i>
+                <span>进度：<span id="annotatedCount">0</span>/<span id="totalImageCount">0</span></span>
+            </div>
+            <div class="dataset-switcher" title="当前编辑的数据集（各槽位数据独立保存）">
+                <label for="activeDatasetSelect" class="dataset-switcher-label"><i class="fas fa-database"></i></label>
+                <select id="activeDatasetSelect" class="dataset-switcher-select"></select>
+            </div>
+            <div class="nav-buttons">
+                <button id="openFolderBtn" class="btn btn-primary">
+                    <i class="fas fa-upload"></i> 添加数据集
+                </button>
+                <button id="aiAnnotateToggle" class="btn btn-warning" title="开启/关闭AI自动标注">
+                    <i class="fas fa-robot"></i> AI标注
+                </button>
+                <button id="clearAnnotationBtn" class="btn btn-danger">
+                    <i class="fas fa-trash"></i> 清除
+                </button>
+                <button id="saveAnnotationBtn" class="btn btn-success">
+                    <i class="fas fa-save"></i> 保存
+                </button>
+
+                <button id="exportBtn" class="btn btn-success">
+                    <i class="fas fa-download"></i> 导出数据集
+                </button>
+                <button id="settingsBtn" class="btn btn-info">
+                    <i class="fas fa-cog"></i> 设置
+                </button>
+
+            </div>
+            </div>
+        </header>
+
+        <!-- 主要内容区域 -->
+        <div class="main-content">
+            <!-- 左侧图片列表 -->
+            <div class="image-panel">
+                <!--<div class="panel-header">
+                    <h3><i class="fas fa-images"></i> 图片列表</h3>
+                </div>-->
+
+
+                <div class="image-search-container">
+                    <div class="search-container">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="text" id="imageSearch" class="search-input" placeholder="搜索图片...">
+                    </div>
+                    <div class="image-toolbar">
+                        <div class="image-stats">
+                            <span id="imageCount">共 0 张图片</span>
+                        </div>
+                        <div class="image-actions">
+                            <button id="selectAllBtn" class="btn btn-small btn-secondary" title="全选">
+                                <i class="fas fa-check-square"></i>
+                            </button>
+                            <button id="deleteSelectedBtn" class="btn btn-small btn-danger" title="删除选中" disabled>
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <ul id="imageList" class="image-list">
+                    <!-- 图片将通过JavaScript动态加载 -->
+                </ul>
+            </div>
+
+            <!-- 中间图像显示区域 -->
+            <div class="image-container">
+                <div id="imageCanvasContainer">
+                    <canvas id="imageCanvas"></canvas>
+                    <!-- 标注工具 -->
+                    <div class="drawing-tools">
+                        <button id="rectTool" class="tool-btn active" title="矩形工具">
+                            <i class="fas fa-vector-square"></i>
+                        </button>
+                        <button id="polygonTool" class="tool-btn" title="多边形工具">
+                            <i class="fas fa-draw-polygon"></i>
+                        </button>
+                        <button id="moveTool" class="tool-btn" title="移动工具">
+                            <i class="fas fa-arrows-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="noImageMessage" class="no-image-message">
+                    <p><i class="fas fa-image fa-3x"></i></p>
+                    <p>请选择一张图片开始标注</p>
+                </div>
+            </div>
+
+            <!-- 右侧标注工具 -->
+            <div class="annotation-panel">
+                <!--<h3><i class="fas fa-edit"></i> 标注工具</h3>-->
+
+                
+                <div class="tool-section">
+                    <h4>标签管理</h4>
+                    <div class="class-controls">
+                        <input type="text" id="newClassInput" placeholder="新标签">
+                        <input type="color" id="newClassColor" value="#3aa757" class="color-picker">
+                        <button id="addClassBtn" class="btn btn-small btn-primary">
+                            <i class="fas fa-plus"></i> 添加
+                        </button>
+                    </div>
+                    <ul id="classList" class="class-list">
+                        <!-- 类别将通过JavaScript动态加载 -->
+                    </ul>
+                </div>
+
+                <div class="tool-section">
+                    <h4>标注列表</h4>
+                    <ul id="currentAnnotations" class="annotation-list">
+                        <!-- 当前标注将通过JavaScript动态加载 -->
+                    </ul>
+                </div>
+
+                
+            </div>
+        </div>
+    </div>
+
+    <!-- 导出模态框 -->
+    <div id="exportModal" class="modal export-modal">
+        <div class="modal-content export-modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-download"></i> 导出数据集</h2>
+            <form id="exportForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="trainRatio">训练集比例:</label>
+                        <input type="number" id="trainRatio" name="trainRatio" min="0" max="1" step="0.1" value="0.7">
+                    </div>
+                    <div class="form-group">
+                        <label for="valRatio">验证集比例:</label>
+                        <input type="number" id="valRatio" name="valRatio" min="0" max="1" step="0.1" value="0.2">
+                    </div>
+                    <div class="form-group">
+                        <label for="testRatio">测试集比例:</label>
+                        <input type="number" id="testRatio" name="testRatio" min="0" max="1" step="0.1" value="0.1">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>样本选择:</label>
+                    <div class="sample-selection">
+                        <label>
+                            <input type="radio" name="sampleSelection" value="all" checked> 所有图片
+                        </label>
+                        <label>
+                            <input type="radio" name="sampleSelection" value="annotated"> 仅已标注的图片
+                        </label>
+                        <label>
+                            <input type="radio" name="sampleSelection" value="unannotated"> 仅未标注的图片
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>类别选择:</label>
+                    <div id="classCheckboxes" class="class-checkbox-container">
+                        <!-- 类别复选框将通过JavaScript动态加载 -->
+                    </div>
+                </div>
+                
+                <!-- 文件前缀和导出按钮在同一行 -->
+                <div class="form-row" style="display: flex; align-items: flex-end; gap: 10px;">
+                    <div class="form-group" style="width: 200px;">
+                        <label for="exportPrefix">导出文件前缀 (可选):</label>
+                        <input type="text" id="exportPrefix" placeholder="输入文件前缀" style="width: 100%;">
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                        <button type="submit" class="btn btn-success" id="exportSubmitBtn" style="width: auto; min-width: 100px; height: 36px;">
+                            <i class="fas fa-download"></i> 导出
+                        </button>
+                        <!-- 加载指示器 -->
+                        <div id="exportLoadingIndicator" class="loading-indicator" style="display: none; height: 36px; line-height: 36px; margin: 0; padding: 0 10px;">
+                            <i class="fas fa-spinner fa-spin"></i> 正在处理...
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <hr style="margin:20px 0;border:none;border-top:1px solid #e0e0e0;">
+            <h3 style="margin:0 0 12px;font-size:1.05em;"><i class="fas fa-cloud-upload-alt"></i> 导出到云平台（MinIO + 数据集服务）</h3>
+            <p style="color:#666;font-size:0.88em;margin:0 0 12px;">将当前数据集的类别与图片标注写回云平台：已绑定图片则 <code>PUT /dataset/image/update</code>；新图片则上传 MinIO 并 <code>POST /dataset/image/create</code>。若本地未绑定数据集 ID 且勾选允许创建，将自动 <code>POST /dataset/create</code>。</p>
+            <div class="form-group">
+                <label for="cloudExportApiBase">API 根地址</label>
+                <input type="text" id="cloudExportApiBase" class="form-control" placeholder="默认可从上次导入的 dataset_config 读取" style="width:100%;box-sizing:border-box;">
+            </div>
+            <div class="form-group">
+                <label for="cloudExportToken">Authorization（必填）</label>
+                <input type="password" id="cloudExportToken" class="form-control" placeholder="Bearer ..." style="width:100%;box-sizing:border-box;">
+            </div>
+            <div class="form-group">
+                <label for="cloudExportDatasetId">云平台数据集 ID（可选，默认可从 cloud_sync.json）</label>
+                <input type="number" id="cloudExportDatasetId" class="form-control" placeholder="留空则自动创建或沿用已绑定 ID">
+            </div>
+            <div class="form-group">
+                <label for="cloudExportMinioEp">MinIO Endpoint</label>
+                <input type="text" id="cloudExportMinioEp" class="form-control" placeholder="minio:9000">
+            </div>
+            <div class="form-group" style="display:flex;gap:12px;flex-wrap:wrap;">
+                <label style="flex:1;">Access Key<input type="text" id="cloudExportMinioAk" class="form-control"></label>
+                <label style="flex:1;">Secret Key<input type="password" id="cloudExportMinioSk" class="form-control"></label>
+            </div>
+            <div class="form-group">
+                <label for="cloudExportBucket">Bucket（必填，须与平台配置一致）</label>
+                <input type="text" id="cloudExportBucket" class="form-control" placeholder="dataset">
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="cloudExportMinioSecure" checked> MinIO HTTPS</label>
+                <label style="margin-left:16px;"><input type="checkbox" id="cloudExportVerifySsl" checked> 校验 TLS</label>
+                <label style="margin-left:16px;"><input type="checkbox" id="cloudExportCreateDs" checked> 无绑定 ID 时自动创建数据集</label>
+            </div>
+            <button type="button" class="btn btn-primary" id="cloudExportBtn" style="margin-top:4px;">
+                <i class="fas fa-sync"></i> 同步到云平台
+            </button>
+            <div id="cloudExportStatus" style="margin-top:10px;font-size:0.9em;color:#444;"></div>
+        </div>
+    </div>
+
+    <!-- AI标注模态框 -->
+    <div id="aiAnnotateModal" class="modal ai-annotate-modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-robot"></i> AI自动标注设置</h2>
+            <form id="aiAnnotateForm">
+                <div class="form-group">
+                    <label for="aiModelSelect">选择模型:</label>
+                    <select id="aiModelSelect" class="form-control">
+                        <option value="">-- 请选择模型 --</option>
+                    </select>
+                    <small>请先在设置中安装YOLO11并下载或上传模型</small>
+                </div>
+                <div class="form-group">
+                    <label for="aiConfidence">置信度阈值:</label>
+                    <input type="range" id="aiConfidence" min="0.1" max="0.9" step="0.05" value="0.5">
+                    <span id="aiConfidenceValue">0.5</span>
+                    <small>置信度越高，检测越严格，框越少</small>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="aiAutoNext">
+                        保存后自动切换到下一张图片
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="aiSkipAnnotated">
+                        批量标注时跳过已有标注的图片
+                    </label>
+                </div>
+                
+                <!-- 批量标注区间设置 -->
+                <div class="form-group batch-range-group">
+                    <label><i class="fas fa-list-ol"></i> 批量标注范围:</label>
+                    <div class="batch-range-inputs">
+                        <span>从第</span>
+                        <input type="number" id="batchStartIndex" min="1" value="1" class="range-input">
+                        <span>张到第</span>
+                        <input type="number" id="batchEndIndex" min="1" value="10" class="range-input">
+                        <span>张</span>
+                    </div>
+                    <small id="batchRangeInfo">共 0 张图片，当前选择范围: 1-10</small>
+                </div>
+                
+                <!-- 批量大小设置 -->
+                <div class="form-group">
+                    <label for="batchSize">每批处理数量:</label>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="number" id="batchSize" class="form-control" min="1" max="100" value="10" style="width: 80px;">
+                        <span>张/批</span>
+                    </div>
+                    <small>每批处理更多图片速度更快，但需要更多内存（建议1-50张）</small>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                    <button type="submit" class="btn btn-success" id="aiAnnotateStartBtn">
+                        <i class="fas fa-play"></i> 开启AI标注
+                    </button>
+                    <button type="button" class="btn btn-primary" id="aiBatchAnnotateBtn">
+                        <i class="fas fa-images"></i> 批量标注选定范围
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="aiAnnotateCancelBtn">
+                        <i class="fas fa-times"></i> 取消
+                    </button>
+                </div>
+            </form>
+            <!-- 批量标注进度 -->
+            <div id="batchAnnotateProgress" style="display: none; margin-top: 20px;">
+                <div class="progress-info">
+                    <span id="batchProgressText">正在处理: 0/0</span>
+                    <button type="button" class="btn btn-danger btn-sm" id="batchCancelBtn">
+                        <i class="fas fa-stop"></i> 停止
+                    </button>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="batchProgressBar" style="width: 0%"></div>
+                </div>
+                <div id="batchResultText" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div id="settingsModal" class="modal settings-modal">
+        <div class="modal-content settings-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-cog"></i> 设置</h2>
+            
+            <div class="settings-accordion">
+                <!-- 关于项目 - 默认折叠 -->
+                <div class="accordion-item">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <span><i class="fas fa-user"></i> 关于项目</span>
+                        <i class="fas fa-chevron-down accordion-icon"></i>
+                    </div>
+                    <div class="accordion-body">
+                        <div class="info-row">
+                            <span><strong>作者:</strong> 自动标注平台</span>
+                            <span><strong>版本:</strong> v1.0</span>
+                        </div>
+                        <div><strong>基于:</strong> <a href="https://github.com/beixiaocai/xclabel" target="_blank">xclabel v2.1 (MIT协议)</a></div>
+                        <div style="margin-top: 8px;"><strong>友情推广:</strong> <a href="https://gitee.com/volara/easyaiot" target="_blank">EasyAIoT（云边端一体化智能算法应用平台）</a></div>
+                    </div>
+                </div>
+                
+                <!-- YOLO11安装 - 默认展开 -->
+                <div class="accordion-item active">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <span><i class="fas fa-robot"></i> YOLO11 模型管理</span>
+                        <i class="fas fa-chevron-down accordion-icon"></i>
+                    </div>
+                    <div class="accordion-body" style="display: block;">
+                        <div class="settings-row">
+                            <label>安装路径:</label>
+                            <input type="text" id="yolo11InstallPath" value="plugins/yolo11" class="settings-input">
+                        </div>
+
+                        
+                        <!-- 模型管理 -->
+                        <div class="models-section">
+                            <div class="models-grid">
+                                <div class="models-download">
+                                    <label class="section-label">下载预训练模型:</label>
+                                    <div class="checkbox-group">
+                                        <label><input type="checkbox" name="yolo11Models" value="yolo11n" checked> n (小)</label>
+                                        <label><input type="checkbox" name="yolo11Models" value="yolo11s" checked> s (中)</label>
+                                        <label><input type="checkbox" name="yolo11Models" value="yolo11m" checked> m (大)</label>
+                                        <label><input type="checkbox" name="yolo11Models" value="yolo11l" checked> l (特大)</label>
+                                        <label><input type="checkbox" name="yolo11Models" value="yolo11x" checked> x (超大)</label>
+                                    </div>
+                                    <div class="settings-btn-group">
+                                        <button type="button" class="btn btn-primary btn-sm" id="downloadModelsBtn">
+                                            <i class="fas fa-download"></i> 下载
+                                        </button>
+                                        <button type="button" class="btn btn-secondary btn-sm" id="refreshModelsBtn">
+                                            <i class="fas fa-sync-alt"></i> 刷新
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="models-installed">
+                                    <label class="section-label">已安装模型:</label>
+                                    <div id="modelsList" class="models-list"></div>
+                                </div>
+                            </div>
+                            <div id="modelDropZone" class="drop-zone">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <span>拖放模型文件到此处，或放置到 <code id="modelsPath">plugins/yolo11/models</code></span>
+                            </div>
+                            <div id="modelDownloadStatus" class="status-box" style="display: none;">
+                                <i class="fas fa-info-circle"></i> <span id="modelStatusText">模型下载状态</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 快捷键设置 -->
+                <div class="accordion-item active">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <span><i class="fas fa-keyboard"></i> 快捷键设置</span>
+                        <i class="fas fa-chevron-down accordion-icon"></i>
+                    </div>
+                    <div class="accordion-body" style="display: block;">
+                        <form id="settingsForm">
+                            <div class="shortcut-grid">
+                                <div class="shortcut-item">
+                                    <label>删除选中框</label>
+                                    <input type="text" id="deleteSelectedShortcut" value="Q">
+                                </div>
+                                <div class="shortcut-item">
+                                    <label>保存标注</label>
+                                    <input type="text" id="saveShortcut" value="Ctrl+S">
+                                </div>
+                                <div class="shortcut-item">
+                                    <label>上一张</label>
+                                    <input type="text" id="prevImageShortcut" value="A">
+                                </div>
+                                <div class="shortcut-item">
+                                    <label>下一张</label>
+                                    <input type="text" id="nextImageShortcut" value="D">
+                                </div>
+                            </div>
+                            <div class="settings-checkbox">
+                                <label>
+                                    <input type="checkbox" id="autoNextAfterSave">
+                                    保存后自动跳到下一张图片
+                                </label>
+                            </div>
+                            <button type="submit" class="btn btn-success btn-sm" id="saveSettingsBtn">
+                                <i class="fas fa-save"></i> 保存设置
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 数据集上传模态框 -->
+    <div id="datasetModal" class="modal dataset-modal">
+        <div class="modal-content dataset-modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-upload"></i> 添加数据集</h2>
+            <div class="dataset-tabs">
+                <button class="tab-btn active" data-tab="image">图片文件夹</button>
+                <button class="tab-btn" data-tab="video">视频文件</button>
+                <button class="tab-btn" data-tab="path">ImageFolder</button>
+                <button class="tab-btn" data-tab="yolo">YOLO</button>
+                <button class="tab-btn" data-tab="coco">COCO</button>
+                <button class="tab-btn" data-tab="cloud">云平台</button>
+            </div>
+            <div class="tab-content">
+                <!-- 图片文件夹上传 -->
+                <div class="tab-pane active" id="image-tab">
+                    <div class="upload-area" id="imageUploadArea">
+                        <pre class="dataset-tree-example">uploads/
+├── photo1.jpg
+├── photo2.png
+└── subdir__img3.jpg</pre>
+                        <i class="fas fa-folder-open fa-3x"></i>
+                        <p>拖拽图片文件到此处或点击选择文件夹</p>
+                        <input type="file" id="folderInput" multiple accept="image/*" style="display: none;">
+                        <button id="selectFolderBtn" class="btn btn-primary">选择图片文件</button>
+                    </div>
+                    <div class="upload-actions" style="margin-top: 15px; text-align: center;">
+                        <button id="uploadImagesBtn" class="btn btn-success" disabled>
+                            <i class="fas fa-upload"></i> 上传图片到数据集
+                        </button>
+                    </div>
+                </div>
+                <!-- 视频文件上传 -->
+                <div class="tab-pane" id="video-tab">
+                    <div class="upload-area" id="videoUploadArea">
+                        <pre class="dataset-tree-example">（本地）my_clip.mp4
+        ↓ 抽帧
+uploads/
+├── my_clip_frame_000030.jpg
+└── my_clip_frame_000060.jpg</pre>
+                        <i class="fas fa-video fa-3x"></i>
+                        <p>拖拽视频文件到此处或点击选择视频</p>
+                        <input type="file" id="videoInput" accept="video/*" style="display: none;">
+                        <button id="selectVideoBtn" class="btn btn-primary">选择视频文件</button>
+                        <div id="selectedVideoInfo" style="margin-top: 10px; font-size: 0.9em; color: #666; display: none;">
+                            <strong>已选择:</strong> <span id="selectedVideoName"></span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="frameInterval">抽帧间隔 (帧):</label>
+                            <input type="number" id="frameInterval" min="1" max="1000" value="30">
+                            <small>每隔指定帧数保存一帧作为样本</small>
+                        </div>
+                        
+                        <button id="extractFramesBtn" class="btn btn-success" disabled>
+                            <i class="fas fa-film"></i> 抽帧并添加到数据集
+                        </button>
+                    </div>
+                </div>
+                <!-- ImageFolder：LabelMe / COCO；无标注时回退 YOLO .txt -->
+                <div class="tab-pane" id="path-tab">
+                    <div class="upload-area" id="pathImportArea" style="text-align: left;">
+                        <pre class="dataset-tree-example">/data/my_label_project/
+├── cats/
+│   ├── 001.jpg
+│   └── 001.json
+├── dogs/
+│   └── 002.jpg
+├── annotations/
+│   └── instances.json
+└── notes.txt</pre>
+                        <div class="form-group">
+                            <label for="datasetPathInput">工程根目录（绝对路径）</label>
+                            <input type="text" id="datasetPathInput" class="form-control" placeholder="/data/my_label_project" autocomplete="off" style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        <div class="upload-actions" style="margin-top: 15px; text-align: center;">
+                            <button type="button" id="importDatasetPathBtn" class="btn btn-success">
+                                <i class="fas fa-folder-plus"></i> 导入 ImageFolder（LabelMe / COCO / YOLO 回退）
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- YOLO：仅 .txt + 类别表，与导出 ZIP 一致 -->
+                <div class="tab-pane" id="yolo-tab">
+                    <div class="upload-area" id="yoloImportArea" style="text-align: left;">
+                        <pre class="dataset-tree-example">/data/yolo_dataset/
+├── data.yaml
+├── classes.txt
+├── train/
+│   ├── images/
+│   │   └── img001.jpg
+│   └── labels/
+│       └── img001.txt
+├── val/
+│   ├── images/
+│   └── labels/
+└── test/ ...</pre>
+                        <div class="form-group">
+                            <label for="yoloDatasetPathInput">YOLO 数据集根目录（绝对路径）</label>
+                            <input type="text" id="yoloDatasetPathInput" class="form-control" placeholder="/data/yolo_dataset" autocomplete="off" style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        <div class="upload-actions" style="margin-top: 15px; text-align: center;">
+                            <button type="button" id="importYoloPathBtn" class="btn btn-success">
+                                <i class="fas fa-file-import"></i> 导入 YOLO（仅 .txt）
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- COCO instances：单独 JSON 路径 -->
+                <div class="tab-pane" id="coco-tab">
+                    <div class="upload-area" id="cocoImportArea" style="text-align: left;">
+                        <pre class="dataset-tree-example">/data/coco2017/
+├── annotations/
+│   └── instances_train2017.json
+└── train2017/
+    ├── 000000000001.jpg
+    └── 000000000002.jpg</pre>
+                        <div class="form-group">
+                            <label for="cocoJsonPathInput">instances JSON 绝对路径</label>
+                            <input type="text" id="cocoJsonPathInput" class="form-control" placeholder="/home/ubuntu/人类头部/annotations/instances_default.json" autocomplete="off" style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        <div class="form-group">
+                            <label for="cocoImagesRootInput">图片根目录（可选）</label>
+                            <input type="text" id="cocoImagesRootInput" class="form-control" placeholder="/home/ubuntu/人类头部" autocomplete="off" style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        <div class="upload-actions" style="margin-top: 15px; text-align: center;">
+                            <button type="button" id="importCocoBtn" class="btn btn-success">
+                                <i class="fas fa-database"></i> 导入 COCO
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- 云平台：API + MinIO -->
+                <div class="tab-pane" id="cloud-tab">
+                    <div class="upload-area" id="cloudImportArea" style="text-align: left;">
+                        <p style="color:#555;font-size:0.9em;">通过数据集服务分页接口拉取图片与标注，并用 MinIO 下载原图到 <code>uploads/cloud_sync/</code>，作为外部数据集继续标注（对象键与 iot-dataset-biz 中 <code>prefix=</code> 一致）。</p>
+                        <div class="form-group">
+                            <label for="cloudApiBase">API 根地址（含网关前缀）</label>
+                            <input type="text" id="cloudApiBase" class="form-control" placeholder="http://host:48080/admin-api" autocomplete="off" style="width:100%;box-sizing:border-box;">
+                        </div>
+                        <div class="form-group">
+                            <label for="cloudToken">Authorization（Bearer Token）</label>
+                            <input type="password" id="cloudToken" class="form-control" placeholder="Bearer ..." autocomplete="off" style="width:100%;box-sizing:border-box;">
+                        </div>
+                        <div class="form-group">
+                            <label for="cloudDatasetId">云平台数据集 ID</label>
+                            <input type="number" id="cloudDatasetId" class="form-control" placeholder="例如 1569" style="width:100%;box-sizing:border-box;">
+                        </div>
+                        <div class="form-group">
+                            <label for="cloudMinioEndpoint">MinIO Endpoint（不含 http/https）</label>
+                            <input type="text" id="cloudMinioEndpoint" class="form-control" placeholder="minio:9000" style="width:100%;box-sizing:border-box;">
+                        </div>
+                        <div class="form-group" style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <label style="flex:1;min-width:140px;">Access Key<input type="text" id="cloudMinioAk" class="form-control" autocomplete="off"></label>
+                            <label style="flex:1;min-width:140px;">Secret Key<input type="password" id="cloudMinioSk" class="form-control" autocomplete="off"></label>
+                        </div>
+                        <div class="form-group">
+                            <label for="cloudMinioBucket">Bucket（可选，可从图片 path 自动解析）</label>
+                            <input type="text" id="cloudMinioBucket" class="form-control" placeholder="dataset" style="width:100%;box-sizing:border-box;">
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="cloudMinioSecure" checked> MinIO 使用 HTTPS</label>
+                            <label style="margin-left:16px;"><input type="checkbox" id="cloudVerifySsl" checked> 校验 TLS 证书</label>
+                        </div>
+                        <div class="upload-actions" style="margin-top:15px;text-align:center;">
+                            <button type="button" id="cloudImportBtn" class="btn btn-success">
+                                <i class="fas fa-cloud-download-alt"></i> 从云平台导入
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑标签模态框 -->
+    <div id="editClassModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-edit"></i> 编辑标签</h2>
+            <form id="editClassForm">
+                <input type="hidden" id="editClassIndex">
+                <div class="form-group">
+                    <label for="editClassName">标签名称:</label>
+                    <input type="text" id="editClassName" placeholder="请输入标签名称">
+                </div>
+                <div class="form-group">
+                    <label for="editClassColor">标签颜色:</label>
+                    <input type="color" id="editClassColor" class="color-picker">
+                </div>
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i> 保存更改
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 模型配置模态框 -->
+    <div id="modelConfigModal" class="modal model-config-modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2><i class="fas fa-robot"></i> <span id="modelConfigTitle">添加模型配置</span></h2>
+            <form id="modelConfigForm">
+                <input type="hidden" id="modelConfigId">
+                <div class="form-group">
+                    <label for="modelConfigName">模型名称:</label>
+                    <input type="text" id="modelConfigName" placeholder="请输入模型名称" required>
+                </div>
+                <div class="form-group">
+                    <label for="modelConfigApiKey">API Key:</label>
+                    <input type="password" id="modelConfigApiKey" placeholder="请输入API密钥" required>
+                </div>
+                <div class="form-group">
+                    <label for="modelConfigEndpoint">API Endpoint:</label>
+                    <input type="text" id="modelConfigEndpoint" placeholder="请输入API端点地址">
+                </div>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="modelConfigDefault">
+                        <span>设为默认模型</span>
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancelModelConfig" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> 取消
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save"></i> 保存配置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div id="toast" class="toast"></div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

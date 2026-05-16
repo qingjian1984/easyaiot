@@ -32,6 +32,20 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
 
   const isBuild = command === 'build'
 
+  const proxy = createProxy(VITE_PROXY)
+  const autoLabelPrefix = '/dev-api/autoLabeling'
+  if (proxy[autoLabelPrefix]) {
+    const baseProxy = proxy[autoLabelPrefix]
+    proxy[autoLabelPrefix] = {
+      ...baseProxy,
+      configure: (proxyServer) => {
+        proxyServer.on('proxyReq', (proxyReq) => {
+          proxyReq.setHeader('X-Forwarded-Prefix', autoLabelPrefix)
+        })
+      },
+    }
+  }
+
   return {
     base: VITE_PUBLIC_PATH,
     root,
@@ -41,7 +55,7 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
       host: true,
       port: VITE_PORT,
       // Load proxy configuration from .env
-      proxy: createProxy(VITE_PROXY),
+      proxy,
     },
     resolve: {
       alias: [
