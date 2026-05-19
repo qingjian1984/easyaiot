@@ -84,6 +84,26 @@ EasyAIoT is a cloud-edge-device integrated intelligent IoT platform that focuses
   <li><strong>Notification Management</strong>: Supports 7 notification methods including Feishu, DingTalk, Enterprise WeChat, Email, Tencent Cloud SMS, Alibaba Cloud SMS, and Webhook, enabling flexible and multi-channel alert notifications</li>
 </ul>
 
+### 📦 Built-in AI Models
+
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
+The platform is ready to use out of the box, with multiple pre-trained models built in for security monitoring, industrial sites, smart transportation, and similar scenarios. Select them directly in algorithm tasks for rapid deployment and inference—no training from scratch required to cover common vision detection needs.
+</p>
+
+| Model Name | Inference Format | Version | Capability |
+| :-- | :--: | :--: | :-- |
+| Safety Helmet Model | ONNX | v1.0.1 | Detect whether workers are wearing safety helmets |
+| Sleeping on Duty Model | PyTorch | v1.0.0 | Detect sleeping on duty, leaving post, and other abnormal behaviors |
+| Person Detection Model | PyTorch | v1.0.0 | General human detection for identifying and locating people in the frame |
+| License Plate Recognition | ONNX | v1.0.0 | Recognize vehicle license plate information |
+| Reflective Vest Model | PyTorch | v1.0.0 | Detect whether workers are wearing reflective vests |
+| Flame Model | PyTorch | v1.0.0 | Detect open flames and fire hazards |
+| Smoking Detection Model | PyTorch | v1.0.0 | Detect smoking behavior |
+| Phone Call Detection Model | ONNX | v1.0.0 | Detect phone calls and mobile phone use |
+| Road Waterlogging Model | ONNX | v1.0.0 | Detect road water accumulation and surface flooding |
+| Face Mask Model | ONNX | v1.0.0 | Detect whether people are wearing masks correctly |
+| Fall Detection Model | ONNX | v1.0.0 | Detect falls and other abnormal postures |
+| Face Detection Model | ONNX | v1.0.0 | Detect face locations in the frame to support face recognition workflows |
 
 ### 💡 Technical Philosophy
 
@@ -460,6 +480,10 @@ compensate third parties for damages caused by usage. All EasyAIoT-related resou
 <div>
   <img src=".image/banner/banner1017.jpg" alt="Screenshot 7" width="49%" style="margin-right: 10px">
   <img src=".image/banner/banner1018.jpg" alt="Screenshot 8" width="49%">
+</div>
+<div>
+  <img src=".image/banner/banner1097.png" alt="Screenshot 7" width="49%" style="margin-right: 10px">
+  <img src=".image/banner/banner1098.png" alt="Screenshot 7" width="49%">
 </div>
 <div>
   <img src=".image/banner/banner1039.jpg" alt="Screenshot 7" width="49%" style="margin-right: 10px">
