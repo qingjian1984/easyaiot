@@ -1,0 +1,302 @@
+import type { DeviceInfo, MonitorTreeDeviceNode } from '@/api/device/camera';
+import { getDeviceInfo } from '@/api/device/camera';
+import { playByDeviceAndChannel } from '@/api/device/gb28181';
+import {
+  formatCameraDeviceLabel,
+  gb28181VirtualDeviceId,
+  getGb28181PlayIds,
+  isGb28181Device,
+  shouldPlayViaGb28181,
+} from './deviceLabel';
+
+export type DevicePlayModalOpener = (visible: boolean, data: Record<string, any>) => void;
+
+export function isGb28181DeviceRecord(record: { source?: string | null; device_kind?: string }) {
+  return isGb28181Device(record.source, record.device_kind);
+}
+
+export function hasDirectPlayStream(record: DeviceInfo, ai = false): boolean {
+  if (isGb28181DeviceRecord(record)) return false;
+  if ((record as { device_kind?: string }).device_kind === 'gb28181_sip') return false;
+  if (ai) {
+    return !!(record.ai_http_stream || record.ai_rtmp_stream);
+  }
+  return !!(record.http_stream || record.rtmp_stream);
+}
+
+type DirectStreamFields = Pick<
+  DeviceInfo,
+  'http_stream' | 'rtmp_stream' | 'ai_http_stream' | 'ai_rtmp_stream'
+>;
+
+export interface DirectPlayUrlResult {
+  url: string | null;
+  /** 启用 AI 时，AI 地址不可播则回退原始流 */
+  fallbackUrl?: string | null;
+  /** 已探测到 AI 流在推流，播放器超时后再回退原始流 */
+  preferAi?: boolean;
+}
+
+/** 探测 AI 流是否在 ZLM 上就绪（毫秒） */
+export const AI_STREAM_PROBE_MS = 2000;
+/** AI 流播放超时后回退原始流（毫秒，仅 preferAi 时生效） */
+export const AI_PLAY_FALLBACK_MS = 6000;
+
+const LOCAL_STREAM_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+
+/** 将服务端生成的 127.0.0.1/localhost 流地址改写为当前页面主机名，便于浏览器拉流 */
+export function rewriteStreamUrlForBrowser(url: string): string {
+  const trimmed = url?.trim();
+  if (!trimmed || typeof window === 'undefined') return trimmed;
+
+  try {
+    const parsed = new URL(trimmed);
+    const pageHost = window.location.hostname;
+    if (!pageHost || LOCAL_STREAM_HOSTS.has(pageHost)) return trimmed;
+    if (!LOCAL_STREAM_HOSTS.has(parsed.hostname)) return trimmed;
+
+    parsed.hostname = pageHost;
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+/** RTMP 转 HTTP-FLV（Jessibuca 浏览器端需 HTTP/WS 地址） */
+export function convertRtmpToHttp(rtmpUrl: string): string | null {
+  const trimmed = rtmpUrl?.trim();
+  if (!trimmed || !trimmed.startsWith('rtmp://')) {
+    return null;
+  }
+  try {
+    const url = new URL(trimmed);
+    const server = url.hostname;
+    let path = url.pathname.replace(/^\//, '');
+    if (!path) path = 'live';
+    if (!path.endsWith('.flv')) path = `${path}.flv`;
+    return rewriteStreamUrlForBrowser(`http://${server}:8080/${path}`);
+  } catch {
+    return null;
+  }
+}
+
+function toBrowserPlayUrl(stream?: string | null): string | null {
+  const trimmed = stream?.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('rtmp://')) {
+    return convertRtmpToHttp(trimmed);
+  }
+  return rewriteStreamUrlForBrowser(trimmed);
+}
+
+/** 是否为算法任务输出的 AI 流（检测框烧录在此路流上） */
+export function isAiStreamPlayUrl(url?: string | null): boolean {
+  if (!url) return false;
+  return /\/ai\//i.test(url);
+}
+
+function pickVideoPlayUrl(device: DirectStreamFields): string | null {
+  return toBrowserPlayUrl(device.http_stream) || toBrowserPlayUrl(device.rtmp_stream);
+}
+
+function pickAiPlayUrl(device: DirectStreamFields): string | null {
+  return toBrowserPlayUrl(device.ai_http_stream) || toBrowserPlayUrl(device.ai_rtmp_stream);
+}
+
+/**
+ * 快速探测流是否可播（避免无算法任务时长时间等待空 AI 地址）。
+ * 探测失败时返回 false，调用方应直接播原始流。
+ */
+export async function probeStreamPlayable(
+  url: string,
+  timeoutMs = AI_STREAM_PROBE_MS,
+): Promise<boolean> {
+  const target = url?.trim();
+  if (!target || typeof window === 'undefined') return false;
+  try {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(target, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { Range: 'bytes=0-1' },
+      cache: 'no-store',
+    });
+    window.clearTimeout(timer);
+    if (res.status === 404 || res.status === 403) return false;
+    return res.ok || res.status === 206;
+  } catch {
+    return false;
+  }
+}
+
+/** 直连设备播放地址：启用 AI 时优先 AI 流，无 AI 地址则回退原始流；未启用时仅原始流 */
+export async function pickDirectPlayUrl(
+  device: DirectStreamFields,
+  enableAi = false,
+): Promise<string | null> {
+  return (await pickDirectPlayUrls(device, enableAi)).url;
+}
+
+export async function pickDirectPlayUrls(
+  device: DirectStreamFields,
+  enableAi = false,
+): Promise<DirectPlayUrlResult> {
+  const videoUrl = pickVideoPlayUrl(device);
+  if (!enableAi) {
+    return { url: videoUrl };
+  }
+
+  const aiUrl = pickAiPlayUrl(device);
+  if (!aiUrl) {
+    return { url: videoUrl };
+  }
+  if (!videoUrl || aiUrl === videoUrl) {
+    return { url: aiUrl };
+  }
+
+  const aiReady = await probeStreamPlayable(aiUrl);
+  if (!aiReady) {
+    return { url: videoUrl };
+  }
+  return { url: aiUrl, fallbackUrl: videoUrl, preferAi: true };
+}
+
+export function supportsRtspForward(record: DeviceInfo): boolean {
+  return !isGb28181DeviceRecord(record);
+}
+
+export async function resolveGb28181StreamUrl(
+  sipDeviceId: string,
+  channelId: string,
+): Promise<string | null> {
+  const res = await playByDeviceAndChannel(sipDeviceId, channelId);
+  const streamContent = (res as any)?.data?.data ?? (res as any)?.data;
+  return streamContent?.ws_flv || streamContent?.https_flv || streamContent?.rtmp || null;
+}
+
+export interface GbChannelPlayUrlResult {
+  url: string | null;
+  fallbackUrl?: string | null;
+  preferAi?: boolean;
+}
+
+/** 加载国标通道对应的 device 表记录（含 ai_http_stream） */
+export async function loadGbChannelSyncedDevice(
+  sipDeviceId: string,
+  channelId: string,
+  synced?: MonitorTreeDeviceNode | null,
+): Promise<MonitorTreeDeviceNode | null> {
+  if (synced?.ai_http_stream?.trim() || synced?.ai_rtmp_stream?.trim()) {
+    return synced;
+  }
+  try {
+    const res = await getDeviceInfo(gb28181VirtualDeviceId(sipDeviceId, channelId));
+    const device = (res as any)?.data ?? res;
+    return device?.id ? (device as MonitorTreeDeviceNode) : synced ?? null;
+  } catch {
+    return synced ?? null;
+  }
+}
+
+/**
+ * 国标通道播放地址：启用 AI 时优先 ai_http_stream（算法烧录检测框），否则 WVP 点播原始流。
+ */
+export async function resolveGbChannelPlayUrls(
+  sipDeviceId: string,
+  channelId: string,
+  options?: {
+    enableAi?: boolean;
+    synced?: MonitorTreeDeviceNode | null;
+    wvpUrl?: string | null;
+  },
+): Promise<GbChannelPlayUrlResult> {
+  const enableAi = options?.enableAi ?? false;
+  let wvpUrl = options?.wvpUrl ?? null;
+  const loadWvp = async () => {
+    if (!wvpUrl) {
+      wvpUrl = await resolveGb28181StreamUrl(sipDeviceId, channelId);
+    }
+    return wvpUrl;
+  };
+
+  if (!enableAi) {
+    return { url: await loadWvp() };
+  }
+
+  const synced = await loadGbChannelSyncedDevice(
+    sipDeviceId,
+    channelId,
+    options?.synced ?? null,
+  );
+  if (synced) {
+    const { url, fallbackUrl, preferAi } = await pickDirectPlayUrls(synced as DirectStreamFields, true);
+    if (url) {
+      return {
+        url,
+        fallbackUrl: fallbackUrl ?? (await loadWvp()),
+        preferAi,
+      };
+    }
+  }
+
+  return { url: await loadWvp() };
+}
+
+export function buildDialogPlayerPayload(
+  record: DeviceInfo,
+  options?: { ai?: boolean },
+): Record<string, any> {
+  const name = formatCameraDeviceLabel(record);
+
+  if (options?.ai) {
+    const aiUrl = pickAiPlayUrl(record);
+    const videoUrl = pickVideoPlayUrl(record);
+    return {
+      ...record,
+      name,
+      http_stream: aiUrl || videoUrl || undefined,
+    };
+  }
+
+  const gbIds = getGb28181PlayIds(record as Record<string, any>);
+  if (gbIds) {
+    return {
+      ...record,
+      name,
+      deviceIdentification: gbIds.sipDeviceId,
+      channelId: gbIds.channelId,
+      http_stream: undefined,
+    };
+  }
+
+  return { ...record, name };
+}
+
+export function openDeviceInDialogPlayer(
+  openModal: DevicePlayModalOpener,
+  record: DeviceInfo,
+  options?: { ai?: boolean },
+) {
+  if (!hasDirectPlayStream(record, options?.ai) && !shouldPlayViaGb28181(record)) {
+    return false;
+  }
+  openModal(true, buildDialogPlayerPayload(record, options));
+  return true;
+}
+
+export async function resolveMonitorPlayUrl(
+  device: DeviceInfo,
+  streamType: 'video' | 'ai' = 'video',
+): Promise<string | null> {
+  if (streamType === 'ai') {
+    return pickAiPlayUrl(device);
+  }
+
+  const gbIds = getGb28181PlayIds(device as Record<string, any>);
+  if (gbIds) {
+    return resolveGb28181StreamUrl(gbIds.sipDeviceId, gbIds.channelId);
+  }
+
+  return pickVideoPlayUrl(device);
+}
