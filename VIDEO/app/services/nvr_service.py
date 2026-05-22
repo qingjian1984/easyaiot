@@ -7,6 +7,7 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
+from sqlalchemy import or_
 from models import Device, Nvr, db
 
 logger = logging.getLogger(__name__)
@@ -304,7 +305,7 @@ def _upsert_nvr_channel_device(
     cam_ip = (ch.get('camera_ip') or ch.get('ip') or '').strip()
     name = _resolve_channel_display_name(ch.get('name'), channel_id, nvr_ip, cam_ip)
     try:
-        cam_port = int(ch.get('camera_port') or ch.get('port') or 554)
+        cam_port = _normalize_ipc_display_port(int(ch.get('camera_port') or ch.get('port') or 554))
     except (TypeError, ValueError):
         cam_port = 554
 
@@ -325,8 +326,10 @@ def _upsert_nvr_channel_device(
     if existing:
         device_id = existing.id
         rtmp_stream, http_stream, ai_rtmp_stream, ai_http_stream = _generate_stream_urls(source, device_id)
-        existing.nvr_id = nvr_id
+        existing.nvr_id = int(nvr_id)
         existing.nvr_channel = channel_id
+        if not existing.nvr_id:
+            raise RuntimeError(f'通道 CH{channel_id} 关联 NVR 失败：nvr_id 为空')
         existing.name = name
         existing.source = source
         existing.rtmp_stream = rtmp_stream
@@ -366,15 +369,36 @@ def _upsert_nvr_channel_device(
         model=model,
         firmware_version=ch.get('firmware') or '',
         serial_number=serial,
-        nvr_id=nvr_id,
+        nvr_id=int(nvr_id),
         nvr_channel=channel_id,
         rtsp_direct=rtsp_direct,
         channel_online=online,
         connection_status=conn,
         directory_id=directory_id_for_new_device(),
     )
+    if not camera.nvr_id:
+        raise RuntimeError(f'通道 CH{channel_id} 创建失败：nvr_id 为空')
     db.session.add(camera)
     return True
+
+
+def _link_channels_to_nvr(nvr_id: int, nvr_ip: str | None = None) -> int:
+    """登记后兜底：同 NVR 取流地址或 NVR-Channel 记录必须带上 nvr_id。"""
+    nvr = Nvr.query.get(nvr_id)
+    if not nvr:
+        return 0
+    host = (nvr_ip or nvr.ip or '').strip()
+    fixed = 0
+    for cam in Device.query.filter(
+        or_(Device.nvr_id.is_(None), Device.nvr_id != nvr_id),
+    ).all():
+        if not is_nvr_channel_device(cam) and not (host and host in (cam.source or '')):
+            continue
+        if int(cam.nvr_channel or 0) <= 0 and host and host not in (cam.source or ''):
+            continue
+        cam.nvr_id = nvr_id
+        fixed += 1
+    return fixed
 
 
 def bulk_register_nvr_channels(
@@ -387,7 +411,7 @@ def bulk_register_nvr_channels(
 ) -> dict[str, Any]:
     """登记/更新 NVR，并按枚举结果批量关联通道（不逐台 ONVIF/连通性探测）。"""
     nvr_id = get_or_create_nvr(nvr_info)
-    db.session.commit()
+    db.session.flush()
     nvr = Nvr.query.get(nvr_id)
     if not nvr:
         raise ValueError(f'NVR {nvr_id} 不存在')
@@ -411,6 +435,9 @@ def bulk_register_nvr_channels(
             errors.append(f'CH{ch_no}: {e}')
 
     try:
+        linked = _link_channels_to_nvr(nvr_id, nvr.ip)
+        if linked:
+            logger.info(f'NVR {nvr_id} 登记后补全 {linked} 条通道的 nvr_id')
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -470,6 +497,59 @@ def resolve_nvr_link(payload: dict[str, Any]) -> tuple[int | None, int]:
     return None, channel
 
 
+_WEB_PROBE_PORTS = frozenset({80, 443, 8000, 8443, 37777})
+
+
+def _normalize_ipc_display_port(port: int | None) -> int:
+    """NVR 枚举返回的 port 多为 IPC Web 端口，展示/存库用 RTSP 默认 554。"""
+    try:
+        p = int(port) if port is not None else 0
+    except (TypeError, ValueError):
+        return 554
+    if p <= 0 or p in _WEB_PROBE_PORTS:
+        return 554
+    return p
+
+
+def is_nvr_channel_device(camera: Device) -> bool:
+    """是否 NVR 挂载通道（经 NVR/RTSP 取流，不应走单机 ONVIF）。"""
+    if camera.nvr_id:
+        return True
+    ch = int(camera.nvr_channel or 0)
+    model = (camera.model or '').strip()
+    source = (camera.source or '').strip().lower()
+    if ch > 0 and model == 'NVR-Channel':
+        return True
+    if model == 'NVR-Channel' and source.startswith('rtsp://'):
+        if '/streaming/channels/' in source or 'channel=' in source:
+            return True
+    nvr_id, inferred_ch = infer_nvr_link_from_source(camera.source)
+    if nvr_id and (ch > 0 or inferred_ch > 0):
+        return True
+    return False
+
+
+def repair_nvr_channel_links(*, commit: bool = True) -> int:
+    """将 nvr_id 因外键 SET NULL 等方式丢失的通道，按 RTSP 源重新关联到 NVR。"""
+    nvr_by_ip = build_nvr_ip_index()
+    fixed = 0
+    q = Device.query.filter(Device.nvr_id.is_(None))
+    for cam in q.all():
+        if not is_nvr_channel_device(cam):
+            continue
+        nvr_id, inferred_ch = infer_nvr_link_from_source(cam.source, nvr_by_ip=nvr_by_ip)
+        if not nvr_id:
+            continue
+        cam.nvr_id = nvr_id
+        if inferred_ch and not int(cam.nvr_channel or 0):
+            cam.nvr_channel = inferred_ch
+        fixed += 1
+    if fixed and commit:
+        db.session.commit()
+        logger.info(f'已修复 {fixed} 条 NVR 通道的 nvr_id 关联')
+    return fixed
+
+
 def build_nvr_ip_index() -> dict[str, int]:
     """NVR IP -> id，用于从 RTSP 源反查挂载关系。"""
     index: dict[str, int] = {}
@@ -516,9 +596,38 @@ def infer_nvr_link_from_source(
 def nvr_fields_for_device(camera: Device) -> dict[str, Any]:
     """设备字典中附带的 NVR 摘要。"""
     if not camera.nvr_id:
+        ch = camera.nvr_channel or 0
+        if is_nvr_channel_device(camera):
+            inferred_id, inferred_ch = infer_nvr_link_from_source(camera.source)
+            if inferred_ch and not ch:
+                ch = inferred_ch
+            nvr = Nvr.query.get(inferred_id) if inferred_id else None
+            if nvr:
+                base = nvr.name or nvr.ip
+                label = f'{base} / CH{ch}' if ch else base
+                return {
+                    'nvr_id': inferred_id,
+                    'nvr_channel': ch,
+                    'nvr_label': label,
+                    'nvr': _nvr_to_dict(nvr, include_cameras=False),
+                    'device_kind': 'nvr_channel',
+                    'rtsp_direct': camera.rtsp_direct,
+                    'channel_online': camera.channel_online,
+                    'connection_status': camera.connection_status,
+                }
+            return {
+                'nvr_id': inferred_id,
+                'nvr_channel': ch,
+                'nvr_label': None,
+                'nvr': None,
+                'device_kind': 'nvr_channel',
+                'rtsp_direct': camera.rtsp_direct,
+                'channel_online': camera.channel_online,
+                'connection_status': camera.connection_status,
+            }
         return {
             'nvr_id': None,
-            'nvr_channel': camera.nvr_channel or 0,
+            'nvr_channel': ch,
             'nvr_label': None,
             'nvr': None,
             'device_kind': 'direct',
