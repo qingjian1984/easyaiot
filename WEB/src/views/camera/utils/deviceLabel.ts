@@ -2,9 +2,10 @@
 const GB28181_SOURCE_PREFIX = 'gb28181://';
 
 export function isGb28181Device(source?: string | null, deviceKind?: string): boolean {
+  if (source?.trim().toLowerCase().startsWith(GB28181_SOURCE_PREFIX)) return true;
   if (deviceKind === 'gb28181' || deviceKind === 'gb28181_sip') return true;
   if (deviceKind === 'direct') return false;
-  return !!source?.trim().toLowerCase().startsWith(GB28181_SOURCE_PREFIX);
+  return false;
 }
 
 /** 国标通道在 device 表中的虚拟设备 ID（与 VIDEO gb28181_sync 一致） */

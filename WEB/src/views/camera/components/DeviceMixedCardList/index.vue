@@ -148,7 +148,6 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { List, Popconfirm, Spin } from 'ant-design-vue';
 import { BasicForm, useForm } from '@/components/Form';
 import { propTypes } from '@/utils/propTypes';
-import { isFunction } from '@/utils/is';
 import { Icon } from '@/components/Icon';
 import { useMessage } from '@/hooks/web/useMessage';
 import { getStreamStatus } from '@/api/device/camera';
@@ -157,6 +156,7 @@ import DAHUA_IMAGE from '@/assets/images/video/dahua.png';
 import HUAWEI_IMAGE from '@/assets/images/video/huawei.png';
 import OTHER_IMAGE from '@/assets/images/video/other.png';
 import type { DeviceInfo, StreamStatusResponse } from '@/api/device/camera';
+import { getDeviceList } from '@/api/device/camera';
 import { formatCameraDeviceLabel } from '@/views/camera/utils/deviceLabel';
 import { hasDirectPlayStream, supportsRtspForward } from '@/views/camera/utils/devicePlay';
 import { queryVideoList } from '@/api/device/gb28181';
@@ -175,7 +175,6 @@ const ListItem = List.Item;
 
 const props = defineProps({
   params: propTypes.object.def({}),
-  api: propTypes.func,
 });
 
 const emit = defineEmits([
@@ -320,13 +319,12 @@ onMounted(() => {
 });
 
 async function fetch(p: Record<string, any> = {}) {
-  const { api, params } = props;
-  if (!api || !isFunction(api)) return;
+  const { params } = props;
   try {
     state.loading = true;
     const search = p.deviceName;
     const [devRes, gbRes, nvrs] = await Promise.all([
-      api({
+      getDeviceList({
         ...params,
         pageNo: 1,
         pageSize: 10000,

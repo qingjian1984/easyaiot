@@ -204,7 +204,8 @@ def _to_dict(camera: Device) -> dict:
     else:
         online_status = _monitor.is_online(camera.id)
     
-    return {
+    source = (camera.source or '').strip()
+    payload = {
         'id': camera.id,
         'name': camera.name,
         'source': camera.source,
@@ -232,6 +233,10 @@ def _to_dict(camera: Device) -> dict:
         'online': online_status,
         **nvr_fields_for_device(camera),
     }
+    # nvr_fields_for_device 对无 NVR 的设备默认 device_kind=direct，需保留国标通道类型
+    if source.lower().startswith('gb28181://'):
+        payload['device_kind'] = 'gb28181'
+    return payload
 
 
 def _add_online_monitor():

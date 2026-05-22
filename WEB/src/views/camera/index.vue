@@ -43,6 +43,12 @@
                       </template>
                       扫描局域网ONVIF设备
                     </a-button>
+                    <a-button @click="handleRefreshOnvifDevices">
+                      <template #icon>
+                        <SyncOutlined/>
+                      </template>
+                      更新ONVIF设备
+                    </a-button>
                     <a-button @click="handleScanSegmentCamera">
                       <template #icon>
                         <SearchOutlined/>
@@ -60,12 +66,6 @@
                         <VideoCameraAddOutlined/>
                       </template>
                       新增直连设备
-                    </a-button>
-                    <a-button @click="handleRefreshOnvifDevices">
-                      <template #icon>
-                        <SyncOutlined/>
-                      </template>
-                      更新ONVIF设备
                     </a-button>
                     <a-button @click="handleToggleViewMode" type="default">
                       <template #icon>
@@ -107,7 +107,6 @@
               <div v-else class="card-mode-wrapper">
                 <DeviceMixedCardList
                   ref="deviceMixedCardListRef"
-                  :api="fetchMergedDeviceList"
                   :params="{}"
                   @view="handleCardView"
                   @edit="handleCardEdit"
@@ -128,6 +127,12 @@
                       </template>
                       扫描局域网ONVIF设备
                     </a-button>
+                    <a-button @click="handleRefreshOnvifDevices">
+                      <template #icon>
+                        <SyncOutlined/>
+                      </template>
+                      更新ONVIF设备
+                    </a-button>
                     <a-button @click="handleScanSegmentCamera">
                       <template #icon>
                         <SearchOutlined/>
@@ -139,12 +144,6 @@
                         <ClusterOutlined/>
                       </template>
                       通过网段注册NVR
-                    </a-button>
-                    <a-button @click="handleRefreshOnvifDevices">
-                      <template #icon>
-                        <SyncOutlined/>
-                      </template>
-                      更新ONVIF设备
                     </a-button>
                     <a-button @click="openAddModal('source')">
                       <template #icon>

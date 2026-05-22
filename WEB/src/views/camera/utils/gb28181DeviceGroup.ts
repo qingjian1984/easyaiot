@@ -108,7 +108,7 @@ export async function fetchMergedDeviceList(params: Record<string, any> = {}) {
 
   const allDevices = devRes?.data ?? [];
   const direct = filterStandaloneDirectDevices(
-    allDevices.filter((d) => !isGb28181ChannelRecord(d)),
+    allDevices.filter((d) => !isGb28181ChannelRecord(d) && !isGb28181SipListRow(d)),
   );
   const gbRows = (gbRes?.data ?? []).map((wvp) => wvpDeviceToTableRow(wvp));
   const nvrRows = nvrs.map((n) => nvrToTableRow(n));
@@ -133,12 +133,17 @@ export function buildMergedCardRows(
   nvrs: import('./nvrDeviceGroup').NvrInfo[] = [],
 ): DeviceListDisplayItem[] {
   const gbItems: DeviceListDisplayItem[] = [];
+  const seenSip = new Set<string>();
   for (const wvp of wvpDevices || []) {
-    const sipId = wvp.deviceIdentification ?? wvp.deviceId;
-    if (!sipId) continue;
+    const sipId = String(wvp.deviceIdentification ?? wvp.deviceId ?? '').trim();
+    if (!sipId || seenSip.has(sipId)) continue;
+    seenSip.add(sipId);
     gbItems.push({ kind: 'gb_sip' as const, gbItem: wvpDeviceToCardItem(wvp) });
   }
-  return buildCardRowsWithNvr(devices, nvrs, gbItems);
+  const directDevices = devices.filter(
+    (d) => !isGb28181ChannelRecord(d) && !isGb28181SipListRow(d),
+  );
+  return buildCardRowsWithNvr(directDevices, nvrs, gbItems);
 }
 
 /** @deprecated 表格请用 fetchMergedDeviceList */
