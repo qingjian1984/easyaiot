@@ -2196,59 +2196,206 @@ function setupModalCloseEvents() {
     });
 }
 
+const IMAGE_UPLOAD_EXTENSIONS = /\.(jpe?g|png|gif|bmp|webp|tiff?)$/i;
+
+/** 与后端 _flatten_upload_relative_name 一致：子目录压平为 uploads 下唯一文件名 */
+function flattenUploadRelativeName(filename) {
+    if (!filename) return '';
+    const norm = filename.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!norm.includes('/')) {
+        const parts = norm.split('/');
+        return parts[parts.length - 1];
+    }
+    return norm.replace(/\//g, '__');
+}
+
+function isImageUploadFile(file) {
+    const name = (file.webkitRelativePath || file.name || '').toLowerCase();
+    return IMAGE_UPLOAD_EXTENSIONS.test(name) || (file.type && file.type.startsWith('image/'));
+}
+
+function filterImageUploadFiles(files) {
+    return Array.from(files).filter(isImageUploadFile);
+}
+
+function uploadFilenameForFile(file) {
+    return flattenUploadRelativeName(file.webkitRelativePath || file.name);
+}
+
+function readDirectoryEntryRecursive(entry, pathPrefix, files) {
+    return new Promise((resolve) => {
+        if (entry.isFile) {
+            entry.file((file) => {
+                const rel = pathPrefix + file.name;
+                try {
+                    Object.defineProperty(file, 'webkitRelativePath', {
+                        value: rel,
+                        configurable: true
+                    });
+                } catch (err) {
+                    // 部分环境不可写，仍保留 basename
+                }
+                files.push(file);
+                resolve();
+            }, () => resolve());
+            return;
+        }
+        if (entry.isDirectory) {
+            const reader = entry.createReader();
+            const readBatch = () => {
+                reader.readEntries(async (entries) => {
+                    if (!entries.length) {
+                        resolve();
+                        return;
+                    }
+                    await Promise.all(entries.map((child) =>
+                        readDirectoryEntryRecursive(child, pathPrefix + entry.name + '/', files)
+                    ));
+                    readBatch();
+                }, () => resolve());
+            };
+            readBatch();
+            return;
+        }
+        resolve();
+    });
+}
+
+async function collectFilesFromDataTransfer(dataTransfer) {
+    const items = dataTransfer.items;
+    if (!items || !items.length) {
+        return Array.from(dataTransfer.files || []);
+    }
+    const files = [];
+    const entryTasks = [];
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind !== 'file') continue;
+        const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+        if (entry) {
+            entryTasks.push(readDirectoryEntryRecursive(entry, '', files));
+        } else {
+            const file = item.getAsFile();
+            if (file) files.push(file);
+        }
+    }
+    if (entryTasks.length) {
+        await Promise.all(entryTasks);
+    }
+    if (files.length) {
+        return files;
+    }
+    return Array.from(dataTransfer.files || []);
+}
+
+function updateImageUploadSelection(selectedFiles) {
+    const uploadArea = document.getElementById('imageUploadArea');
+    const uploadImagesBtn = document.getElementById('uploadImagesBtn');
+    if (!uploadArea || !uploadImagesBtn) return;
+
+    const existingCount = uploadArea.querySelector('.file-count');
+    if (existingCount) {
+        existingCount.remove();
+    }
+
+    if (!selectedFiles.length) {
+        uploadImagesBtn.disabled = true;
+        return;
+    }
+
+    const fileCount = document.createElement('div');
+    fileCount.className = 'file-count';
+    fileCount.textContent = `已选择 ${selectedFiles.length} 张图片`;
+    fileCount.style.marginTop = '10px';
+    fileCount.style.fontSize = '0.9em';
+    fileCount.style.color = '#666';
+    uploadArea.appendChild(fileCount);
+    uploadImagesBtn.disabled = false;
+}
+
+function setupImageUploadDropZone(uploadArea, onFilesSelected) {
+    if (!uploadArea) return;
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((eventName) => {
+        uploadArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    ['dragenter', 'dragover'].forEach((eventName) => {
+        uploadArea.addEventListener(eventName, () => {
+            uploadArea.classList.add('drag-over');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach((eventName) => {
+        uploadArea.addEventListener(eventName, () => {
+            uploadArea.classList.remove('drag-over');
+        }, false);
+    });
+
+    uploadArea.addEventListener('drop', async (e) => {
+        const rawFiles = await collectFilesFromDataTransfer(e.dataTransfer);
+        const imageFiles = filterImageUploadFiles(rawFiles);
+        if (!imageFiles.length) {
+            showToast('未找到可上传的图片文件，请拖拽包含图片的文件夹');
+            return;
+        }
+        onFilesSelected(imageFiles);
+    }, false);
+}
+
 // 设置数据集上传事件
 function setupDatasetUploadEvents() {
+    const datasetModal = document.getElementById('datasetModal');
+    if (datasetModal) {
+        ['dragenter', 'dragover', 'drop'].forEach((eventName) => {
+            datasetModal.addEventListener(eventName, preventDefaults, false);
+        });
+    }
+
     // 图片文件夹上传
     const selectFolderBtn = document.getElementById('selectFolderBtn');
     const folderInput = document.getElementById('folderInput');
     const uploadImagesBtn = document.getElementById('uploadImagesBtn');
+    const imageUploadArea = document.getElementById('imageUploadArea');
+    let selectedImageFiles = [];
+
+    const setSelectedImageFiles = (files) => {
+        selectedImageFiles = filterImageUploadFiles(files);
+        updateImageUploadSelection(selectedImageFiles);
+    };
+
     if (selectFolderBtn && folderInput && uploadImagesBtn) {
         selectFolderBtn.addEventListener('click', function() {
             folderInput.click();
         });
+
+        setupImageUploadDropZone(imageUploadArea, setSelectedImageFiles);
         
         folderInput.addEventListener('change', function(e) {
-            // 处理选中的图片文件
-            const files = Array.from(e.target.files);
+            const files = filterImageUploadFiles(e.target.files);
             if (files.length > 0) {
-                // 显示选中的文件数量
-                const uploadArea = document.getElementById('imageUploadArea');
-                const fileCount = document.createElement('div');
-                fileCount.className = 'file-count';
-                fileCount.textContent = `已选择 ${files.length} 个文件`;
-                fileCount.style.marginTop = '10px';
-                fileCount.style.fontSize = '0.9em';
-                fileCount.style.color = '#666';
-                
-                // 移除之前的文件数量显示
-                const existingCount = uploadArea.querySelector('.file-count');
-                if (existingCount) {
-                    existingCount.remove();
-                }
-                
-                uploadArea.appendChild(fileCount);
-                
-                // 启用上传按钮
-                uploadImagesBtn.disabled = false;
+                setSelectedImageFiles(files);
+            } else if (e.target.files && e.target.files.length > 0) {
+                showToast('所选文件夹中未找到图片文件');
             }
         });
         
         // 上传图片按钮事件
         uploadImagesBtn.addEventListener('click', function() {
-            const files = Array.from(folderInput.files);
-            if (files.length === 0) {
-                showToast('请先选择图片文件');
+            if (selectedImageFiles.length === 0) {
+                showToast('请先选择包含图片的文件夹');
                 return;
             }
-            
+
+            const uploadCount = selectedImageFiles.length;
             // 显示上传中状态
             uploadImagesBtn.disabled = true;
             uploadImagesBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 上传中...';
             
             // 创建FormData对象，用于发送文件
             const formData = new FormData();
-            files.forEach(file => {
-                formData.append('files[]', file, file.name);
+            selectedImageFiles.forEach(file => {
+                formData.append('files[]', file, uploadFilenameForFile(file));
             });
             
             // 发送真实的文件上传请求
@@ -2263,7 +2410,7 @@ function setupDatasetUploadEvents() {
                 uploadImagesBtn.disabled = false;
                 
                 // 显示成功提示
-                showToast(`成功上传 ${files.length} 张图片`);
+                showToast(`成功上传 ${uploadCount} 张图片`);
                 
                 // 关闭模态框
                 document.getElementById('datasetModal').style.display = 'none';

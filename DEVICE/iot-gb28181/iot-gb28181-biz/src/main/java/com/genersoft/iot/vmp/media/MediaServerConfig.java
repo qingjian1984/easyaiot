@@ -42,6 +42,8 @@ public class MediaServerConfig implements CommandLineRunner {
         MediaServer mediaSerItemInConfig = mediaConfig.buildMediaSer();
         mediaSerItemInConfig.setServerId(userSetting.getServerId());
         mediaServerService.deleteDefault();
+        // 刷新并持久化默认节点网络 IP，避免 DB/Redis 残留错误的 hook-ip
+        mediaServerService.update(mediaSerItemInConfig);
         // 发送媒体节点变化事件
         mediaServerService.syncCatchFromDatabase();
         // 获取所有的zlm， 并开启主动连接

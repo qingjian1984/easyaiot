@@ -432,9 +432,9 @@
 ├── photo2.png
 └── subdir__img3.jpg</pre>
                         <i class="fas fa-folder-open fa-3x"></i>
-                        <p>拖拽图片文件到此处或点击选择文件夹</p>
-                        <input type="file" id="folderInput" multiple accept="image/*" style="display: none;">
-                        <button id="selectFolderBtn" class="btn btn-primary">选择图片文件</button>
+                        <p>拖拽文件夹到此处或点击选择文件夹（支持子目录中的图片）</p>
+                        <input type="file" id="folderInput" multiple webkitdirectory directory style="display: none;">
+                        <button id="selectFolderBtn" class="btn btn-primary">选择文件夹</button>
                     </div>
                     <div class="upload-actions" style="margin-top: 15px; text-align: center;">
                         <button id="uploadImagesBtn" class="btn btn-success" disabled>

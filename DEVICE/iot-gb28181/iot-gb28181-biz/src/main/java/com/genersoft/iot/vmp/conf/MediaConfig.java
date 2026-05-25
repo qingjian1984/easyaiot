@@ -32,8 +32,11 @@ public class MediaConfig{
     @Value("${media.wan_ip:}")
     private String wanIp;
 
-    @Value("${media.hook-ip:127.0.0.1}")
+    @Value("${media.hook-ip:}")
     private String hookIp;
+
+    /** 缓存自动探测到的宿主机 IP，保证 sdp/stream/hook 使用同一地址 */
+    private volatile String cachedHostIp;
 
     @Value("${sip.domain}")
     private String sipDomain;
@@ -113,14 +116,29 @@ public class MediaConfig{
     }
 
     /**
-     * 自动获取宿主机 IP（排除 127.0.0.1、docker 接口和链路本地地址）
+     * 将自动解析的网络 IP 写入媒体节点（用于刷新 DB/Redis 中残留的错误 hook-ip）
+     */
+    public void applyNetworkIpTo(MediaServer mediaServer) {
+        if (mediaServer == null) {
+            return;
+        }
+        mediaServer.setHookIp(getHookIp());
+        mediaServer.setSdpIp(getSdpIp());
+        mediaServer.setStreamIp(getStreamIp());
+    }
+
+    /**
+     * 自动获取宿主机 IP（排除 127.0.0.1、docker/br 等虚拟网卡和链路本地地址）
      */
     private String detectHostIp(String label) {
+        if (cachedHostIp != null) {
+            return cachedHostIp;
+        }
         try {
             Enumeration<NetworkInterface> nifs = NetworkInterface.getNetworkInterfaces();
             while (nifs.hasMoreElements()) {
                 NetworkInterface nif = nifs.nextElement();
-                if (nif.getName().startsWith("docker")) {
+                if (!nif.isUp() || nif.isLoopback() || isVirtualInterface(nif.getName())) {
                     continue;
                 }
 
@@ -130,6 +148,7 @@ public class MediaConfig{
                     if (addr instanceof Inet4Address) {
                         String hostAddress = addr.getHostAddress();
                         if (!hostAddress.equals("127.0.0.1") && !hostAddress.startsWith("169.254.")) {
+                            cachedHostIp = hostAddress;
                             log.info("[自动获取 {}] 检测到宿主机 IP: {}", label, hostAddress);
                             return hostAddress;
                         }
@@ -142,6 +161,13 @@ public class MediaConfig{
 
         log.warn("[自动获取 {}] 未能自动获取宿主机 IP，使用默认值 127.0.0.1", label);
         return "127.0.0.1";
+    }
+
+    private boolean isVirtualInterface(String name) {
+        return name.startsWith("docker")
+                || name.startsWith("br-")
+                || name.startsWith("veth")
+                || name.startsWith("virbr");
     }
 
     public MediaServer buildMediaSer(){

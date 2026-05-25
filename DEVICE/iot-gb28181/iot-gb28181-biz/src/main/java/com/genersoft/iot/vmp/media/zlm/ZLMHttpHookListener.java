@@ -235,6 +235,9 @@ public class ZLMHttpHookListener {
         try {
             HookZlmServerStartEvent event = new HookZlmServerStartEvent(this);
             MediaServer mediaServer = mediaServerService.getOne(zlmServerConfig.getMediaServerId());
+            if (mediaServer != null && Objects.equals(mediaConfig.getId(), mediaServer.getId())) {
+                mediaConfig.applyNetworkIpTo(mediaServer);
+            }
             if (mediaServer == null && Objects.equals(mediaConfig.getId(), zlmServerConfig.getGeneralMediaServerId())) {
                 mediaServer = mediaConfig.buildMediaSer();
             }

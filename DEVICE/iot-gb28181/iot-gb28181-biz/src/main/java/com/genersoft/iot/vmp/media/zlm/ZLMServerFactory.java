@@ -90,6 +90,17 @@ public class ZLMServerFactory {
                 result= zlmResult.getPort();
             }else {
                 log.error("创建RTP Server 失败 {}: ", zlmResult.getMsg());
+                if (zlmResult.getMsg() != null && zlmResult.getMsg().contains("already exists")) {
+                    Map<String, Object> closeParam = new HashMap<>();
+                    closeParam.put("stream_id", streamId);
+                    ZLMResult<?> closeResult = zlmresTfulUtils.closeRtpServer(mediaServerItem, closeParam);
+                    if (closeResult != null && closeResult.getCode() == 0) {
+                        ZLMResult<?> retryResult = zlmresTfulUtils.openRtpServer(mediaServerItem, param);
+                        if (retryResult != null && retryResult.getCode() == 0) {
+                            result = retryResult.getPort();
+                        }
+                    }
+                }
             }
         }else {
             //  检查ZLM状态

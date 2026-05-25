@@ -5138,6 +5138,11 @@ body {
     background: rgba(38, 108, 251, 0.15);
 }
 
+.dataset-modal .upload-area.drag-over {
+    border-color: rgba(38, 108, 251, 0.85);
+    background: rgba(38, 108, 251, 0.22);
+}
+
 .dataset-modal .upload-area i {
     color: rgba(38, 108, 251, 0.7);
     margin-bottom: 15px;

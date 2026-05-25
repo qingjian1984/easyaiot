@@ -3,6 +3,7 @@ package com.genersoft.iot.vmp.media.zlm;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.genersoft.iot.vmp.conf.DynamicTask;
+import com.genersoft.iot.vmp.conf.MediaConfig;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.gb28181.event.EventPublisher;
 import com.genersoft.iot.vmp.media.bean.MediaServer;
@@ -63,6 +64,9 @@ public class ZLMMediaServerStatusManager {
 
     @Autowired
     private EventPublisher eventPublisher;
+
+    @Autowired
+    private MediaConfig mediaConfig;
 
     private final String type = "zlm";
 
@@ -237,8 +241,9 @@ public class ZLMMediaServerStatusManager {
     }
 
     public void setZLMConfig(MediaServer mediaServerItem, boolean restart) {
-        log.info("[媒体服务节点] 正在设置 ：{} -> {}:{}",
-                mediaServerItem.getId(), mediaServerItem.getIp(), mediaServerItem.getHttpPort());
+        refreshDefaultServerNetworkIp(mediaServerItem);
+        log.info("[媒体服务节点] 正在设置 ：{} -> {}:{}, hook-ip: {}",
+                mediaServerItem.getId(), mediaServerItem.getIp(), mediaServerItem.getHttpPort(), mediaServerItem.getHookIp());
         String protocol = sslEnabled ? "https" : "http";
         String hookPrefix = String.format("%s://%s:%s%s/index/hook", protocol, mediaServerItem.getHookIp(), serverPort, (serverServletContextPath == null || "/".equals(serverServletContextPath)) ? "" : serverServletContextPath);
 
@@ -297,6 +302,13 @@ public class ZLMMediaServerStatusManager {
             log.info("[媒体服务节点] 设置媒体服务节点失败 {} -> {}:{}",
                     mediaServerItem.getId(), mediaServerItem.getIp(), mediaServerItem.getHttpPort());
         }
+    }
+
+    private void refreshDefaultServerNetworkIp(MediaServer mediaServerItem) {
+        if (mediaServerItem == null || !mediaConfig.getId().equals(mediaServerItem.getId())) {
+            return;
+        }
+        mediaConfig.applyNetworkIpTo(mediaServerItem);
     }
 
 }

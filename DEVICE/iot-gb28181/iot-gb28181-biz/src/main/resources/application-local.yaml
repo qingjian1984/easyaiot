@@ -156,11 +156,10 @@ media:
   id: zlmediakit-local
   # ZLM 在本机或容器端口映射时可使用 127.0.0.1 连接
   ip: 127.0.0.1
-  # sdp-ip / stream-ip / hook-ip 不配置时将自动获取宿主机 IP（排除 docker 接口和回环地址）
-  # 如需固定 IP 可取消注释并填写宿主机内网 IP
-  # sdp-ip:
-  # stream-ip:
-  # hook-ip:
+  # sdp-ip / stream-ip / hook-ip 留空则自动获取宿主机 IP（覆盖 application.yaml 默认值）
+  sdp-ip:
+  stream-ip:
+  hook-ip:
   # [可选] 有公网IP就配置公网IP, 不可用域名
   # wan_ip:
   # [必须修改] zlm服务器的http.port (根据 docker-compose.yml，ZLMediaKit 端口映射为 6080:80)

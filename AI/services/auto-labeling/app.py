@@ -629,9 +629,12 @@ def upload_folder():
     
     for file in files:
         if file.filename != '':
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename or '')
+            flat_name = _flatten_upload_relative_name(file.filename)
+            if not flat_name:
+                continue
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], flat_name)
             file.save(filepath)
-            uploaded_files.append(file.filename or '')
+            uploaded_files.append(flat_name)
 
     if uploaded_files:
         _set_dataset_mode_upload()

@@ -446,6 +446,9 @@ public class MediaServerServiceImpl implements IMediaServerService {
                 redisTemplate.opsForHash().put(key, mediaServer.getId(), mediaServer);
             }
         }
+        if (mediaServer != null && mediaConfig.getId().equals(mediaServer.getId())) {
+            mediaConfig.applyNetworkIpTo(mediaServer);
+        }
         return mediaServer;
     }
 
