@@ -45,6 +45,7 @@
                 @refresh="handleGbCardRefresh"
                 @view="handleGbCardView"
                 @edit="handleGbCardEdit"
+                @delete="handleGbCardDelete"
               />
             </ListItem>
             <ListItem v-else :class="item.device.online ? 'camera-item normal' : 'camera-item error'">
@@ -230,6 +231,7 @@ const emit = defineEmits([
   'refreshGbDevice',
   'viewGbDevice',
   'editGbDevice',
+  'deleteGbDevice',
   'openNvrDevice',
   'viewNvrDevice',
   'editNvrDevice',
@@ -453,6 +455,10 @@ function handleGbCardView(item: Gb28181CardItem) {
 
 function handleGbCardEdit(item: Gb28181CardItem) {
   emit('editGbDevice', item);
+}
+
+function handleGbCardDelete(item: Gb28181CardItem) {
+  emit('deleteGbDevice', item);
 }
 
 function handleView(record: DeviceInfo) {

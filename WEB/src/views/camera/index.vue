@@ -154,6 +154,7 @@
                   @refresh-gb-device="handleRefreshGbDevice"
                   @view-gb-device="handleViewGbDevice"
                   @edit-gb-device="handleEditGbDevice"
+                  @delete-gb-device="handleDeleteGbDevice"
                   @open-nvr-device="handleOpenNvrDevice"
                   @view-nvr-device="handleViewNvrDevice"
                   @edit-nvr-device="handleEditNvrDevice"
@@ -278,6 +279,7 @@ import {
   isGb28181SipListRow,
   type GbSipDeviceSummary,
 } from './utils/gb28181DeviceGroup';
+import { deleteGb28181SipDevice } from './utils/gb28181DeviceDelete';
 import { isNvrListRow } from './utils/deviceLabel';
 import StreamForward from "./components/StreamForward/index.vue";
 import Gb28181PullProxy from "@/views/gb28181/components/PullProxy/index.vue";
@@ -541,6 +543,24 @@ function handleEditGbDevice(item: Gb28181CardItem) {
   openGbDeviceInfoModal('edit', { sipDeviceId: item.deviceIdentification });
 }
 
+async function handleDeleteGbDevice(item: Gb28181CardItem | { sip_device_id?: string; deviceIdentification?: string }) {
+  const sipId =
+    'deviceIdentification' in item && item.deviceIdentification
+      ? item.deviceIdentification
+      : gbSipIdFromRecord(item as DeviceInfo & { sip_device_id?: string });
+  try {
+    await deleteGb28181SipDevice(sipId);
+    createMessage.success('删除成功');
+    if (gbDetailVisible.value && gbDetailSipId.value === sipId) {
+      closeGbDetail();
+    }
+    handleSuccess();
+  } catch (error) {
+    console.error('删除国标设备失败', error);
+    createMessage.error('删除失败');
+  }
+}
+
 function handleTableViewGbDevice(record: DeviceInfo & { sip_device_id?: string }) {
   openGbDeviceInfoModal('view', { sipDeviceId: gbSipIdFromRecord(record) });
 }
@@ -734,6 +754,15 @@ const getTableActions = (record) => {
             online: !!record.online,
             channels: [],
           });
+        },
+      },
+      {
+        icon: 'material-symbols:delete-outline-rounded',
+        tooltip: '删除',
+        color: 'error',
+        popConfirm: {
+          title: '删除后 WVP 国标设备及已同步的通道将移除，是否确认？',
+          confirm: () => handleDeleteGbDevice(record),
         },
       },
     ];
@@ -966,6 +995,10 @@ const handleCardEdit = (record) => {
 };
 
 const handleCardDelete = async (record) => {
+  if (isGb28181SipListRow(record)) {
+    await handleDeleteGbDevice(record);
+    return;
+  }
   await handleDelete(record);
 };
 

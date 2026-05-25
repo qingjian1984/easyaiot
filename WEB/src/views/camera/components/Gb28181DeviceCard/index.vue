@@ -56,6 +56,16 @@
           alt=""
         />
       </div>
+      <Popconfirm
+        title="删除后 WVP 国标设备及已同步的通道将移除，是否确认？"
+        ok-text="是"
+        cancel-text="否"
+        @confirm="emit('delete', item)"
+      >
+        <div class="btn" title="删除">
+          <Icon icon="material-symbols:delete-outline-rounded" :size="15" color="#DC2626" />
+        </div>
+      </Popconfirm>
     </div>
   </div>
   <div class="product-img">
@@ -65,6 +75,8 @@
 
 <script lang="ts" setup>
 import { computed } from 'vue';
+import { Popconfirm } from 'ant-design-vue';
+import { Icon } from '@/components/Icon';
 import { useMessage } from '@/hooks/web/useMessage';
 import HAIKANG_IMAGE from '@/assets/images/video/haikang.png';
 import DAHUA_IMAGE from '@/assets/images/video/dahua.png';
@@ -92,6 +104,7 @@ const emit = defineEmits<{
   refresh: [item: Gb28181CardItem];
   view: [item: Gb28181CardItem];
   edit: [item: Gb28181CardItem];
+  delete: [item: Gb28181CardItem];
 }>();
 
 const { createMessage } = useMessage();
