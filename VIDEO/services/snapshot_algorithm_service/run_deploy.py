@@ -46,6 +46,8 @@ from app.utils.cron_utils import (
     snap_cron_match_window_seconds,
     cron_slot_for_time,
 )
+from app.utils.onnx_inference import ONNXInference
+from app.utils.algo_model_detect import run_model_detection
 from app.utils.rtsp_stream_utils import (
     build_opencv_ffmpeg_capture_options,
     effective_rtsp_transport,
@@ -176,6 +178,13 @@ def get_infer_device(device_key: Any = None) -> str:
     return f"cuda:{gpu_id}"
 
 
+def resolve_onnx_gpu_id(model_id: int) -> Optional[int]:
+    """为 ONNX 模型分配 GPU 索引；USE_GPU=False 时返回 None（走 CPU）。"""
+    if os.environ.get('USE_GPU', 'False').lower() != 'true':
+        return None
+    return get_assigned_gpu_id(model_id, kind='infer')
+
+
 def get_ffmpeg_gpu_id(device_key: Any = None) -> Optional[int]:
     """给FFmpeg用：返回整数GPU索引（传给 -gpu），无GPU时返回None"""
     return get_assigned_gpu_id(device_key if device_key is not None else "default", kind="ffmpeg")
@@ -277,6 +286,7 @@ stop_event = threading.Event()
 task_config = None
 task_cron_expression = None  # 规范化后的 cron
 yolo_models = {}
+yolo_model_devices = {}  # {model_id: 'cpu' | 'cuda:N'}
 # 为每个摄像头创建独立的追踪器
 trackers = {}  # {device_id: SimpleTracker}
 # 为每个摄像头创建独立的帧缓存队列
@@ -734,6 +744,8 @@ def load_yolo_models(model_ids: List[int]) -> Dict[int, Any]:
     Returns:
         Dict[int, YOLO]: 模型字典 {model_id: YOLO模型实例}
     """
+    global yolo_model_devices
+    yolo_model_devices.clear()
     try:
         from ultralytics import YOLO
 
@@ -828,11 +840,32 @@ def load_yolo_models(model_ids: List[int]) -> Dict[int, Any]:
                         logger.warning(f"获取模型 {model_id} 信息异常: {str(e)}")
                         continue
 
-                # 加载YOLO模型
-                logger.info(f"正在加载YOLO模型: model_id={model_id}, path={model_path}")
-                yolo_model = YOLO(str(model_path))
-                models[model_id] = yolo_model
-                logger.info(f"✅ YOLO模型加载成功: model_id={model_id}")
+                model_path_str = str(model_path)
+                if model_path_str.lower().endswith('.onnx'):
+                    gpu_id = resolve_onnx_gpu_id(model_id)
+                    logger.info(f"正在加载ONNX模型: model_id={model_id}, path={model_path}, gpu_id={gpu_id}")
+                    onnx_model = ONNXInference(
+                        model_path_str,
+                        conf_threshold=_get_detect_conf(),
+                        iou_threshold=0.45,
+                        device_id=gpu_id,
+                    )
+                    models[model_id] = onnx_model
+                    yolo_model_devices[model_id] = (
+                        f'onnx:cuda:{gpu_id}' if gpu_id is not None else 'onnx:cpu'
+                    )
+                    logger.info(
+                        f"✅ ONNX模型加载成功: model_id={model_id}, providers={onnx_model.providers}"
+                    )
+                else:
+                    logger.info(f"正在加载YOLO模型: model_id={model_id}, path={model_path}")
+                    yolo_model = YOLO(model_path_str)
+                    infer_device = get_infer_device(model_id)
+                    models[model_id] = yolo_model
+                    yolo_model_devices[model_id] = infer_device
+                    logger.info(
+                        f"✅ YOLO模型加载成功: model_id={model_id}, infer_device={infer_device}"
+                    )
 
             except Exception as e:
                 logger.error(f"❌ 加载YOLO模型失败: model_id={model_id}, error={str(e)}", exc_info=True)
@@ -847,7 +880,7 @@ def load_yolo_models(model_ids: List[int]) -> Dict[int, Any]:
 
 def load_task_config():
     """从数据库加载任务配置（重启时会重新加载，确保获取最新的摄像头信息）"""
-    global task_config, task_cron_expression, yolo_models, tracker
+    global task_config, task_cron_expression, yolo_models, yolo_model_devices, tracker
 
     try:
         logger.info(f"🔄 正在从数据库重新加载任务配置: task_id={TASK_ID}")
@@ -2153,40 +2186,25 @@ def yolo_detection_worker(worker_id: int):
                 all_detections = []
                 try:
                     for model_id, yolo_model in yolo_models.items():
+                        if stop_event.is_set():
+                            break
                         try:
-                            # 优化检测参数以降低CPU占用：
-                            # - imgsz: 降低检测分辨率（默认416，原640）
-                            # - conf: 保持默认置信度阈值
-                            # - iou: 保持默认IOU阈值
-                            # - device: 使用CPU（如果支持GPU可改为'cuda'）
-                            results = yolo_model(
+                            infer_device = yolo_model_devices.get(
+                                model_id, get_infer_device(device_id_from_data)
+                            )
+                            model_dets = run_model_detection(
+                                yolo_model,
                                 frame,
                                 conf=_get_detect_conf(),
                                 iou=0.45,
-                                imgsz=YOLO_IMG_SIZE,  # 使用配置的检测分辨率（默认416，原640）
-                                verbose=False,
-                                half=False,
-                                device=get_infer_device(device_id_from_data)
+                                imgsz=YOLO_IMG_SIZE,
+                                infer_device=infer_device,
+                                should_keep=_should_keep_detection,
                             )
-                            result = results[0]
-
-                            if result.boxes is not None and len(result.boxes) > 0:
-                                boxes = result.boxes.xyxy.cpu().numpy()
-                                confidences = result.boxes.conf.cpu().numpy()
-                                class_ids = result.boxes.cls.cpu().numpy().astype(int)
-
-                                for box, conf, cls_id in zip(boxes, confidences, class_ids):
-                                    x1, y1, x2, y2 = map(int, box)
-                                    class_name = yolo_model.names[cls_id]
-                                    if not _should_keep_detection(class_name):
-                                        continue
-                                    all_detections.append({
-                                        'class_id': int(cls_id),
-                                        'class_name': class_name,
-                                        'confidence': float(conf),
-                                        'bbox': [int(x1), int(y1), int(x2), int(y2)]
-                                    })
+                            all_detections.extend(model_dets)
                         except Exception as e:
+                            if stop_event.is_set():
+                                break
                             logger.error(f"❌ 模型 {model_id} 检测异常: {str(e)}", exc_info=True)
                             continue
                 except Exception as e:
@@ -2288,15 +2306,30 @@ def yolo_detection_worker(worker_id: int):
     logger.info(f"🤖 YOLO检测线程 {worker_id} 停止")
 
 
+def shutdown_yolo_workers(timeout: float = 8.0):
+    """停止 YOLO 检测线程并释放模型，避免停机时 CUDA/ORT 仍在推理。"""
+    global yolo_executor, yolo_models, yolo_model_devices
+
+    stop_event.set()
+
+    if yolo_executor:
+        logger.info("🛑 等待YOLO检测线程结束...")
+        try:
+            yolo_executor.shutdown(wait=True, cancel_futures=True)
+        except TypeError:
+            yolo_executor.shutdown(wait=True)
+        yolo_executor = None
+        logger.info("✅ YOLO检测线程已结束")
+
+    yolo_models.clear()
+    yolo_model_devices.clear()
+
+
 def cleanup_all_resources():
     """清理所有资源（VideoCapture等）"""
     logger.info("🧹 开始清理所有资源...")
 
-    global yolo_executor
-    if yolo_executor:
-        logger.info("🛑 停止YOLO线程池...")
-        yolo_executor.shutdown(wait=False)
-        yolo_executor = None
+    shutdown_yolo_workers()
 
     # 清理所有VideoCapture对象
     for device_id, cap in list(device_caps.items()):
@@ -2313,7 +2346,8 @@ def cleanup_all_resources():
 def signal_handler(sig, frame):
     """信号处理器"""
     logger.info("\n🛑 收到停止信号，正在关闭所有服务...")
-    stop_event.set()
+
+    shutdown_yolo_workers()
 
     # 清理所有资源（FFmpeg进程、VideoCapture等）
     cleanup_all_resources()

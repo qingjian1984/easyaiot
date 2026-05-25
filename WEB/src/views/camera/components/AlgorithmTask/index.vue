@@ -221,7 +221,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import {
   PlusOutlined,
   EyeOutlined,
@@ -719,11 +719,17 @@ const handleToggleEnabled = async (record: AlgorithmTask) => {
   }
 };
 
-const handleSuccess = () => {
+const handleSuccess = async () => {
   if (viewMode.value === 'table') {
-    reload();
+    await nextTick();
+    try {
+      await reload();
+    } catch (error) {
+      // BasicTable 未挂载时（v-if 切换/tab 切换）会抛错，避免 Uncaught promise
+      console.warn('算法任务表格未就绪，跳过刷新', error);
+    }
   } else {
-    loadTasks();
+    await loadTasks();
   }
 };
 
