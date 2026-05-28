@@ -36,3 +36,5 @@ hs_err_pid*
 /iot-visual/*/target
 *.iml
 
+.build-cache
+.offline-cache
