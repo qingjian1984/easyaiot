@@ -3,7 +3,7 @@
 # 用法: source 本脚本后调用 init_easyaiot_build_cache_dirs "$EASYAIOT_ROOT"
 #
 # 各业务模块宿主机缓存互不共享：
-#   ai / video / auto-labeling  → pip-cache、pip-wheels
+#   ai / video  → pip-cache、pip-wheels
 #   device                      → m2/repository（Maven）
 #   web                         → pnpm-store、.build-stamp
 #
@@ -14,8 +14,8 @@
 : "${BUILD_CACHE_UID:=1000}"
 : "${BUILD_CACHE_GID:=1000}"
 
-EASYAIOT_PYTHON_CACHE_MODULES=(ai video auto-labeling)
-EASYAIOT_BUILD_CACHE_MODULES=(ai video auto-labeling device web)
+EASYAIOT_PYTHON_CACHE_MODULES=(ai video)
+EASYAIOT_BUILD_CACHE_MODULES=(ai video device web)
 
 easyaiot_build_cache_base() {
     local root="${1:-${EASYAIOT_ROOT:-.}}"
@@ -25,8 +25,7 @@ easyaiot_build_cache_base() {
 easyaiot_normalize_module() {
     local module="${1,,}"
     case "$module" in
-        ai|video|auto-labeling|device|web) echo "$module" ;;
-        auto_labeling|autolabeling|labeling) echo "auto-labeling" ;;
+        ai|video|device|web) echo "$module" ;;
         *)
             echo "未知构建缓存模块: $1（支持: ${EASYAIOT_BUILD_CACHE_MODULES[*]}）" >&2
             return 1

@@ -2,12 +2,6 @@
 WEB/logs/** -diff
 WEB/docker-build-logs/** -diff
 
-# auto-labeling 上传目录：不参与 diff
-AI/services/auto-labeling/uploads/** -diff
-
-# auto-labeling 标注数据目录：不参与 diff
-AI/services/auto-labeling/static/annotations/** -diff
-
 # 构建缓存（项目根 .build-cache，运行时由 install_linux*.sh 填充）
 .build-cache/** -diff
 

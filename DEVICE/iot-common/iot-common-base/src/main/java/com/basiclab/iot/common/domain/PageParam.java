@@ -16,6 +16,11 @@ public class PageParam implements Serializable {
     private static final Integer PAGE_SIZE = 10;
 
     /**
+     * 分页查询允许的最大每页条数（数据集标注等场景需一次加载较多记录）
+     */
+    public static final Integer PAGE_SIZE_MAX = 1000;
+
+    /**
      * 每页条数 - 不分页
      * <p>
      * 例如说，导出接口，可以设置 {@link #pageSize} 为 -1 不分页，查询所有数据。
@@ -27,10 +32,10 @@ public class PageParam implements Serializable {
     @Min(value = 1, message = "页码最小值为 1")
     private Integer pageNo = PAGE_NO;
 
-    @Schema(description = "每页条数，最大值为 100", example = "10")
+    @Schema(description = "每页条数，最大值为 1000", example = "10")
     @NotNull(message = "每页条数不能为空")
     @Min(value = 1, message = "每页条数最小值为 1")
-    @Max(value = 100, message = "每页条数最大值为 100")
+    @Max(value = 1000, message = "每页条数最大值为 1000")
     private Integer pageSize = PAGE_SIZE;
 
 }

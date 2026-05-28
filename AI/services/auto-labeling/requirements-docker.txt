@@ -1,5 +1,0 @@
---index-url https://pypi.tuna.tsinghua.edu.cn/simple
-# Docker 构建专用（基础镜像已含 torch/torchvision）
-# 本地直装请使用 requirements.txt
-
--r requirements-base.txt

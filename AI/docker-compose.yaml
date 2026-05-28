@@ -1,5 +1,5 @@
 # 构建期依赖缓存（运行时无需挂载）：
-#   项目根 .build-cache/{ai,video,auto-labeling}/pip-cache、pip-wheels — 按模块隔离（见 install_linux*.sh）
+#   项目根 .build-cache/{ai,video}/pip-cache、pip-wheels — 按模块隔离（见 install_linux*.sh）
 #   默认属主 UID/GID=1000（BUILD_CACHE_UID 可覆盖）
 services:
   ai-service:
@@ -118,54 +118,6 @@ services:
     # 3. 确保中间件服务（Nacos、PostgresSQL等）的端口已映射到宿主机
 
     # 日志配置
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  auto-labeling:
-    image: auto-labeling:latest
-    container_name: auto-labeling
-    user: root
-    # 默认 CPU 推理；如需 GPU 加速自动标注，取消下行注释（需 NVIDIA Container Toolkit）
-    # runtime: nvidia
-
-    env_file:
-      - ./services/auto-labeling/.env.docker
-
-    network_mode: host
-
-    volumes:
-      # 仅挂载标注数据，避免覆盖镜像内 style.css / script.js 等前端静态资源
-      - ./services/auto-labeling/static/annotations:/app/static/annotations
-      - ./services/auto-labeling/plugins:/app/plugins
-      - ./services/auto-labeling/.env.docker:/app/.env.docker:ro
-
-    environment:
-      - PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-1}
-      - FLASK_RUN_PORT=${AUTO_LABELING_PORT:-8000}
-      - FLASK_RUN_HOST=0.0.0.0
-      - NACOS_SERVER=${NACOS_SERVER:-localhost:8848}
-      - NACOS_NAMESPACE=${NACOS_NAMESPACE:-}
-      - NACOS_USERNAME=${NACOS_USERNAME:-nacos}
-      - NACOS_PASSWORD=${NACOS_PASSWORD:-basiclab@iot78475418754}
-      - SERVICE_NAME=auto-labeling-server
-      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-localhost:9000}
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-basiclab@iot975248395}
-      - MINIO_SECURE=${MINIO_SECURE:-false}
-      - TZ=${TZ:-Asia/Shanghai}
-
-    restart: unless-stopped
-
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
     logging:
       driver: "json-file"
       options:

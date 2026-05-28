@@ -77,12 +77,6 @@ hs_err_pid*
 # 排除 postgresql 初始化脚本
 !.scripts/postgresql/00-init-databases.sh
 
-# auto-labeling 上传目录（运行时用户数据）
-/AI/services/auto-labeling/uploads/
-
-# auto-labeling 标注数据目录（运行时用户数据）
-/AI/services/auto-labeling/static/annotations/
-
 # Docker 构建依赖宿主机缓存（项目根 .build-cache，由 install_linux*.sh 创建）
 .build-cache/**
 !.build-cache/README.md

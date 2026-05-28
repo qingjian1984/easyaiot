@@ -6,6 +6,7 @@
     :canFullscreen="false"
     :showOkBtn="false"
     :showCancelBtn="false"
+    :get-container="getContainer"
   >
     <template #title>
       <span class="modal-title-with-icon">
@@ -20,17 +21,18 @@
         :label-col="{ span: 0 }"
         :wrapper-col="{ span: 24 }"
       >
-        <!-- 选择小样本模型 -->
+        <!-- 选择推理模型 -->
         <FormItem>
-          <div class="form-label">选择小样本模型:</div>
+          <div class="form-label">选择已部署模型:</div>
           <Select
             v-model:value="form.few_shot_model_id"
-            placeholder="请选择小样本模型"
+            placeholder="请选择已部署的推理模型"
             :loading="modelLoading"
             show-search
             :filter-option="filterModelOption"
             allow-clear
             class="model-select"
+            :get-popup-container="getSelectPopupContainer"
           >
             <SelectOption
               v-for="model in fewShotModelList"
@@ -41,7 +43,7 @@
             </SelectOption>
           </Select>
           <div class="form-hint">
-            请先在设置中安装YOLO11并下载或上传模型
+            请先在模型部署中启动推理服务（状态为运行中）
           </div>
         </FormItem>
 
@@ -96,6 +98,13 @@ import { useMessage } from '@/hooks/web/useMessage';
 import { startAutoLabel, getAIServiceList } from '@/api/device/auto-label';
 
 defineOptions({ name: 'AILabelModal' });
+
+const props = defineProps<{
+  datasetId?: number;
+  getContainer?: () => HTMLElement;
+}>();
+
+const getSelectPopupContainer = (): HTMLElement => props.getContainer?.() ?? document.body;
 
 const { createMessage } = useMessage();
 
@@ -178,15 +187,15 @@ async function handleStart() {
     return;
   }
 
-  const datasetId = (window as any).__currentDatasetId__;
-  if (!datasetId) {
+  const dsId = props.datasetId;
+  if (!dsId) {
     createMessage.warning('请先选择数据集');
     return;
   }
 
   try {
     loading.value = true;
-    const res = await startAutoLabel(datasetId, {
+    const res = await startAutoLabel(dsId, {
       model_service_id: form.few_shot_model_id,  // 修改参数名
       confidence_threshold: form.confidence_threshold,
     });

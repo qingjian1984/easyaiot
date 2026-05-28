@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # ============================================
-# AI 服务与标注平台 Docker Compose 管理脚本
+# AI 服务 Docker Compose 管理脚本
 # ============================================
-# 管理服务：ai-service (5000)、auto-labeling 标注平台 (8000)
+# 管理服务：ai-service (5000)，数据集标注已合并至 WEB + /model/dataset API
 # 使用方法：
 #   ./install_linux.sh [命令]
 #
@@ -37,8 +37,6 @@ source "${EASYAIOT_ROOT}/.scripts/docker/init-build-cache-dirs.sh"
 # shellcheck source=../.scripts/docker/gpu_compose_helpers.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/gpu_compose_helpers.sh"
 
-AUTO_LABELING_DIR="$SCRIPT_DIR/services/auto-labeling"
-
 # 打印带颜色的消息
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -69,20 +67,14 @@ prepare_cached_resources_for_module() {
     if [ "${AUTO_CACHE_PIP:-1}" = "1" ] && [ -f "$cache_script" ]; then
         print_warning "[${module}] 首次需预下载 pip 离线包，可能需要 10–30 分钟..."
         BASE_IMAGE="${BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-devel}" \
-            AUTO_LABELING_BASE_IMAGE="${AUTO_LABELING_BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime}" \
             "$cache_script" "$module" || \
             BASE_IMAGE="${BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-devel}" \
-            AUTO_LABELING_BASE_IMAGE="${AUTO_LABELING_BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime}" \
             /bin/bash "$cache_script" "$module" || true
     fi
 }
 
 prepare_cached_resources() {
     prepare_cached_resources_for_module "ai"
-}
-
-prepare_auto_labeling_cached_resources() {
-    prepare_cached_resources_for_module "auto-labeling"
 }
 
 build_with_cache() {
@@ -116,40 +108,6 @@ build_with_cache() {
 
     if [ $build_status -ne 0 ]; then
         print_error "AI 服务镜像构建失败"
-        grep -iE "(error|warning|failed|失败|警告)" "$build_log" | tail -20 || true
-        rm -f "$build_log"
-        return 1
-    fi
-    rm -f "$build_log"
-    return 0
-}
-
-build_auto_labeling_with_cache() {
-    local no_cache_flag="$1"
-    local build_log="/tmp/docker_build_auto_labeling_$$.log"
-    local build_status=0
-
-    init_easyaiot_build_cache_dirs "$EASYAIOT_ROOT"
-    enable_docker_buildkit
-    prepare_auto_labeling_cached_resources
-
-    print_info "构建标注平台（.build-cache/auto-labeling pip-cache/pip-wheels）..."
-    set +e
-    docker build \
-        --build-arg BASE_IMAGE="${AUTO_LABELING_BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime}" \
-        --build-context "pip-cache=$(pip_cache_build_context_dir_for "$EASYAIOT_ROOT" auto-labeling)" \
-        --build-context "pip-wheels=$(pip_wheels_build_context_dir_for "$EASYAIOT_ROOT" auto-labeling)" \
-        --target runtime \
-        -t auto-labeling:latest \
-        --pull=false \
-        --build-arg OFFLINE_MODE=${OFFLINE_MODE:-0} \
-        $no_cache_flag \
-        "$AUTO_LABELING_DIR" 2>&1 | tee "$build_log"
-    build_status=${PIPESTATUS[0]}
-    set -e
-
-    if [ $build_status -ne 0 ]; then
-        print_error "标注平台镜像构建失败"
         grep -iE "(error|warning|failed|失败|警告)" "$build_log" | tail -20 || true
         rm -f "$build_log"
         return 1
@@ -609,72 +567,6 @@ create_env_file() {
     fi
 }
 
-# 创建标注平台 .env.docker（host 网络模式，中间件使用 localhost）
-create_auto_labeling_env_file() {
-    if [ ! -d "$AUTO_LABELING_DIR" ]; then
-        print_error "标注平台目录不存在: $AUTO_LABELING_DIR"
-        exit 1
-    fi
-
-    local env_docker="$AUTO_LABELING_DIR/.env.docker"
-    if [ ! -f "$env_docker" ]; then
-        print_info "标注平台 .env.docker 不存在，正在创建..."
-        if [ -f "$AUTO_LABELING_DIR/env.example" ]; then
-            cp "$AUTO_LABELING_DIR/env.example" "$env_docker"
-            print_success "标注平台 .env.docker 已从 env.example 创建"
-        else
-            print_error "env.example 不存在: $AUTO_LABELING_DIR/env.example"
-            exit 1
-        fi
-    else
-        print_info "标注平台 .env.docker 已存在"
-    fi
-
-    print_info "配置标注平台中间件连接（host 网络模式）..."
-    sed -i 's|^NACOS_SERVER=.*|NACOS_SERVER=localhost:8848|' "$env_docker"
-    sed -i 's|^NACOS_NAMESPACE=.*|NACOS_NAMESPACE=|' "$env_docker"
-    sed -i 's|^NACOS_PASSWORD=.*|NACOS_PASSWORD=basiclab@iot78475418754|' "$env_docker"
-    sed -i 's|^MINIO_ENDPOINT=.*|MINIO_ENDPOINT=localhost:9000|' "$env_docker"
-    sed -i 's|^MINIO_ACCESS_KEY=.*|MINIO_ACCESS_KEY=minioadmin|' "$env_docker"
-    sed -i 's|^MINIO_SECRET_KEY=.*|MINIO_SECRET_KEY=basiclab@iot975248395|' "$env_docker"
-    sed -i 's|^FLASK_RUN_PORT=.*|FLASK_RUN_PORT=8000|' "$env_docker"
-    sed -i 's|^SERVICE_NAME=.*|SERVICE_NAME=auto-labeling-server|' "$env_docker"
-    sed -i 's|^DATASET_API_BASE=.*|DATASET_API_BASE=http://127.0.0.1:48080/admin-api|' "$env_docker"
-    print_success "标注平台中间件连接已配置"
-}
-
-# 构建标注平台镜像
-build_auto_labeling_image() {
-    local no_cache="${1:-}"
-    if [ ! -d "$AUTO_LABELING_DIR" ]; then
-        print_error "标注平台目录不存在: $AUTO_LABELING_DIR"
-        exit 1
-    fi
-    if [ ! -f "$AUTO_LABELING_DIR/Dockerfile" ]; then
-        print_error "标注平台 Dockerfile 不存在: $AUTO_LABELING_DIR/Dockerfile"
-        exit 1
-    fi
-
-    for f in style.css script.js all.min.css; do
-        if [ ! -f "$AUTO_LABELING_DIR/static/$f" ]; then
-            print_error "标注平台缺少前端静态文件: static/$f（请从仓库拉取或恢复 static 目录）"
-            exit 1
-        fi
-    done
-    mkdir -p "$AUTO_LABELING_DIR/static/annotations"
-
-    local no_cache_flag=""
-    if [ -n "$no_cache" ]; then
-        no_cache_flag="--no-cache"
-    fi
-
-    print_info "构建标注平台 Docker 镜像（优先复用本地缓存）..."
-    if ! build_auto_labeling_with_cache "$no_cache_flag"; then
-        exit 1
-    fi
-    print_success "标注平台镜像构建完成"
-}
-
 # 安装服务
 install_service() {
     print_info "开始安装 AI 服务..."
@@ -688,7 +580,6 @@ install_service() {
     configure_gpu
     create_directories
     create_env_file
-    create_auto_labeling_env_file
     prepare_cached_resources
     
     print_info "构建 Docker 镜像（优先复用离线 pip 缓存）..."
@@ -703,8 +594,6 @@ install_service() {
     fi
     echo ""
     print_success "AI 服务镜像构建完成！"
-
-    build_auto_labeling_image
     
     print_info "启动服务..."
     $COMPOSE_CMD up -d --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
@@ -718,7 +607,7 @@ install_service() {
     
     print_info "AI 服务访问地址: http://localhost:5000"
     print_info "AI 健康检查: http://localhost:5000/actuator/health"
-    print_info "标注平台访问地址: http://localhost:8000"
+    print_info "数据集标注: WEB 数据集详情 → 图像数据集标注"
     print_info "查看日志: ./install_linux.sh logs"
 }
 
@@ -733,13 +622,6 @@ start_service() {
         print_warning ".env.docker 文件不存在，正在创建..."
         create_env_file
     fi
-    create_auto_labeling_env_file
-
-    if ! docker image inspect auto-labeling:latest >/dev/null 2>&1; then
-        print_warning "标注平台镜像不存在，正在构建..."
-        build_auto_labeling_image
-    fi
-    
     $COMPOSE_CMD up -d --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
     print_success "服务已启动"
     check_status
@@ -777,7 +659,7 @@ check_status() {
     echo ""
     print_info "容器健康状态:"
     local any_running=false
-    for svc in ai-service auto-labeling; do
+    for svc in ai-service; do
         if docker ps --filter "name=^${svc}$" --format "{{.Names}}" 2>/dev/null | grep -q "^${svc}$"; then
             any_running=true
             docker ps --filter "name=^${svc}$" --format "table {{.Names}}\t{{.Status}}" 2>/dev/null
@@ -791,7 +673,6 @@ check_status() {
     done
     if [ "$any_running" = true ]; then
         print_info "AI 服务: http://localhost:5000"
-        print_info "标注平台: http://localhost:8000"
     fi
 }
 
@@ -828,7 +709,6 @@ build_image() {
     fi
     echo ""
     print_success "AI 服务镜像构建完成"
-    build_auto_labeling_image "no-cache"
 }
 
 # 清理服务
@@ -856,8 +736,6 @@ clean_service() {
         
         print_info "删除镜像..."
         docker rmi ai-service:latest >/dev/null 2>&1 || true
-        docker rmi auto-labeling:latest >/dev/null 2>&1 || true
-        
     print_success "清理完成"
 }
 
@@ -869,7 +747,6 @@ update_service() {
     detect_architecture
     configure_architecture
     check_network
-    create_auto_labeling_env_file
     prepare_cached_resources
     
     print_info "拉取最新代码..."
@@ -887,8 +764,6 @@ update_service() {
     fi
     echo ""
     print_success "AI 服务镜像构建完成！"
-
-    build_auto_labeling_image
     
     print_info "重启服务..."
     $COMPOSE_CMD up -d --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
@@ -899,11 +774,10 @@ update_service() {
 
 # 显示帮助信息
 show_help() {
-    echo "AI 服务与标注平台 Docker Compose 管理脚本"
+    echo "AI 服务 Docker Compose 管理脚本"
     echo ""
     echo "管理服务:"
-    echo "  - ai-service (端口 5000)"
-    echo "  - auto-labeling 标注平台 (端口 8000)"
+    echo "  - ai-service (端口 5000，含 /model/dataset 自动标注 API)"
     echo ""
     echo "使用方法:"
     echo "  ./install_linux.sh [命令]"

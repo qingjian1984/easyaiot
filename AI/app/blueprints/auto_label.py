@@ -8,10 +8,10 @@ import os
 import json
 import logging
 import tempfile
-import zipfile
 import threading
 from datetime import datetime
-from flask import Blueprint, request, jsonify, send_file
+import requests
+from flask import Blueprint, request, jsonify, Response
 from sqlalchemy import text
 
 from db_models import db, AutoLabelTask, AutoLabelResult, AIService
@@ -20,6 +20,76 @@ from app.services.minio_service import ModelService
 
 auto_label_bp = Blueprint('auto_label', __name__)
 logger = logging.getLogger(__name__)
+
+# 与 Java PageParam.PAGE_SIZE_MAX 保持一致
+_DATASET_IMAGE_PAGE_SIZE = 1000
+
+
+def _fetch_all_dataset_images(java_backend_url: str, dataset_id: int, extra_params: dict | None = None) -> list:
+    """分页拉取数据集全部图片（单页最多 1000 条）"""
+    import requests
+
+    all_images: list = []
+    page_no = 1
+    extra_params = extra_params or {}
+
+    while True:
+        params = {
+            'datasetId': dataset_id,
+            'pageNo': page_no,
+            'pageSize': _DATASET_IMAGE_PAGE_SIZE,
+            **extra_params,
+        }
+        response = requests.get(
+            f"{java_backend_url}/admin-api/dataset/image/page",
+            params=params,
+            timeout=60,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f'获取图片列表失败: HTTP {response.status_code}, {response.text}')
+
+        body = response.json()
+        if body.get('code') != 0:
+            raise RuntimeError(f'获取图片列表失败: {body.get("msg")}')
+
+        data = body.get('data') or {}
+        batch = data.get('list') or []
+        total = data.get('total') or 0
+        all_images.extend(batch)
+
+        if not batch or len(all_images) >= total or len(batch) < _DATASET_IMAGE_PAGE_SIZE:
+            break
+        page_no += 1
+
+    return all_images
+
+
+def _dataset_java_base() -> str:
+    return os.getenv('JAVA_BACKEND_URL', 'http://localhost:8080').rstrip('/')
+
+
+def _dataset_annotation_url(dataset_id: int, suffix: str) -> str:
+    return f"{_dataset_java_base()}/admin-api/dataset/{dataset_id}/annotation/{suffix}"
+
+
+def _forward_request_headers() -> dict:
+    headers = {}
+    for key in ('Authorization', 'X-Authorization', 'tenant-id'):
+        val = request.headers.get(key)
+        if val:
+            headers[key] = val
+    return headers
+
+
+def _proxy_dataset_json_response(resp: requests.Response):
+    try:
+        body = resp.json()
+    except ValueError:
+        return jsonify({'code': 500, 'msg': resp.text or '数据集服务响应异常'}), 500
+    if resp.ok:
+        return jsonify(body), resp.status_code
+    msg = body.get('msg') if isinstance(body, dict) else str(body)
+    return jsonify({'code': body.get('code', resp.status_code) if isinstance(body, dict) else resp.status_code, 'msg': msg}), resp.status_code
 
 
 @auto_label_bp.route('/dataset/<int:dataset_id>/auto-label/start', methods=['POST'])
@@ -239,92 +309,38 @@ def label_single_image(dataset_id, image_id):
 
 @auto_label_bp.route('/dataset/<int:dataset_id>/auto-label/export', methods=['POST'])
 def export_labeled_dataset(dataset_id):
-    """导出标注后的数据集为ZIP"""
+    """导出标注数据集（转发至 iot-dataset /annotation/export）"""
     try:
         data = request.json or {}
-        task_id = data.get('task_id')
-        train_ratio = float(data.get('train_ratio', 0.7))
-        val_ratio = float(data.get('val_ratio', 0.2))
-        test_ratio = float(data.get('test_ratio', 0.1))
-        export_format = data.get('format', 'yolo')  # yolo, resnet, videonet, audionet
-        sample_type = data.get('sample_type', 'all')  # all, annotated, unannotated
-        selected_classes = data.get('selected_classes', [])  # 选择的类别列表
-        file_prefix = data.get('file_prefix', '')  # 文件前缀
-
-        # 验证比例
-        if abs(train_ratio + val_ratio + test_ratio - 1.0) > 0.01:
-            return jsonify({'code': 400, 'msg': '训练集、验证集、测试集比例之和必须为1'}), 400
-
-        # 创建临时目录
-        temp_dir = tempfile.mkdtemp()
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        zip_filename = f"dataset_{dataset_id}_{timestamp}.zip"
-        zip_path = os.path.join(temp_dir, zip_filename)
-
-        # 获取数据集图片和标注
-        import requests
-        java_backend_url = os.getenv('JAVA_BACKEND_URL', 'http://localhost:8080')
-
-        # 从Java后端获取图片列表
-        response = requests.get(
-            f"{java_backend_url}/admin-api/dataset/image/page",
-            params={'dataset_id': dataset_id, 'page_size': 10000},
-            timeout=30
+        if data.get('task_id'):
+            logger.warning('export task_id 已由 iot-dataset 统一导出，旧参数 task_id 已忽略')
+        export_format = (data.get('format') or 'yolo').lower()
+        if export_format not in ('yolo', ''):
+            return jsonify({'code': 400, 'msg': f'导出格式 {export_format} 已下线，请使用 YOLO 导出'}), 400
+        body = {
+            'trainRatio': float(data.get('train_ratio', 0.7)),
+            'valRatio': float(data.get('val_ratio', 0.2)),
+            'testRatio': float(data.get('test_ratio', 0.1)),
+            'sampleSelection': data.get('sample_selection') or data.get('sample_type', 'all'),
+            'selectedClasses': data.get('selected_classes') or [],
+            'exportPrefix': data.get('export_prefix') or data.get('file_prefix') or '',
+        }
+        if not body['selectedClasses']:
+            return jsonify({'code': 400, 'msg': '请至少选择一个导出类别'}), 400
+        resp = requests.post(
+            _dataset_annotation_url(dataset_id, 'export'),
+            json=body,
+            headers=_forward_request_headers(),
+            timeout=1800,
+            stream=True,
         )
-
-        if response.status_code != 200:
-            return jsonify({'code': 500, 'msg': '获取图片列表失败'}), 500
-
-        images_data = response.json()
-        if images_data.get('code') != 0:
-            return jsonify({'code': 500, 'msg': '获取图片列表失败'}), 500
-
-        all_images = images_data.get('data', {}).get('list', [])
-
-        # 根据样本类型过滤图片
-        if sample_type == 'annotated':
-            filtered_images = [img for img in all_images if img.get('completed') == 1]
-        elif sample_type == 'unannotated':
-            filtered_images = [img for img in all_images if img.get('completed') != 1]
-        else:
-            filtered_images = all_images
-
-        # 如果指定了任务ID，只导出该任务的标注结果
-        if task_id:
-            task = AutoLabelTask.query.filter_by(id=task_id, dataset_id=dataset_id).first()
-            if not task:
-                return jsonify({'code': 404, 'msg': '任务不存在'}), 404
-
-            task_image_ids = {r.dataset_image_id for r in AutoLabelResult.query.filter_by(task_id=task_id, status='SUCCESS').all()}
-            filtered_images = [img for img in filtered_images if img.get('id') in task_image_ids]
-
-        # 如果指定了类别，过滤标注
-        if selected_classes:
-            # 这里需要根据标注中的类别进行过滤
-            # 暂时先不过滤，在导出时再处理
-            pass
-
-        if not filtered_images:
-            return jsonify({'code': 400, 'msg': '没有可导出的数据'}), 400
-
-        # 创建ZIP文件
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            if export_format == 'yolo':
-                _export_yolo_format(zipf, dataset_id, filtered_images, train_ratio, val_ratio, test_ratio, temp_dir, selected_classes, file_prefix)
-            elif export_format in ['resnet', 'videonet', 'audionet']:
-                # TODO: 实现其他格式的导出
-                return jsonify({'code': 400, 'msg': f'导出格式 {export_format} 暂未实现'}), 400
-            else:
-                return jsonify({'code': 400, 'msg': f'不支持的导出格式: {export_format}'}), 400
-
-        # 返回文件
-        return send_file(
-            zip_path,
-            as_attachment=True,
-            download_name=zip_filename,
-            mimetype='application/zip'
-        )
-
+        if not resp.ok:
+            return _proxy_dataset_json_response(resp)
+        headers = {
+            k: v for k, v in resp.headers.items()
+            if k.lower() in ('content-type', 'content-disposition', 'content-length')
+        }
+        return Response(resp.iter_content(chunk_size=8192), status=resp.status_code, headers=headers)
     except Exception as e:
         logger.error(f"导出数据集失败: {str(e)}", exc_info=True)
         return jsonify({'code': 500, 'msg': f'导出失败: {str(e)}'}), 500
@@ -332,75 +348,22 @@ def export_labeled_dataset(dataset_id):
 
 @auto_label_bp.route('/dataset/<int:dataset_id>/extract-frames', methods=['POST'])
 def extract_frames_from_video(dataset_id):
-    """从视频文件抽帧并添加到数据集"""
+    """视频抽帧（转发至 iot-dataset /annotation/extract-frames）"""
     try:
         if 'file' not in request.files:
             return jsonify({'code': 400, 'msg': '未找到视频文件'}), 400
-
         file = request.files['file']
-        if file.filename == '':
+        if not file or file.filename == '':
             return jsonify({'code': 400, 'msg': '未选择视频文件'}), 400
-
-        frame_interval = int(request.form.get('frame_interval', 3))
-
-        # 保存视频文件到临时目录
-        temp_video = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1])
-        file.save(temp_video.name)
-        temp_video.close()
-
-        try:
-            # 使用OpenCV或FFmpeg进行抽帧
-            import cv2
-            import requests
-
-            cap = cv2.VideoCapture(temp_video.name)
-            if not cap.isOpened():
-                return jsonify({'code': 400, 'msg': '无法打开视频文件'}), 400
-
-            frame_count = 0
-            extracted_count = 0
-            java_backend_url = os.getenv('JAVA_BACKEND_URL', 'http://localhost:8080')
-
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-
-                # 每隔指定帧数保存一帧
-                if frame_count % frame_interval == 0:
-                    # 保存帧为图片
-                    frame_filename = f"frame_{frame_count:06d}.jpg"
-                    temp_frame = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
-                    cv2.imwrite(temp_frame.name, frame)
-                    temp_frame.close()
-
-                    # 上传到MinIO并添加到数据集
-                    # 这里需要调用Java后端的API上传图片
-                    # 暂时简化处理，直接返回成功
-                    extracted_count += 1
-
-                    # 清理临时文件
-                    if os.path.exists(temp_frame.name):
-                        os.unlink(temp_frame.name)
-
-                frame_count += 1
-
-            cap.release()
-
-            return jsonify({
-                'code': 0,
-                'msg': f'抽帧完成，共提取 {extracted_count} 帧',
-                'data': {
-                    'extracted_count': extracted_count,
-                    'total_frames': frame_count
-                }
-            })
-
-        finally:
-            # 清理临时视频文件
-            if os.path.exists(temp_video.name):
-                os.unlink(temp_video.name)
-
+        frame_interval = request.form.get('frame_interval', '30')
+        resp = requests.post(
+            _dataset_annotation_url(dataset_id, 'extract-frames'),
+            files={'file': (file.filename, file.stream, file.content_type or 'video/mp4')},
+            data={'frame_interval': frame_interval},
+            headers=_forward_request_headers(),
+            timeout=1800,
+        )
+        return _proxy_dataset_json_response(resp)
     except Exception as e:
         logger.error(f"视频抽帧失败: {str(e)}", exc_info=True)
         return jsonify({'code': 500, 'msg': f'抽帧失败: {str(e)}'}), 500
@@ -408,87 +371,30 @@ def extract_frames_from_video(dataset_id):
 
 @auto_label_bp.route('/dataset/<int:dataset_id>/import-labelme', methods=['POST'])
 def import_labelme_dataset(dataset_id):
-    """导入labelme数据集"""
+    """导入 LabelMe（转发至 iot-dataset /annotation/import-labelme）"""
     try:
-        if 'files' not in request.files:
-            return jsonify({'code': 400, 'msg': '未找到文件'}), 400
-
         files = request.files.getlist('files')
         if not files:
             return jsonify({'code': 400, 'msg': '未选择文件'}), 400
-
-        # 分离图片文件和JSON标注文件
-        image_files = {}
-        json_files = {}
-
-        for file in files:
-            filename = file.filename
-            ext = os.path.splitext(filename)[1].lower()
-
-            if ext in ['.jpg', '.jpeg', '.png', '.bmp']:
-                base_name = os.path.splitext(filename)[0]
-                image_files[base_name] = file
-            elif ext == '.json':
-                base_name = os.path.splitext(filename)[0]
-                json_files[base_name] = file
-
-        if not image_files:
-            return jsonify({'code': 400, 'msg': '未找到图片文件'}), 400
-
-        imported_count = 0
-        java_backend_url = os.getenv('JAVA_BACKEND_URL', 'http://localhost:8080')
-
-        # 处理每个图片文件
-        for base_name, image_file in image_files.items():
-            try:
-                # 读取对应的JSON标注文件
-                annotations = []
-                if base_name in json_files:
-                    json_file = json_files[base_name]
-                    json_content = json_file.read().decode('utf-8')
-                    labelme_data = json.loads(json_content)
-
-                    # 转换labelme格式为系统标注格式
-                    shapes = labelme_data.get('shapes', [])
-                    image_width = labelme_data.get('imageWidth', 0)
-                    image_height = labelme_data.get('imageHeight', 0)
-
-                    for shape in shapes:
-                        label = shape.get('label', '')
-                        points = shape.get('points', [])
-                        shape_type = shape.get('shape_type', 'polygon')
-
-                        if shape_type == 'rectangle' and len(points) == 2:
-                            # 矩形框：两个点转换为四个点
-                            x1, y1 = points[0]
-                            x2, y2 = points[1]
-                            points = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
-
-                        annotation = {
-                            'class': label,
-                            'points': points,
-                            'type': 'rectangle' if shape_type == 'rectangle' else 'polygon',
-                            'auto': False
-                        }
-                        annotations.append(annotation)
-
-                # 保存图片和标注到数据集
-                # 这里需要调用Java后端的API上传图片和标注
-                # 暂时简化处理
-                imported_count += 1
-
-            except Exception as e:
-                logger.error(f"处理文件失败 {base_name}: {str(e)}")
-                continue
-
+        multipart = []
+        for f in files:
+            multipart.append(('files', (f.filename, f.stream, f.content_type or 'application/octet-stream')))
+        resp = requests.post(
+            _dataset_annotation_url(dataset_id, 'import-labelme'),
+            files=multipart,
+            headers=_forward_request_headers(),
+            timeout=1800,
+        )
+        if not resp.ok:
+            return _proxy_dataset_json_response(resp)
+        body = resp.json()
+        data = body.get('data') if isinstance(body, dict) else {}
+        images = (data or {}).get('imagesCopied') or (data or {}).get('imported_count') or 0
         return jsonify({
             'code': 0,
-            'msg': f'导入完成，共导入 {imported_count} 个文件',
-            'data': {
-                'imported_count': imported_count
-            }
+            'msg': body.get('msg') or f'导入完成，共导入 {images} 个文件',
+            'data': {'imported_count': images, **(data or {})},
         })
-
     except Exception as e:
         logger.error(f"导入labelme数据集失败: {str(e)}", exc_info=True)
         return jsonify({'code': 500, 'msg': f'导入失败: {str(e)}'}), 500
@@ -520,22 +426,8 @@ def execute_auto_label_task(app, task_id):
             java_backend_url = os.getenv('JAVA_BACKEND_URL', 'http://localhost:8080')
             logger.info(f"开始获取数据集图片列表: dataset_id={task.dataset_id}")
 
-            response = requests.get(
-                f"{java_backend_url}/admin-api/dataset/image/page",
-                params={'datasetId': task.dataset_id, 'pageSize': 100},  # 使用驼峰命名
-                timeout=30
-            )
-
-            if response.status_code != 200:
-                raise Exception(f'获取图片列表失败: HTTP {response.status_code}, {response.text}')
-
-            images_data = response.json()
-            logger.info(f"获取图片列表响应: code={images_data.get('code')}, 图片数量={len(images_data.get('data', {}).get('list', []))}")
-
-            if images_data.get('code') != 0:
-                raise Exception(f'获取图片列表失败: {images_data.get("msg")}')
-
-            images = images_data.get('data', {}).get('list', [])
+            images = _fetch_all_dataset_images(java_backend_url, task.dataset_id)
+            logger.info(f"获取图片列表完成，共 {len(images)} 张")
             task.total_images = len(images)
             db.session.commit()
 
@@ -770,136 +662,3 @@ def _parse_inference_result(result, image_width, image_height):
         logger.error(f"解析推理结果失败: {str(e)}", exc_info=True)
     
     return annotations
-
-
-def _export_yolo_format(zipf, dataset_id, images, train_ratio, val_ratio, test_ratio, temp_dir, selected_classes=None, file_prefix=''):
-    """导出YOLO格式数据集"""
-    import random
-    import shutil
-    from PIL import Image
-    
-    if selected_classes is None:
-        selected_classes = []
-    
-    # 创建目录结构
-    base_name = file_prefix if file_prefix else f"dataset_{dataset_id}"
-    splits = ['train', 'val', 'test']
-    for split in splits:
-        zipf.writestr(f"{base_name}/{split}/images/.gitkeep", "")
-        zipf.writestr(f"{base_name}/{split}/labels/.gitkeep", "")
-    
-    # 获取类别列表（从图片标注中提取）
-    classes = set()
-    for image in images:
-        annotations_str = image.get('annotations', '')
-        if annotations_str:
-            try:
-                anns = json.loads(annotations_str) if isinstance(annotations_str, str) else annotations_str
-                for ann in anns:
-                    class_name = ann.get('class', '')
-                    if class_name:
-                        # 如果指定了类别过滤，只添加选中的类别
-                        if not selected_classes or class_name in selected_classes:
-                            classes.add(class_name)
-            except:
-                pass
-    
-    classes = sorted(list(classes))
-    class_to_id = {cls: idx for idx, cls in enumerate(classes)}
-    
-    # 创建data.yaml
-    data_yaml = f"""path: .
-train: train/images
-val: val/images
-test: test/images
-
-nc: {len(classes)}
-names: {classes}
-"""
-    zipf.writestr(f"{base_name}/data.yaml", data_yaml)
-    
-    # 随机分配数据集
-    random.shuffle(images)
-    total = len(images)
-    train_end = int(total * train_ratio)
-    val_end = train_end + int(total * val_ratio)
-    
-    train_images = images[:train_end]
-    val_images = images[train_end:val_end]
-    test_images = images[val_end:]
-    
-    # 处理每个分割
-    for split_name, split_images in [('train', train_images), ('val', val_images), ('test', test_images)]:
-        for image_info in split_images:
-            try:
-                image_path = image_info.get('path')
-                image_name = image_info.get('name', f"image_{image_info.get('id')}.jpg")
-                image_width = image_info.get('width', 0)
-                image_height = image_info.get('heigh', 0)
-                
-                if not image_path or not image_width or not image_height:
-                    continue
-                
-                # 下载图片
-                bucket_name, object_key = _parse_minio_path(image_path)
-                if not bucket_name or not object_key:
-                    continue
-                
-                temp_image = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
-                temp_image.close()
-                
-                success, _ = ModelService.download_from_minio(bucket_name, object_key, temp_image.name)
-                if not success:
-                    continue
-                
-                # 添加图片到ZIP
-                zipf.write(temp_image.name, f"{base_name}/{split_name}/images/{image_name}")
-                
-                # 生成YOLO格式标签
-                annotations_str = image_info.get('annotations', '')
-                annotations = []
-                if annotations_str:
-                    try:
-                        annotations = json.loads(annotations_str) if isinstance(annotations_str, str) else annotations_str
-                    except:
-                        pass
-                
-                label_lines = []
-                for ann in annotations:
-                    class_name = ann.get('class', '')
-                    # 如果指定了类别过滤，只导出选中的类别
-                    if selected_classes and class_name not in selected_classes:
-                        continue
-                    
-                    if class_name not in class_to_id:
-                        continue
-                    
-                    class_id = class_to_id[class_name]
-                    points = ann.get('points', [])
-                    
-                    if len(points) >= 4:
-                        # 计算边界框
-                        xs = [p[0] for p in points]
-                        ys = [p[1] for p in points]
-                        x_min, x_max = min(xs), max(xs)
-                        y_min, y_max = min(ys), max(ys)
-                        
-                        # 转换为YOLO格式（归一化）
-                        center_x = ((x_min + x_max) / 2) / image_width
-                        center_y = ((y_min + y_max) / 2) / image_height
-                        width = (x_max - x_min) / image_width
-                        height = (y_max - y_min) / image_height
-                        
-                        label_lines.append(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}")
-                
-                # 添加标签文件到ZIP
-                label_name = os.path.splitext(image_name)[0] + '.txt'
-                zipf.writestr(f"{base_name}/{split_name}/labels/{label_name}", '\n'.join(label_lines))
-                
-                # 清理临时文件
-                if os.path.exists(temp_image.name):
-                    os.unlink(temp_image.name)
-                    
-            except Exception as e:
-                logger.error(f"导出图片失败: {str(e)}", exc_info=True)
-                continue

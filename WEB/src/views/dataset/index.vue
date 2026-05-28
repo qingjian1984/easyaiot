@@ -5,52 +5,24 @@
         :animated="{ inkBar: true, tabPane: true }"
         :activeKey="state.activeKey"
         :tabBarGutter="60"
-        @tabClick="handleTabClick"
       >
         <TabPane key="1" tab="数据集管理">
           <DatasetList></DatasetList>
         </TabPane>
-        <TabPane key="2" tab="自动化标注" />
       </Tabs>
     </div>
   </div>
 </template>
 <script lang="ts" setup name="noticeSetting">
 import { reactive } from 'vue';
-import { useRoute } from 'vue-router';
 import { TabPane, Tabs } from 'ant-design-vue';
 import DatasetList from '@/views/dataset/components/DatasetList/index.vue';
-import { openNewWindow } from '@/utils/router';
 
 defineOptions({ name: 'DATASET' });
-
-const route = useRoute();
 
 const state = reactive({
   activeKey: '1',
 });
-
-const AUTO_LABEL_PORT = 8000;
-
-function buildAutoLabelingUrl(): string {
-  const { protocol, hostname } = window.location;
-  const base = `${protocol}//${hostname}:${AUTO_LABEL_PORT}/`;
-  const params = new URLSearchParams();
-  const datasetId = route.params.id ?? route.query.datasetId;
-  if (datasetId != null && String(datasetId) !== '') {
-    params.set('datasetId', String(datasetId));
-  }
-  const qs = params.toString();
-  return qs ? `${base}?${qs}` : base;
-}
-
-function handleTabClick(activeKey: string) {
-  if (activeKey === '2') {
-    openNewWindow(buildAutoLabelingUrl());
-    return;
-  }
-  state.activeKey = activeKey;
-}
 </script>
 
 <style lang="less" scoped>

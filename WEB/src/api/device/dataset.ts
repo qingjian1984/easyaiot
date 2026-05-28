@@ -176,6 +176,101 @@ export const uploadDatasetImage = (formData: FormData) => {
   );
 };
 
+// —— 标注工具：导入/导出（对齐 auto-labeling V9.13.0）——
+
+export interface DatasetAnnotationImportResult {
+  imagesCopied?: number;
+  labelmeImages?: number;
+  cocoImages?: number;
+  yoloImages?: number;
+  hint?: string;
+  cloudDatasetId?: number;
+  updatedImages?: number;
+  createdImages?: number;
+}
+
+export interface DatasetAnnotationExportParams {
+  trainRatio?: number;
+  valRatio?: number;
+  testRatio?: number;
+  sampleSelection?: 'all' | 'annotated' | 'unannotated';
+  selectedClasses: string[];
+  exportPrefix?: string;
+}
+
+const annotationPost = (url: string, data?: Record<string, unknown>, options: Record<string, unknown> = {}) => {
+  defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
+  return defHttp.post({ url, data, ...options }, { isTransformResponse: true });
+};
+
+/** 导出 YOLO ZIP */
+export const exportAnnotationDataset = (datasetId: number, data: DatasetAnnotationExportParams) => {
+  defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
+  return defHttp.post(
+    {
+      url: `${Api.Dataset}/${datasetId}/annotation/export`,
+      data,
+      responseType: 'blob',
+      timeout: 30 * 60 * 1000,
+    },
+    { isTransformResponse: false },
+  );
+};
+
+/** 上传图片文件夹 */
+export const importAnnotationImageFolder = (datasetId: number, formData: FormData) => {
+  defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
+  return defHttp.post({
+    url: `${Api.Dataset}/${datasetId}/annotation/import-folder`,
+    data: formData,
+    timeout: 30 * 60 * 1000,
+  });
+};
+
+/** 导入 LabelMe 文件夹 */
+export const importAnnotationLabelme = (datasetId: number, formData: FormData) => {
+  defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
+  return defHttp.post({
+    url: `${Api.Dataset}/${datasetId}/annotation/import-labelme`,
+    data: formData,
+    timeout: 30 * 60 * 1000,
+  });
+};
+
+/** ImageFolder 路径导入 */
+export const importAnnotationImageFolderPath = (datasetId: number, path: string) =>
+  annotationPost(`${Api.Dataset}/${datasetId}/annotation/import-path`, { path });
+
+/** YOLO 路径导入 */
+export const importAnnotationYoloPath = (datasetId: number, path: string) =>
+  annotationPost(`${Api.Dataset}/${datasetId}/annotation/import-yolo-path`, { path });
+
+/** COCO 路径导入 */
+export const importAnnotationCocoPath = (datasetId: number, body: { cocoJson: string; imagesRoot?: string }) =>
+  annotationPost(`${Api.Dataset}/${datasetId}/annotation/import-coco-path`, body);
+
+/** 云平台数据集列表 */
+export const listAnnotationCloudDatasets = () =>
+  commonApi('get', `${Api.Dataset}/annotation/cloud-datasets`, {}, {}, false);
+
+/** 从云平台导入 */
+export const importAnnotationFromCloud = (datasetId: number, sourceDatasetId: number) =>
+  annotationPost(`${Api.Dataset}/${datasetId}/annotation/cloud-import`, { sourceDatasetId });
+
+/** 导出到云平台 */
+export const exportAnnotationToCloud = (datasetId: number, body: { name: string; version: string }) =>
+  annotationPost(`${Api.Dataset}/${datasetId}/annotation/cloud-export`, body);
+
+/** 视频抽帧 */
+export const extractAnnotationFrames = (datasetId: number, formData: FormData) => {
+  defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
+  return defHttp.post({
+    url: `${Api.Dataset}/${datasetId}/annotation/extract-frames`,
+    data: formData,
+    timeout: 30 * 60 * 1000,
+  });
+};
+
 // 标注任务
 export const createDatasetTask = (params) => {
   return commonApi('post', Api.DatasetTask + '/create', {params});

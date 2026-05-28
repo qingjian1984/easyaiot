@@ -14,9 +14,6 @@ data/**
 /static/
 /static/**
 
-# auto-labeling 运行时标注数据（前端 css/js/fonts 需纳入版本库与镜像）
-services/auto-labeling/static/annotations/
-
 # 环境变量文件（包含敏感信息）
 .env
 .env.local

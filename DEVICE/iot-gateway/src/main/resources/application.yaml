@@ -32,14 +32,6 @@ spring:
             - RewritePath=/admin-api/admin-api/(?<segment>.*), /admin-api/$\{segment} # 移除重复的 /admin-api 前缀
             - StripPrefix=1
             - RewritePath=/admin-api/model/v3/api-docs, /v3/api-docs # 配置，保证转发到 /v3/api-docs
-        # 自动标注平台（AI/services/auto-labeling，Nacos: auto-labeling-server，Flask 根路径 /、/api/**、/static/**）
-        - id: auto-labeling-admin-api
-          uri: lb://auto-labeling-server
-          order: 0
-          predicates:
-            - Path=/admin-api/labeling/**
-          filters:
-            - RewritePath=/admin-api/labeling/(?<segment>.*), /$\{segment} # 去掉网关前缀，转发到标注服务实际路径
         # 模型实验服务
         - id: studio-admin-api
           uri: lb://studio-server
@@ -48,13 +40,13 @@ spring:
           filters:
             - StripPrefix=1
             - RewritePath=/admin-api/dataset/v3/api-docs, /v3/api-docs # 配置，保证转发到 /v3/api-docs
-        # 数据集服务
+        # 数据集服务（含标注导入/导出：/dataset/{id}/annotation/*）
         - id: dataset-admin-api
           uri: lb://dataset-server
           predicates: # 断言，作为路由的匹配条件，对应 RouteDefinition 数组
             - Path=/admin-api/dataset/**, /admin-api/warehouse/**
           metadata:
-            # 压缩包解压上传可能超过默认 10s，延长至 30 分钟
+            # 文件夹上传、YOLO 导出 ZIP、云平台导入等可能较慢，延长至 30 分钟
             response-timeout: 1800000
           filters:
             - StripPrefix=1

@@ -36,7 +36,6 @@ temp_uploads/
 model/
 
 # 独立子服务（各自有 Dockerfile / 镜像）
-services/auto-labeling/
 services/ai_service/
 
 # 环境变量（运行时通过卷挂载 .env.docker）

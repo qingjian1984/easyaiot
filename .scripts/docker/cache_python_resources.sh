@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================
 # EasyAIoT Python 离线 wheel 预下载（按模块隔离）
-# 目录: .build-cache/{ai,video,auto-labeling}/pip-wheels
+# 目录: .build-cache/{ai,video}/pip-wheels
 # Docker 构建使用各模块 requirements-docker.txt，与镜像内 pip install 一致
 # ============================================
 
@@ -27,32 +27,25 @@ source "${SCRIPT_DIR}/init-build-cache-dirs.sh"
 
 AI_DIR="${EASYAIOT_ROOT}/AI"
 VIDEO_DIR="${EASYAIOT_ROOT}/VIDEO"
-AUTO_LABELING_DIR="${EASYAIOT_ROOT}/AI/services/auto-labeling"
-
 PYTORCH_BASE_IMAGE="${BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-devel}"
-AUTO_LABELING_BASE_IMAGE="${AUTO_LABELING_BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime}"
 
 # PyPI 仅提供 sdist、需在 devel 镜像中预编译为 wheel（runtime 无 gcc）
 SDIST_WHEEL_SPECS=(
     "netifaces==0.11.0"
 )
 
-# 参数: all（默认）| ai | video | auto-labeling
+# 参数: all（默认）| ai | video
 TARGET_MODULE="${1:-all}"
 
 module_req_docker_file() {
     case "$(easyaiot_normalize_python_cache_module "$1")" in
         ai) echo "${AI_DIR}/requirements-docker.txt" ;;
         video) echo "${VIDEO_DIR}/requirements-docker.txt" ;;
-        auto-labeling) echo "${AUTO_LABELING_DIR}/requirements-docker.txt" ;;
     esac
 }
 
 module_base_image() {
-    case "$(easyaiot_normalize_python_cache_module "$1")" in
-        auto-labeling) echo "$AUTO_LABELING_BASE_IMAGE" ;;
-        *) echo "$PYTORCH_BASE_IMAGE" ;;
-    esac
+    echo "$PYTORCH_BASE_IMAGE"
 }
 
 # 展开 -r includes，避免合并文件中出现无法解析的相对引用
@@ -192,11 +185,11 @@ case "${TARGET_MODULE,,}" in
             download_module_wheels "$module"
         done
         ;;
-    ai|video|auto-labeling|auto_labeling|autolabeling|labeling)
+    ai|video)
         download_module_wheels "$TARGET_MODULE"
         ;;
     *)
-        print_error "未知模块: ${TARGET_MODULE}（支持: all, ai, video, auto-labeling）"
+        print_error "未知模块: ${TARGET_MODULE}（支持: all, ai, video）"
         exit 1
         ;;
 esac

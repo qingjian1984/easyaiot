@@ -1,26 +1,117 @@
 <template>
+  <ConfigProvider :get-popup-container="getModalContainer">
   <div ref="container" class="annotation-container">
-    <!-- 全屏标题 -->
-    <div v-show="isFullscreen" class="fullscreen-title">
-      <div class="title-content">
-        <i class="fas fa-database"></i>
-        <span>图像数据集标注</span>
+    <!-- 顶栏：进度与操作 -->
+    <div class="top-toolbar">
+      <div class="progress-info">
+        <Icon icon="ant-design:picture-outlined"/>
+        <span>进度 <strong>{{ globalImageIndex + 1 }}</strong> / {{ totalImages }}</span>
+        <span v-if="totalImages > 0" class="progress-percent">
+          （已完成 {{ completedCount }}，{{ progressPercent }}%）
+        </span>
+        <span v-if="batchTaskRunning" class="batch-task-hint">
+          <Icon icon="ant-design:loading-outlined" spin/>
+          批量AI标注进行中…
+        </span>
+      </div>
+      <div class="top-actions">
+        <div class="tool-group">
+          <button
+            v-for="tool in tools"
+            :key="tool.id"
+            type="button"
+            class="tool-button"
+            :class="{ active: activeTool === tool.id }"
+            @click="setActiveTool(tool.id)"
+          >
+            <Icon :icon="tool.icon"/>
+            <span>{{ tool.name }} ({{ tool.shortcut }})</span>
+          </button>
+        </div>
+        <span class="top-actions-divider"/>
+        <button type="button" class="action-btn import-btn" @click="openImportModal">
+          <Icon icon="ant-design:upload-outlined"/>
+          添加数据集
+        </button>
+        <button type="button" class="action-btn" @click="openExportModal">
+          <Icon icon="ant-design:download-outlined"/>
+          导出数据集
+        </button>
+        <span class="top-actions-divider"/>
+        <button type="button" class="action-btn" :disabled="saving" @click="saveCurrentAnnotations">
+          <Icon icon="ant-design:save-outlined"/>
+          保存标注
+        </button>
+        <button type="button" class="action-btn ai-batch-btn" @click="openAiBatchModal">
+          <Icon icon="ant-design:robot-outlined"/>
+          批量AI标注
+        </button>
       </div>
     </div>
+
     <!-- 主内容区 -->
     <div class="main-content">
-      <!-- 左侧工具栏 -->
-      <div class="toolbar">
-        <div
-          v-for="tool in tools"
-          :key="tool.id"
-          class="tool-button"
-          :class="{ active: activeTool === tool.id }"
-          @click="setActiveTool(tool.id)"
-        >
-          <Icon :icon="tool.icon"/>
-          <span>{{ tool.name }} ({{ tool.shortcut }})</span>
+      <!-- 左侧图片列表（虚拟滚动，单次最多加载 1000 条） -->
+      <div ref="imagePanelRef" class="image-panel">
+        <div class="image-list-header">
+          <div class="image-list-stats">
+            <span class="stat-done">已完成 {{ completedCount }}</span>
+            <span class="stat-sep">/</span>
+            <span class="stat-total">{{ totalImages }}</span>
+            <span v-if="listFilterStatus !== 'all'" class="stat-filtered">· {{ displayImages.length }}</span>
+          </div>
+          <Select
+            v-model:value="listFilterStatus"
+            size="small"
+            class="filter-select"
+            :options="listFilterOptions"
+            popup-class-name="image-panel-dropdown"
+            :get-popup-container="getSidePanelPopupContainer"
+          />
         </div>
+        <div
+          ref="listScrollRef"
+          class="image-list-scroll"
+          @scroll="onListScroll"
+        >
+          <div class="image-list-phantom" :style="{ height: `${listPhantomHeight}px` }"/>
+          <ul
+            class="image-list"
+            :style="{ transform: `translateY(${listOffsetY}px)` }"
+          >
+            <li
+              v-for="{ img, index } in visibleListImages"
+              :key="img.id"
+              class="image-list-item"
+              :class="{
+                active: currentImage.id === img.id,
+                annotated: hasAnnotations(img),
+                completed: img.completed === 1
+              }"
+              @click="selectImageInList(img)"
+            >
+              <span class="image-index">{{ index + 1 }}</span>
+              <span class="image-name" :title="img.name">{{ img.name }}</span>
+              <span class="image-status-badge" :class="getImageStatusClass(img)">
+                {{ getImageStatusText(img) }}
+              </span>
+            </li>
+          </ul>
+          <div v-if="displayImages.length === 0" class="image-list-empty">
+            暂无图片
+          </div>
+        </div>
+        <Pagination
+          v-if="totalPages > 1"
+          v-model:current="listChunkPage"
+          class="image-list-pagination"
+          size="small"
+          simple
+          :total="totalImages"
+          :page-size="LIST_CHUNK_SIZE"
+          :show-size-changer="false"
+          @change="onListChunkPageChange"
+        />
       </div>
 
       <!-- 画布区域 -->
@@ -39,6 +130,7 @@
             @mousemove="handleMouseMove"
             @mouseup="handleMouseUp"
             @dblclick="handleDoubleClick"
+            @wheel.prevent="handleCanvasWheel"
           ></canvas>
         </div>
 
@@ -74,21 +166,6 @@
 
       <!-- 右侧标签栏 -->
       <div class="label-panel">
-        <!-- 筛选开关部分保持不变 -->
-        <div class="filter-section">
-          <div class="filter-toggle">
-            <label>
-              <input type="checkbox" v-model="showOnlyUnannotated">
-              <span class="toggle-slider"></span>
-            </label>
-            <span>仅未标注</span>
-            <span class="filter-indicator" v-if="showOnlyUnannotated">
-              ({{ filteredImageCount }}张)
-            </span>
-          </div>
-        </div>
-
-        <!-- 修改后的panel-header部分 -->
         <div class="panel-header">
           <span>标签管理</span>
         </div>
@@ -133,63 +210,48 @@
       </div>
     </div>
 
-    <!-- 图片预览列表 -->
-    <div class="image-preview-container">
-      <button class="nav-btn prev-btn" @click="changePage(-1)"
-              :disabled="currentPage === 1">
-        <Icon icon="fa:chevron-left"/>
-      </button>
-      <div class="preview-list-wrapper">
-        <div class="preview-list">
-          <div
-            v-for="(img, index) in visiblePreviewImages"
-            :key="img.id"
-            class="preview-item"
-            :class="{
-            active: globalImageIndex === (currentPage - 1) * previewCount + index,
-            annotated: hasAnnotations(img),
-            completed: img.completed === 1
-          }"
-            @click="selectImage((currentPage - 1) * previewCount + index)"
-          >
-            <img :src="img.path" alt="预览图" class="preview-image"/>
-            <div class="preview-status">
-              {{ hasAnnotations(img) ? '已标注' : '待标注' }}
-            </div>
-            <div v-if="img.completed === 1" class="completed-badge">已完成</div>
-          </div>
-        </div>
-      </div>
-      <button
-        class="nav-btn next-btn"
-        @click="changePage(1)"
-        :disabled="currentPage >= totalPages"
-      >
-        <Icon icon="fa:chevron-right"/>
-      </button>
-
-      <div class="pagination-control">
-        <span class="page-indicator">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
-      </div>
-    </div>
+    <AILabelModal
+      ref="aiLabelModalRef"
+      :dataset-id="datasetId"
+      :get-container="getModalContainer"
+      @success="onBatchAiSuccess"
+    />
+    <ImportDatasetModal
+      ref="importModalRef"
+      :dataset-id="datasetId"
+      :get-container="getModalContainer"
+      @success="onImportSuccess"
+    />
+    <ExportDatasetModal
+      ref="exportModalRef"
+      :dataset-id="datasetId"
+      :dataset-labels="labels"
+      :get-container="getModalContainer"
+    />
   </div>
+  </ConfigProvider>
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, onUnmounted, ref, watch} from 'vue';
+import {computed, nextTick, onMounted, onUnmounted, ref, watch} from 'vue';
+import {ConfigProvider, Pagination, Select} from 'ant-design-vue';
 import {Icon} from '@/components/Icon';
 import {useMessage} from "@/hooks/web/useMessage";
 import {useRoute} from "vue-router";
-import { debounce } from 'lodash-es';
 import {getDatasetImagePage, getDatasetTagPage, updateDatasetImage} from "@/api/device/dataset";
+import { getAutoLabelTask } from '@/api/device/auto-label';
+import AILabelModal from '@/views/dataset/components/AutoLabel/AILabelModal/index.vue';
+import ImportDatasetModal from '@/views/dataset/components/AutoLabel/ImportDatasetModal/index.vue';
+import ExportDatasetModal from '@/views/dataset/components/AutoLabel/ExportDatasetModal/index.vue';
 
 defineOptions({name: 'AnnotationTool'});
 
-const {createMessage} = useMessage();
+const {createMessage, createConfirm} = useMessage();
 const route = useRoute();
-
-// 添加事件绑定标志
-let eventBound = false;
+const datasetId = computed(() => Number(route.params['id']));
+const aiLabelModalRef = ref<InstanceType<typeof AILabelModal> | null>(null);
+const importModalRef = ref<InstanceType<typeof ImportDatasetModal> | null>(null);
+const exportModalRef = ref<InstanceType<typeof ExportDatasetModal> | null>(null);
 
 // 标注数据
 const annotations = ref<Annotation[]>([]);
@@ -198,54 +260,129 @@ const annotationCount = computed<number>(() => annotations.value.length);
 const statusText = computed<string>(() => `已标注 ${annotationCount.value} 个对象`);
 const isSaved = ref(true);
 
-// 新增筛选状态变量
-const showOnlyUnannotated = ref(false);
-const filteredImageCount = ref(0);
+/** 左侧列表每个分块展示的条数（与后端 PageParam.PAGE_SIZE_MAX 一致） */
+const LIST_CHUNK_SIZE = 1000;
+const LIST_ITEM_HEIGHT = 36;
+const LIST_OVERSCAN = 10;
+
+type ListFilterStatus = 'all' | 'pending' | 'annotated' | 'completed';
+
+const listFilterOptions: { label: string; value: ListFilterStatus }[] = [
+  {label: '全部', value: 'all'},
+  {label: '待完成', value: 'pending'},
+  {label: '有标注', value: 'annotated'},
+  {label: '已完成', value: 'completed'},
+];
+
+const listFilterStatus = ref<ListFilterStatus>('all');
+const imagePanelRef = ref<HTMLElement | null>(null);
+const listLoading = ref(false);
+const listChunkPage = ref(1);
+const totalImages = ref(0);
+const completedCount = ref(0);
+const listScrollRef = ref<HTMLElement | null>(null);
+const listScrollTop = ref(0);
 
 // 添加保存状态锁
 const saving = ref(false);
 
-// 分页相关状态
-const currentPage = ref(1);
-const previewCount = 16; // 每页显示的图片数量
-const totalImages = ref(0); // 总图片数量
+const batchTaskRunning = ref(false);
+let batchTaskPollTimer: ReturnType<typeof setInterval> | null = null;
 
-// 计算总页数
-const totalPages = computed(() => {
-  return Math.ceil(totalImages.value / previewCount);
-});
+const totalPages = computed(() => Math.max(1, Math.ceil(totalImages.value / LIST_CHUNK_SIZE)));
 
-// 计算全局图片索引
+const displayImages = computed(() => images.value);
+
 const globalImageIndex = computed(() => {
-  return (currentPage.value - 1) * previewCount + currentImageIndex.value;
+  return (listChunkPage.value - 1) * LIST_CHUNK_SIZE + currentImageIndex.value;
 });
 
-// 更新可见预览图片
-const visiblePreviewImages = computed(() => {
-  return images.value;
+const progressPercent = computed(() => {
+  if (totalImages.value <= 0) return 0;
+  return Math.round((completedCount.value / totalImages.value) * 100);
 });
 
-// 分页方法
-const changePage = (direction: number) => {
-  const newPage = currentPage.value + direction;
-  if (newPage >= 1 && newPage <= totalPages.value) {
-    currentPage.value = newPage;
-    fetchImages(newPage);
-  }
+const listPhantomHeight = computed(() => displayImages.value.length * LIST_ITEM_HEIGHT);
+
+const listOffsetY = computed(() => visibleListRange.value.start * LIST_ITEM_HEIGHT);
+
+const visibleListRange = computed(() => {
+  const count = displayImages.value.length;
+  if (count === 0) return {start: 0, end: 0};
+  const container = listScrollRef.value;
+  const viewHeight = container?.clientHeight ?? 480;
+  const start = Math.max(0, Math.floor(listScrollTop.value / LIST_ITEM_HEIGHT) - LIST_OVERSCAN);
+  const visibleCount = Math.ceil(viewHeight / LIST_ITEM_HEIGHT) + LIST_OVERSCAN * 2;
+  const end = Math.min(count, start + visibleCount);
+  return {start, end};
+});
+
+const visibleListImages = computed(() => {
+  const {start, end} = visibleListRange.value;
+  const base = (listChunkPage.value - 1) * LIST_CHUNK_SIZE;
+  return displayImages.value.slice(start, end).map((img, i) => ({
+    img,
+    index: base + start + i,
+  }));
+});
+
+const onListScroll = (e: Event) => {
+  listScrollTop.value = (e.target as HTMLElement).scrollTop;
 };
 
-// 更新当前页的起始索引
-const startPreviewIndex = computed(() => {
-  return (currentPage.value - 1) * previewCount;
-});
+const scrollListToActive = () => {
+  nextTick(() => {
+    const idx = images.value.findIndex((i) => i.id === currentImage.value.id);
+    if (idx < 0 || !listScrollRef.value) return;
+    const targetTop = idx * LIST_ITEM_HEIGHT;
+    const el = listScrollRef.value;
+    const viewBottom = el.scrollTop + el.clientHeight;
+    if (targetTop < el.scrollTop || targetTop + LIST_ITEM_HEIGHT > viewBottom) {
+      el.scrollTop = Math.max(0, targetTop - el.clientHeight / 2 + LIST_ITEM_HEIGHT / 2);
+      listScrollTop.value = el.scrollTop;
+    }
+  });
+};
+
+const buildListQueryParams = (pageNo: number) => {
+  const params: Record<string, unknown> = {
+    datasetId: route.params['id'],
+    pageNo,
+    pageSize: LIST_CHUNK_SIZE,
+  };
+  if (listFilterStatus.value === 'pending') {
+    params.completed = 0;
+  } else if (listFilterStatus.value === 'completed') {
+    params.completed = 1;
+  }
+  return params;
+};
+
+const getSidePanelPopupContainer = (): HTMLElement => {
+  return imagePanelRef.value || document.body;
+};
+
+const onListChunkPageChange = async (page: number) => {
+  const prevPage = listChunkPage.value;
+  if (page === prevPage) return;
+  const ok = await confirmDiscardUnsaved();
+  if (!ok) {
+    listChunkPage.value = prevPage;
+    return;
+  }
+  currentImageIndex.value = 0;
+  await fetchImages(page);
+};
 
 // 快捷键提示
 const shortcutHints = ref<{ key: string, text: string }[]>([
-  {key: 'Del', text: '删除选中'},
-  {key: 'Ctrl+S', text: '保存标注'},
-  {key: '← →', text: '切换图片'},
-  {key: '1-5', text: '切换标签'},
-  {key: 'Ctrl+Z', text: '撤销操作'}
+  {key: 'Del', text: '删除'},
+  {key: 'Ctrl+S', text: '保存'},
+  {key: 'Space', text: '下一张'},
+  {key: '←→', text: '切图'},
+  {key: '1-9', text: '标签'},
+  {key: '滚轮', text: '缩放'},
+  {key: 'Ctrl+Z', text: '撤销'},
 ]);
 
 // 操作历史记录
@@ -411,15 +548,16 @@ const getLabelName = (shortcut: string): string => {
   return label ? label.name : '未知标签';
 };
 
-// 添加对筛选状态的监听
-watch(showOnlyUnannotated, (newVal) => {
-  // 重置到第一页
-  currentPage.value = 1;
-  // 重新获取图片
+watch(listFilterStatus, () => {
+  listChunkPage.value = 1;
   fetchImages(1);
 });
 
 // 监听当前图片变化
+watch(currentImageIndex, () => {
+  scrollListToActive();
+});
+
 watch(currentImage, (newImage) => {
   if (newImage.path) {
     loadImage(newImage.path);
@@ -465,40 +603,71 @@ const setCurrentLabel = (index: number): void => {
   console.log(`当前标签已设置为: ${labels.value[index].name} (shortcut: ${labels.value[index].shortcut})`);
 };
 
-// 选择图片
-const selectImage = (index: number): void => {
-  if (index >= 0 && index < totalImages.value) {
-    // 计算目标页码
-    const targetPage = Math.floor(index / previewCount) + 1;
-    // 计算目标页的局部索引
-    const targetIndex = index % previewCount;
+const confirmDiscardUnsaved = (): Promise<boolean> => {
+  if (isSaved.value) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    createConfirm({
+      iconType: 'warning',
+      title: '未保存的标注',
+      content: '当前图片有未保存的修改，切换后将丢失。是否继续？',
+      onOk: () => resolve(true),
+      onCancel: () => resolve(false),
+    });
+  });
+};
 
-    // 如果目标页码与当前页码不同，需要先切换页面
-    if (targetPage !== currentPage.value) {
-      currentPage.value = targetPage;
-      fetchImages(targetPage).then(() => {
-        // 页面切换完成后再选择图片
-        currentImageIndex.value = targetIndex;
-      });
-    } else {
-      // 如果已在同一页，直接选择图片
-      currentImageIndex.value = targetIndex;
-    }
+const selectImageInList = async (img: Image): Promise<void> => {
+  if (currentImage.value.id === img.id) return;
+  const ok = await confirmDiscardUnsaved();
+  if (!ok) return;
+  const idx = images.value.findIndex((i) => i.id === img.id);
+  if (idx >= 0) {
+    currentImageIndex.value = idx;
+    scrollListToActive();
   }
+};
+
+const getImageStatusText = (img: Image): string => {
+  if (img.completed === 1) return '已完成';
+  if (hasAnnotations(img)) return '已标注';
+  return '待标注';
+};
+
+const getImageStatusClass = (img: Image): string => {
+  if (img.completed === 1) return 'status-completed';
+  if (hasAnnotations(img)) return 'status-annotated';
+  return 'status-pending';
+};
+
+// 选择图片（全局索引，用于键盘切换）
+const selectImage = async (index: number): Promise<void> => {
+  if (index < 0 || index >= totalImages.value) return;
+  const ok = await confirmDiscardUnsaved();
+  if (!ok) return;
+
+  const targetPage = Math.floor(index / LIST_CHUNK_SIZE) + 1;
+  const targetIndex = index % LIST_CHUNK_SIZE;
+
+  if (targetPage !== listChunkPage.value) {
+    listChunkPage.value = targetPage;
+    await fetchImages(targetPage);
+  }
+  currentImageIndex.value = Math.min(targetIndex, Math.max(0, images.value.length - 1));
+  scrollListToActive();
 };
 
 // 图片导航
-const nextImage = (): void => {
+const nextImage = async (): Promise<void> => {
   const newIndex = globalImageIndex.value + 1;
   if (newIndex < totalImages.value) {
-    selectImage(newIndex);
+    await selectImage(newIndex);
   }
 };
 
-const prevImage = (): void => {
+const prevImage = async (): Promise<void> => {
   const newIndex = globalImageIndex.value - 1;
   if (newIndex >= 0) {
-    selectImage(newIndex);
+    await selectImage(newIndex);
   }
 };
 
@@ -573,58 +742,71 @@ const fetchLabels = async (): Promise<void> => {
   }
 };
 
-// 修改后的fetchImages函数
-const fetchImages = async (pageNo: number = 1): Promise<void> => {
+const mapImageRow = (img: any): Image => {
+  let rowAnnotations: Annotation[] | string = [];
+  if (img.annotations) {
+    try {
+      rowAnnotations = typeof img.annotations === 'string'
+        ? JSON.parse(img.annotations)
+        : img.annotations;
+    } catch {
+      rowAnnotations = [];
+    }
+  }
+  return {
+    id: img.id,
+    name: img.name,
+    path: img.path,
+    annotations: rowAnnotations,
+    completed: img.completed || 0,
+    modificationCount: img.modificationCount || 0,
+    lastModified: img.lastModified ? new Date(img.lastModified) : null,
+  };
+};
+
+const fetchCompletedCount = async (): Promise<void> => {
   try {
     const res = await getDatasetImagePage({
       datasetId: route.params['id'],
-      pageNo: pageNo,
-      pageSize: previewCount,
-      // 新增筛选参数
-      completed: showOnlyUnannotated.value ? 0 : undefined
+      pageNo: 1,
+      pageSize: 1,
+      completed: 1,
     });
+    completedCount.value = res?.total ?? 0;
+  } catch {
+    completedCount.value = images.value.filter((i) => i.completed === 1).length;
+  }
+};
 
-    if (res && res.list) {
-      // 更新总图片数量
-      totalImages.value = res.total || res.list.length;
+/** 加载左侧列表的一个分块（单次最多 LIST_CHUNK_SIZE 条） */
+const fetchImages = async (chunkPage: number = 1): Promise<void> => {
+  listLoading.value = true;
+  try {
+    const res = await getDatasetImagePage(buildListQueryParams(chunkPage));
 
-      // 更新筛选后的图片数量
-      filteredImageCount.value = res.total || 0;
+    if (res?.list) {
+      totalImages.value = res.total ?? res.list.length;
 
-      // 只更新当前页的图片
-      images.value = res.list.map((img: any) => {
-        // 处理标注数据
-        let annotations: Annotation[] | string = [];
-        if (img.annotations) {
-          try {
-            annotations = typeof img.annotations === 'string'
-              ? JSON.parse(img.annotations)
-              : img.annotations;
-          } catch (e) {
-            annotations = [];
-          }
-        }
+      let mapped = res.list.map(mapImageRow);
+      if (listFilterStatus.value === 'annotated') {
+        mapped = mapped.filter((img) => hasAnnotations(img));
+      }
 
-        return {
-          id: img.id,
-          name: img.name,
-          path: img.path,
-          annotations,
-          completed: img.completed || 0,
-          modificationCount: img.modificationCount || 0,
-          lastModified: img.lastModified ? new Date(img.lastModified) : null
-        };
-      });
+      images.value = mapped;
+      listChunkPage.value = chunkPage;
 
-      // 初始化后自动选择第一张图片
       if (images.value.length > 0 && currentImageIndex.value >= images.value.length) {
         currentImageIndex.value = 0;
       }
+      await fetchCompletedCount();
+      scrollListToActive();
     }
   } catch (error) {
     createMessage.error('获取图片失败:' + error);
     images.value = [];
     totalImages.value = 0;
+  } finally {
+    listLoading.value = false;
   }
 };
 
@@ -704,11 +886,19 @@ const saveCurrentAnnotations = async (): Promise<void> => {
     // 仅显示一次成功提示
     createMessage.success('标注保存成功');
     isSaved.value = true;
+    await fetchCompletedCount();
   } catch (error) {
     createMessage.error('保存失败:' + error);
   } finally {
     saving.value = false; // 解锁
   }
+};
+
+const handleCanvasWheel = (e: WheelEvent): void => {
+  if (!imageLoaded.value) return;
+  const delta = e.deltaY > 0 ? -0.08 : 0.08;
+  zoomLevel.value = Math.min(5, Math.max(0.05, zoomLevel.value + delta * zoomLevel.value));
+  draw();
 };
 
 // 初始化画布
@@ -1156,6 +1346,18 @@ const handleDoubleClick = (): void => {
   }
 };
 
+/** 全屏时 Modal/下拉层须挂到全屏元素内，否则浏览器不会显示（默认挂 body） */
+const getModalContainer = (): HTMLElement => {
+  const fsEl =
+    document.fullscreenElement ||
+    (document as any).webkitFullscreenElement ||
+    (document as any).msFullscreenElement;
+  if (fsEl instanceof HTMLElement) {
+    return fsEl;
+  }
+  return document.body;
+};
+
 // 全屏切换逻辑
 const toggleFullscreen = () => {
   if (!container.value) return;
@@ -1193,8 +1395,18 @@ const handleFullscreenChange = () => {
   });
 };
 
+const isTypingInInput = (): boolean => {
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  return !!el.closest('.ant-input, .ant-select, textarea, input, select');
+};
+
 // 键盘快捷键
 const handleKeyDown = (e: KeyboardEvent): void => {
+  if (isTypingInInput()) {
+    return;
+  }
+
   if (e.ctrlKey) {
     if (e.key === 's') {
       e.preventDefault();
@@ -1234,9 +1446,19 @@ const handleKeyDown = (e: KeyboardEvent): void => {
       setActiveTool(ToolType.SELECT);
       break;
     case 'ArrowRight':
+    case ' ':
+      e.preventDefault();
       nextImage();
       break;
     case 'ArrowLeft':
+      prevImage();
+      break;
+    case 'n':
+    case 'N':
+      nextImage();
+      break;
+    case 'b':
+    case 'B':
       prevImage();
       break;
     case 'Delete':
@@ -1257,6 +1479,63 @@ const handleKeyDown = (e: KeyboardEvent): void => {
   }
 };
 
+function openAiBatchModal(): void {
+  aiLabelModalRef.value?.openModal();
+}
+
+function openImportModal(): void {
+  importModalRef.value?.openModal();
+}
+
+function openExportModal(): void {
+  exportModalRef.value?.openModal();
+}
+
+async function onImportSuccess(): Promise<void> {
+  listChunkPage.value = 1;
+  await fetchImages(1);
+}
+
+function stopBatchTaskPoll(): void {
+  if (batchTaskPollTimer) {
+    clearInterval(batchTaskPollTimer);
+    batchTaskPollTimer = null;
+  }
+  batchTaskRunning.value = false;
+}
+
+async function pollBatchTask(taskId: number): Promise<void> {
+  stopBatchTaskPoll();
+  batchTaskRunning.value = true;
+
+  const check = async () => {
+    try {
+      const res = await getAutoLabelTask(datasetId.value, taskId);
+      const task = res?.data ?? res;
+      const status = task?.status;
+      if (status === 'COMPLETED') {
+        stopBatchTaskPoll();
+        createMessage.success(`批量 AI 标注完成，共处理 ${task.processed_count ?? ''} 张`);
+        await fetchImages(listChunkPage.value);
+      } else if (status === 'FAILED') {
+        stopBatchTaskPoll();
+        createMessage.error(task?.error_message || '批量 AI 标注失败');
+      }
+    } catch {
+      stopBatchTaskPoll();
+    }
+  };
+
+  await check();
+  batchTaskPollTimer = setInterval(check, 2500);
+}
+
+function onBatchAiSuccess(payload: { taskId?: number }): void {
+  if (payload?.taskId) {
+    pollBatchTask(payload.taskId);
+  }
+}
+
 // 初始化
 onMounted(() => {
   initCanvas();
@@ -1272,9 +1551,11 @@ onMounted(() => {
   fetchImages(1);
 });
 
-// 组件卸载时移除事件监听
 onUnmounted(() => {
+  stopBatchTaskPoll();
   window.removeEventListener('resize', handleResize);
+  window.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('resize', resizeCanvas);
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
   document.removeEventListener('msfullscreenchange', handleFullscreenChange);
@@ -1292,304 +1573,354 @@ onUnmounted(() => {
 @gray-color: #6c757d;
 @border-color: #dee2e6;
 
-// 更新全屏标题样式
-.fullscreen-title {
-  width: 100%;
-  height: 64px; /* 固定高度避免覆盖内容 */
-  background: linear-gradient(to right, #1a1c2c, #2d3748); /* 更专业的深色渐变 */
-  color: white;
-  font-weight: bold;
-  font-size: 22px;
-  display: flex;
-  align-items: center;
-  z-index: 1000;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); /* 添加阴影增强层次感 */
-  padding: 0 20px; /* 左右留白 */
-
-  .title-content {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-
-    i {
-      font-size: 20px;
-      color: #4cc9f0;
-    }
-  }
-}
-
 .annotation-container {
-  height: 700px;
+  height: min(92vh, 900px);
   display: flex;
   flex-direction: column;
   background: @dark-color;
   transition: all 0.3s ease;
 
-  /* 在样式部分添加以下样式 */
+  .top-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: #fff;
+    border-bottom: 1px solid #e8e8e8;
+    flex-shrink: 0;
 
-  .filter-section {
-    padding: 6px 0 20px 5px;
-    border-bottom: 1px solid #eee;
-    margin-bottom: 12px;
-
-    .filter-toggle {
+    .progress-info {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       font-size: 14px;
+      color: #333;
+      min-width: 0;
+      flex: 1;
+      flex-wrap: wrap;
 
-      label {
-        position: relative;
-        display: inline-block;
-        width: 40px;
-        height: 20px;
+      strong {
+        color: @primary-color;
+      }
 
-        input {
-          opacity: 0;
-          width: 0;
-          height: 0;
+      .batch-task-hint {
+        margin-left: 12px;
+        color: @warning-color;
+        font-size: 13px;
+      }
 
-          &:checked + .toggle-slider {
-            background-color: @primary-color;
-
-            &:before {
-              transform: translateX(20px);
-            }
-          }
-        }
-
-        .toggle-slider {
-          position: absolute;
-          cursor: pointer;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: #ccc;
-          transition: .3s;
-          border-radius: 20px;
-
-          &:before {
-            position: absolute;
-            content: "";
-            height: 16px;
-            width: 16px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: .3s;
-            border-radius: 50%;
-          }
-        }
+      .progress-percent {
+        color: #6b7a90;
+        font-size: 12px;
       }
     }
 
-    .filter-indicator {
-      color: @primary-color;
-      font-weight: 500;
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .top-actions-divider {
+      width: 1px;
+      height: 24px;
+      background: #e8e8e8;
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+
+    .tool-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tool-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #d9d9d9;
+      background: #fff;
       font-size: 13px;
+      color: @gray-color;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover {
+        border-color: @primary-color;
+        color: @primary-color;
+      }
+
+      &.active {
+        background: fade(@primary-color, 10%);
+        border-color: @primary-color;
+        color: @primary-color;
+      }
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid #d9d9d9;
+      background: #fff;
+      font-size: 13px;
+      color: @gray-color;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover:not(:disabled) {
+        border-color: @primary-color;
+        color: @primary-color;
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      &.import-btn {
+        background: @primary-color;
+        border-color: @primary-color;
+        color: #fff;
+
+        &:hover:not(:disabled) {
+          opacity: 0.9;
+          border-color: @primary-color;
+          color: #fff;
+        }
+      }
+
+      &.ai-batch-btn {
+        background: #fff7e6;
+        border-color: #ffc53d;
+        color: #d48806;
+
+        &:hover:not(:disabled) {
+          background: #ffe58f;
+          border-color: #ffc53d;
+          color: #d48806;
+        }
+      }
     }
   }
 
   .main-content {
     display: flex;
     flex: 1;
-    height: calc(100% - 120px);
+    min-height: 0;
     min-width: 0;
   }
 
-  .image-preview-container {
-    height: 120px; /* 增加高度以适应分页控制器 */
+  .image-panel {
+    width: 280px;
+    min-width: 240px;
+    background: #1e2433;
     display: flex;
-    justify-content: center;
-    align-items: center;
-    background: #f5f7fa;
-    border-top: 1px solid #eaeaea;
-    padding: 0 40px;
-    position: relative;
-    transition: opacity 0.3s ease;
+    flex-direction: column;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
 
-    .pagination-control {
-      position: absolute;
-      bottom: 5px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      z-index: 10;
+    .image-list-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 10px 8px;
+      flex-shrink: 0;
+    }
 
-      .page-indicator {
-        font-weight: 500;
+    :deep(.ant-select-selector) {
+      background: rgba(255, 255, 255, 0.06) !important;
+      border-color: rgba(255, 255, 255, 0.12) !important;
+      color: #e8edf5;
+    }
+
+    :deep(.ant-select) {
+      .ant-select-selection-item {
+        color: #e8edf5;
+        font-size: 12px;
+      }
+
+      .ant-select-arrow {
+        color: #8c9ab0;
+      }
+
+      &:hover .ant-select-selector,
+      &.ant-select-focused .ant-select-selector {
+        border-color: @primary-color !important;
       }
     }
 
-    .nav-btn {
-      top: 50%;
-      transform: translateY(-50%);
-      /* 其他按钮样式保持不变 */
+    .image-list-stats {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      flex: 1;
+      font-size: 12px;
+      color: #9aa8bc;
+
+      .stat-done {
+        color: #6bcb77;
+      }
+
+      .stat-total {
+        color: #c5d0e0;
+        font-weight: 600;
+      }
+
+      .stat-filtered {
+        color: #8c9ab0;
+      }
     }
 
-    .nav-btn {
+    .filter-select {
+      width: 96px;
+      flex-shrink: 0;
+    }
+
+    .image-list-scroll {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      margin: 0 8px;
+
+      &::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 3px;
+      }
+    }
+
+    .image-list-phantom {
+      width: 100%;
+      pointer-events: none;
+    }
+
+    .image-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
       position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 30px;
-      height: 60px;
-      background: rgba(0, 0, 0, 0.3);
-      color: white;
-      border: none;
-      border-radius: 4px;
+      top: 0;
+      left: 0;
+      right: 0;
+      will-change: transform;
+    }
+
+    .image-list-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      box-sizing: border-box;
+      padding: 0 8px;
+      margin-bottom: 0;
+      border-radius: 6px;
       cursor: pointer;
-      z-index: 10;
+      border: 1px solid transparent;
+      transition: background 0.15s;
+      color: #c5d0e0;
+      font-size: 13px;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      &.active {
+        background: rgba(67, 97, 238, 0.35);
+        border-color: rgba(67, 97, 238, 0.5);
+        color: #fff;
+      }
+
+      .image-index {
+        flex-shrink: 0;
+        width: 28px;
+        text-align: right;
+        color: #8c9ab0;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      &.active .image-index {
+        color: rgba(255, 255, 255, 0.85);
+      }
+
+      .image-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .image-status-badge {
+        flex-shrink: 0;
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 10px;
+
+        &.status-pending {
+          color: #9aa8bc;
+          background: rgba(255, 255, 255, 0.06);
+        }
+
+        &.status-annotated {
+          color: #4cc9f0;
+          background: rgba(76, 201, 240, 0.15);
+        }
+
+        &.status-completed {
+          color: #6bcb77;
+          background: rgba(107, 203, 119, 0.15);
+        }
+      }
+    }
+
+    .image-list-empty {
+      position: absolute;
+      inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.3s;
-
-      &:hover:not(:disabled) {
-        background: rgba(0, 0, 0, 0.6);
-      }
-
-      &:disabled {
-        opacity: 0.3;
-        cursor: not-allowed;
-      }
-
-      &.prev-btn {
-        left: 5px;
-      }
-
-      &.next-btn {
-        right: 5px;
-      }
+      color: #6b7a90;
+      font-size: 13px;
+      pointer-events: none;
     }
 
-    .preview-list {
+    .image-list-pagination {
       display: flex;
-      overflow-x: auto;
-      width: 100%;
-      padding: 0 10px;
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-
-      &::-webkit-scrollbar {
-        display: none;
-      }
-    }
-
-    .preview-item {
-      width: 80px;
-      height: 80px;
-      margin: 0 8px;
-      border: 2px solid transparent;
-      border-radius: 4px;
-      overflow: hidden;
-      cursor: pointer;
-      position: relative;
-      flex-shrink: 0;
-      transition: all 0.3s ease;
-
-      &.active {
-        border-color: @primary-color;
-        box-shadow: 0 0 8px fade(@primary-color, 50%);
-        transform: scale(1.1);
-      }
-
-      &.annotated {
-        position: relative;
-
-        &::after {
-          content: '';
-          position: absolute;
-          top: 5px;
-          right: 5px;
-          width: 10px;
-          height: 10px;
-          background-color: @success-color;
-          border-radius: 50%;
-        }
-      }
-
-      &.completed {
-        border: 2px solid @success-color;
-
-        .completed-badge {
-          position: absolute;
-          top: 5px;
-          left: 5px;
-          background: @success-color;
-          color: white;
-          font-size: 10px;
-          padding: 2px 5px;
-          border-radius: 3px;
-        }
-      }
-
-      .preview-image {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-
-      .preview-status {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        font-size: 12px;
-        text-align: center;
-        padding: 2px 0;
-      }
-    }
-  }
-
-  .toolbar {
-    width: 80px;
-    background: white;
-    padding: 20px 0;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 24px;
-    z-index: 5;
-
-    .tool-button {
-      display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 6px;
-      width: 60px;
-      padding: 10px 0;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      color: @gray-color;
+      justify-content: center;
+      padding: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      flex-shrink: 0;
 
-      &:hover {
-        background: #e9ecef;
+      :deep(.ant-pagination) {
+        color: #9aa8bc;
       }
 
-      &.active {
-        background: fade(@primary-color, 10%);
-        color: @primary-color;
+      :deep(.ant-pagination-simple-pager input) {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: #e8edf5;
       }
 
-      i {
-        font-size: 20px;
-      }
+      :deep(.ant-pagination-item-link) {
+        color: #c5d0e0;
 
-      span {
-        font-size: 12px;
-        font-weight: 500;
+        &:hover {
+          color: @primary-color;
+        }
       }
     }
   }
@@ -1658,25 +1989,46 @@ onUnmounted(() => {
       bottom: 90px;
       left: 50%;
       transform: translateX(-50%);
+      max-width: calc(100% - 40px);
       background: rgba(0, 0, 0, 0.7);
       color: white;
-      padding: 8px 16px;
+      padding: 10px 20px;
       border-radius: 30px;
       font-size: 14px;
       display: flex;
-      gap: 12px;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 14px;
       z-index: 10;
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      scrollbar-width: none;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
 
       .hint-item {
-        display: flex;
+        display: inline-flex;
+        flex-shrink: 0;
         align-items: center;
         gap: 6px;
+        white-space: nowrap;
 
         .key {
+          flex-shrink: 0;
           background: rgba(255, 255, 255, 0.2);
           padding: 2px 8px;
           border-radius: 4px;
           font-weight: 500;
+          line-height: 1.5;
+        }
+
+        .text {
+          flex-shrink: 0;
+          line-height: 1.5;
         }
       }
     }
@@ -1767,13 +2119,14 @@ onUnmounted(() => {
   }
 
   .label-panel {
-    width: 220px;
+    width: 240px;
     background: white;
-    padding: 20px 16px;
+    padding: 16px 14px;
     box-shadow: -2px 0 10px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
     z-index: 5;
+    overflow-y: auto;
 
     .panel-header {
       padding-left: 5px;
@@ -1923,21 +2276,6 @@ onUnmounted(() => {
 }
 
 // 全屏模式下的样式调整
-:fullscreen &,
-&:-webkit-full-screen,
-&:-moz-full-screen,
-&:-ms-fullscreen {
-  .image-position-indicator,
-  .status-indicator {
-    top: 54px; /* 为标题栏留出空间 */
-  }
-
-  .canvas-wrapper {
-    top: 44px; /* 确保画布区域下移 */
-  }
-}
-
-// 全屏模式下的样式调整
 :fullscreen .annotation-container,
 :-webkit-full-screen .annotation-container,
 :-moz-full-screen .annotation-container,
@@ -1946,16 +2284,15 @@ onUnmounted(() => {
   width: 100vw;
   background: @dark-color;
 
+  :deep(.ant-modal-wrap),
+  :deep(.ant-modal-mask) {
+    position: fixed;
+    z-index: 2000;
+  }
+
   .main-content {
-    height: calc(100% - 120px);
-  }
-
-  .image-preview-container {
-    height: 120px; /* 增加高度以适应分页控制器 */
-  }
-
-  .toolbar {
-    width: 80px;
+    flex: 1;
+    min-height: 0;
   }
 
   .canvas-area {
@@ -1973,6 +2310,23 @@ onUnmounted(() => {
 @media (min-width: 1920px) {
   :fullscreen .label-panel {
     width: 220px;
+  }
+}
+
+.image-panel-dropdown.ant-select-dropdown {
+  background: #2a3142;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 4px;
+
+  .ant-select-item {
+    color: #c5d0e0;
+    border-radius: 4px;
+  }
+
+  .ant-select-item-option-active,
+  .ant-select-item-option-selected {
+    background: rgba(67, 97, 238, 0.35);
+    color: #fff;
   }
 }
 </style>

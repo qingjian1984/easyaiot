@@ -1,7 +1,14 @@
 import { defHttp } from '@/utils/http/axios';
+import {
+  exportAnnotationDataset,
+  extractAnnotationFrames,
+  importAnnotationLabelme,
+  type DatasetAnnotationExportParams,
+} from '@/api/device/dataset';
 
 enum Api {
-  AutoLabel = '/model/dataset',  // Python后端路径（通过网关 /admin-api/model/** 转发到 model-server）
+  /** AI 推理与自动标注任务（model-server） */
+  AutoLabel = '/model/dataset',
   AIService = '/model/deploy_service',
 }
 
@@ -30,79 +37,45 @@ const commonApi = (
   );
 };
 
-// 启动自动化标注任务
-export const startAutoLabel = (datasetId: number, params: any) => {
-  return commonApi('post', `${Api.AutoLabel}/dataset/${datasetId}/auto-label/start`, { params });
+// —— AI 自动标注（仍走 model-server）——
+
+export const startAutoLabel = (datasetId: number, data: Record<string, unknown>) => {
+  return commonApi('post', `${Api.AutoLabel}/dataset/${datasetId}/auto-label/start`, { data });
 };
 
-// 获取自动化标注任务
 export const getAutoLabelTask = (datasetId: number, taskId: number) => {
   return commonApi('get', `${Api.AutoLabel}/dataset/${datasetId}/auto-label/task/${taskId}`);
 };
 
-// 获取自动化标注任务列表
 export const listAutoLabelTasks = (datasetId: number, params: any) => {
   return commonApi('get', `${Api.AutoLabel}/dataset/${datasetId}/auto-label/tasks`, { params });
 };
 
-// 导出标注数据集
-export const exportLabeledDataset = (datasetId: number, params: any) => {
-  defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
-
-  return defHttp.post(
-    {
-      url: `${Api.AutoLabel}/dataset/${datasetId}/auto-label/export`,
-      data: params,
-      responseType: 'blob', // 重要：设置为blob以接收文件
-    },
-    {
-      isTransformResponse: false,
-    },
-  );
-};
-
-// 获取AI服务列表
 export const getAIServiceList = (params = {}) => {
   return commonApi('get', `${Api.AIService}/list`, { params }, {}, false);
 };
 
-// 单张图片AI标注
-export const labelSingleImage = (datasetId: number, imageId: number, params: any) => {
-  return commonApi('post', `${Api.AutoLabel}/dataset/${datasetId}/auto-label/image/${imageId}`, { params });
+export const labelSingleImage = (datasetId: number, imageId: number, data: Record<string, unknown>) => {
+  return commonApi('post', `${Api.AutoLabel}/dataset/${datasetId}/auto-label/image/${imageId}`, { data });
 };
 
-// 视频抽帧
-export const extractFramesFromVideo = (datasetId: number, formData: FormData) => {
-  defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
+// —— 以下导入/导出已迁移至 iot-dataset（/dataset/{id}/annotation/*），保留别名兼容旧调用 ——
 
-  return defHttp.post(
-    {
-      url: `${Api.AutoLabel}/dataset/${datasetId}/extract-frames`,
-      data: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    },
-    {
-      isTransformResponse: true,
-    },
-  );
+/** @deprecated 请使用 `exportAnnotationDataset`（@/api/device/dataset） */
+export const exportLabeledDataset = (datasetId: number, params: Record<string, unknown>) => {
+  const body: DatasetAnnotationExportParams = {
+    trainRatio: Number(params.train_ratio ?? 0.7),
+    valRatio: Number(params.val_ratio ?? 0.2),
+    testRatio: Number(params.test_ratio ?? 0.1),
+    sampleSelection: (params.sample_selection ?? params.sample_type ?? 'all') as DatasetAnnotationExportParams['sampleSelection'],
+    selectedClasses: (params.selected_classes as string[]) ?? [],
+    exportPrefix: String(params.export_prefix ?? params.file_prefix ?? ''),
+  };
+  return exportAnnotationDataset(datasetId, body);
 };
 
-// 导入labelme数据集
-export const importLabelmeDataset = (datasetId: number, formData: FormData) => {
-  defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
+/** @deprecated 请使用 `extractAnnotationFrames`（@/api/device/dataset） */
+export const extractFramesFromVideo = extractAnnotationFrames;
 
-  return defHttp.post(
-    {
-      url: `${Api.AutoLabel}/dataset/${datasetId}/import-labelme`,
-      data: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    },
-    {
-      isTransformResponse: true,
-    },
-  );
-};
+/** @deprecated 请使用 `importAnnotationLabelme`（@/api/device/dataset） */
+export const importLabelmeDataset = importAnnotationLabelme;

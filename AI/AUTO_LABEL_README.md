@@ -70,18 +70,21 @@ POST /dataset/{dataset_id}/auto-label/export
 }
 ```
 
-## 前端组件
+## 前端组件（已合并至统一标注平台）
 
 ### 位置
-- 组件: `/WEB/src/views/dataset/components/AutoLabel/index.vue`
-- API: `/WEB/src/api/device/auto-label.ts`
-- 已添加到 DatasetDetail 的 tab 列表中
+- 主界面: `/WEB/src/views/dataset/components/AnnotationTool/index.vue`（数据集详情 → 图像数据集标注）
+- AI 弹窗: `/WEB/src/views/dataset/components/AutoLabel/AILabelModal/index.vue`
+- 导入/导出: `ImportDatasetModal`、`ExportDatasetModal`
+- API: `/WEB/src/api/device/auto-label.ts`（网关前缀 `/admin-api/model/dataset/...`）
 
 ### 功能
-1. 查看任务列表
-2. 创建新的标注任务
-3. 查看任务详情（实时刷新进度）
-4. 导出标注后的数据集为ZIP
+1. 左侧竖向图片列表 + 画布手工标注
+2. 单张 / 批量 AI 自动标注（集群推理）
+3. 导入图片、视频抽帧、LabelMe 数据集
+4. 导出 YOLO 等格式 ZIP
+
+> 独立服务 `AI/services/auto-labeling`（端口 8000）已弃用，请勿再部署。
 
 ## 配置说明
 

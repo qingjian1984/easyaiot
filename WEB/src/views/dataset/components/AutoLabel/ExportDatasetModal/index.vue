@@ -1,11 +1,13 @@
 <template>
   <BasicModal
     @register="register"
-    width="600px"
+    width="960px"
     @cancel="handleCancel"
     :canFullscreen="false"
     :showOkBtn="false"
     :showCancelBtn="false"
+    :get-container="getContainer"
+    wrap-class-name="dataset-export-modal-wrap"
   >
     <template #title>
       <span class="modal-title-with-icon">
@@ -13,187 +15,204 @@
         导出数据集
       </span>
     </template>
-    <div class="modal-content">
-      <Form
-        :model="form"
-        :label-col="{ span: 8 }"
-        :wrapper-col="{ span: 16 }"
-      >
-        <FormItem label="训练集比例: 验证集比例: 测试集比例:">
-          <Space>
-            <InputNumber
-              v-model:value="form.train_ratio"
-              :min="0"
-              :max="1"
-              :step="0.1"
-              :precision="2"
-              style="width: 100px"
-            />
-            <InputNumber
-              v-model:value="form.val_ratio"
-              :min="0"
-              :max="1"
-              :step="0.1"
-              :precision="2"
-              style="width: 100px"
-            />
-            <InputNumber
-              v-model:value="form.test_ratio"
-              :min="0"
-              :max="1"
-              :step="0.1"
-              :precision="2"
-              style="width: 100px"
-            />
-          </Space>
-        </FormItem>
-        
-        <FormItem label="样本选择:">
-          <RadioGroup v-model:value="form.sampleType">
-            <Radio value="all">所有图片</Radio>
-            <Radio value="annotated">仅已标注的图片</Radio>
-            <Radio value="unannotated">仅未标注的图片</Radio>
-          </RadioGroup>
-        </FormItem>
-        
-        <FormItem label="导出数据类型:">
-          <RadioGroup v-model:value="form.format">
-            <Radio value="yolo">YOLO格式</Radio>
-            <Radio value="resnet">ResNet格式</Radio>
-            <Radio value="videonet">VideoNet格式</Radio>
-            <Radio value="audionet">AudioNet格式</Radio>
-          </RadioGroup>
-        </FormItem>
-        
-        <FormItem label="类别选择:">
-          <CheckboxGroup v-model:value="form.selectedClasses" style="width: 100%">
-            <Row :gutter="[8, 8]">
-              <Col :span="8" v-for="label in labels" :key="label.id">
-                <Checkbox :value="label.name">{{ label.name }}</Checkbox>
-              </Col>
-            </Row>
-          </CheckboxGroup>
-        </FormItem>
-        
-        <FormItem label="导出文件前缀(可选):">
-          <Input
-            v-model:value="form.filePrefix"
-            placeholder="输入文件前缀"
-            allow-clear
-          />
-        </FormItem>
-      </Form>
+    <div class="modal-content export-modal-content">
+      <Tabs v-model:activeKey="tabActive" class="dataset-tabs">
+        <TabPane key="export-local" tab="导出到本地">
+          <form class="export-form" @submit.prevent="handleLocalExport">
+            <div class="form-row ratios-row">
+              <div class="form-group">
+                <label>训练集比例:</label>
+                <InputNumber v-model:value="form.train_ratio" :min="0" :max="1" :step="0.1" style="width: 100%" />
+              </div>
+              <div class="form-group">
+                <label>验证集比例:</label>
+                <InputNumber v-model:value="form.val_ratio" :min="0" :max="1" :step="0.1" style="width: 100%" />
+              </div>
+              <div class="form-group">
+                <label>测试集比例:</label>
+                <InputNumber v-model:value="form.test_ratio" :min="0" :max="1" :step="0.1" style="width: 100%" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>样本选择:</label>
+              <div class="sample-selection">
+                <label :class="{ active: form.sampleSelection === 'all' }">
+                  <input v-model="form.sampleSelection" type="radio" value="all" />
+                  所有图片
+                </label>
+                <label :class="{ active: form.sampleSelection === 'annotated' }">
+                  <input v-model="form.sampleSelection" type="radio" value="annotated" />
+                  仅已标注的图片
+                </label>
+                <label :class="{ active: form.sampleSelection === 'unannotated' }">
+                  <input v-model="form.sampleSelection" type="radio" value="unannotated" />
+                  仅未标注的图片
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>类别选择:</label>
+              <CheckboxGroup v-model:value="form.selectedClasses" class="class-checkbox-container">
+                <Row :gutter="[8, 8]">
+                  <Col :span="8" v-for="label in labels" :key="label.id">
+                    <Checkbox :value="label.name">{{ label.name }}</Checkbox>
+                  </Col>
+                </Row>
+              </CheckboxGroup>
+            </div>
+
+            <div class="form-row export-action-row">
+              <div class="form-group prefix-group">
+                <label>导出文件前缀 (可选):</label>
+                <Input v-model:value="form.filePrefix" placeholder="输入文件前缀" allow-clear />
+              </div>
+              <div class="form-group action-group">
+                <Button v-show="!loading" type="primary" html-type="submit" class="export-submit-btn">
+                  <Icon icon="ant-design:download-outlined" />
+                  导出
+                </Button>
+                <div v-show="loading" class="loading-indicator">
+                  <Icon icon="ant-design:loading-outlined" spin />
+                  正在处理...
+                </div>
+              </div>
+            </div>
+          </form>
+        </TabPane>
+
+        <TabPane key="export-cloud" tab="云平台">
+          <div class="upload-area cloud-export-area">
+            <p class="cloud-desc">
+              将当前标注结果同步为云平台上的<strong>新数据集</strong>（自动创建并上传图片与标注）。
+            </p>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>数据集名称</label>
+                <Input v-model:value="cloudForm.name" placeholder="例如：行人检测-2026" />
+              </div>
+              <div class="form-group flex-1">
+                <label>版本</label>
+                <Input v-model:value="cloudForm.version" placeholder="例如：v1.0.0" />
+              </div>
+            </div>
+            <div class="upload-actions">
+              <Button type="primary" :loading="cloudLoading" @click="handleCloudExport">
+                <Icon icon="ant-design:cloud-upload-outlined" />
+                导出到云平台
+              </Button>
+            </div>
+            <div v-if="cloudStatus" class="cloud-status">{{ cloudStatus }}</div>
+          </div>
+        </TabPane>
+      </Tabs>
     </div>
-    <template #footer>
-      <div class="modal-footer-custom">
-        <Button type="primary" @click="handleConfirm" :loading="loading">
-          <template #icon><Icon icon="ant-design:download-outlined" /></template>
-          导出
-        </Button>
-        <Button @click="handleCancel">取消</Button>
-      </div>
-    </template>
   </BasicModal>
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive, watch } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { BasicModal, useModal } from '@/components/Modal';
 import { Icon } from '@/components/Icon';
-import { Form, FormItem, InputNumber, RadioGroup, Radio, CheckboxGroup, Checkbox, Row, Col, Input, Button, Space } from 'ant-design-vue';
+import {
+  InputNumber,
+  CheckboxGroup,
+  Checkbox,
+  Row,
+  Col,
+  Input,
+  Button,
+  Tabs,
+  TabPane,
+} from 'ant-design-vue';
 import { useMessage } from '@/hooks/web/useMessage';
-import { exportLabeledDataset } from '@/api/device/auto-label';
+import { exportAnnotationDataset, exportAnnotationToCloud } from '@/api/device/dataset';
 
 defineOptions({ name: 'ExportDatasetModal' });
 
-const { createMessage } = useMessage();
+const props = defineProps<{
+  datasetId?: number;
+  datasetLabels?: { id: number; name: string; color?: string; shortcut?: string }[];
+  getContainer?: () => HTMLElement;
+}>();
 
+const { createMessage } = useMessage();
 const emits = defineEmits(['success']);
 
 const loading = ref(false);
-const labels = ref<any[]>([]);
+const cloudLoading = ref(false);
+const cloudStatus = ref('');
+const tabActive = ref('export-local');
+const labels = ref<{ id: number; name: string }[]>([]);
 
 const form = reactive({
-  format: 'yolo',
   train_ratio: 0.7,
   val_ratio: 0.2,
   test_ratio: 0.1,
-  sampleType: 'all',
+  sampleSelection: 'all' as 'all' | 'annotated' | 'unannotated',
   selectedClasses: [] as string[],
   filePrefix: '',
 });
 
+const cloudForm = reactive({
+  name: '',
+  version: '',
+});
+
 const [register, { openModal, closeModal }] = useModal();
 
-// 监听标签变化
-watch(() => (window as any).__currentLabels__, (newLabels: any[]) => {
-  if (newLabels && Array.isArray(newLabels)) {
-    labels.value = newLabels;
-    // 默认选择所有类别
-    if (form.selectedClasses.length === 0 && newLabels.length > 0) {
-      form.selectedClasses = newLabels.map(l => l.name);
-    }
-  }
-}, { immediate: true, deep: true });
-
-// 打开模态框时更新标签
-const openModalWithLabels = () => {
-  const currentLabels = (window as any).__currentLabels__;
-  if (currentLabels && Array.isArray(currentLabels)) {
-    labels.value = currentLabels;
+const syncLabelsFromProps = () => {
+  const source = props.datasetLabels;
+  if (source?.length) {
+    labels.value = source;
     if (form.selectedClasses.length === 0) {
-      form.selectedClasses = currentLabels.map(l => l.name);
+      form.selectedClasses = source.map((l) => l.name);
     }
   }
+};
+
+watch(() => props.datasetLabels, syncLabelsFromProps, { immediate: true, deep: true });
+
+const openModalWithLabels = () => {
+  syncLabelsFromProps();
+  tabActive.value = 'export-local';
+  cloudStatus.value = '';
   openModal();
 };
 
-// 更新暴露的方法
-defineExpose({
-  openModal: openModalWithLabels,
-  closeModal,
-  form,
-});
+defineExpose({ openModal: openModalWithLabels, closeModal, form });
 
-// 确认导出
-const handleConfirm = async () => {
-  const datasetId = (window as any).__currentDatasetId__;
-  if (!datasetId) {
+async function handleLocalExport() {
+  const dsId = props.datasetId;
+  if (!dsId) {
     createMessage.warning('请先选择数据集');
     return;
   }
-
-  // 验证比例
-  const total = form.train_ratio + form.val_ratio + form.test_ratio;
-  if (Math.abs(total - 1.0) > 0.01) {
-    createMessage.warning('训练集、验证集、测试集比例之和必须为1');
+  if (form.selectedClasses.length === 0) {
+    createMessage.warning('请至少选择一个类别');
     return;
   }
 
-  // 如果没有选择类别，默认选择所有类别
-  if (form.selectedClasses.length === 0) {
-    form.selectedClasses = labels.value.map(l => l.name);
-  }
-
+  loading.value = true;
   try {
-    loading.value = true;
-    const res = await exportLabeledDataset(datasetId, {
-      format: form.format,
-      train_ratio: form.train_ratio,
-      val_ratio: form.val_ratio,
-      test_ratio: form.test_ratio,
-      sample_type: form.sampleType,
-      selected_classes: form.selectedClasses,
-      file_prefix: form.filePrefix,
+    const blob = await exportAnnotationDataset(dsId, {
+      trainRatio: form.train_ratio,
+      valRatio: form.val_ratio,
+      testRatio: form.test_ratio,
+      sampleSelection: form.sampleSelection,
+      selectedClasses: form.selectedClasses,
+      exportPrefix: form.filePrefix,
     });
 
-    // 处理文件下载
-    if (res instanceof Blob) {
-      const url = window.URL.createObjectURL(res);
+    if (blob instanceof Blob) {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const filename = `datasets_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.zip`;
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const prefix = form.filePrefix || `dataset_${datasetId}`;
       link.href = url;
-      link.download = `${prefix}_${Date.now()}.zip`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -204,51 +223,192 @@ const handleConfirm = async () => {
     } else {
       createMessage.error('导出失败');
     }
-  } catch (error) {
-    console.error('导出失败:', error);
-    createMessage.error('导出失败');
+  } catch (e: any) {
+    console.error('导出失败:', e);
+    createMessage.error(e?.message || '导出失败');
   } finally {
     loading.value = false;
   }
-};
+}
 
-// 取消
-const handleCancel = () => {
-  closeModal();
-};
-</script>
+async function handleCloudExport() {
+  const dsId = props.datasetId;
+  if (!dsId) {
+    createMessage.warning('请先选择数据集');
+    return;
+  }
+  const name = cloudForm.name.trim();
+  const version = cloudForm.version.trim();
+  if (!name) {
+    createMessage.warning('请填写数据集名称');
+    return;
+  }
+  if (!version) {
+    createMessage.warning('请填写版本');
+    return;
+  }
 
-<style lang="less" scoped>
-.modal-content {
-  padding: 24px;
-  
-  :deep(.ant-form-item-label) {
-    & > label::after {
-      content: '';
-    }
-    
-    & > label {
-      font-weight: 500;
-      color: #333;
-    }
+  cloudLoading.value = true;
+  cloudStatus.value = '正在创建云平台数据集并同步标注…';
+  try {
+    const res = await exportAnnotationToCloud(dsId, { name, version });
+    const data = res?.data ?? res;
+    createMessage.success('导出完成');
+    cloudStatus.value = `新数据集 ID: ${data?.cloudDatasetId}；新建 ${data?.createdImages ?? 0} 张图片`;
+    emits('success');
+  } catch (e: any) {
+    createMessage.error(e?.message || '导出失败');
+    cloudStatus.value = '';
+  } finally {
+    cloudLoading.value = false;
   }
 }
 
+function handleCancel() {
+  closeModal();
+}
+</script>
+
+<style lang="less" scoped>
 .modal-title-with-icon {
   display: flex;
   align-items: center;
   gap: 8px;
-  
-  .title-icon {
-    font-size: 18px;
+  .title-icon { font-size: 18px; }
+}
+
+.export-modal-content {
+  padding: 8px 4px 16px;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+
+  &.ratios-row .form-group {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  &.export-action-row {
+    align-items: flex-end;
   }
 }
 
-.modal-footer-custom {
+.form-group {
+  margin-bottom: 16px;
+
+  label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #333;
+  }
+
+  &.prefix-group {
+    flex: 0 0 200px;
+    min-width: 200px;
+  }
+
+  &.action-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0;
+  }
+
+  &.flex-1 {
+    flex: 1;
+    min-width: 160px;
+  }
+}
+
+.sample-selection {
   display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid #e8e8e8;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  background: #fafafa;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    cursor: pointer;
+    font-weight: normal;
+    font-size: 14px;
+    transition: all 0.2s;
+
+    &:hover {
+      border-color: #1890ff;
+      color: #1890ff;
+    }
+
+    &.active {
+      background: #e6f4ff;
+      border-color: #1890ff;
+      color: #1890ff;
+    }
+
+    input { margin: 0; }
+  }
+}
+
+.class-checkbox-container {
+  padding: 10px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  background: #fafafa;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.export-submit-btn {
+  min-width: 100px;
+  height: 36px;
+}
+
+.loading-indicator {
+  height: 36px;
+  line-height: 36px;
+  padding: 0 10px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cloud-export-area {
+  text-align: left;
+  padding: 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  background: #fafafa;
+
+  .cloud-desc {
+    color: #555;
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+}
+
+.cloud-status {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #444;
+}
+
+.upload-actions {
+  text-align: center;
+  margin-top: 16px;
 }
 </style>
