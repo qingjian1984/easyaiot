@@ -9,8 +9,10 @@ import com.basiclab.iot.dataset.dal.dataobject.DatasetImageDO;
 import com.basiclab.iot.dataset.dal.dataobject.DatasetTagDO;
 import com.basiclab.iot.dataset.dal.pgsql.DatasetImageMapper;
 import com.basiclab.iot.dataset.dal.pgsql.DatasetMapper;
+import com.basiclab.iot.common.enums.CommonStatusEnum;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetImagePageReqVO;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetImageSaveReqVO;
+import com.basiclab.iot.dataset.domain.dataset.vo.DatasetSyncCheckRespVO;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetTagPageReqVO;
 import com.basiclab.iot.dataset.service.DatasetImageService;
 import com.basiclab.iot.dataset.service.DatasetTagService;
@@ -192,30 +194,47 @@ public class DatasetImageServiceImpl implements DatasetImageService {
         datasetImageMapper.resetUsageByDatasetId(datasetId);
     }
 
-    // DatasetImageServiceImpl.java
     @Override
-    public boolean checkSyncCondition(Long datasetId) {
-        // 1. 检查数据集是否已划分用途
-        long count = datasetImageMapper.selectCount(new LambdaQueryWrapper<DatasetImageDO>()
+    public DatasetSyncCheckRespVO checkSyncCondition(Long datasetId) {
+        long totalImages = datasetImageMapper.selectCount(new LambdaQueryWrapper<DatasetImageDO>()
+                .eq(DatasetImageDO::getDatasetId, datasetId));
+
+        long unallocatedCount = datasetImageMapper.selectCount(new LambdaQueryWrapper<DatasetImageDO>()
                 .eq(DatasetImageDO::getDatasetId, datasetId)
                 .eq(DatasetImageDO::getIsTrain, 0)
                 .eq(DatasetImageDO::getIsValidation, 0)
                 .eq(DatasetImageDO::getIsTest, 0));
 
-        if (count > 0) {
-            return false; // 存在未划分用途的图片
-        }
-
-        // 2. 检查所有图片是否已完成标注
-        count = datasetImageMapper.selectCount(new LambdaQueryWrapper<DatasetImageDO>()
+        long unannotatedCount = datasetImageMapper.selectCount(new LambdaQueryWrapper<DatasetImageDO>()
                 .eq(DatasetImageDO::getDatasetId, datasetId)
                 .eq(DatasetImageDO::getCompleted, 0));
 
-        return count == 0; // 所有图片都已标注
+        boolean usageAllocated = totalImages > 0 && unallocatedCount == 0;
+        boolean annotationCompleted = totalImages > 0 && unannotatedCount == 0;
+        boolean syncReady = usageAllocated && annotationCompleted;
+
+        return DatasetSyncCheckRespVO.builder()
+                .usageAllocated(usageAllocated)
+                .annotationCompleted(annotationCompleted)
+                .syncReady(syncReady)
+                .totalImages((int) totalImages)
+                .unallocatedCount((int) unallocatedCount)
+                .unannotatedCount((int) unannotatedCount)
+                .build();
     }
 
     @Override
     public String syncToMinio(Long datasetId) {
+        DatasetSyncCheckRespVO check = checkSyncCondition(datasetId);
+        if (check.getTotalImages() == null || check.getTotalImages() == 0) {
+            throw exception(DATASET_NO_IMAGES);
+        }
+        if (!Boolean.TRUE.equals(check.getUsageAllocated())) {
+            throw exception(DATASET_USAGE_NOT_ALLOCATED);
+        }
+        if (!Boolean.TRUE.equals(check.getAnnotationCompleted())) {
+            throw exception(DATASET_ANNOTATION_INCOMPLETE);
+        }
         List<DatasetImageDO> images = datasetImageMapper.selectList(
                 new LambdaQueryWrapper<DatasetImageDO>()
                         .eq(DatasetImageDO::getDatasetId, datasetId));
@@ -246,6 +265,7 @@ public class DatasetImageServiceImpl implements DatasetImageService {
         DatasetDO updateDO = new DatasetDO();
         updateDO.setId(datasetId);
         updateDO.setZipUrl(zipUrl);
+        updateDO.setIsSyncMinio(CommonStatusEnum.YES.getStatus());
         datasetMapper.updateById(updateDO);
         return zipUrl;
     }
@@ -629,6 +649,7 @@ public class DatasetImageServiceImpl implements DatasetImageService {
             image.setIsValidation(0);
             image.setIsTest(0);
             datasetImageMapper.insert(image);
+            invalidateDatasetAllocationIfNeeded(datasetId);
         } catch (ErrorResponseException e) {
             String errorCode = e.errorResponse() != null ? e.errorResponse().code() : "Unknown";
             String errorMessage = e.errorResponse() != null ? e.errorResponse().message() : e.getMessage();
@@ -662,6 +683,27 @@ public class DatasetImageServiceImpl implements DatasetImageService {
                             .contentType(contentType)
                             .build());
         }
+    }
+
+    /**
+     * 新增图片后，若此前已划分用途或已同步训练包，则作废并需重新划分、同步
+     */
+    private void invalidateDatasetAllocationIfNeeded(Long datasetId) {
+        DatasetDO dataset = datasetMapper.selectById(datasetId);
+        if (dataset == null) {
+            return;
+        }
+        boolean wasAllocated = Objects.equals(dataset.getIsAllocated(), CommonStatusEnum.YES.getStatus());
+        boolean wasSynced = Objects.equals(dataset.getIsSyncMinio(), CommonStatusEnum.YES.getStatus())
+                || dataset.getZipUrl() != null;
+        if (!wasAllocated && !wasSynced) {
+            return;
+        }
+        resetUsageByDatasetId(datasetId);
+        datasetMapper.updateById(new DatasetDO().setId(datasetId)
+                .setIsAllocated(CommonStatusEnum.NO.getStatus())
+                .setIsSyncMinio(CommonStatusEnum.NO.getStatus())
+                .setZipUrl(null));
     }
 
     // 辅助方法

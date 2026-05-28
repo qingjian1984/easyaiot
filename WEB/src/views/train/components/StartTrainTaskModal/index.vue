@@ -127,18 +127,21 @@
                 show-icon
                 banner
                 class="dataset-alert"
-                message="从平台已创建的数据集中选择，将使用数据集对应版本的标注数据"
+                message="请先在数据集管理中完成：标注 → 划分用途 → 同步到 Minio，方可用于训练"
               />
               <Select
                 v-model:value="selectedDatasetId"
                 class="dataset-select"
-                placeholder="请选择云端数据集"
+                placeholder="请选择已同步到 Minio 的云端数据集"
                 :loading="cloudDatasetLoading"
                 :options="cloudDatasetOptions"
                 allow-clear
                 show-search
                 :filter-option="filterCloudDataset"
               />
+              <p v-if="selectedCloudDataset && !selectedCloudDataset.zipUrl" class="dataset-hint-warn">
+                该数据集尚未同步到 Minio：请进入数据集详情，先「划分用途」再「一键同步到 Minio」。
+              </p>
               <Empty
                 v-if="!cloudDatasetLoading && !cloudDatasetOptions.length"
                 class="dataset-empty"
@@ -184,7 +187,11 @@ interface DatasetItem {
   id: string | number;
   name: string;
   version: string;
-  zipUrl: string;
+  zipUrl?: string;
+  isAllocated?: number;
+  isSyncMinio?: number;
+  totalImages?: number;
+  annotatedImages?: number;
 }
 
 type DatasetSourceTab = 'local' | 'cloud';
@@ -292,11 +299,26 @@ const selectedModel = ref(presetModels[0]);
 const selectedDatasetId = ref<string | number | undefined>(undefined);
 const maxBatchSize = ref(64);
 
+const selectedCloudDataset = computed(() =>
+  datasetList.value.find((item) => item.id === selectedDatasetId.value),
+);
+
 const cloudDatasetOptions = computed(() =>
-  datasetList.value.map((item) => ({
-    label: `${item.name}（${item.version || '—'}）`,
-    value: item.id,
-  })),
+  datasetList.value.map((item) => {
+    const trainable = !!item.zipUrl;
+    const statusHint = trainable
+      ? '可用于训练'
+      : item.isAllocated === 1
+        ? '待同步 Minio'
+        : (item.annotatedImages ?? 0) >= (item.totalImages ?? 0) && (item.totalImages ?? 0) > 0
+          ? '待划分用途'
+          : '未完成标注/同步';
+    return {
+      label: `${item.name}（${item.version || '—'}）— ${statusHint}`,
+      value: item.id,
+      disabled: !trainable,
+    };
+  }),
 );
 
 const filterCloudDataset = (input: string, option?: { label?: string }) =>
@@ -398,9 +420,23 @@ const startTrain = async () => {
       uploading.value = false;
     }
   } else {
-    const dataset = datasetList.value.find((item) => item.id === selectedDatasetId.value);
-    if (!dataset?.zipUrl) {
+    if (!selectedDatasetId.value) {
       createMessage.warn('请选择云端数据集');
+      return;
+    }
+    const dataset = datasetList.value.find((item) => item.id === selectedDatasetId.value);
+    if (!dataset) {
+      createMessage.warn('请选择云端数据集');
+      return;
+    }
+    if (!dataset.zipUrl) {
+      if (dataset.isAllocated !== 1) {
+        createMessage.warn('该数据集尚未划分用途，请先在数据集管理中点击「按比例划分数据集用途」');
+      } else if (dataset.isSyncMinio !== 1) {
+        createMessage.warn('该数据集尚未同步到 Minio，请先在数据集管理中点击「一键同步到 Minio」');
+      } else {
+        createMessage.warn('该数据集训练包尚未就绪，请完成划分用途并同步到 Minio 后再训练');
+      }
       return;
     }
     datasetPath = dataset.zipUrl;
@@ -530,6 +566,13 @@ const handleCancel = () => closeModal();
 
 .dataset-empty {
   margin-top: 24px;
+}
+
+.dataset-hint-warn {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #e67e22;
+  line-height: 1.5;
 }
 
 .param-input,

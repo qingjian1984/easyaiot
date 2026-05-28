@@ -154,7 +154,7 @@ public class DatasetImageController {
 
     @GetMapping("/{datasetId}/check-sync-condition")
     @Operation(summary = "检查数据集同步条件")
-    public CommonResult<Boolean> checkSyncCondition(
+    public CommonResult<com.basiclab.iot.dataset.domain.dataset.vo.DatasetSyncCheckRespVO> checkSyncCondition(
             @PathVariable("datasetId") Long datasetId) {
         return success(datasetImageService.checkSyncCondition(datasetId));
     }

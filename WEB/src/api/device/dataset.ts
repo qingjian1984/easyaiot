@@ -43,6 +43,15 @@ interface DatasetSplitReqVO {
   testRatio: number;
 }
 
+export interface DatasetSyncCheckResult {
+  usageAllocated: boolean;
+  annotationCompleted: boolean;
+  syncReady: boolean;
+  totalImages: number;
+  unallocatedCount: number;
+  unannotatedCount: number;
+}
+
 // 数据集
 export const createDataset = (params) => {
   return commonApi('post', Api.Dataset + '/create', {params});

@@ -1,5 +1,32 @@
 <template>
   <div class="subDevice-wrapper">
+    <Alert
+      v-if="syncCheck.totalImages > 0 && !syncCheck.usageAllocated"
+      type="warning"
+      show-icon
+      banner
+      class="dataset-workflow-alert"
+      message="请先划分数据集用途"
+      description="标注完成后，需先点击「按比例划分数据集用途」，将图片划分为训练集/验证集/测试集，再执行「一键同步到 Minio」用于模型训练。"
+    />
+    <Alert
+      v-else-if="syncCheck.totalImages > 0 && syncCheck.usageAllocated && !syncCheck.annotationCompleted"
+      type="warning"
+      show-icon
+      banner
+      class="dataset-workflow-alert"
+      message="尚有图片未完成标注"
+      :description="`还有 ${syncCheck.unannotatedCount} 张图片待标注，完成标注并划分用途后方可同步到 Minio。`"
+    />
+    <Alert
+      v-else-if="syncCheck.syncReady && !syncCheck.syncedToMinio"
+      type="info"
+      show-icon
+      banner
+      class="dataset-workflow-alert"
+      message="可以同步到 Minio"
+      description="用途已划分且标注已完成，请点击「一键同步到 Minio」生成训练用数据集包。"
+    />
     <BasicTable @register="registerTable" v-if="state.isTableMode">
       <template #toolbar>
         <a-button type="primary"
@@ -36,7 +63,7 @@
           type="default"
           :title="`是否确认同步数据集到Minio？`"
           preIcon="ant-design:cloud-upload-outlined"
-          :disabled="!state.isSyncReady"
+          :disabled="!syncCheck.syncReady"
         >
           一键同步到Minio
         </PopConfirmButton>
@@ -143,7 +170,7 @@
             type="default"
             :title="`是否确认同步数据集到Minio？`"
             preIcon="ant-design:cloud-upload-outlined"
-            :disabled="!state.isSyncReady"
+            :disabled="!syncCheck.syncReady"
           >
             一键同步到Minio
           </PopConfirmButton>
@@ -161,13 +188,15 @@
 import {getBasicColumns, getFormConfig} from './data';
 import {useMessage} from '@/hooks/web/useMessage';
 import {BasicTable, TableAction, useTable} from '@/components/Table';
-import {Tag} from "ant-design-vue";
+import {Alert, Tag} from "ant-design-vue";
 import {useRoute} from "vue-router";
 import {useModal} from "@/components/Modal";
 import {
   checkSyncCondition,
+  type DatasetSyncCheckResult,
   deleteDatasetImage,
   deleteDatasetImages,
+  getDataset,
   getDatasetImagePage,
   resetDataset,
   splitDataset,
@@ -188,14 +217,44 @@ defineOptions({name: 'DatasetImage'})
 const route = useRoute()
 const checkedKeys = ref<Array<string | number>>([]);
 
-onMounted(async () => {
+const defaultSyncCheck = (): DatasetSyncCheckResult & { syncedToMinio: boolean } => ({
+  usageAllocated: false,
+  annotationCompleted: false,
+  syncReady: false,
+  totalImages: 0,
+  unallocatedCount: 0,
+  unannotatedCount: 0,
+  syncedToMinio: false,
+});
+
+const syncCheck = reactive(defaultSyncCheck());
+
+function parseSyncCheckPayload(raw: unknown): DatasetSyncCheckResult {
+  const data = (raw as { data?: DatasetSyncCheckResult })?.data ?? (raw as DatasetSyncCheckResult);
+  return {
+    usageAllocated: !!data?.usageAllocated,
+    annotationCompleted: !!data?.annotationCompleted,
+    syncReady: !!data?.syncReady,
+    totalImages: data?.totalImages ?? 0,
+    unallocatedCount: data?.unallocatedCount ?? 0,
+    unannotatedCount: data?.unannotatedCount ?? 0,
+  };
+}
+
+async function refreshSyncCheck() {
   try {
     const ret = await checkSyncCondition(route.params.id);
-    state.isSyncReady = ret['data'];
+    Object.assign(syncCheck, parseSyncCheckPayload(ret));
+    const datasetInfo = await getDataset({id: route.params.id});
+    syncCheck.syncedToMinio = datasetInfo?.isSyncMinio === 1 || !!datasetInfo?.zipUrl;
   } catch (error) {
     console.error('检查同步条件失败:', error);
-    state.isSyncReady = false;
+    Object.assign(syncCheck, defaultSyncCheck());
   }
+}
+
+onMounted(() => {
+  refreshSyncCheck();
 });
 
 const state = reactive({
@@ -205,7 +264,6 @@ const state = reactive({
   historyActiveKey: '1',
   loadVideoUrl: '',
   frameVideoUrl: '',
-  isSyncReady: false,
 });
 
 const [registerTable, {reload}] = useTable({
@@ -289,20 +347,19 @@ function handleEdit(record) {
 
 async function handleSyncToMinio() {
   try {
-    // 1. 检查同步条件
-    const ret = await checkSyncCondition(route.params.id);
-    const checkResult = ret['data'];
-    if (!checkResult) {
-      createMessage.error('数据集未完成标注或未划分用途，无法同步');
+    await refreshSyncCheck();
+    if (!syncCheck.usageAllocated) {
+      createMessage.error('请先点击「按比例划分数据集用途」，将图片划分为训练集/验证集/测试集后再同步');
+      return;
+    }
+    if (!syncCheck.annotationCompleted) {
+      createMessage.error(`尚有 ${syncCheck.unannotatedCount} 张图片未完成标注，无法同步到 Minio`);
       return;
     }
 
-    // 2. 执行同步
     await syncToMinio(route.params.id);
-    createMessage.success('数据集同步任务已启动');
-
-    // 3. 刷新界面
-    handleSuccess(); // 刷新列表
+    createMessage.success('数据集已同步到 Minio，可用于模型训练');
+    handleSuccess();
   } catch (error) {
     console.error('同步数据集失败:', error);
     createMessage.error('同步数据集失败');
@@ -365,10 +422,7 @@ function handleSuccess() {
   });
   cardListReload();
 
-  // 刷新同步状态
-  checkSyncCondition(route.params.id).then(ret => {
-    state.isSyncReady = ret['data'];
-  });
+  refreshSyncCheck();
 }
 
 const handleDelete = async (record) => {
@@ -404,6 +458,10 @@ async function handleDeleteAll() {
 </script>
 
 <style lang="less" scoped>
+.dataset-workflow-alert {
+  margin-bottom: 12px;
+}
+
 .device-wrapper {
   :deep(.ant-tabs-nav) {
     padding: 5px 0 0 25px;

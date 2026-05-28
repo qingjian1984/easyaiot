@@ -53,9 +53,15 @@ public class DatasetRespVO extends BaseEntity {
     @ExcelProperty("审核驳回理由")
     private String reason;
 
+    @Schema(description = "是否已划分数据集用途，0-否；1-是", example = "0")
+    private Integer isAllocated;
+
     @Schema(description = "是否已生成数据集到Minio，0-否；1-是", example = "0")
     @ExcelProperty("是否已生成数据集到Minio，0-否；1-是")
     private Integer isSyncMinio;
+
+    @Schema(description = "数据集压缩包下载地址（同步 Minio 后生成，用于训练）")
+    private String zipUrl;
 
     @Schema(description = "图片总数")
     private Integer totalImages;

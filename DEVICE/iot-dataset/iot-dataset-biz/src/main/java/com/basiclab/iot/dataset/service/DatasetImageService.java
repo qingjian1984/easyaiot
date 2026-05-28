@@ -4,6 +4,7 @@ import com.basiclab.iot.common.domain.PageResult;
 import com.basiclab.iot.dataset.dal.dataobject.DatasetImageDO;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetImagePageReqVO;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetImageSaveReqVO;
+import com.basiclab.iot.dataset.domain.dataset.vo.DatasetSyncCheckRespVO;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.validation.Valid;
@@ -102,12 +103,12 @@ public interface DatasetImageService {
 
 
     /**
-     * 检查数据集同步条件
+     * 检查数据集同步条件（用途划分、标注完成等）
      *
      * @param datasetId 数据集ID
-     * @return 是否满足同步条件
+     * @return 同步前置条件详情
      */
-    boolean checkSyncCondition(Long datasetId);
+    DatasetSyncCheckRespVO checkSyncCondition(Long datasetId);
 
     /**
      * 同步数据集到Minio

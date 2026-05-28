@@ -137,6 +137,12 @@ public class DatasetServiceImpl implements DatasetService {
 
         // 划分图像数据集比例
         datasetImageService.splitDataset(datasetId, splitReqVO.getTrainRatio(), splitReqVO.getValRatio(), splitReqVO.getTestRatio());
+
+        // 更新数据集划分状态
+        datasetMapper.updateById(new DatasetDO().setId(datasetId)
+                .setIsAllocated(CommonStatusEnum.YES.getStatus())
+                .setIsSyncMinio(CommonStatusEnum.NO.getStatus())
+                .setZipUrl(null));
     }
 
     @Override
@@ -147,8 +153,10 @@ public class DatasetServiceImpl implements DatasetService {
         // 划分图像数据集比例
         datasetImageService.resetUsageByDatasetId(datasetId);
 
-        // 3. 更新数据集状态
+        // 3. 更新数据集状态（重置后需重新划分用途并同步 Minio）
         datasetMapper.updateById(new DatasetDO().setId(datasetId)
-                .setIsAllocated(CommonStatusEnum.NO.getStatus()));
+                .setIsAllocated(CommonStatusEnum.NO.getStatus())
+                .setIsSyncMinio(CommonStatusEnum.NO.getStatus())
+                .setZipUrl(null));
     }
 }
