@@ -1313,53 +1313,12 @@ def cleanup_alert_images(alert_image_dir: str, max_images: int = 300, keep_ratio
 
 
 def cleanup_srs_recordings(srs_record_dir: str = '/data/playbacks', max_recordings: int = 500, keep_ratio: float = 0.1):
-    """清理SRS录像目录，当录像数量超过限制时，删除最旧的录像
-
-    Args:
-        srs_record_dir: SRS录像目录路径，默认为 /data/playbacks
-        max_recordings: 最大录像数量，超过此数量时触发清理
-        keep_ratio: 保留比例（0.0-1.0），例如0.1表示保留最新的10%
-    """
+    """清理 SRS 录像目录（委托 VIDEO 回放磁盘守护服务）。"""
     try:
-        if not os.path.exists(srs_record_dir):
-            logger.debug(f"SRS录像目录不存在: {srs_record_dir}")
-            return
-
-        # 递归获取所有.flv录像文件
-        recording_files = []
-        for root, dirs, files in os.walk(srs_record_dir):
-            for filename in files:
-                if filename.lower().endswith('.flv'):
-                    file_path = os.path.join(root, filename)
-                    if os.path.isfile(file_path):
-                        # 获取文件修改时间
-                        try:
-                            mtime = os.path.getmtime(file_path)
-                            recording_files.append((file_path, mtime))
-                        except Exception as e:
-                            logger.warning(f"获取文件修改时间失败: {file_path}, 错误: {str(e)}")
-                            continue
-
-        total_recordings = len(recording_files)
-
-        # 如果录像数量未超过限制，不需要清理
-        if total_recordings <= max_recordings:
-            logger.debug(f"SRS录像目录检查: 总数={total_recordings}, 未超过限制={max_recordings}")
-            return
-
-        # 按修改时间排序（最旧的在前）
-        recording_files.sort(key=lambda x: x[1])
-
-        # 计算需要保留的录像数量（最新的10%）
-        keep_count = max(1, int(total_recordings * keep_ratio))
-
-        # 计算需要删除的录像数量（最旧的90%）
-        delete_count = total_recordings - keep_count
-
-        # 不再删除 /data/playbacks 目录下的录像文件，只记录统计信息
-        if delete_count > 0:
-            logger.debug(
-                f"SRS录像统计: 目录={srs_record_dir}, 总数={total_recordings}, 应删除={delete_count}, 保留={keep_count}（已禁用删除 /data/playbacks 逻辑）")
+        if srs_record_dir:
+            os.environ.setdefault('SRS_RECORD_DIR', srs_record_dir)
+        from app.services.playback_disk_guard_service import run_playback_disk_guard
+        run_playback_disk_guard()
     except Exception as e:
         logger.error(f"清理SRS录像失败: {str(e)}", exc_info=True)
 

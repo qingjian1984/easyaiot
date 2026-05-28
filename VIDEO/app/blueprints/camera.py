@@ -1747,62 +1747,6 @@ def extract_thumbnail_from_video(video_path, output_path=None, frame_position=0.
         return None if output_path is None else False
 
 
-def cleanup_device_recordings(device_id: str, max_recordings: int = 50, keep_ratio: float = 0.1):
-    """清理指定设备目录下的SRS录像文件，当录像数量超过限制时，删除最旧的录像
-    
-    Args:
-        device_id: 设备ID
-        max_recordings: 最大录像数量，超过此数量时触发清理（默认50个）
-        keep_ratio: 保留比例（0.0-1.0），例如0.1表示保留最新的10%（删除90%）
-    """
-    import os
-    try:
-        # SRS录像目录路径：/data/playbacks/live/{device_id}/
-        srs_record_dir = os.getenv('SRS_RECORD_DIR', '/data/playbacks')
-        device_record_dir = os.path.join(srs_record_dir, 'live', str(device_id))
-        
-        if not os.path.exists(device_record_dir):
-            logger.debug(f"设备录像目录不存在: {device_record_dir}")
-            return
-        
-        # 递归获取该设备目录下的所有.flv录像文件
-        recording_files = []
-        for root, dirs, files in os.walk(device_record_dir):
-            for filename in files:
-                if filename.lower().endswith('.flv'):
-                    file_path = os.path.join(root, filename)
-                    if os.path.isfile(file_path):
-                        # 获取文件修改时间
-                        try:
-                            mtime = os.path.getmtime(file_path)
-                            recording_files.append((file_path, mtime))
-                        except Exception as e:
-                            logger.warning(f"获取文件修改时间失败: {file_path}, 错误: {str(e)}")
-                            continue
-        
-        total_recordings = len(recording_files)
-        
-        # 如果录像数量未超过限制，不需要清理
-        if total_recordings <= max_recordings:
-            logger.debug(f"设备 {device_id} 录像目录检查: 总数={total_recordings}, 未超过限制={max_recordings}")
-            return
-        
-        # 按修改时间排序（最旧的在前）
-        recording_files.sort(key=lambda x: x[1])
-        
-        # 计算需要保留的录像数量（最新的10%）
-        keep_count = max(1, int(total_recordings * keep_ratio))
-        
-        # 计算需要删除的录像数量（最旧的90%）
-        delete_count = total_recordings - keep_count
-        
-        # 不再删除 /data/playbacks 目录下的录像文件，只记录统计信息
-        if delete_count > 0:
-            logger.debug(f"设备 {device_id} 录像统计: 总数={total_recordings}, 应删除={delete_count}, 保留={keep_count}（已禁用删除 /data/playbacks 逻辑）")
-    except Exception as e:
-        logger.error(f"清理设备 {device_id} 录像失败: {str(e)}", exc_info=True)
-
-
 def _resolve_srs_container_path_to_host(local_path: str) -> str:
     """将 SRS 回调中的容器内路径解析为当前进程可访问的宿主机路径。
 
@@ -2178,15 +2122,16 @@ def on_dvr_callback():
                 db.session.rollback()
                 # 记录创建失败不影响主流程，继续执行
             
-            # 清理设备目录下的旧录像（超过50个时，删除最旧的90%）
+            # MinIO 上传成功后删除本地 SRS 片段，并做设备级数量兜底清理
             try:
-                cleanup_device_recordings(device_id, max_recordings=50, keep_ratio=0.1)
+                from app.services.playback_disk_guard_service import (
+                    cleanup_device_recordings,
+                    remove_local_after_minio_upload,
+                )
+                remove_local_after_minio_upload(absolute_file_path)
+                cleanup_device_recordings(device_id)
             except Exception as e:
-                logger.error(f"on_dvr回调：清理设备录像失败 device_id={device_id}, error={str(e)}", exc_info=True)
-                # 清理失败不影响主流程，继续执行
-            
-            # 可选：上传成功后删除本地文件（根据需求决定）
-            # os.remove(absolute_file_path)
+                logger.error(f"on_dvr回调：本地回放磁盘清理失败 device_id={device_id}, error={str(e)}", exc_info=True)
             
         except S3Error as e:
             logger.error(f"on_dvr回调：MinIO上传失败 device_id={device_id}, bucket={bucket_name}, object_name={object_name}, error={str(e)}", exc_info=True)

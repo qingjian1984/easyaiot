@@ -800,6 +800,33 @@ def create_app():
             print(f"❌ 启动抓拍空间自动清理任务失败: {str(e)}")
             import traceback
             traceback.print_exc()
+
+        # SRS 本地回放磁盘守护（默认每 10 分钟；磁盘紧张时可配合紧急阈值自动删最旧文件）
+        try:
+            from app.services.playback_disk_guard_service import run_playback_disk_guard
+
+            guard_interval_min = int(os.getenv('PLAYBACK_GUARD_INTERVAL_MINUTES', '10'))
+
+            def playback_disk_guard_wrapper():
+                return run_playback_disk_guard()
+
+            scheduler.add_job(
+                playback_disk_guard_wrapper,
+                'interval',
+                minutes=guard_interval_min,
+                id='playback_disk_guard',
+                replace_existing=True,
+            )
+            print(f'✅ SRS回放磁盘守护任务已启动（每 {guard_interval_min} 分钟执行）')
+            try:
+                playback_disk_guard_wrapper()
+                print('✅ SRS回放磁盘守护已执行启动时首次清理')
+            except Exception as boot_guard_err:
+                print(f'⚠️ SRS回放磁盘守护启动清理失败: {boot_guard_err}')
+        except Exception as e:
+            print(f'❌ 启动SRS回放磁盘守护任务失败: {str(e)}')
+            import traceback
+            traceback.print_exc()
         
         # 初始化抓拍任务调度器
         try:
