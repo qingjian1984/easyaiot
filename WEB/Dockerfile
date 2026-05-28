@@ -17,8 +17,8 @@ RUN npm install -g pnpm@11.3.0 && \
 WORKDIR /app
 RUN mkdir -p /tmp/web-build-logs /pnpm
 
-# 先复制依赖清单与 npmrc（利用层缓存）
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+# 先复制依赖清单（利用层缓存）；registry 与 fetch 配置已通过上方 pnpm config set 设置
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # 预拉依赖到 store（持久化见 install_linux.sh --cache-from/--cache-to type=local）
 RUN --mount=type=cache,target=/pnpm/store,id=web-pnpm-store \
