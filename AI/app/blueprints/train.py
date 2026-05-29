@@ -133,6 +133,39 @@ def _prepare_train_dataset_in_dir(dataset_path: str, model_dir: str, log_fn):
     log_fn('云端数据集解压成功')
 
 
+TRAIN_ARTIFACTS_BUCKET = 'models'
+
+
+def _train_artifact_object_key(model_id, task_id, filename):
+    """与历史 best.pt 路径一致：models/model_{model_id}/train_{task_id}/{filename}"""
+    return f"models/model_{model_id}/train_{task_id}/{filename}"
+
+
+def _build_minio_download_url(bucket_name, object_key):
+    return f"/api/v1/buckets/{bucket_name}/objects/download?prefix={object_key}"
+
+
+def _resolve_train_results_dir(model_dir):
+    """定位 YOLO 训练输出目录（exist_ok 时可能为 train_results2 等）。"""
+    parent = model_dir
+    if not os.path.isdir(parent):
+        return os.path.join(model_dir, 'train_results')
+    candidates = []
+    for name in os.listdir(parent):
+        if not name.startswith('train_results'):
+            continue
+        path = os.path.join(parent, name)
+        if os.path.isdir(path):
+            candidates.append(name)
+    for name in sorted(candidates, reverse=True):
+        path = os.path.join(parent, name)
+        if os.path.isfile(os.path.join(path, 'results.png')) or os.path.isfile(
+            os.path.join(path, 'results.csv')
+        ):
+            return path
+    return os.path.join(model_dir, 'train_results')
+
+
 def _is_uploaded_dataset_zip(path: str) -> bool:
     if not path or not os.path.isfile(path):
         return False
@@ -804,47 +837,46 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                 save_period=5
             )
 
-            # 存储results.csv文件（上传Minio），然后路径存到数据库metrics_path
-            results_csv_path = os.path.join(model_dir, 'train_results', 'results.csv')
+            train_output_dir = _resolve_train_results_dir(model_dir)
+            model_id = train_task.model_id
+            artifact_bucket = TRAIN_ARTIFACTS_BUCKET
+
+            # 存储 results.csv（上传 Minio models 桶），路径写入 metrics_path
+            results_csv_path = os.path.join(train_output_dir, 'results.csv')
             if os.path.exists(results_csv_path):
-                # 上传results.csv到Minio
-                minio_csv_path = f"train_tasks/train_{task_id}/results.csv"
+                minio_csv_path = _train_artifact_object_key(model_id, task_id, 'results.csv')
                 csv_success, csv_error = ModelService.upload_to_minio(
-                    bucket_name="model-train",
+                    bucket_name=artifact_bucket,
                     object_name=minio_csv_path,
-                    file_path=results_csv_path
+                    file_path=results_csv_path,
                 )
-                
                 if csv_success:
-                    # 构建可访问的URL路径供后续使用，参照png的处理方式
-                    accessible_csv_url = f"/api/v1/buckets/model-train/objects/download?prefix={minio_csv_path}"
+                    accessible_csv_url = _build_minio_download_url(artifact_bucket, minio_csv_path)
                     update_log_local(f"训练结果CSV已上传至Minio: {accessible_csv_url}")
                     train_task.metrics_path = accessible_csv_url
                 else:
-                    update_log_local("训练结果CSV上传Minio失败，请检查日志")
+                    update_log_local(f"训练结果CSV上传Minio失败: {csv_error or '请检查日志'}")
             else:
-                update_log_local("未找到训练结果CSV文件")
+                update_log_local(f"未找到训练结果CSV文件: {results_csv_path}")
 
-            # 存储results.png（上传Minio），然后路径存到数据库train_results_path
-            results_png_path = os.path.join(model_dir, 'train_results', 'results.png')
+            # 存储 results.png，路径写入 train_results_path
+            results_png_path = os.path.join(train_output_dir, 'results.png')
             if os.path.exists(results_png_path):
-                # 上传results.png到Minio，使用指定的bucket和object key格式
-                minio_png_path = f"train_tasks/train_{task_id}/results.png"
+                minio_png_path = _train_artifact_object_key(model_id, task_id, 'results.png')
                 png_success, png_error = ModelService.upload_to_minio(
-                    bucket_name="model-train",
+                    bucket_name=artifact_bucket,
                     object_name=minio_png_path,
-                    file_path=results_png_path
+                    file_path=results_png_path,
                 )
-                
                 if png_success:
-                    # 构建可访问的URL路径供后续使用
-                    accessible_url = f"/api/v1/buckets/model-train/objects/download?prefix={minio_png_path}"
+                    accessible_url = _build_minio_download_url(artifact_bucket, minio_png_path)
                     update_log_local(f"训练结果图表已上传至Minio: {accessible_url}")
                     train_task.train_results_path = accessible_url
+                    db.session.commit()
                 else:
-                    update_log_local("训练结果图表上传Minio失败，请检查日志")
+                    update_log_local(f"训练结果图表上传Minio失败: {png_error or '请检查日志'}")
             else:
-                update_log_local("未找到训练结果图表文件")
+                update_log_local(f"未找到训练结果图表文件: {results_png_path}")
 
             # 检查是否应该停止训练
             if train_status.get(task_id, {}).get('stop_requested'):
@@ -867,10 +899,10 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
             update_log_local("训练完成，正在保存结果...", progress=90)
 
             update_log_local("模型训练完成!")
-            update_log_local(f"训练结果保存路径: {os.path.join(model_dir, 'train_results')}")
+            update_log_local(f"训练结果保存路径: {train_output_dir}")
 
             # 保存最佳模型
-            best_model_path = os.path.join(model_dir, 'train_results', 'weights', 'best.pt')
+            best_model_path = os.path.join(train_output_dir, 'weights', 'best.pt')
             update_log_local(f"检查最佳模型文件是否存在: {best_model_path}")
 
             if os.path.exists(best_model_path):
@@ -888,15 +920,15 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                 update_log_local("开始上传最佳模型到Minio...", progress=95)
 
                 # 上传最佳模型
-                minio_model_path = f"train_tasks/train_{task_id}/best.pt"
+                minio_model_path = _train_artifact_object_key(model_id, task_id, 'best.pt')
                 model_success, model_error = ModelService.upload_to_minio(
-                    bucket_name="models",
+                    bucket_name=artifact_bucket,
                     object_name=minio_model_path,
                     file_path=local_model_path
                 )
 
                 if model_success:
-                    accessible_model_url = f"/api/v1/buckets/models/objects/download?prefix={minio_model_path}"
+                    accessible_model_url = _build_minio_download_url(artifact_bucket, minio_model_path)
                     update_log_local(f"模型已成功上传至Minio: {accessible_model_url}")
                     train_task.minio_model_path = accessible_model_url
                     db.session.commit()
@@ -911,16 +943,15 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                 with open(log_path, 'w') as f:
                     f.write(log_content)
 
-                minio_log_path = f"logs/train_{task_id}/train_log.txt"
+                minio_log_path = _train_artifact_object_key(model_id, task_id, 'train_log.txt')
                 log_success, log_error = ModelService.upload_to_minio(
-                    bucket_name="log-bucket",
+                    bucket_name=artifact_bucket,
                     object_name=minio_log_path,
                     file_path=log_path
                 )
 
                 if log_success:
-                    # 构建可访问的URL路径供后续使用，参照results.png的URL结构
-                    accessible_log_url = f"/api/v1/buckets/log-bucket/objects/download?prefix={minio_log_path}"
+                    accessible_log_url = _build_minio_download_url(artifact_bucket, minio_log_path)
                     update_log_local(f"训练日志已上传至Minio: {accessible_log_url}")
                     train_task.minio_log_path = accessible_log_url  # 保存URL而不是路径
                 else:

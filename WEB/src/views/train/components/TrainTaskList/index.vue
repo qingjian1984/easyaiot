@@ -75,10 +75,17 @@
       title="训练结果"
       :footer="null"
       width="80%"
+      @afterClose="revokeResultsBlobUrl"
     >
-      <img :src="currentImageUrl" style="width: 100%" v-if="currentImageUrl"/>
+      <img
+        v-if="currentImageUrl && !resultsImageError"
+        :src="currentImageUrl"
+        style="width: 100%"
+        alt="训练结果"
+        @error="resultsImageError = true"
+      />
       <div v-else class="text-center py-8">
-        <a-empty description="暂无训练结果图片"/>
+        <a-empty :description="resultsImageError ? '训练结果图片加载失败' : '暂无训练结果图片'"/>
       </div>
     </a-modal>
   </div>
@@ -98,6 +105,7 @@ import TrainTaskCardList from '@/views/train/components/TrainTaskCardList/index.
 import {getBasicColumns, getFormConfig} from './Data';
 import {Empty as AEmpty, Modal as AModal} from 'ant-design-vue';
 import {Icon} from '@/components/Icon';
+import {resolveTrainResultsDisplayUrl} from '@/utils/alertMinioImage';
 
 defineOptions({name: 'TrainTaskList'});
 
@@ -110,6 +118,8 @@ let cardListReload = () => {};
 const showLogsModal = ref(false);
 const showResultsModal = ref(false);
 const currentImageUrl = ref('');
+const resultsImageError = ref(false);
+let resultsBlobUrl: string | null = null;
 
 const [registerAddModel, {openModal: openAddModal}] = useModal();
 const [registerTrainLogsModal, {openModal: openTrainLogsModal}] = useModal();
@@ -333,12 +343,39 @@ const handleStartTrain = async (config) => {
   }
 };
 
-const handleViewTrainResults = (record) => {
-  if (record.train_results_path) {
-    currentImageUrl.value = record.train_results_path;
-    showResultsModal.value = true;
-  } else {
+function revokeResultsBlobUrl() {
+  if (resultsBlobUrl) {
+    window.URL.revokeObjectURL(resultsBlobUrl);
+    resultsBlobUrl = null;
+  }
+}
+
+const handleViewTrainResults = async (record) => {
+  if (!record.train_results_path) {
     createMessage.warning('此训练记录没有结果图片');
+    return;
+  }
+  revokeResultsBlobUrl();
+  resultsImageError.value = false;
+  currentImageUrl.value = '';
+  showResultsModal.value = true;
+
+  const fetchUrl = resolveTrainResultsDisplayUrl(record.train_results_path);
+  try {
+    const token = localStorage.getItem('jwt_token');
+    const response = await fetch(fetchUrl, {
+      method: 'GET',
+      headers: token ? {'X-Authorization': `Bearer ${token}`} : {},
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    resultsBlobUrl = window.URL.createObjectURL(blob);
+    currentImageUrl.value = resultsBlobUrl;
+  } catch {
+    resultsImageError.value = true;
+    createMessage.error('训练结果图片加载失败，请确认 MinIO 中文件存在或重新训练');
   }
 };
 
@@ -350,7 +387,7 @@ const handleDownloadWeights = async (record) => {
   }
   try {
     const token = localStorage.getItem('jwt_token');
-    const response = await fetch(url, {
+    const response = await fetch(resolveTrainResultsDisplayUrl(url), {
       method: 'GET',
       headers: {'X-Authorization': 'Bearer ' + token},
     });
