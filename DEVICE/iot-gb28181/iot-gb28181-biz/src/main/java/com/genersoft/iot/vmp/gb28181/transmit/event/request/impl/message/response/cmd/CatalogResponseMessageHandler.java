@@ -48,7 +48,6 @@ public class CatalogResponseMessageHandler extends SIPRequestProcessorParent imp
 
     @Lazy
     @Autowired
-    @Lazy
     private IDeviceChannelService deviceChannelService;
 
     @Autowired

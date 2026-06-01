@@ -26,7 +26,6 @@ public class CatalogDataManager implements CommandLineRunner {
 
     @Lazy
     @Autowired
-    @Lazy
     private IDeviceChannelService deviceChannelService;
 
     @Autowired
