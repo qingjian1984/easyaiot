@@ -565,16 +565,51 @@ compensate third parties for damages caused by usage. All EasyAIoT-related resou
   <img src=".image/banner/banner1002.png" alt="Screenshot 16" width="49%">
 </div>
 
-## 📞 Contact Information (After adding WeChat, please follow the official account to join the technical exchange group)
+## 📞 Contact Information
 
-<div>
-  <img src=".image/联系方式.jpg" alt="Contact Information" width="30%" style="margin-right: 50px;">
-</div>
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
+Please follow our official account below first, then reach us via the technical exchange group or WeChat.
+</p>
 
 ## 👥 Official Account
 
 <div>
   <img src=".image/公众号.jpg" alt="Official Account" width="30%">
+</div>
+
+## 💬 Technical Exchange Group
+
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
+After following the official account, scan the QR codes below with WeChat to join the EasyAIoT technical exchange group. If one group is full, please try the next one.
+</p>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; margin: 20px 0;">
+  <div style="text-align: center;">
+    <img src=".image/交流群2群.jpg" alt="EasyAIoT Technical Exchange Group 2" width="200">
+    <p style="font-size: 13px; color: #666; margin: 8px 0;">Group 2</p>
+  </div>
+  <div style="text-align: center;">
+    <img src=".image/交流群3群.jpg" alt="EasyAIoT Technical Exchange Group 3" width="200">
+    <p style="font-size: 13px; color: #666; margin: 8px 0;">Group 3</p>
+  </div>
+  <div style="text-align: center;">
+    <img src=".image/交流群4群.jpg" alt="EasyAIoT Technical Exchange Group 4" width="200">
+    <p style="font-size: 13px; color: #666; margin: 8px 0;">Group 4</p>
+  </div>
+  <div style="text-align: center;">
+    <img src=".image/交流群5群.jpg" alt="EasyAIoT Technical Exchange Group 5" width="200">
+    <p style="font-size: 13px; color: #666; margin: 8px 0;">Group 5</p>
+  </div>
+</div>
+
+## 💬 WeChat Contact
+
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
+After following the official account, scan the QR code below to add us as a WeChat friend for one-on-one communication.
+</p>
+
+<div>
+  <img src=".image/微信联系方式.jpg" alt="WeChat Contact" width="200">
 </div>
 
 ## 🪐 Knowledge Planet:

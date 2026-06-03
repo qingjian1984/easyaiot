@@ -599,17 +599,51 @@ EasyAIoT是一個開源學習項目，與商業行為無關。用戶在使用該
 </tbody>
 </table>
 
-## 📞 聯系方式（添加微信後，需關註公眾號，拉入技術交流群）
+## 📞 聯系方式
 
-<div>
-  <img src=".image/聯系方式.jpg" alt="聯系方式" width="30%" style="margin-right: 50px;">
-  <img src=".image/联系方式2.png" alt="聯系方式" width="30%">
-</div>
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
+請先關注下方公眾號，再通過技術交流群或微信號與我們聯系。
+</p>
 
 ## 👥 公眾號
 
 <div>
-  <img src=".image/公眾號.jpg" alt="公眾號" width="30%">
+  <img src=".image/公众号.jpg" alt="公眾號" width="30%">
+</div>
+
+## 💬 技術交流群
+
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
+關注公眾號後，使用微信掃描下方二維碼加入 EasyAIoT 技術交流群。如某個群已滿無法加入，請嘗試掃描下一個群。
+</p>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; margin: 20px 0;">
+  <div style="text-align: center;">
+    <img src=".image/交流群2群.jpg" alt="EasyAIoT技術交流2群" width="200">
+    <p style="font-size: 13px; color: #666; margin: 8px 0;">2群</p>
+  </div>
+  <div style="text-align: center;">
+    <img src=".image/交流群3群.jpg" alt="EasyAIoT技術交流3群" width="200">
+    <p style="font-size: 13px; color: #666; margin: 8px 0;">3群</p>
+  </div>
+  <div style="text-align: center;">
+    <img src=".image/交流群4群.jpg" alt="EasyAIoT技術交流4群" width="200">
+    <p style="font-size: 13px; color: #666; margin: 8px 0;">4群</p>
+  </div>
+  <div style="text-align: center;">
+    <img src=".image/交流群5群.jpg" alt="EasyAIoT技術交流5群" width="200">
+    <p style="font-size: 13px; color: #666; margin: 8px 0;">5群</p>
+  </div>
+</div>
+
+## 💬 微信號聯系
+
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
+關注公眾號後，如需一對一溝通，可掃描下方二維碼添加微信好友。
+</p>
+
+<div>
+  <img src=".image/微信联系方式.jpg" alt="微信號聯系方式" width="200">
 </div>
 
 ## 🪐 知識星球：
