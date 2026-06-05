@@ -1,10 +1,9 @@
-import { Button } from '@/components/Button'
 <template>
   <div>
     <BasicTable @register="registerTable">
       <template #toolbar>
         <Button type="primary" @click="openConfigModal(true, { type: 'add', pushType })"
-          >新增推送</a-button
+          >新增推送</Button
         >
       </template>
       <template #bodyCell="{ column, record }">
@@ -63,6 +62,7 @@ import { Button } from '@/components/Button'
 </template>
 <script lang="ts" setup name="PushTemplate">
   import { onMounted } from 'vue';
+  import { Button } from '@/components/Button';
   import { BasicTable, useTable, TableAction } from '/@/components/Table';
   import { useMessage } from '/@/hooks/web/useMessage';
   import { useModal } from '/@/components/Modal';
