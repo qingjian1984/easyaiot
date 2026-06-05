@@ -20,6 +20,8 @@ from healthcheck import HealthCheck, EnvironmentDump
 from nacos import NacosClient
 from sqlalchemy import text
 
+from app.utils.video_env import load_video_env
+
 from app.blueprints import camera, alert, snap, playback, record, algorithm_task, stream_forward, face
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -33,32 +35,38 @@ def parse_args():
     return args
 
 # 加载环境变量配置文件
+def _print_key_config():
+    """启动时打印关键连接配置（便于排查仍连 localhost 的问题）"""
+    db_url = os.environ.get('DATABASE_URL', '')
+    db_host = '未设置'
+    if db_url:
+        try:
+            from urllib.parse import urlparse
+            db_host = urlparse(db_url.replace('postgres://', 'postgresql://', 1)).hostname or '未知'
+        except Exception:
+            db_host = '解析失败'
+    print(f"📌 DATABASE_URL 主机: {db_host}")
+    print(f"📌 NACOS_SERVER: {os.environ.get('NACOS_SERVER', '未设置')}")
+    print(f"📌 KAFKA_BOOTSTRAP_SERVERS: {os.environ.get('KAFKA_BOOTSTRAP_SERVERS', '未设置')}")
+
+
 def load_env_file(env_name=''):
+    # 显式 --env=prod 时必须 override=True，否则 shell/systemd 里旧的 localhost 会盖掉 .env.prod
     if env_name:
-        env_file = f'.env.{env_name}'
-        if os.path.exists(env_file):
-            load_dotenv(env_file)
-            print(f"✅ 已加载配置文件: {env_file}")
-        else:
-            print(f"⚠️  配置文件 {env_file} 不存在，尝试加载默认 .env 文件")
-            if os.path.exists('.env'):
-                load_dotenv('.env')
-                print(f"✅ 已加载默认配置文件: .env")
-            else:
-                print(f"❌ 默认配置文件 .env 也不存在")
+        os.environ['VIDEO_ENV'] = env_name
+    loaded = load_video_env(override=True)
+    if loaded:
+        label = os.path.basename(loaded)
+        print(f"✅ 已加载配置文件: {label}（override=True，覆盖已有环境变量）")
+        _print_key_config()
+    elif env_name:
+        print(f"⚠️  配置文件 .env.{env_name} 不存在，且默认 .env 也不存在")
     else:
-        if os.path.exists('.env'):
-            load_dotenv('.env')
-            print(f"✅ 已加载默认配置文件: .env")
-        else:
-            print(f"⚠️  默认配置文件 .env 不存在")
+        print(f"⚠️  默认配置文件 .env 不存在")
 
 # 解析命令行参数并加载配置文件
 args = parse_args()
 load_env_file(args.env)
-# 供 algorithm_task_daemon 等子进程加载同一套环境（避免仅读 .env 覆盖 prod 配置）
-if args.env:
-    os.environ['VIDEO_ENV'] = args.env
 
 # 在导入 ONNX 相关模块前补全 pip 安装的 nvidia CUDA 库路径（非 Docker 直跑也生效）
 import app.utils.nvidia_lib_path  # noqa: F401

@@ -36,6 +36,10 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 video_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, video_root)
 
+from app.utils.video_env import load_video_env
+
+load_video_env(override=True)
+
 # 导入VIDEO模块的模型
 from models import db, StreamForwardTask, Device
 from app.utils.async_video_stream import AsyncVideoStream, async_rtsp_read_enabled
@@ -67,8 +71,7 @@ def get_flask_app():
         _flask_app = app
     return _flask_app
 
-# 加载环境变量
-load_dotenv()
+# 环境变量已在文件顶部通过 load_video_env 加载
 
 # OpenCV 经 FFmpeg 拉 RTSP 时的默认选项（与抓拍/实时算法服务对齐）
 # 默认 udp（低延迟）；跨主机/易丢包可设 AI_RTSP_TRANSPORT=tcp 或 OPENCV_FFMPEG_RTSP_TRANSPORT=tcp

@@ -15,7 +15,6 @@ import threading
 import time
 import signal
 from datetime import datetime
-from dotenv import load_dotenv
 
 import app.utils.nvidia_lib_path  # noqa: F401  子进程 run_deploy 继承 LD_LIBRARY_PATH
 
@@ -419,17 +418,10 @@ class AlgorithmTaskDaemon:
         
         # 准备环境变量（使用传入的参数）
         env = os.environ.copy()
-        # 子进程 cwd 为 services/*_algorithm_service，需显式加载 VIDEO 根目录 env（与 run.py --env 一致）
-        video_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        # 子进程必须继承 VIDEO_ENV，run_deploy 内 load_video_env 会加载 .env.prod
         video_env = os.getenv('VIDEO_ENV', '').strip()
-        env_candidates = []
         if video_env:
-            env_candidates.append(os.path.join(video_root, f'.env.{video_env}'))
-        env_candidates.append(os.path.join(video_root, '.env'))
-        for env_path in env_candidates:
-            if os.path.isfile(env_path):
-                load_dotenv(env_path, override=False)
-                break
+            env['VIDEO_ENV'] = video_env
         for key in (
             'DATABASE_URL', 'GATEWAY_URL', 'GB28181_SERVICE_URL', 'JWT_TOKEN',
             'GB28181_HTTP_READ_TIMEOUT', 'GB28181_PLAY_PROTOCOL', 'GB28181_HEVC_RTSP_FIRST',

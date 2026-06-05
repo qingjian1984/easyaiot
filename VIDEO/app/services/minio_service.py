@@ -9,10 +9,10 @@ import posixpath
 from flask import current_app
 from minio import Minio
 from minio.error import S3Error
-from dotenv import load_dotenv
 
-# 加载.env文件中的环境变量
-load_dotenv()
+from app.utils.video_env import load_video_env
+
+load_video_env(override=False)
 
 class ModelService:
     @staticmethod

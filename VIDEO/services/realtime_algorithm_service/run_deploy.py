@@ -37,6 +37,10 @@ import concurrent.futures
 video_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, video_root)
 
+from app.utils.video_env import load_video_env
+
+load_video_env(override=True)
+
 import app.utils.nvidia_lib_path  # noqa: F401  须在 import onnxruntime 之前
 
 # 导入VIDEO模块的模型
@@ -232,12 +236,7 @@ def get_flask_app():
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app', 'utils'))
 from tracker import SimpleTracker
 
-# 加载 VIDEO 根目录 .env（守护进程 cwd 为 services/realtime_algorithm_service，裸 load_dotenv() 找不到配置）
-_video_env = os.path.join(video_root, '.env')
-if os.path.isfile(_video_env):
-    load_dotenv(_video_env, override=False)
-else:
-    load_dotenv()
+# 环境变量已在文件顶部通过 load_video_env 加载
 
 # OpenCV FFmpeg 解码参数（用于降低延迟并尽量忽略/丢弃损坏包）
 # 说明：当上游流发生抖动/重连/丢包时，FFmpeg 解码常出现 "error while decoding MB..."；
