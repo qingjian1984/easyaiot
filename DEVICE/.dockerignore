@@ -38,6 +38,11 @@ docker-bake.hcl
 # 构建缓存（Maven 经 --build-context maven-repo 挂载，勿打进 COPY 上下文）
 .build-cache
 
+# 宿主机 Maven 构建产物（防止陈旧 target/classes 被打进镜像内 mvn package 的 jar）
+# 注意：根目录 target/jars 是第二阶段运行时镜像的输入，不能排除
+iot-*/target
+iot-*/*/target
+
 # 其他
 .DS_Store
 Thumbs.db
