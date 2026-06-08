@@ -103,36 +103,51 @@ export function resolveGbChannelPlayIds(
   return { sipDeviceId: sip, channelId };
 }
 
-/** 从 WVP 通道记录提取位置字段 */
+/** 解析单个坐标值，空值或非数字返回 null */
+function parseGbCoord(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+}
+
+/** 按坐标对提取：经纬度需同时有效且不为 (0,0)（WVP 未上报默认值），否则该来源视为无坐标 */
+function extractGbCoordPair(
+  channel: Record<string, any>,
+  lngKey: string,
+  latKey: string,
+): [number, number] | null {
+  const lng = parseGbCoord(channel[lngKey]);
+  const lat = parseGbCoord(channel[latKey]);
+  if (lng == null || lat == null) return null;
+  if (lng === 0 && lat === 0) return null;
+  return [lng, lat];
+}
+
+/**
+ * 从 WVP 通道记录提取位置字段。
+ * 坐标按对回退：优先 WVP 主坐标 gbLongitude/gbLatitude（WGS-84），缺失或为 (0,0)
+ * 时取国标 Catalog 上报坐标 longitude/latitude，均无效视为未上报坐标。
+ */
 export function extractGbChannelLocation(channel: Record<string, any>): {
   longitude?: number | null;
   latitude?: number | null;
   address?: string | null;
   location_source?: string | null;
 } {
-  const rawLng = channel.longitude ?? channel.gbLongitude;
-  const rawLat = channel.latitude ?? channel.gbLatitude;
+  const pair =
+    extractGbCoordPair(channel, 'gbLongitude', 'gbLatitude') ??
+    extractGbCoordPair(channel, 'longitude', 'latitude');
   const rawAddr = channel.address ?? channel.gbAddress;
-  let longitude: number | null = null;
-  let latitude: number | null = null;
-  if (rawLng != null && rawLng !== '') {
-    const n = Number(rawLng);
-    if (!Number.isNaN(n)) longitude = n;
-  }
-  if (rawLat != null && rawLat !== '') {
-    const n = Number(rawLat);
-    if (!Number.isNaN(n)) latitude = n;
-  }
   const address =
     rawAddr != null && String(rawAddr).trim() ? String(rawAddr).trim() : null;
-  if (longitude == null && latitude == null && !address) {
+  if (!pair && !address) {
     return {};
   }
   return {
-    longitude,
-    latitude,
+    longitude: pair ? pair[0] : null,
+    latitude: pair ? pair[1] : null,
     address,
-    location_source: longitude != null && latitude != null ? 'gb28181' : undefined,
+    location_source: pair ? 'gb28181' : undefined,
   };
 }
 

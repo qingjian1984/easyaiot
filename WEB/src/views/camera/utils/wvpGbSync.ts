@@ -6,6 +6,14 @@ export interface Gb28181ChannelSyncItem {
   sipDeviceId: string;
   channelId: string;
   name?: string;
+  /** WVP 主坐标（WGS-84）；后端按坐标对回退：缺失或 (0,0) 时取国标 Catalog 坐标 */
+  gbLongitude?: number | string | null;
+  gbLatitude?: number | string | null;
+  /** 国标 Catalog 原始上报坐标 */
+  longitude?: number | string | null;
+  latitude?: number | string | null;
+  address?: string | null;
+  gbAddress?: string | null;
 }
 
 /**
@@ -30,6 +38,13 @@ export async function collectWvpGbChannelsForSync(): Promise<{
         sipDeviceId: ids.sipDeviceId,
         channelId: ids.channelId,
         name: String(ch.name || '').trim() || undefined,
+        // 携带 WVP 坐标原始字段入库，坐标对回退逻辑统一在 VIDEO 后端处理
+        gbLongitude: ch.gbLongitude,
+        gbLatitude: ch.gbLatitude,
+        longitude: ch.longitude,
+        latitude: ch.latitude,
+        address: ch.address,
+        gbAddress: ch.gbAddress,
       });
     }
   }

@@ -67,7 +67,7 @@ import type { MapMarkerData } from '@/components/TiandituMap';
 import { type MonitorTreeDeviceNode } from '@/api/device/camera';
 import { getDeviceChannels } from '@/api/device/gb28181';
 import { useMessage } from '@/hooks/web/useMessage';
-import { isGb28181Device } from '@/views/camera/utils/deviceLabel';
+import { gb28181VirtualDeviceId, isGb28181Device } from '@/views/camera/utils/deviceLabel';
 import {
   collectMonitorTreeExpandedKeys,
   findMonitorTreeNodeByKey,
@@ -75,6 +75,7 @@ import {
 } from '@/views/camera/utils/monitorDeviceTree';
 import {
   buildWvpChannelTreeNodes,
+  parseGbChannelKey,
 } from '@/views/camera/utils/gb28181Tree';
 import { enrichWvpChannelTreeNodes } from '@/views/camera/utils/monitorGbDisplay';
 import { getCachedMonitorDirectoryTreeBundle } from '@/views/camera/utils/monitorDirectoryTreeCache';
@@ -188,7 +189,13 @@ async function handleTreeSelect(keys: string[] | string) {
   }
 
   if (key.startsWith('gb_ch_')) {
-    createMessage.info('国标通道暂不支持地图定位，请选择已设置坐标的摄像头');
+    // 国标通道已同步坐标入库为虚拟设备 gb28181_{sip}_{channel}，按其定位
+    const gb = parseGbChannelKey(key);
+    if (!gb) {
+      createMessage.warn('无效的国标通道');
+      return;
+    }
+    await focusDeviceOnMap(gb28181VirtualDeviceId(gb.sipDeviceId, gb.channelId));
     return;
   }
 

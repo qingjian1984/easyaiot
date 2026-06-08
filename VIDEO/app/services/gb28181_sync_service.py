@@ -189,30 +189,47 @@ def ensure_gb28181_virtual_device(
     return device
 
 
+def _parse_coord(value: Any) -> Optional[float]:
+    """解析单个坐标值，空值或无法转为 float 返回 None。"""
+    if value in (None, ''):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_coord_pair(item: dict, lng_key: str, lat_key: str) -> Optional[Tuple[float, float]]:
+    """按坐标对提取：经纬度需同时有效且不为 (0,0)（WVP 未上报默认值），否则该来源视为无坐标。"""
+    lng = _parse_coord(item.get(lng_key))
+    lat = _parse_coord(item.get(lat_key))
+    if lng is None or lat is None:
+        return None
+    if lng == 0 and lat == 0:
+        return None
+    return lng, lat
+
+
 def _extract_channel_location(item: dict) -> dict:
-    """从 WVP 通道数据提取位置信息（国标 Catalog 字段）。"""
-    lng = item.get('longitude') or item.get('gbLongitude')
-    lat = item.get('latitude') or item.get('gbLatitude')
+    """
+    从 WVP 通道数据提取位置信息。
+
+    坐标按对回退：优先 WVP 主坐标 gbLongitude/gbLatitude（WGS-84，Catalog 到达时由
+    WVP 归一写入，UI 编辑也写它），缺失或为 (0,0) 时回退国标 Catalog 原始上报坐标
+    longitude/latitude，均无效视为未上报坐标。
+    """
+    pair = (
+        _extract_coord_pair(item, 'gbLongitude', 'gbLatitude')
+        or _extract_coord_pair(item, 'longitude', 'latitude')
+    )
     address = item.get('address') or item.get('gbAddress')
-
-    parsed_lng = parsed_lat = None
-    if lng not in (None, ''):
-        try:
-            parsed_lng = float(lng)
-        except (TypeError, ValueError):
-            parsed_lng = None
-    if lat not in (None, ''):
-        try:
-            parsed_lat = float(lat)
-        except (TypeError, ValueError):
-            parsed_lat = None
-
     addr = str(address).strip() if address not in (None, '') else None
-    if parsed_lng is None and parsed_lat is None and not addr:
+
+    if pair is None and not addr:
         return {}
     return {
-        'longitude': parsed_lng,
-        'latitude': parsed_lat,
+        'longitude': pair[0] if pair else None,
+        'latitude': pair[1] if pair else None,
         'address': addr,
         'location_source': 'gb28181',
     }

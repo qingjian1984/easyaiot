@@ -25,6 +25,7 @@ from app.services.nvr_service import (
     resolve_nvr_link,
 )
 from app.services.onvif_service import OnvifCamera
+from app.utils.gb28181_source import GB28181_SOURCE_PREFIX
 from app.utils.ip_utils import IpReachabilityMonitor, resolve_ipv4_for_stream_urls
 from models import Device, db, DeviceDetectionRegion, DeviceDirectory, DeviceTrackSession, DeviceTrackPoint
 
@@ -1543,7 +1544,13 @@ def list_devices_for_map(*, directory_id=None, has_location_only=True) -> list:
     """返回用于地图展示的摄像头位置列表（轻量字段）。"""
     query = Device.query
     if directory_id is not None:
-        query = query.filter(Device.directory_id == directory_id)
+        # 国标虚拟设备恒挂默认分组，但通道可出现在任意目录视图下；放行以免按目录筛选时漏掉其坐标
+        query = query.filter(
+            or_(
+                Device.directory_id == directory_id,
+                Device.source.ilike(f'{GB28181_SOURCE_PREFIX}%'),
+            )
+        )
     if has_location_only:
         query = query.filter(
             Device.longitude.isnot(None),
