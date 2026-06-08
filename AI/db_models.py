@@ -25,7 +25,7 @@ class Model(db.Model):
     description = db.Column(db.Text)
     model_path = db.Column(db.String(500), nullable=True)
     image_url = db.Column(db.String(500))
-    version = db.Column(db.String(20), default="V1.0.0")
+    version = db.Column(db.String(20), default="1.0.0")
     # 0=未部署 1=已部署 2=训练中 3=已下线（与前端模型管理一致）
     status = db.Column(db.Integer, default=0, nullable=False)
     # 模型支持的全部识别标签（JSON 数组）；推理时可从中选择子集

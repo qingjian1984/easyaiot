@@ -82,13 +82,13 @@ import { BasicTable, TableAction, useTable } from '@/components/Table';
 import { useMessage } from '@/hooks/web/useMessage';
 import { getBasicColumns, getFormConfig } from "./data";
 import ModelModal from "../ModelModal/index.vue";
-import { useModal } from "@/components/Modal";
+import { useDrawer } from '@/components/Drawer';
 import { deleteModel, getModelPage, downloadModel } from "@/api/device/model";
 import ModelCardList from "../ModelCardList/index.vue";
 import { Button } from '@/components/Button'
 const { createMessage, createConfirm } = useMessage();
 
-const [registerAddModel, { openModal: openAddModal }] = useModal();
+const [registerAddModel, { openDrawer: openAddModal }] = useDrawer();
 defineOptions({ name: 'ModelList' })
 
 const state = reactive({
@@ -202,7 +202,7 @@ const handleDownload = async (record) => {
     
     // 从响应头获取文件名，如果没有则根据模型路径确定
     const contentDisposition = response.headers.get('Content-Disposition');
-    let fileName = `${record.name}_${record.version || 'v1.0.0'}.pt`;
+    let fileName = `${record.name}_${record.version || '1.0.0'}.pt`;
     
     if (contentDisposition) {
       const fileNameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
@@ -221,12 +221,12 @@ const handleDownload = async (record) => {
       } catch (e) {
         // 如果解析失败，根据模型类型确定扩展名
         const fileExt = record.onnx_model_path && !record.model_path ? '.onnx' : '.pt';
-        fileName = `${record.name}_${record.version || 'v1.0.0'}${fileExt}`;
+        fileName = `${record.name}_${record.version || '1.0.0'}${fileExt}`;
       }
     } else {
       // 根据模型路径确定文件扩展名
       const fileExt = record.onnx_model_path && !record.model_path ? '.onnx' : '.pt';
-      fileName = `${record.name}_${record.version || 'v1.0.0'}${fileExt}`;
+      fileName = `${record.name}_${record.version || '1.0.0'}${fileExt}`;
     }
     
     // 创建下载链接

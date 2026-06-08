@@ -192,25 +192,16 @@ class InferenceService:
         return {}
 
     def _resolve_selected_class_names(self, parameters: Optional[Dict[str, Any]]) -> Optional[list]:
+        """仅当推理请求显式传入 selected_classes 时才过滤标签。"""
         if not parameters:
             return None
         selected = parameters.get('selected_classes')
         if selected is None:
             selected = parameters.get('selectedClasses')
-        if selected is not None:
-            parsed = parse_class_names_json(selected)
-            return parsed if parsed else None
-
-        if self.model_id and self.model_id > 0:
-            model_record = Model.query.get(self.model_id)
-            if model_record:
-                selected = parse_class_names_json(model_record.selected_class_names)
-                if selected:
-                    return selected
-                all_names = parse_class_names_json(model_record.class_names)
-                if all_names:
-                    return all_names
-        return None
+        if selected is None:
+            return None
+        parsed = parse_class_names_json(selected)
+        return parsed if parsed else None
 
     def _resolve_class_ids(self, model, parameters: Optional[Dict[str, Any]]) -> Optional[list]:
         selected_names = self._resolve_selected_class_names(parameters)

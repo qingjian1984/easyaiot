@@ -98,6 +98,7 @@ import {isFunction} from '@/utils/is';
 import {DeleteOutlined, DownloadOutlined, EditOutlined, EyeOutlined} from '@ant-design/icons-vue';
 import {getFormConfig} from './Data';
 import DEFAULT_MODEL_IMAGE from '@/assets/images/video/ai-task.png';
+import { formatModelVersionDisplay } from '../../utils/modelVersionUtils';
 
 defineOptions({name: 'ModelCardList'});
 
@@ -202,7 +203,7 @@ function getTagsText(item: any): string {
   const parts: string[] = [];
   const format = getFormatText(item);
   if (format) parts.push(format);
-  if (item.version) parts.push(`v${item.version}`);
+  if (item.version) parts.push(formatModelVersionDisplay(item.version));
   if (item.description) {
     const desc = item.description.trim();
     if (desc.length <= 18) {

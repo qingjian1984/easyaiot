@@ -31,7 +31,7 @@ import { BasicDrawer, useDrawerInner } from '@/components/Drawer';
 import { BasicForm, useForm } from '@/components/Form';
 import { useMessage } from '@/hooks/web/useMessage';
 import { QuestionCircleOutlined } from '@ant-design/icons-vue';
-import { Switch, Popover as AntButton, Select } from 'ant-design-vue';
+import { Switch, Popover, Select } from 'ant-design-vue';
 import {
   createAlgorithmTask,
   updateAlgorithmTask,

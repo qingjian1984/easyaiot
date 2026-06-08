@@ -19,44 +19,52 @@
                 <option value="yolov11">Yolov11模型</option>
                 <option value="yolov26">Yolov26模型</option>
                 <option v-for="model in state.models" :key="model.id" :value="model.id">
-                  {{ model.name }} (v{{ model.version }})
+                  {{ model.name }} ({{ formatVersion(model.version) }})
                 </option>
               </select>
+              <div v-if="!isCustomModelSelected" class="model-select-tip">
+                选择「模型管理」中上传的自定义模型后，可筛选本次要检测的类别
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- 识别标签选择（自定义模型） -->
-        <div
-          class="config-section"
-          v-if="isCustomModelSelected && state.availableClassNames.length > 0"
-        >
+        <!-- 检测类别（自定义模型：推理时筛选） -->
+        <div class="config-section" v-if="isCustomModelSelected">
           <div class="section-title">
-            <SettingOutlined class="icon" />
-            <span>识别标签</span>
+            <AppstoreOutlined class="icon" />
+            <span>检测类别</span>
+            <BasicHelp
+              class="section-help"
+              placement="top"
+              text="目标检测模型可识别的类别；未选择时默认检测全部类别"
+            />
           </div>
           <div class="config-options">
-            <div class="class-tags-toolbar">
-              <button type="button" class="link-btn" @click="selectAllInferenceClasses">全选</button>
-              <button type="button" class="link-btn" @click="clearInferenceClasses">清空</button>
-              <span class="class-tags-hint">
-                已选 {{ state.selectedClassNames.length }} / {{ state.availableClassNames.length }}
-              </span>
+            <div v-if="state.classesLoading" class="class-tags-status">正在加载检测类别...</div>
+            <div v-else-if="state.availableClassNames.length === 0" class="class-tags-status class-tags-status--warn">
+              未能读取检测类别，请先在「模型管理」中上传有效的 YOLO 权重（.pt）
             </div>
-            <div class="class-checkbox-list">
-              <label
-                v-for="name in state.availableClassNames"
-                :key="name"
-                class="class-checkbox-item"
-              >
-                <input
-                  type="checkbox"
-                  :value="name"
-                  v-model="state.selectedClassNames"
-                />
-                <span>{{ name }}</span>
-              </label>
-            </div>
+            <template v-else>
+              <ApiSelect
+                v-model:value="state.selectedClassNames"
+                mode="multiple"
+                allow-clear
+                placeholder="默认检测全部类别，可取消不需要的类别"
+                :max-tag-count="4"
+                class="class-select"
+                :options="classNameOptions"
+                :immediate="false"
+              />
+              <div class="class-tags-hint">
+                <template v-if="state.selectedClassNames.length === 0">
+                  当前检测全部 {{ state.availableClassNames.length }} 个类别
+                </template>
+                <template v-else>
+                  仅检测已选的 {{ state.selectedClassNames.length }} 个类别
+                </template>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -75,7 +83,7 @@
               <select class="select-field" v-model="state.selectedDeployServiceId" @change="handleDeployServiceChange">
                 <option :value="null">请选择模型服务</option>
                 <option v-for="service in state.deployServices" :key="service.id" :value="service.id">
-                  {{ service.model_name }}服务（v{{ service.model_version }}）
+                  {{ service.model_name }}服务（{{ formatVersion(service.model_version) }}）
                 </option>
               </select>
             </div>
@@ -396,14 +404,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, onMounted, onUnmounted, nextTick } from "vue";
+import { computed, reactive, ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getModelPage, runInference, runClusterInference, uploadInputFile, getInferenceTaskDetail, getInferenceTasks, getDeployServicePage, getModelClasses } from "@/api/device/model";
+import { getModelPage, runInference, runClusterInference, uploadInputFile, getInferenceTaskDetail, getInferenceTasks, getDeployServicePage, getModelClasses, parseModelClassPayload } from "@/api/device/model";
 import { getLLMList, visionInference, activateLLM, type LLMModel } from "@/api/device/llm";
 import { useMessage } from '@/hooks/web/useMessage';
+import { ApiSelect } from '@/components/Form';
+import { BasicHelp } from '@/components/Basic';
 import { Tooltip } from 'ant-design-vue';
 import {
   SettingOutlined,
+  AppstoreOutlined,
   UploadOutlined,
   ControlOutlined,
   PlayCircleOutlined,
@@ -419,8 +430,10 @@ import {
   HistoryOutlined,
   QuestionCircleOutlined
 } from '@ant-design/icons-vue';
+import { formatModelVersionDisplay } from '../../utils/modelVersionUtils';
 
 const { createMessage } = useMessage();
+const formatVersion = formatModelVersionDisplay;
 
 // 接收父组件传递的初始大模型ID
 const props = defineProps<{
@@ -501,6 +514,7 @@ interface AppState {
   llmsLoading: boolean; // 大模型加载状态
   availableClassNames: string[];
   selectedClassNames: string[];
+  classesLoading: boolean;
 }
 
 // 状态管理
@@ -542,6 +556,7 @@ const state = reactive<AppState>({
   llmsLoading: false,
   availableClassNames: [],
   selectedClassNames: [],
+  classesLoading: false,
 });
 
 // 轮询超时时间（30分钟）
@@ -569,42 +584,54 @@ const isCustomModelSelected = computed(() => {
   return modelId !== null && modelId !== '' && !['yolov8', 'yolov11', 'yolov26'].includes(String(modelId));
 });
 
-const applyModelClassSelection = async (model?: Model | null) => {
-  if (!model) {
+const classNameOptions = computed(() =>
+  state.availableClassNames.map((name) => ({ label: name, value: name })),
+);
+
+const loadClassesForModel = async (model?: Model | null) => {
+  if (!model?.id) {
     state.availableClassNames = [];
     state.selectedClassNames = [];
+    state.classesLoading = false;
     return;
   }
-  let classNames = model.classNames ?? model.class_names ?? [];
-  let selected = model.selectedClassNames ?? model.selected_class_names ?? classNames;
 
-  if ((!classNames || classNames.length === 0) && model.id) {
-    try {
-      const classResp = await getModelClasses(model.id);
-      if (classResp?.code === 0 && classResp.data) {
-        classNames = classResp.data.classNames ?? classResp.data.class_names ?? [];
-        selected = classResp.data.selectedClassNames ?? classResp.data.selected_class_names ?? classNames;
-        model.classNames = classNames;
-        model.selectedClassNames = selected;
-      }
-    } catch (error) {
-      console.warn('加载模型标签失败', error);
+  state.classesLoading = true;
+  try {
+    let { classNames, selectedClassNames } = parseModelClassPayload(model);
+    if (classNames.length === 0) {
+      const resp = await getModelClasses(model.id);
+      const parsed = parseModelClassPayload(resp);
+      classNames = parsed.classNames;
+      selectedClassNames = parsed.selectedClassNames;
+      model.classNames = classNames;
+      model.selectedClassNames = selectedClassNames;
     }
+    state.availableClassNames = classNames;
+    state.selectedClassNames = selectedClassNames.length > 0 ? selectedClassNames : [...classNames];
+  } catch (error) {
+    console.warn('加载模型标签失败', error);
+    state.availableClassNames = [];
+    state.selectedClassNames = [];
+  } finally {
+    state.classesLoading = false;
   }
-
-  state.availableClassNames = Array.isArray(classNames) ? [...classNames] : [];
-  state.selectedClassNames = Array.isArray(selected) && selected.length > 0
-    ? [...selected]
-    : [...state.availableClassNames];
 };
 
-const selectAllInferenceClasses = () => {
-  state.selectedClassNames = [...state.availableClassNames];
-};
-
-const clearInferenceClasses = () => {
-  state.selectedClassNames = [];
-};
+watch(
+  () => state.selectedModelId,
+  async (modelId) => {
+    if (!modelId || ['yolov8', 'yolov11', 'yolov26'].includes(String(modelId))) {
+      state.availableClassNames = [];
+      state.selectedClassNames = [];
+      state.classesLoading = false;
+      return;
+    }
+    const model = state.models.find((item) => String(item.id) === String(modelId));
+    await loadClassesForModel(model);
+  },
+  { immediate: true },
+);
 
 const setActiveSource = (source: string) => {
   state.activeSource = source;
@@ -789,19 +816,10 @@ const startDetection = async () => {
     if (
       isCustomModelSelected.value &&
       state.availableClassNames.length > 0 &&
-      state.selectedClassNames.length > 0
+      state.selectedClassNames.length > 0 &&
+      state.selectedClassNames.length < state.availableClassNames.length
     ) {
       parameters.selected_classes = [...state.selectedClassNames];
-    } else if (
-      isCustomModelSelected.value &&
-      state.availableClassNames.length > 0 &&
-      state.selectedClassNames.length === 0
-    ) {
-      createMessage.warning('请至少选择一个识别标签');
-      state.inferenceLoading = false;
-      state.detectionStatus = 'idle';
-      state.statusText = '就绪 - 等待输入源';
-      return;
     }
     formData.append('parameters', JSON.stringify(parameters));
 
@@ -1230,7 +1248,7 @@ const loadModels = async () => {
       }
       if (isCustomModelSelected.value) {
         const model = state.models.find((item) => String(item.id) === String(state.selectedModelId));
-        await applyModelClassSelection(model);
+        await loadClassesForModel(model);
       }
     }
   } catch (error: any) {
@@ -1319,22 +1337,14 @@ const handleDeployServiceChange = () => {
 };
 
 const handleModelChange = async () => {
-  // 如果选择了模型，清空大模型选择和模型服务选择
   if (state.selectedModelId) {
-    state.selectedLLMId = null; // 恢复大模型下拉框为默认：请选择大模型
+    state.selectedLLMId = null;
     state.selectedDeployServiceId = null;
   }
-  if (isCustomModelSelected.value) {
-    const model = state.models.find((item) => String(item.id) === String(state.selectedModelId));
-    await applyModelClassSelection(model);
-  } else {
-    applyModelClassSelection(null);
-  }
   state.detectionResult = null;
-  state.llmTextResult = null; // 清空大模型文本结果，恢复初始样式
+  state.llmTextResult = null;
   state.detectionCount = 0;
   state.averageConfidence = 0;
-  // 停止轮询
   stopPollingInferenceResult();
 };
 
@@ -2025,6 +2035,12 @@ body {
         }
       }
 
+      .section-help {
+        margin-left: 4px;
+        color: @text-secondary;
+        font-size: 14px;
+      }
+
       .refresh-icon {
         margin-left: auto;
         cursor: pointer;
@@ -2051,47 +2067,30 @@ body {
       flex: 1;
       min-height: 0;
 
-      .class-tags-toolbar {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+      .model-select-tip {
+        font-size: 12px;
+        color: @text-muted;
+        line-height: 1.4;
       }
 
-      .link-btn {
-        border: none;
-        background: transparent;
-        color: @primary-color;
-        cursor: pointer;
-        font-size: 12px;
-        padding: 0;
+      .class-tags-status {
+        font-size: 13px;
+        color: @text-secondary;
+        line-height: 1.5;
+
+        &--warn {
+          color: @warning-color;
+        }
+      }
+
+      .class-select {
+        width: 100%;
       }
 
       .class-tags-hint {
-        margin-left: auto;
-        color: @text-muted;
         font-size: 12px;
-      }
-
-      .class-checkbox-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px 12px;
-        max-height: 140px;
-        overflow-y: auto;
-        padding: 10px 12px;
-        border: 1px solid @border-color;
-        border-radius: 6px;
-        background: #fff;
-      }
-
-      .class-checkbox-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 13px;
-        color: @light-text;
-        cursor: pointer;
-        user-select: none;
+        color: @text-muted;
+        line-height: 1.4;
       }
 
       .source-content {

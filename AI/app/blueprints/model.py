@@ -28,6 +28,16 @@ from sqlalchemy.exc import IntegrityError
 model_bp = Blueprint('model', __name__)
 logger = logging.getLogger(__name__)
 
+_DEFAULT_MODEL_VERSION = '1.0.0'
+
+
+def _normalize_model_version(version) -> str:
+    """去掉版本号前导 v/V，统一存储为纯语义版本（如 1.0.0）。"""
+    text = str(version or '').strip()
+    if text.lower().startswith('v'):
+        text = text[1:].lstrip()
+    return text or _DEFAULT_MODEL_VERSION
+
 
 def _serialize_model_class_fields(model: Model) -> dict:
     class_names = parse_class_names_json(model.class_names)
@@ -180,7 +190,7 @@ def upload_custom_model():
     - file: 模型文件（.pt或.onnx格式，multipart/form-data）
     - name: 模型名称（可选，如果提供则保存到数据库）
     - description: 模型描述（可选）
-    - version: 模型版本（可选，默认V1.0.0）
+    - version: 模型版本（可选，默认1.0.0）
     - save_to_db: 是否保存到数据库（可选，默认false）
     """
     if 'file' not in request.files:
@@ -198,7 +208,7 @@ def upload_custom_model():
     # 获取可选参数
     name = request.form.get('name', '').strip()
     description = request.form.get('description', '').strip()
-    version = request.form.get('version', 'V1.0.0').strip()
+    version = _normalize_model_version(request.form.get('version', _DEFAULT_MODEL_VERSION))
     save_to_db = request.form.get('save_to_db', 'false').lower() == 'true'
 
     temp_path = None
@@ -459,7 +469,7 @@ def create_model():
         description = data.get('description', '')
         file_path = data.get('filePath', '')
         image_url = data.get('imageUrl', '')
-        version = data.get('version', 'V1.0.0')
+        version = _normalize_model_version(data.get('version', _DEFAULT_MODEL_VERSION))
         status = 0
         if data.get('status') is not None:
             try:
@@ -537,7 +547,7 @@ def update_model(model_id):
 
         model = Model.query.get_or_404(model_id)
         new_name = data.get('name', model.name)
-        new_version = data.get('version', model.version)
+        new_version = _normalize_model_version(data.get('version', model.version))
 
         # 检查模型名称+版本是否已存在（排除自身）
         if new_name != model.name or new_version != model.version:
@@ -557,7 +567,7 @@ def update_model(model_id):
         if 'name' in data:
             model.name = data['name']
         if 'version' in data:
-            model.version = data['version']
+            model.version = _normalize_model_version(data['version'])
         if 'description' in data:
             model.description = data['description']
         if 'filePath' in data:
@@ -793,7 +803,7 @@ def download_model(model_id):
 
         # 确定文件扩展名
         file_ext = '.onnx' if model.onnx_model_path and not model.model_path else '.pt'
-        download_name = f"{model.name}_{model.version or 'v1.0.0'}{file_ext}"
+        download_name = f"{model.name}_{model.version or _DEFAULT_MODEL_VERSION}{file_ext}"
 
         # 发送文件
         return send_file(

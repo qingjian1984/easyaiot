@@ -130,6 +130,7 @@ import {
 import dayjs from 'dayjs';
 import {message, Space} from 'ant-design-vue';
 import { Button } from '@/components/Button'
+import { formatModelVersionDisplay } from '../../utils/modelVersionUtils';
 defineOptions({ name: 'ModelExport' });
 
 const { createMessage } = useMessage();
@@ -254,7 +255,7 @@ const loadModels = async () => {
     
     // 构建选项列表
     modelOptions.value = models.value.map((model: any) => ({
-      label: `${model.name} (v${model.version})`,
+      label: `${model.name} (${formatModelVersionDisplay(model.version)})`,
       value: model.id,
     }));
     

@@ -51,6 +51,26 @@ export const getModelClasses = (modelId) => {
   return commonApi('get', `${Api.Model}/${modelId}/classes`);
 };
 
+/** 兼容 defHttp 解包前后多种响应结构 */
+export function parseModelClassPayload(resp: any): { classNames: string[]; selectedClassNames: string[] } {
+  if (!resp) {
+    return { classNames: [], selectedClassNames: [] };
+  }
+  let payload = resp;
+  if (resp.code === 0 && resp.data) {
+    payload = resp.data;
+  } else if (resp.data?.class_names || resp.data?.classNames) {
+    payload = resp.data;
+  }
+  const classNames = payload.classNames ?? payload.class_names ?? [];
+  const selected = payload.selectedClassNames ?? payload.selected_class_names ?? classNames;
+  const normalized = Array.isArray(classNames) ? classNames.map(String) : [];
+  const normalizedSelected = Array.isArray(selected) && selected.length > 0
+    ? selected.map(String)
+    : normalized;
+  return { classNames: normalized, selectedClassNames: normalizedSelected };
+}
+
 export const getModelInferenceTasks = (modelId, params) => {
   return commonApi('get', `${Api.Model}/${modelId}/inference_tasks`, {params});
 };

@@ -8,7 +8,7 @@
     >
       <template #toolbar>
         <div class="toolbar-buttons">
-          <Button type="primary" @click="openAddModal(true, {isEdit: false, isView: false})">
+          <Button type="primary" @click="openTrainDrawer(true, {})">
             <Icon icon="ant-design:plus-circle-outlined"/>
             启动新训练
           </Button>
@@ -51,7 +51,7 @@
         @delete="handleCardDelete"
       >
         <template #header>
-          <Button type="primary" @click="openAddModal(true, {isEdit: false, isView: false})">
+          <Button type="primary" @click="openTrainDrawer(true, {})">
             <Icon icon="ant-design:plus-circle-outlined"/>
             启动新训练
           </Button>
@@ -99,6 +99,7 @@ import {nextTick, ref} from 'vue';
 import {SwapOutlined} from '@ant-design/icons-vue';
 import {BasicTable, TableAction, useTable} from '@/components/Table';
 import {useMessage} from '@/hooks/web/useMessage';
+import {useDrawer} from '@/components/Drawer';
 import {useModal} from '@/components/Modal';
 import {deleteTrainTask, getTrainTaskPage, startTrain, stopTrain} from '@/api/device/train';
 import {getDatasetPage} from '@/api/device/dataset';
@@ -125,7 +126,7 @@ const currentImageUrl = ref('');
 const resultsImageError = ref(false);
 let resultsBlobUrl: string | null = null;
 
-const [registerAddModel, {openModal: openAddModal}] = useModal();
+const [registerAddModel, {openDrawer: openTrainDrawer}] = useDrawer();
 const [registerTrainLogsModal, {openModal: openTrainLogsModal}] = useModal();
 
 function getMethod(m: () => void) {
@@ -405,11 +406,11 @@ const handleStopTrain = async (record) => {
 };
 
 const handleRetrain = (record) => {
-  openAddModal(true, {isRetrain: true, record});
+  openTrainDrawer(true, {isRetrain: true, record});
 };
 
 const handleResume = (record) => {
-  openAddModal(true, {isResume: true, record});
+  openTrainDrawer(true, {isResume: true, record});
 };
 
 function revokeResultsBlobUrl() {

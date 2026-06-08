@@ -1,194 +1,180 @@
 <template>
-  <BasicModal
-    @register="registerModal"
-    :title="modalTitle"
-    @cancel="handleCancel"
-    :width="700"
-    :canFullscreen="false"
+  <BasicDrawer
+    v-bind="$attrs"
+    @register="registerDrawer"
+    :title="drawerTitle"
+    width="1400"
+    placement="right"
+    :showFooter="true"
     :showOkBtn="false"
     :showCancelBtn="false"
-    :minHeight="200"
-    wrapClassName="train-task-config-modal"
-    :bodyStyle="{ padding: 0 }"
-    destroyOnClose
-    :footerOffset="0"
+    destroy-on-close
   >
-    <div class="modal-content">
-      <Alert
-        v-if="isResumeMode"
-        type="info"
-        show-icon
-        banner
-        class="resume-alert"
-        :message="resumeHint"
-      />
-
-      <div class="param-section">
-        <h4 class="section-title">任务信息</h4>
-        <div class="param-group">
-          <label>任务名称</label>
-          <input
-            type="text"
-            v-model="taskName"
-            class="param-input"
-            :disabled="isResumeMode"
-            placeholder="请输入训练任务名称"
-          />
-        </div>
-      </div>
-
-      <div class="param-section">
-        <h4 class="section-title">基础参数配置</h4>
-        <div class="basic-params-row">
-          <div class="basic-param-item">
-            <label>迭代次数 (epochs)</label>
-            <input type="number" v-model="params.epochs" :min="minEpochs" max="1000" class="param-input"/>
-            <span class="hint">{{ isResumeMode ? `需大于已完成 ${completedEpochs} epoch` : '推荐 100-300' }}</span>
-          </div>
-          <div class="basic-param-item">
-            <label>批量大小 (batch_size)</label>
-            <input type="number" v-model="params.batch_size" min="1" :max="maxBatchSize" class="param-input"/>
-            <span class="hint">按显存调整</span>
-          </div>
-          <div class="basic-param-item">
-            <label>图像尺寸 (imgsz)</label>
-            <input type="number" v-model="params.imgsz" class="param-input"/>
-            <span class="hint">默认 640</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="param-section">
-        <h4 class="section-title">GPU 配置</h4>
-        <div class="param-group gpu-toggle-row">
-          <label>使用 GPU 训练</label>
-          <div class="gpu-toggle-inline">
-            <a-switch v-model:checked="useGpu"/>
-            <span class="hint" v-if="gpuLoading">正在探测 GPU...</span>
-            <span class="hint" v-else-if="!useGpu">将使用 CPU 训练</span>
-            <span class="hint" v-else-if="gpuStatus.multi_gpu">
-              已探测 {{ gpuStatus.visible_gpu_ids.length }} 张 GPU，将自动多卡并行 (DDP)
-            </span>
-            <span class="hint" v-else-if="gpuStatus.visible_gpu_ids.length === 1">
-              单卡: {{ gpuDeviceLabel }}
-            </span>
-            <span class="hint warn" v-else>未检测到可用 GPU，将回退 CPU</span>
-          </div>
-        </div>
-        <ul v-if="gpuStatus.devices?.length" class="gpu-device-list">
-          <li v-for="dev in gpuStatus.devices" :key="dev.index">
-            GPU {{ dev.index }}: {{ dev.name }} ({{ dev.total_memory_gb }} GB)
-          </li>
-        </ul>
-      </div>
-
-      <div class="param-section">
-        <h4 class="section-title">资源选择</h4>
-
-        <div class="param-group">
-          <label>预训练权重</label>
-          <select v-model="selectedModel" class="resource-select" :disabled="isResumeMode">
-            <option v-for="preset in presetModels" :key="preset" :value="preset">
-              {{ preset }}
-            </option>
-          </select>
-          <span class="hint hint-placeholder" aria-hidden="true">&nbsp;</span>
-        </div>
-
-      </div>
-
-      <div class="param-section dataset-section">
-        <h4 class="section-title">数据集配置</h4>
-        <Tabs
-          v-model:activeKey="datasetSourceTab"
-          type="card"
-          class="dataset-tabs"
-          :destroyInactiveTabPane="false"
-          :class="{ 'dataset-tabs--readonly': isResumeMode }"
-          @change="onDatasetTabChange"
-        >
-          <TabPane key="local" tab="本地上传">
-            <div class="dataset-tab-pane">
-              <Alert
-                type="info"
-                show-icon
-                banner
-                class="dataset-alert"
-                message="上传 YOLO 格式数据集 ZIP 压缩包，单文件最大 5GB，无需在云端预先创建数据集"
-              />
-              <Upload
-                accept=".zip"
-                :file-list="localFileList"
-                :show-upload-list="true"
-                :max-count="1"
-                :before-upload="beforeLocalDatasetUpload"
-                @remove="handleLocalFileRemove"
-              >
-                <Button type="primary">
-                  {{ localFileList?.length ? '重新选择压缩包' : '上传数据集压缩包' }}
-                </Button>
-              </Upload>
-              <span class="dataset-upload-tip">仅支持 .zip 格式，单文件最大 5GB</span>
-            </div>
-          </TabPane>
-          <TabPane key="cloud" tab="云端数据集">
-            <div class="dataset-tab-pane">
-              <Alert
-                type="info"
-                show-icon
-                banner
-                class="dataset-alert"
-                message="请先在数据集管理中完成：标注 → 划分用途 → 同步到 Minio，方可用于训练"
-              />
-              <Select
-                v-model:value="selectedDatasetId"
-                class="dataset-select"
-                placeholder="请选择已同步到 Minio 的云端数据集"
-                :loading="cloudDatasetLoading"
-                :options="cloudDatasetOptions"
-                allow-clear
-                show-search
-                :filter-option="filterCloudDataset"
-              />
-              <p v-if="selectedCloudDataset && !selectedCloudDataset.zipUrl" class="dataset-hint-warn">
-                该数据集尚未同步到 Minio：请进入数据集详情，先「划分用途」再「一键同步到 Minio」。
-              </p>
-              <Empty
-                v-if="!cloudDatasetLoading && !cloudDatasetOptions.length"
-                class="dataset-empty"
-                description="暂无云端数据集，请先在数据集管理中创建"
-              />
-            </div>
-          </TabPane>
-        </Tabs>
-      </div>
-    </div>
     <template #footer>
-      <div class="modal-footer">
+      <div class="footer-buttons">
         <Button @click="handleCancel">取消</Button>
         <Button type="primary" :loading="uploading" @click="startTrain">
           {{ submitButtonText }}
         </Button>
       </div>
     </template>
-  </BasicModal>
+
+    <Spin :spinning="gpuLoading || customModelsLoading">
+      <div class="train-drawer-content">
+        <Alert
+          v-if="isResumeMode"
+          type="info"
+          show-icon
+          class="resume-alert"
+          :message="resumeHint"
+        />
+
+        <BasicForm @register="registerForm" />
+
+        <Divider orientation="left">模型配置</Divider>
+        <Form
+          :label-col="formLabelCol"
+          :wrapper-col="formWrapperCol"
+          class="resource-form"
+        >
+          <FormItem label="预训练权重" required>
+            <Select
+              v-model:value="selectedModelPath"
+              placeholder="请选择预训练权重"
+              :loading="customModelsLoading"
+              :disabled="modelPathDisabled"
+              show-search
+              option-filter-prop="label"
+              style="width: 100%"
+            >
+              <SelectOptGroup label="系统模型">
+                <SelectOption
+                  v-for="item in presetModelOptions"
+                  :key="item.value"
+                  :value="item.value"
+                  :label="item.label"
+                >
+                  {{ item.label }}
+                </SelectOption>
+              </SelectOptGroup>
+              <SelectOptGroup v-if="customWeightOptions.length" label="用户模型">
+                <SelectOption
+                  v-for="item in customWeightOptions"
+                  :key="item.value"
+                  :value="item.value"
+                  :label="item.label"
+                >
+                  {{ item.label }}
+                </SelectOption>
+              </SelectOptGroup>
+            </Select>
+            <div class="form-hint">系统模型为 Ultralytics 官方权重；用户模型来自模型管理上传的 .pt 文件</div>
+          </FormItem>
+          <FormItem v-if="gpuStatus.devices?.length" label="GPU 设备">
+            <div class="gpu-device-panel">
+              <div
+                v-for="dev in gpuStatus.devices"
+                :key="dev.index"
+                class="gpu-device-item"
+              >
+                <Tag color="blue">GPU {{ dev.index }}</Tag>
+                <span>{{ dev.name }}（{{ dev.total_memory_gb }} GB）</span>
+              </div>
+            </div>
+          </FormItem>
+        </Form>
+
+        <Divider orientation="left">数据集配置</Divider>
+        <Form
+          :label-col="formLabelCol"
+          :wrapper-col="formWrapperCol"
+          class="resource-form"
+        >
+          <FormItem label="数据来源">
+            <Radio.Group
+              v-model:value="datasetSourceTab"
+              :disabled="isResumeMode"
+              @change="onDatasetSourceChange"
+            >
+              <Radio value="local">本地上传</Radio>
+              <Radio value="cloud">云端数据集</Radio>
+            </Radio.Group>
+          </FormItem>
+          <FormItem v-if="datasetSourceTab === 'local'" label="上传文件">
+            <Upload
+              accept=".zip"
+              :file-list="localFileList"
+              :show-upload-list="true"
+              :max-count="1"
+              :disabled="isResumeMode"
+              :before-upload="beforeLocalDatasetUpload"
+              @remove="handleLocalFileRemove"
+            >
+              <Button type="primary" :disabled="isResumeMode">
+                {{ localFileList?.length ? '重新选择压缩包' : '上传数据集压缩包' }}
+              </Button>
+            </Upload>
+            <div class="form-hint">上传 YOLO 格式数据集 ZIP 压缩包，单文件最大 5GB</div>
+          </FormItem>
+          <FormItem v-else label="选择数据集">
+            <Select
+              v-model:value="selectedDatasetId"
+              placeholder="请选择已同步到 Minio 的云端数据集"
+              :loading="cloudDatasetLoading"
+              :options="cloudDatasetOptions"
+              :disabled="isResumeMode"
+              allow-clear
+              show-search
+              style="width: 100%"
+              :filter-option="filterCloudDataset"
+            />
+            <div class="form-hint">请先在数据集管理中完成：标注 → 划分用途 → 同步到 Minio</div>
+            <p v-if="selectedCloudDataset && !selectedCloudDataset.zipUrl" class="form-hint-warn">
+              该数据集尚未同步到 Minio，请先完成划分用途并同步
+            </p>
+            <Empty
+              v-if="!cloudDatasetLoading && !cloudDatasetOptions.length"
+              description="暂无云端数据集"
+            />
+          </FormItem>
+        </Form>
+      </div>
+    </Spin>
+  </BasicDrawer>
 </template>
 
 <script lang="ts" setup>
-import {computed, nextTick, reactive, ref} from 'vue';
-import type {UploadProps} from 'ant-design-vue';
-import {Alert, Empty, Select, TabPane, Tabs, Upload} from 'ant-design-vue';
-import {BasicModal, useModalInner} from '@/components/Modal';
-import {getDatasetPage} from '@/api/device/dataset';
-import {getTrainGpuStatus, uploadTrainDataset} from '@/api/device/train';
-import {useMessage} from '@/hooks/web/useMessage';
-import { Button } from '@/components/Button'
+import { computed, ref, watch } from 'vue';
+import type { UploadProps } from 'ant-design-vue';
+import {
+  Alert,
+  Divider,
+  Empty,
+  Form,
+  FormItem,
+  Radio,
+  Select,
+  SelectOption,
+  SelectOptGroup,
+  Spin,
+  Tag,
+  Upload,
+} from 'ant-design-vue';
+import { BasicDrawer, useDrawerInner } from '@/components/Drawer';
+import { BasicForm, useForm } from '@/components/Form';
+import { getDatasetPage } from '@/api/device/dataset';
+import { getModelPage } from '@/api/device/model';
+import { getTrainGpuStatus, uploadTrainDataset } from '@/api/device/train';
+import { useMessage } from '@/hooks/web/useMessage';
+import { Button } from '@/components/Button';
 import {
   getCompletedEpochs,
   isCloudDatasetPath,
   parseTrainHyperparameters,
   resolveTaskBaseNameFromRecord,
 } from '../TrainTaskList/trainTaskUtils';
+import { formatModelVersionDisplay } from '../../utils/modelVersionUtils';
+
 interface GpuDeviceInfo {
   index: number;
   name: string;
@@ -215,19 +201,26 @@ interface DatasetItem {
 
 type DatasetSourceTab = 'local' | 'cloud';
 
-const presetModels = [
-  'yolov8n.pt',
-  'yolov8s.pt',
-  'yolov8m.pt',
-  'yolov8l.pt',
-  'yolov8x.pt',
-  'yolo11n.pt',
-  'yolo11s.pt',
-  'yolo26n.pt',
-  'yolo26s.pt',
+interface CustomWeightOption {
+  value: string;
+  label: string;
+}
+
+const presetModels = ['yolov8n.pt', 'yolo11n.pt', 'yolo26n.pt'];
+
+const presetModelOptions: CustomWeightOption[] = [
+  { label: 'Yolov8 (yolov8n.pt)', value: 'yolov8n.pt' },
+  { label: 'Yolo11 (yolo11n.pt)', value: 'yolo11n.pt' },
+  { label: 'Yolo26 (yolo26n.pt)', value: 'yolo26n.pt' },
 ];
 
-const {createMessage} = useMessage();
+const { createMessage } = useMessage();
+
+const formLabelCol = { style: { width: '100px' } };
+const formWrapperCol = { span: 21 };
+
+const selectedModelPath = ref(presetModels[0]);
+const modelPathDisabled = ref(false);
 
 const defaultGpuStatus = (): GpuStatusData => ({
   cuda_available: false,
@@ -236,10 +229,83 @@ const defaultGpuStatus = (): GpuStatusData => ({
   devices: [],
 });
 
-const useGpu = ref(true);
 const gpuLoading = ref(false);
 const gpuStatus = ref<GpuStatusData>(defaultGpuStatus());
 const uploading = ref(false);
+const customModelsLoading = ref(false);
+const customWeightOptions = ref<CustomWeightOption[]>([]);
+
+function parseModelPageResponse(response: unknown): Array<Record<string, any>> {
+  if (Array.isArray(response)) {
+    return response;
+  }
+  if (response && typeof response === 'object') {
+    const payload = response as Record<string, unknown>;
+    // 与 ModelCardList 一致：分页接口返回 { data, total }
+    if (Array.isArray(payload.data)) {
+      return payload.data as Array<Record<string, any>>;
+    }
+    if (Array.isArray(payload.list)) {
+      return payload.list as Array<Record<string, any>>;
+    }
+    if (Array.isArray(payload.items)) {
+      return payload.items as Array<Record<string, any>>;
+    }
+  }
+  return [];
+}
+
+function resolveTrainModelPath(model: Record<string, any>): string {
+  return String(model.model_path || model.filePath || model.modelPath || '').trim();
+}
+
+/** 与 ModelCardList.getFormatText 一致：有 model_path 且非 ONNX 即为 PyTorch 权重 */
+function isTrainablePtModel(model: Record<string, any>): boolean {
+  const path = resolveTrainModelPath(model);
+  if (!path) {
+    return false;
+  }
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.onnx') || /\.onnx(\?|#|$)/i.test(path)) {
+    return false;
+  }
+  return true;
+}
+
+const gpuHelpMessage = computed(() => {
+  if (gpuLoading.value) return '正在探测 GPU...';
+  if (gpuStatus.value.multi_gpu) {
+    return `已探测 ${gpuStatus.value.visible_gpu_ids.length} 张 GPU，将自动多卡并行 (DDP)`;
+  }
+  if (gpuStatus.value.visible_gpu_ids.length === 1) {
+    const dev = gpuStatus.value.devices?.[0];
+    return dev ? `单卡: ${dev.name} (${dev.total_memory_gb} GB)` : '单卡模式';
+  }
+  if (gpuStatus.value.visible_gpu_ids.length === 0) {
+    return '未检测到可用 GPU，将回退 CPU';
+  }
+  return '';
+});
+
+const loadCustomModels = async () => {
+  customModelsLoading.value = true;
+  try {
+    const res = await getModelPage({ pageNo: 1, pageSize: 1000 });
+    const allModels = parseModelPageResponse(res);
+    customWeightOptions.value = allModels
+      .filter(isTrainablePtModel)
+      .map((model) => ({
+        value: resolveTrainModelPath(model),
+        label: `${model.name || '未命名'} (${formatModelVersionDisplay(model.version) || '—'})`,
+      }))
+      .filter((item) => item.value && !presetModels.includes(item.value));
+  } catch (e) {
+    customWeightOptions.value = [];
+    console.error('加载用户模型失败', e);
+  } finally {
+    customModelsLoading.value = false;
+  }
+};
 
 const datasetSourceTab = ref<DatasetSourceTab>('local');
 const cloudDatasetsLoaded = ref(false);
@@ -249,14 +315,12 @@ const localDatasetPath = ref('');
 const localDatasetDisplayName = ref('');
 const localFileList = ref<UploadProps['fileList']>([]);
 
-const gpuDeviceLabel = computed(() => {
-  const dev = gpuStatus.value.devices?.[0];
-  if (!dev) return 'GPU 0';
-  return `${dev.name} (${dev.total_memory_gb} GB)`;
-});
-
 const loadGpuStatus = async () => {
   gpuLoading.value = true;
+  updateSchema({
+    field: 'use_gpu',
+    helpMessage: '正在探测 GPU...',
+  });
   try {
     const res = await getTrainGpuStatus();
     const data = (res?.data ?? res) as GpuStatusData;
@@ -266,13 +330,18 @@ const loadGpuStatus = async () => {
       multi_gpu: !!data?.multi_gpu,
       devices: data?.devices ?? [],
     };
-    useGpu.value = gpuStatus.value.visible_gpu_ids.length > 0;
+    const defaultUseGpu = gpuStatus.value.visible_gpu_ids.length > 0;
+    await setFieldsValue({ use_gpu: defaultUseGpu });
   } catch (e) {
     gpuStatus.value = defaultGpuStatus();
-    useGpu.value = false;
+    await setFieldsValue({ use_gpu: false });
     console.error(e);
   } finally {
     gpuLoading.value = false;
+    updateSchema({
+      field: 'use_gpu',
+      helpMessage: gpuHelpMessage.value,
+    });
   }
 };
 
@@ -284,17 +353,18 @@ const resetDatasetSelection = () => {
   selectedDatasetId.value = undefined;
 };
 
+const onDatasetSourceChange = (e: { target: { value: DatasetSourceTab } }) => {
+  onDatasetTabChange(e.target.value);
+};
+
 const onDatasetTabChange = (key: string | number) => {
   if (isResumeMode.value) return;
   resetDatasetSelection();
   if (key === 'cloud' && !cloudDatasetsLoaded.value) {
     loadDatasets().finally(() => {
       cloudDatasetsLoaded.value = true;
-      nextTick(() => redoModalHeight());
     });
-    return;
   }
-  nextTick(() => redoModalHeight());
 };
 
 const isRetrainMode = ref(false);
@@ -305,7 +375,7 @@ const resumeDatasetPath = ref('');
 const resumeDatasetName = ref('');
 const resumeDatasetVersion = ref('');
 
-const modalTitle = computed(() => {
+const drawerTitle = computed(() => {
   if (isResumeMode.value) return '继续训练';
   if (isRetrainMode.value) return '重新训练';
   return '训练参数配置';
@@ -317,11 +387,80 @@ const submitButtonText = computed(() => {
   return '开始训练';
 });
 
-const minEpochs = computed(() => (isResumeMode.value ? completedEpochs.value + 1 : 10));
-
 const resumeHint = computed(() =>
   `将从第 ${completedEpochs.value} epoch 断点继续，请设置大于 ${completedEpochs.value} 的总迭代次数。`,
 );
+
+const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getFieldsValue }] = useForm({
+  labelWidth: 100,
+  baseColProps: { span: 24 },
+  showActionButtonGroup: false,
+  schemas: [
+    {
+      field: 'task_name',
+      label: '任务名称',
+      component: 'Input',
+      required: true,
+      componentProps: {
+        placeholder: '请输入训练任务名称',
+      },
+    },
+    {
+      field: 'epochs',
+      label: '迭代次数',
+      component: 'InputNumber',
+      required: true,
+      defaultValue: 100,
+      componentProps: {
+        min: 10,
+        max: 1000,
+        style: { width: '100%' },
+        placeholder: 'epochs',
+      },
+      helpMessage: '推荐 100-300',
+    },
+    {
+      field: 'batch_size',
+      label: '批量大小',
+      component: 'InputNumber',
+      required: true,
+      defaultValue: 16,
+      componentProps: {
+        min: 1,
+        max: 64,
+        style: { width: '100%' },
+        placeholder: 'batch_size',
+      },
+      helpMessage: '按 GPU 显存调整，常见值为 8 / 16 / 32',
+    },
+    {
+      field: 'imgsz',
+      label: '图像尺寸',
+      component: 'InputNumber',
+      required: true,
+      defaultValue: 640,
+      componentProps: {
+        min: 320,
+        max: 1280,
+        step: 32,
+        style: { width: '100%' },
+        placeholder: '640',
+      },
+      helpMessage: 'YOLO 默认 640',
+    },
+    {
+      field: 'use_gpu',
+      label: 'GPU 训练',
+      component: 'Switch',
+      defaultValue: true,
+      componentProps: {
+        checkedChildren: '是',
+        unCheckedChildren: '否',
+      },
+      helpMessage: '正在探测 GPU...',
+    },
+  ],
+});
 
 const resetTrainForm = () => {
   isRetrainMode.value = false;
@@ -331,30 +470,53 @@ const resetTrainForm = () => {
   resumeDatasetPath.value = '';
   resumeDatasetName.value = '';
   resumeDatasetVersion.value = '';
-  taskName.value = '';
-  selectedModel.value = presetModels[0];
   datasetSourceTab.value = 'local';
   cloudDatasetsLoaded.value = false;
   datasetList.value = [];
-  params.epochs = 100;
-  params.batch_size = 16;
-  params.imgsz = 640;
+  customWeightOptions.value = [];
+  gpuStatus.value = defaultGpuStatus();
+  selectedModelPath.value = presetModels[0];
+  modelPathDisabled.value = false;
+  resetFields();
   resetDatasetSelection();
+  updateSchema([
+    { field: 'task_name', componentProps: { disabled: false } },
+    { field: 'epochs', componentProps: { min: 10 }, helpMessage: '推荐 100-300' },
+  ]);
 };
 
-const [registerModal, {closeModal, redoModalHeight}] = useModalInner(async (data) => {
+const applyResumeFormState = () => {
+  const disabled = isResumeMode.value;
+  modelPathDisabled.value = disabled;
+  updateSchema([
+    { field: 'task_name', componentProps: { disabled } },
+    {
+      field: 'epochs',
+      componentProps: { min: completedEpochs.value + 1 },
+      helpMessage: `需大于已完成 ${completedEpochs.value} epoch`,
+    },
+  ]);
+};
+
+const drawerOpenData = ref<Record<string, unknown>>({});
+
+async function initTrainDrawer(data: Record<string, unknown> = {}) {
   resetTrainForm();
+  await loadCustomModels();
 
   const fillFromRecord = async (record: Record<string, unknown>) => {
     retrainTaskId.value = record.id as number;
 
     const hp = parseTrainHyperparameters(record.hyperparameters);
     completedEpochs.value = getCompletedEpochs(record);
-    taskName.value = hp.taskName || resolveTaskBaseNameFromRecord(record);
-    params.epochs = hp.epochs ?? 100;
-    params.batch_size = hp.batch_size ?? 16;
-    params.imgsz = hp.imgsz ?? 640;
-    selectedModel.value = hp.modelPath || presetModels[0];
+
+    await setFieldsValue({
+      task_name: hp.taskName || resolveTaskBaseNameFromRecord(record),
+      epochs: hp.epochs ?? 100,
+      batch_size: hp.batch_size ?? 16,
+      imgsz: hp.imgsz ?? 640,
+    });
+    selectedModelPath.value = hp.modelPath || presetModels[0];
 
     const datasetPath = String(record.dataset_path || '');
     resumeDatasetPath.value = datasetPath;
@@ -367,7 +529,7 @@ const [registerModal, {closeModal, redoModalHeight}] = useModalInner(async (data
       localDatasetPath.value = datasetPath;
       const fileName = datasetPath.split('/').pop() || String(record.dataset_name || '本地数据集');
       localDatasetDisplayName.value = fileName;
-      localFileList.value = [{uid: '-1', name: fileName, status: 'done'}];
+      localFileList.value = [{ uid: '-1', name: fileName, status: 'done' }];
     } else if (datasetSource === 'cloud') {
       await loadDatasets();
       cloudDatasetsLoaded.value = true;
@@ -384,8 +546,9 @@ const [registerModal, {closeModal, redoModalHeight}] = useModalInner(async (data
   if (data?.isResume && data?.record) {
     isResumeMode.value = true;
     await fillFromRecord(data.record as Record<string, unknown>);
-    if (params.epochs <= completedEpochs.value) {
-      params.epochs = completedEpochs.value + 1;
+    const values = await getFieldsValue();
+    if ((values.epochs ?? 100) <= completedEpochs.value) {
+      await setFieldsValue({ epochs: completedEpochs.value + 1 });
     }
   } else if (data?.isRetrain && data?.record) {
     isRetrainMode.value = true;
@@ -393,26 +556,38 @@ const [registerModal, {closeModal, redoModalHeight}] = useModalInner(async (data
   }
 
   await loadGpuStatus();
+
   if ((data?.isRetrain || data?.isResume) && data?.record) {
     const hp = parseTrainHyperparameters(data.record.hyperparameters);
     if (hp.use_gpu !== undefined) {
-      useGpu.value = hp.use_gpu && gpuStatus.value.visible_gpu_ids.length > 0;
+      await setFieldsValue({
+        use_gpu: hp.use_gpu && gpuStatus.value.visible_gpu_ids.length > 0,
+      });
     }
   }
-  nextTick(() => redoModalHeight());
+
+  if (isResumeMode.value || isRetrainMode.value) {
+    applyResumeFormState();
+  }
+}
+
+const [registerDrawer, { closeDrawer, getOpen }] = useDrawerInner((data) => {
+  drawerOpenData.value = (data ?? {}) as Record<string, unknown>;
 });
 
-const params = reactive({
-  epochs: 100,
-  batch_size: 16,
-  imgsz: 640,
-});
+watch(
+  () => getOpen.value,
+  (open) => {
+    if (!open) {
+      return;
+    }
+    void initTrainDrawer({ ...drawerOpenData.value });
+    drawerOpenData.value = {};
+  },
+);
 
-const taskName = ref('');
 const datasetList = ref<DatasetItem[]>([]);
-const selectedModel = ref(presetModels[0]);
 const selectedDatasetId = ref<string | number | undefined>(undefined);
-const maxBatchSize = ref(64);
 
 const selectedCloudDataset = computed(() =>
   datasetList.value.find((item) => item.id === selectedDatasetId.value),
@@ -444,7 +619,7 @@ const emit = defineEmits(['success']);
 const loadDatasets = async () => {
   cloudDatasetLoading.value = true;
   try {
-    const res = await getDatasetPage({page: 1, size: 100});
+    const res = await getDatasetPage({ page: 1, size: 100 });
     datasetList.value = res.data?.list || res.data || [];
   } catch (e) {
     createMessage.error('加载云端数据集失败');
@@ -468,7 +643,7 @@ const beforeLocalDatasetUpload: UploadProps['beforeUpload'] = (file) => {
   localDatasetFile.value = file;
   localDatasetPath.value = '';
   localDatasetDisplayName.value = file.name;
-  localFileList.value = [{uid: '-1', name: file.name, status: 'done'}];
+  localFileList.value = [{ uid: '-1', name: file.name, status: 'done' }];
   return false;
 };
 
@@ -503,13 +678,20 @@ const uploadLocalDatasetIfNeeded = async (): Promise<string | null> => {
 };
 
 const startTrain = async () => {
-  if (!taskName.value.trim()) {
-    createMessage.warn('请输入训练任务名称');
+  let values: Record<string, any>;
+  try {
+    values = await validate();
+  } catch {
     return;
   }
 
-  if (isResumeMode.value && Number(params.epochs) <= completedEpochs.value) {
+  if (isResumeMode.value && Number(values.epochs) <= completedEpochs.value) {
     createMessage.warn(`总 epochs 必须大于已完成 epoch(${completedEpochs.value})`);
+    return;
+  }
+
+  if (!selectedModelPath.value) {
+    createMessage.warn('请选择预训练权重');
     return;
   }
 
@@ -573,219 +755,86 @@ const startTrain = async () => {
   }
 
   emit('success', {
-    ...params,
-    taskName: taskName.value.trim(),
-    modelPath: selectedModel.value,
+    epochs: values.epochs,
+    batch_size: values.batch_size,
+    imgsz: values.imgsz,
+    taskName: String(values.task_name || '').trim(),
+    modelPath: selectedModelPath.value,
     datasetSource,
     datasetPath,
     datasetName,
     datasetVersion,
-    use_gpu: useGpu.value,
-    gpu_ids: useGpu.value && gpuStatus.value.visible_gpu_ids.length
+    use_gpu: values.use_gpu,
+    gpu_ids: values.use_gpu && gpuStatus.value.visible_gpu_ids.length
       ? gpuStatus.value.visible_gpu_ids
       : undefined,
-    ...(retrainTaskId.value ? {taskId: retrainTaskId.value} : {}),
-    ...(isResumeMode.value ? {resume: true} : {}),
+    ...(retrainTaskId.value ? { taskId: retrainTaskId.value } : {}),
+    ...(isResumeMode.value ? { resume: true } : {}),
   });
-  closeModal();
+  closeDrawer();
 };
 
-const handleCancel = () => closeModal();
+const handleCancel = () => closeDrawer();
 </script>
 
 <style lang="less" scoped>
-.modal-content {
-  padding: 20px 25px 8px;
-  background: #ffffff;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.section-title {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: #2c3e50;
-  margin-bottom: 20px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid #e8eef3;
-}
-
-.hint-placeholder {
-  visibility: hidden;
-}
-
-.param-group {
-  display: grid;
-  grid-template-columns: 160px 1fr auto;
-  align-items: start;
-  margin-bottom: 15px;
-  gap: 12px;
-}
-
-.basic-params-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.basic-param-item {
+.train-drawer-content {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-
-  label {
-    font-size: 13px;
-    font-weight: 500;
-    color: #5a6c7d;
-    line-height: 1.4;
-  }
-
-  .param-input {
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .hint {
-    font-size: 12px;
-    color: #8a9aaa;
-    line-height: 1.3;
-  }
+  gap: 12px;
 }
 
 .resume-alert {
-  margin: 0 0 16px;
+  margin-bottom: 4px;
 }
 
-.dataset-tabs--readonly {
-  pointer-events: none;
-  opacity: 0.72;
-}
-
-.dataset-section .section-title {
-  margin-bottom: 12px;
-}
-
-.dataset-tabs {
-  :deep(.ant-tabs-nav) {
-    margin-bottom: 0;
-  }
-
-  :deep(.ant-tabs-content-holder) {
-    border: 1px solid #f0f0f0;
-    border-top: none;
-    border-radius: 0 0 8px 8px;
-    background: #fafafa;
+.resource-form {
+  :deep(.ant-form-item) {
+    margin-bottom: 16px;
   }
 }
 
-.dataset-tab-pane {
-  padding: 12px 16px 16px;
-}
-
-.dataset-alert {
-  margin-bottom: 12px;
-}
-
-.dataset-upload-tip {
-  display: block;
-  margin-top: 8px;
-  font-size: 12px;
-  color: #8a9aaa;
-  line-height: 1.4;
-}
-
-.dataset-select {
+.gpu-device-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
+  padding: 10px 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
 }
 
-.dataset-empty {
-  margin-top: 24px;
-}
-
-.dataset-hint-warn {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: #e67e22;
-  line-height: 1.5;
-}
-
-.param-input,
-.resource-select {
-  padding: 10px 14px;
-  border: 1px solid #dce1e6;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.param-input:focus,
-.resource-select:focus {
-  border-color: #3498db;
-  background: white;
-}
-
-.gpu-toggle-row {
-  grid-template-columns: 160px 1fr;
-  align-items: center;
-}
-
-.gpu-toggle-inline {
+.gpu-device-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: nowrap;
-  min-width: 0;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.65);
+
+  :deep(.ant-tag) {
+    margin: 0;
+  }
 }
 
-.gpu-toggle-inline .hint {
-  flex: 1;
-  min-width: 0;
+.form-hint {
+  margin-top: 4px;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 13px;
   line-height: 1.5;
-  color: #5a6c7d;
+}
+
+.form-hint-warn {
+  margin: 8px 0 0;
   font-size: 13px;
+  color: #fa8c16;
+  line-height: 1.5;
 }
 
-.gpu-device-list {
-  margin: 0 0 16px 172px;
-  padding: 0;
-  list-style: none;
-  font-size: 13px;
-  color: #5a6c7d;
-}
-
-.gpu-device-list li {
-  padding: 4px 0;
-}
-
-.hint.warn {
-  color: #e67e22;
-}
-
-@media (max-width: 768px) {
-  .param-group {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .basic-params-row {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
-
-<style lang="less">
-.train-task-config-modal {
-  .scroll-container .scrollbar__wrap {
-    margin-bottom: 0 !important;
-  }
-
-  .ant-modal-body {
-    padding: 0;
-    background: #fff;
-  }
+.footer-buttons {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
 }
 </style>
