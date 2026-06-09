@@ -202,7 +202,17 @@ function snapshotFilters(processedData: Record<string, any>): Record<string, any
 }
 
 async function handleSubmit() {
-  const formData = await validate();
+  let formData: Record<string, any>;
+  try {
+    formData = await validate();
+  } catch (error: any) {
+    // 摄像头下拉（ApiSelect）选项异步加载会让校验“过期”，
+    // ant-design-vue 会以 { errorFields: [], outOfDate: true } 形式 reject，
+    // 这并非真正的校验失败，吞掉避免未处理的 Promise 异常。
+    if (error?.outOfDate && (!error?.errorFields || error.errorFields.length === 0))
+      return;
+    throw error;
+  }
   const processedData = processFormData(formData);
   lastFormParams.value = snapshotFilters(processedData);
   page.value = 1;

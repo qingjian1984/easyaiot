@@ -126,7 +126,16 @@ function resizeMap() {
 }
 
 async function handleSearch() {
-  const formData = await validate();
+  let formData: Record<string, unknown>;
+  try {
+    formData = await validate();
+  } catch (error: any) {
+    // 摄像头 ApiSelect 选项异步加载会让校验“过期”，ant-design-vue 以
+    // { errorFields: [], outOfDate: true } reject，并非真正校验失败，吞掉即可。
+    if (error?.outOfDate && (!error?.errorFields || error.errorFields.length === 0))
+      return;
+    throw error;
+  }
   const processed = normalizeAlertQueryParams(
     formData as Record<string, unknown>,
     router.currentRoute.value.query.task_name as string | undefined,
