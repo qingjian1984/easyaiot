@@ -23,6 +23,28 @@
             @change="handleModelChange"
           />
         </a-form-item>
+        <a-form-item label="部署目标" class="form-item-input">
+          <a-select
+            v-model:value="formState.deploy_target"
+            :options="deployTargetOptions"
+            @change="handleDeployTargetChange"
+          />
+        </a-form-item>
+        <a-form-item
+          v-if="formState.deploy_target === 'node'"
+          label="目标节点"
+          :required="true"
+          class="form-item-input"
+        >
+          <a-select
+            v-model:value="formState.target_node_id"
+            placeholder="选择在线计算节点"
+            :options="nodeOptions"
+            show-search
+            :filter-option="filterOption"
+            allow-clear
+          />
+        </a-form-item>
         <a-form-item label="端口" :required="true" class="form-item-input">
           <template #extra>
             <span class="port-tip">端口占用时自动寻找未占用端口</span>
@@ -45,6 +67,7 @@ import { BasicModal, useModalInner } from '@/components/Modal';
 import { Form, FormItem, Select, InputNumber } from 'ant-design-vue';
 import { useMessage } from '@/hooks/web/useMessage';
 import { deployModel, getModelPage } from '@/api/device/model';
+import { getNodePage } from '@/api/device/node';
 
 const AForm = Form;
 const AFormItem = FormItem;
@@ -54,10 +77,19 @@ const AInputNumber = InputNumber;
 const { createMessage } = useMessage();
 
 const modelOptions = ref<Array<{ label: string; value: number }>>([]);
+const nodeOptions = ref<Array<{ label: string; value: number }>>([]);
+
+const deployTargetOptions = [
+  { label: '本机部署', value: 'local' },
+  { label: '自动调度节点', value: 'auto' },
+  { label: '指定节点', value: 'node' },
+];
 
 const formState = reactive({
   model_id: null as number | null,
   start_port: 9999 as number,
+  deploy_target: 'local' as string,
+  target_node_id: null as number | null,
 });
 
 
@@ -69,9 +101,13 @@ const deploying = computed(() => state.deploying);
 
 // 验证表单是否有效
 const isFormValid = computed(() => {
-  return formState.model_id !== null 
-    && formState.start_port >= 8000 
+  const base = formState.model_id !== null
+    && formState.start_port >= 8000
     && formState.start_port <= 65535;
+  if (formState.deploy_target === 'node') {
+    return base && formState.target_node_id !== null;
+  }
+  return base;
 });
 
 const loadModelOptions = async () => {
@@ -88,18 +124,43 @@ const loadModelOptions = async () => {
   }
 };
 
+const loadNodeOptions = async () => {
+  try {
+    const res = await getNodePage({ pageNo: 1, pageSize: 200, status: 'online' });
+    const page = res?.data || res;
+    const list = (page?.list || []).filter(
+      (node: any) => node.nodeRole === 'compute' || node.nodeRole === 'hybrid',
+    );
+    nodeOptions.value = list.map((node: any) => ({
+      label: `${node.name} (${node.host})`,
+      value: node.id,
+    }));
+  } catch (error) {
+    console.error('获取节点列表失败:', error);
+    nodeOptions.value = [];
+  }
+};
+
 onMounted(() => {
   loadModelOptions();
+  loadNodeOptions();
 });
 
-const [register, { closeModal, setModalProps }] = useModalInner(async (data) => {
-  // 重置表单
+const [register, { closeModal, setModalProps }] = useModalInner(async () => {
   formState.model_id = null;
   formState.start_port = 9999;
+  formState.deploy_target = 'local';
+  formState.target_node_id = null;
   state.deploying = false;
   setModalProps({ confirmLoading: false });
-  await loadModelOptions();
+  await Promise.all([loadModelOptions(), loadNodeOptions()]);
 });
+
+function handleDeployTargetChange() {
+  if (formState.deploy_target !== 'node') {
+    formState.target_node_id = null;
+  }
+}
 
 // 监听部署状态，更新弹框按钮的 loading 状态
 watch(() => state.deploying, (loading) => {
@@ -137,11 +198,15 @@ const handleSubmit = async () => {
 
   try {
     state.deploying = true;
-    const values: any = {
+    const values: Record<string, unknown> = {
       model_id: formState.model_id,
       start_port: formState.start_port,
+      auto_schedule: formState.deploy_target === 'auto',
     };
-    
+    if (formState.deploy_target === 'node' && formState.target_node_id) {
+      values.target_node_id = formState.target_node_id;
+    }
+
     const response = await deployModel(values);
     // 检查响应中是否有警告标记
     if (response && (response as any).warning) {
@@ -151,7 +216,8 @@ const handleSubmit = async () => {
       closeModal();
       emit('success');
     } else {
-      createMessage.success('部署成功');
+      const msg = (response as any)?.msg;
+      createMessage.success(msg || '部署成功');
       closeModal();
       emit('success');
     }

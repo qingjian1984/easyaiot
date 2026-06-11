@@ -68,6 +68,9 @@ hs_err_pid*
 .scripts/zlmediakit/log/
 .scripts/zlmediakit/conf/config.ini
 
+# 媒体节点离线 Docker 镜像包（体积大，勿提交）
+.scripts/media-cluster/images/*.tar
+
 # alert_images 文件夹
 **/alert_images/
 

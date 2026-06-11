@@ -174,6 +174,10 @@ def deploy_model_route():
         data = request.get_json()
         model_id = data.get('model_id')
         start_port = int(data.get('start_port', 8000))
+        target_node_id = data.get('target_node_id')
+        auto_schedule = bool(data.get('auto_schedule', False))
+        if target_node_id is not None:
+            target_node_id = int(target_node_id)
 
         if not model_id:
             return jsonify({
@@ -181,7 +185,12 @@ def deploy_model_route():
                 'msg': '缺少必要参数：model_id'
             }), 400
 
-        result = deploy_model(model_id, start_port)
+        result = deploy_model(
+            int(model_id),
+            start_port,
+            target_node_id=target_node_id,
+            auto_schedule=auto_schedule,
+        )
         return jsonify(result)
 
     except ValueError as e:

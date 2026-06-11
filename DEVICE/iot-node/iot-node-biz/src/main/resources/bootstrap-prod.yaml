@@ -1,0 +1,16 @@
+spring:
+  cloud:
+    nacos:
+      server-addr: ${SPRING_CLOUD_NACOS_SERVER_ADDR:Nacos:8848}
+      discovery:
+        metadata:
+          version: 1.0.0
+        username: nacos
+        password: basiclab@iot78475418754
+      config:
+        server-addr: ${SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR:Nacos:8848}
+        group: DEFAULT_GROUP
+        name: ${spring.application.name}
+        file-extension: yaml
+        username: nacos
+        password: basiclab@iot78475418754

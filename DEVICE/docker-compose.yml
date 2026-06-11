@@ -168,6 +168,35 @@ services:
       iot-infra:
         condition: service_healthy
 
+  iot-node:
+    image: iot-module-node-biz:latest
+    container_name: iot-node
+    user: root
+    environment:
+      - TZ=Asia/Shanghai
+      - JAVA_OPTS=-Xms512m -Xmx512m
+      - SPRING_PROFILES_ACTIVE=local
+      - SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR=Nacos:8848
+      - SPRING_CLOUD_NACOS_CONFIG_NAMESPACE=
+      - SPRING_CLOUD_NACOS_SERVER_ADDR=Nacos:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_NAMESPACE=
+      - SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_URL=jdbc:postgresql://PostgresSQL:5432/iot-node20?autoReconnect=true&autoReconnectForPools=true&useUnicode=true&characterEncoding=utf8&createDatabaseIfNotExist=true&allowMultiQueries=true&zeroDateTimeBehavior=convertToNull&stringtype=unspecified
+      - SPRING_REDIS_HOST=Redis
+    volumes:
+      - ${HOME}/docker/iot-node/logs:/root/logs/
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:48094/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: always
+    networks:
+      - easyaiot-network
+    depends_on:
+      iot-infra:
+        condition: service_healthy
+
   iot-tdengine:
     image: iot-module-tdengine-biz:latest
     container_name: iot-tdengine

@@ -391,6 +391,7 @@ class AIService(db.Model):
     log_path = db.Column(db.String(500))  # 日志文件路径
     model_version = db.Column(db.String(20))  # 模型版本号
     format = db.Column(db.String(50))  # 模型格式 (onnx, openvino, pytorch等)
+    node_id = db.Column(db.BigInteger)  # 部署所在服务器节点 ID（iot-node）
     created_at = db.Column(db.DateTime, default=beijing_now)
     updated_at = db.Column(db.DateTime, default=beijing_now, onupdate=beijing_now)
     
@@ -414,6 +415,7 @@ class AIService(db.Model):
             'log_path': self.log_path,
             'model_version': self.model_version,
             'format': self.format,
+            'node_id': self.node_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

@@ -416,7 +416,9 @@ def create_algorithm_task(task_name: str,
                          frame_skip: int = 25,
                          is_enabled: bool = False,
                          defense_mode: Optional[str] = None,
-                         defense_schedule: Optional[str] = None) -> AlgorithmTask:
+                         defense_schedule: Optional[str] = None,
+                         schedule_policy: str = 'local',
+                         target_node_id: Optional[int] = None) -> AlgorithmTask:
     """创建算法任务"""
     try:
         # 验证任务类型
@@ -657,7 +659,9 @@ def create_algorithm_task(task_name: str,
             frame_skip=frame_skip,
             is_enabled=is_enabled,
             defense_mode=defense_mode,
-            defense_schedule=defense_schedule
+            defense_schedule=defense_schedule,
+            schedule_policy=schedule_policy or 'local',
+            target_node_id=target_node_id,
         )
         
         db.session.add(task)
@@ -812,7 +816,8 @@ def update_algorithm_task(task_id: int, **kwargs) -> AlgorithmTask:
             'alarm_suppress_time',  # 告警配置
             'cron_expression', 'frame_skip',  # 抓拍算法任务配置
             'is_enabled', 'status', 'exception_reason',
-            'defense_mode', 'defense_schedule'
+            'defense_mode', 'defense_schedule',
+            'schedule_policy', 'target_node_id',
         ]
         
         # 验证布防模式

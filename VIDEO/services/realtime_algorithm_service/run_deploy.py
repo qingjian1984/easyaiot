@@ -1663,8 +1663,13 @@ def send_heartbeat():
         log_base_dir = os.path.join(video_root, 'logs')
         log_path = os.path.join(log_base_dir, f'task_{TASK_ID}')
 
-        # 构建心跳URL
-        heartbeat_url = f"http://localhost:{VIDEO_SERVICE_PORT}/video/algorithm/heartbeat/realtime"
+        heartbeat_url = os_module.getenv('VIDEO_HEARTBEAT_URL')
+        if not heartbeat_url:
+            control_url = os_module.getenv('VIDEO_CONTROL_URL', '').rstrip('/')
+            if control_url:
+                heartbeat_url = f'{control_url}/algorithm/heartbeat/realtime'
+            else:
+                heartbeat_url = f"http://localhost:{VIDEO_SERVICE_PORT}/video/algorithm/heartbeat/realtime"
 
         # 发送心跳
         response = requests.post(

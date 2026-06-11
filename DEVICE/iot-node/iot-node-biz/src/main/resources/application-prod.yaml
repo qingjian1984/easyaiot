@@ -1,0 +1,18 @@
+spring:
+  autoconfigure:
+    exclude:
+      - com.alibaba.druid.spring.boot.autoconfigure.DruidDataSourceAutoConfigure
+  datasource:
+    dynamic:
+      primary: master
+      datasource:
+        master:
+          driver-class-name: org.postgresql.Driver
+          url: ${SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_URL}
+          username: ${SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_USERNAME:postgres}
+          password: ${SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_PASSWORD}
+  redis:
+    host: ${SPRING_REDIS_HOST:Redis}
+    port: ${SPRING_REDIS_PORT:6379}
+    database: 0
+    password: ${SPRING_REDIS_PASSWORD:basiclab@iot975248395}

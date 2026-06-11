@@ -114,7 +114,9 @@ def create_task():
             frame_skip=data.get('frame_skip', 25),
             is_enabled=data.get('is_enabled', False),
             defense_mode=data.get('defense_mode'),
-            defense_schedule=data.get('defense_schedule')
+            defense_schedule=data.get('defense_schedule'),
+            schedule_policy=data.get('schedule_policy', 'local'),
+            target_node_id=data.get('target_node_id'),
         )
         
         return jsonify({

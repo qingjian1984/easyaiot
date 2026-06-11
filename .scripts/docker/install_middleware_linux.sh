@@ -4909,6 +4909,7 @@ init_databases() {
     DB_SQL_MAP["ruoyi-vue-pro20"]="${sql_dir}/ruoyi-vue-pro10.sql"
     DB_SQL_MAP["iot-message20"]="${sql_dir}/iot-message10.sql"
     DB_SQL_MAP["iot-gb2818120"]="${sql_dir}/iot-gb2818110.sql"
+    DB_SQL_MAP["iot-node20"]="${sql_dir}/iot-node10.sql"
     
     local success_count=0
     local total_count=${#DB_SQL_MAP[@]}
@@ -6303,7 +6304,7 @@ delete_databases() {
     fi
     
     # 定义需要删除的数据库列表
-    local databases=("iot-ai20" "iot-device20" "iot-video20" "ruoyi-vue-pro20")
+    local databases=("iot-ai20" "iot-device20" "iot-video20" "iot-node20" "ruoyi-vue-pro20")
     local deleted_count=0
     local total_count=${#databases[@]}
     

@@ -22,12 +22,137 @@ from .snap_space_service import get_snap_space_by_device_id, create_snap_space_f
 
 logger = logging.getLogger(__name__)
 
+WORKLOAD_TYPE_ALGORITHM = 'algorithm_task'
+
 # 存储已启动的守护进程对象（参考 AI 模块的 deploy_service.py）
 _running_daemons: Dict[int, AlgorithmTaskDaemon] = {}
 _daemons_lock = threading.Lock()
 # 启动锁：防止并发启动同一个任务
 _starting_tasks: Dict[int, threading.Lock] = {}
 _starting_lock = threading.Lock()
+
+
+def _get_video_root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _use_remote_deploy(task: AlgorithmTask) -> bool:
+    from app.utils.node_client import is_remote_deploy_enabled
+    if not is_remote_deploy_enabled():
+        return False
+    policy = getattr(task, 'schedule_policy', None) or 'local'
+    return policy in ('auto', 'node')
+
+
+def _task_capabilities(task_type: str) -> list:
+    if task_type == 'snap':
+        return ['algorithm_snap']
+    return ['algorithm_realtime']
+
+
+def _resolve_video_control_url() -> str:
+    gateway = os.getenv('JAVA_BACKEND_URL', os.getenv('GATEWAY_URL', 'http://localhost:48080')).rstrip('/')
+    return f'{gateway}/admin-api/video'
+
+
+def _build_task_deploy_env(task_id: int, task_type: str, log_path: str, server_host: str) -> dict:
+    env = {}
+    for key in (
+        'DATABASE_URL', 'GATEWAY_URL', 'GB28181_SERVICE_URL', 'JWT_TOKEN', 'JAVA_BACKEND_URL',
+        'GB28181_HTTP_READ_TIMEOUT', 'GB28181_PLAY_PROTOCOL', 'GB28181_HEVC_RTSP_FIRST',
+        'GB28181_OPENCV_RTMP_FALLBACK_RTSP', 'POD_IP', 'HOST_IP', 'AI_SERVICE_URL',
+        'USE_GPU', 'GPU_IDS', 'GPU_POLICY', 'INFER_GPU_POLICY', 'FFMPEG_GPU_POLICY',
+        'CUDA_VISIBLE_DEVICES', 'NVIDIA_VISIBLE_DEVICES', 'ORT_EXECUTION_PROVIDERS',
+        'KAFKA_BOOTSTRAP_SERVERS', 'MINIO_ENDPOINT', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY',
+        'MINIO_SECURE', 'NACOS_SERVER', 'VIDEO_ENV',
+    ):
+        val = os.getenv(key)
+        if val is not None and val != '':
+            env[key] = val
+
+    video_control_url = _resolve_video_control_url()
+    video_service_port = os.getenv('FLASK_RUN_PORT', '6000')
+    env['PYTHONUNBUFFERED'] = '1'
+    env['TASK_ID'] = str(task_id)
+    env['VIDEO_SERVICE_PORT'] = video_service_port
+    env['VIDEO_CONTROL_URL'] = video_control_url
+    env['VIDEO_HEARTBEAT_URL'] = f'{video_control_url}/algorithm/heartbeat/realtime'
+    env['LOG_PATH'] = log_path
+    env['POD_IP'] = server_host
+    env['HOST_IP'] = server_host
+
+    kafka_bootstrap = env.get('KAFKA_BOOTSTRAP_SERVERS', os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092'))
+    if 'Kafka' in kafka_bootstrap or 'kafka-server' in kafka_bootstrap:
+        env['KAFKA_BOOTSTRAP_SERVERS'] = os.getenv('NODE_REMOTE_KAFKA', kafka_bootstrap)
+    else:
+        env['KAFKA_BOOTSTRAP_SERVERS'] = kafka_bootstrap
+    return env
+
+
+def _deploy_task_on_remote_node(task_id: int, task: AlgorithmTask) -> Tuple[bool, str, bool]:
+    from app.utils import node_client
+
+    policy = getattr(task, 'schedule_policy', None) or 'local'
+    target_node_id = getattr(task, 'target_node_id', None)
+    if policy == 'node' and not target_node_id:
+        return (False, '已选择指定节点但未配置目标节点', False)
+
+    allocation = node_client.allocate_node(
+        WORKLOAD_TYPE_ALGORITHM,
+        str(task_id),
+        capabilities=_task_capabilities(task.task_type),
+        target_node_id=target_node_id if policy == 'node' else None,
+        sticky=True,
+    )
+
+    node_id = allocation['nodeId']
+    host = allocation['host']
+    gpu_ids = allocation.get('gpuIds')
+
+    video_root_remote = os.getenv('NODE_REMOTE_VIDEO_ROOT', '/opt/easyaiot/VIDEO')
+    service_dir = 'snapshot_algorithm_service' if task.task_type == 'snap' else 'realtime_algorithm_service'
+    work_dir = os.path.join(video_root_remote, 'services', service_dir)
+    log_dir = os.path.join(video_root_remote, 'logs', f'task_{task_id}')
+    python_exec = os.getenv('NODE_REMOTE_PYTHON', 'python3')
+    deploy_script = os.path.join(work_dir, 'run_deploy.py')
+    command = [python_exec, deploy_script]
+
+    env = _build_task_deploy_env(task_id, task.task_type, log_dir, host)
+    env['VIDEO_ROOT'] = video_root_remote
+
+    result = node_client.deploy_workload(
+        node_id=node_id,
+        workload_type=WORKLOAD_TYPE_ALGORITHM,
+        workload_id=str(task_id),
+        command=command,
+        work_dir=work_dir,
+        log_dir=log_dir,
+        env=env,
+        gpu_ids=gpu_ids,
+    )
+
+    task.node_id = node_id
+    task.service_server_ip = host
+    task.service_process_id = result.get('pid')
+    task.service_log_path = log_dir
+    task.run_status = 'running'
+    db.session.commit()
+
+    logger.info(
+        '算法任务远程部署成功 task_id=%s node_id=%s host=%s pid=%s',
+        task_id, node_id, host, result.get('pid'),
+    )
+    return (True, f'已下发到节点 {host}', False)
+
+
+def _stop_remote_task(task_id: int, node_id: Optional[int]) -> None:
+    if not node_id:
+        return
+    from app.utils import node_client
+    try:
+        node_client.stop_workload(node_id, WORKLOAD_TYPE_ALGORITHM, str(task_id))
+    except Exception as e:
+        logger.warning('远程停止算法任务失败 task_id=%s: %s', task_id, e)
 
 
 def get_service_script_path(service_type: str) -> str:
@@ -325,6 +450,15 @@ def stop_service_process(task_id: int, service_type: str):
             if task_start_lock.acquire(blocking=True, timeout=5):
                 task_start_lock.release()
     
+    task = AlgorithmTask.query.get(task_id)
+    was_remote = bool(task and task.node_id)
+    if was_remote:
+        _stop_remote_task(task_id, task.node_id)
+        task.node_id = None
+        task.service_process_id = None
+        task.run_status = 'stopped'
+        db.session.commit()
+
     with _daemons_lock:
         if task_id in _running_daemons:
             daemon = _running_daemons[task_id]
@@ -335,9 +469,9 @@ def stop_service_process(task_id: int, service_type: str):
                 logger.error(f"❌ 停止{service_type}服务失败: task_id={task_id}, error={str(e)}")
             finally:
                 del _running_daemons[task_id]
-    
-    # 清理可能遗留的进程（包括FFmpeg子进程）
-    cleanup_orphaned_processes(task_id)
+
+    if not was_remote:
+        cleanup_orphaned_processes(task_id)
     
     # 清理启动锁
     with _starting_lock:
@@ -363,6 +497,12 @@ def restart_task_services(task_id: int) -> bool:
     Returns:
         bool: 是否成功重启服务
     """
+    task = AlgorithmTask.query.get(task_id)
+    if task and _use_remote_deploy(task):
+        _stop_remote_task(task_id, task.node_id)
+        success, _, _ = _deploy_task_on_remote_node(task_id, task)
+        return success
+
     with _daemons_lock:
         if task_id in _running_daemons:
             daemon = _running_daemons[task_id]
@@ -405,6 +545,12 @@ def start_task_services(task_id: int, task: AlgorithmTask) -> Tuple[bool, str, b
     try:
         # 实时算法任务和抓拍算法任务都需要启动服务进程
         if task.task_type in ['realtime', 'snap']:
+            if _use_remote_deploy(task):
+                if task.node_id:
+                    logger.info('任务 %s 已在远程节点 %s 运行，跳过重复部署', task_id, task.node_id)
+                    return (True, '任务已在远程节点运行', True)
+                return _deploy_task_on_remote_node(task_id, task)
+
             # 检查是否已经有运行的守护进程（在清理之前检查，避免误杀正在运行的进程）
             should_cleanup = True
             with _daemons_lock:
@@ -603,11 +749,12 @@ def _auto_start_all_tasks_internal():
                     continue
                 
                 # 启动任务的服务
-                if start_task_services(task.id, task):
+                success, msg, _ = start_task_services(task.id, task)
+                if success:
                     success_count += 1
-                    logger.info(f"✅ 任务 {task.id} ({task.task_name}) 的服务启动成功")
+                    logger.info(f"✅ 任务 {task.id} ({task.task_name}) 的服务启动成功: {msg}")
                 else:
-                    logger.error(f"❌ 任务 {task.id} ({task.task_name}) 的服务启动失败")
+                    logger.error(f"❌ 任务 {task.id} ({task.task_name}) 的服务启动失败: {msg}")
                     
             except Exception as e:
                 logger.error(f"❌ 启动任务 {task.id} 的服务时出错: {str(e)}", exc_info=True)

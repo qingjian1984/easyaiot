@@ -503,6 +503,18 @@ def _get_minio_client():
 
 def upload_frame_to_snap_space(device_id: str, frame: np.ndarray) -> bool:
     """将帧上传到设备抓拍空间（MinIO），不产生告警记录。"""
+    import os
+    try:
+        from app.utils.snap_media_client import stage_snap_frame
+        from app.services.media_kafka_service import is_snap_kafka_mode
+        staging = os.getenv('MEDIA_SNAP_STAGING_ENABLED', '').lower() in ('1', 'true', 'yes')
+        if staging or is_snap_kafka_mode():
+            return stage_snap_frame(
+                device_id, frame, source='algorithm', task_id=TASK_ID or None,
+            )
+    except Exception as staging_err:
+        logger.debug('抓拍暂存/Kafka 路径不可用，回退直传 MinIO: %s', staging_err)
+
     import io
     import uuid as _uuid
 
@@ -1731,7 +1743,13 @@ def send_heartbeat():
         log_path = os.path.join(log_base_dir, f'task_{TASK_ID}')
 
         # 构建心跳URL
-        heartbeat_url = f"http://localhost:{VIDEO_SERVICE_PORT}/video/algorithm/heartbeat/realtime"
+        heartbeat_url = os_module.getenv('VIDEO_HEARTBEAT_URL')
+        if not heartbeat_url:
+            control_url = os_module.getenv('VIDEO_CONTROL_URL', '').rstrip('/')
+            if control_url:
+                heartbeat_url = f'{control_url}/algorithm/heartbeat/realtime'
+            else:
+                heartbeat_url = f"http://localhost:{VIDEO_SERVICE_PORT}/video/algorithm/heartbeat/realtime"
 
         # 发送心跳
         response = requests.post(

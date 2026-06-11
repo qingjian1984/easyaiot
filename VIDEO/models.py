@@ -912,6 +912,12 @@ class AlgorithmTask(db.Model):
     run_status = db.Column(db.String(20), default='stopped', nullable=False, comment='运行状态[running:运行中,stopped:已停止,restarting:重启中]')
     exception_reason = db.Column(db.String(500), nullable=True, comment='异常原因')
     
+    # 节点调度（跨节点部署）
+    schedule_policy = db.Column(db.String(20), default='local', nullable=False,
+                                comment='调度策略[local:本机,auto:自动节点,node:指定节点]')
+    target_node_id = db.Column(db.BigInteger, nullable=True, comment='指定部署节点ID')
+    node_id = db.Column(db.BigInteger, nullable=True, comment='实际运行节点ID')
+
     # 服务状态信息（仅实时算法任务使用）
     service_server_ip = db.Column(db.String(45), nullable=True, comment='服务运行服务器IP')
     service_port = db.Column(db.Integer, nullable=True, comment='服务端口')
@@ -1053,6 +1059,9 @@ class AlgorithmTask(db.Model):
             'last_capture_time': utc_isoformat_z(self.last_capture_time),
             'defense_mode': self.defense_mode,
             'defense_schedule': self.defense_schedule,
+            'schedule_policy': self.schedule_policy,
+            'target_node_id': self.target_node_id,
+            'node_id': self.node_id,
             'service_server_ip': self.service_server_ip,
             'service_port': self.service_port,
             'service_process_id': self.service_process_id,

@@ -159,9 +159,6 @@
         <TabPane key="7" tab="算法任务">
           <AlgorithmTask ref="algorithmTaskRef"/>
         </TabPane>
-        <TabPane key="8" tab="拉流代理">
-          <Gb28181PullProxy ref="gb28181PullProxyRef"/>
-        </TabPane>
         <TabPane key="9" tab="节点管理">
           <Gb28181Node ref="gb28181NodeRef"/>
         </TabPane>
@@ -219,7 +216,6 @@ import {
 import { deleteGb28181SipDevice } from './utils/gb28181DeviceDelete';
 import { isNvrListRow } from './utils/deviceLabel';
 import StreamForward from "./components/StreamForward/index.vue";
-import Gb28181PullProxy from "@/views/gb28181/components/PullProxy/index.vue";
 import { formatCameraDeviceLabel } from './utils/deviceLabel';
 import {
   hasDirectPlayStream,
@@ -312,8 +308,7 @@ const plateLibraryRef = ref();
 // 推流转发组件引用
 const streamForwardRef = ref();
 
-// GB28181组件引用
-const gb28181PullProxyRef = ref();
+// 节点管理组件引用
 const gb28181NodeRef = ref();
 
 /** 一级 Tab key（与模板 TabPane 从左到右顺序一致） */
@@ -324,7 +319,6 @@ const CAMERA_TAB_KEYS = {
   STORAGE: '4',
   STREAM_FORWARD: '6',
   ALGORITHM: '7',
-  GB_PULL_PROXY: '8',
   GB_NODE: '9',
   FACE_LIBRARY: '10',
   PLATE_LIBRARY: '11',
@@ -332,9 +326,10 @@ const CAMERA_TAB_KEYS = {
 
 const CAMERA_TAB_ID_SET = new Set<string>(Object.values(CAMERA_TAB_KEYS));
 
-/** 旧版 tab 编号兼容（仅处理当前 1～11 以外的历史编号） */
+/** 旧版 tab 编号兼容（已移除的 Tab 或历史编号） */
 const LEGACY_CAMERA_TAB_MAP: Record<string, string> = {
   '5': CAMERA_TAB_KEYS.STORAGE,
+  '8': CAMERA_TAB_KEYS.CAMERA_MAP,
   '12': CAMERA_TAB_KEYS.DEVICE_LIST,
 };
 
@@ -378,13 +373,6 @@ const handleTabClick = (activeKey: string) => {
   if (activeKey === CAMERA_TAB_KEYS.CAMERA_MAP && cameraMapDistributionRef.value) {
     cameraMapDistributionRef.value.refresh();
   }
-  // GB28181 拉流/节点 Tab 可按需在此 refresh
-  // if (activeKey === CAMERA_TAB_KEYS.GB_PULL_PROXY && gb28181PullProxyRef.value) {
-  //   gb28181PullProxyRef.value.refresh();
-  // }
-  // if (activeKey === CAMERA_TAB_KEYS.GB_NODE && gb28181NodeRef.value) {
-  //   gb28181NodeRef.value.refresh();
-  // }
 };
 
 // 切换视图时刷新对应列表

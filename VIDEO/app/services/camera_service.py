@@ -538,8 +538,8 @@ def _get_host_ip_for_stream_urls() -> str:
     return '127.0.0.1'
 
 
-def _default_stream_urls(device_id: str) -> tuple[str, str, str, str]:
-    """直连/默认场景下生成 live 与 ai 的 RTMP、HTTP-FLV 地址（使用宿主机 IP）。"""
+def _legacy_local_stream_urls(device_id: str) -> tuple[str, str, str, str]:
+    """本机 SRS 默认流地址（不经过媒体节点池）。"""
     host = _get_host_ip_for_stream_urls()
     return (
         f'rtmp://{host}:1935/live/{device_id}',
@@ -549,9 +549,44 @@ def _default_stream_urls(device_id: str) -> tuple[str, str, str, str]:
     )
 
 
+def _default_stream_urls(device_id: str) -> tuple[str, str, str, str]:
+    """生成 live 与 ai 的 RTMP、HTTP-FLV 地址；启用媒体节点池时经 iot-node 调度。"""
+    try:
+        from app.utils.media_client import (
+            allocate_device_media,
+            is_media_pool_enabled,
+            stream_urls_from_binding,
+        )
+        if is_media_pool_enabled():
+            binding = allocate_device_media(device_id)
+            return stream_urls_from_binding(binding)
+    except Exception as e:
+        logger.warning('媒体节点池分配失败 device_id=%s，回退本机地址: %s', device_id, e)
+
+    return _legacy_local_stream_urls(device_id)
+
+
 def gb28181_device_stream_urls(device_id: str) -> tuple[str, str, str, str]:
     """国标虚拟设备：播放走 WVP 点播，仅生成算法任务用的 AI 推流地址。"""
-    _, _, ai_rtmp_stream, ai_http_stream = _default_stream_urls(device_id)
+    try:
+        from app.utils.media_client import (
+            allocate_device_media,
+            is_media_pool_enabled,
+            stream_urls_from_binding,
+        )
+        if is_media_pool_enabled():
+            binding = allocate_device_media(
+                device_id,
+                need_srs_live=False,
+                need_srs_ai=True,
+                need_zlm=True,
+            )
+            _, _, ai_rtmp_stream, ai_http_stream = stream_urls_from_binding(binding)
+            return '', '', ai_rtmp_stream, ai_http_stream
+    except Exception as e:
+        logger.warning('国标设备媒体节点池分配失败 device_id=%s，回退本机地址: %s', device_id, e)
+
+    _, _, ai_rtmp_stream, ai_http_stream = _legacy_local_stream_urls(device_id)
     return '', '', ai_rtmp_stream, ai_http_stream
 
 

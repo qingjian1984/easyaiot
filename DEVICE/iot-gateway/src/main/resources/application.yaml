@@ -51,6 +51,16 @@ spring:
           filters:
             - StripPrefix=1
             - RewritePath=/admin-api/dataset/v3/api-docs, /v3/api-docs # 配置，保证转发到 /v3/api-docs
+        # 服务器节点管理服务（本机导出+同步离线镜像，延长至 45 分钟）
+        - id: node-admin-api
+          uri: lb://node-server
+          predicates:
+            - Path=/admin-api/node/**
+          metadata:
+            response-timeout: 2700000
+          filters:
+            - StripPrefix=1
+            - RewritePath=/admin-api/node/v3/api-docs, /v3/api-docs
         # 文件服务
         - id: file-admin-api
           uri: lb://file-server

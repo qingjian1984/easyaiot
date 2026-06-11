@@ -33,7 +33,7 @@ const props = defineProps<{
 const router = useRouter()
 
 const handleGoToAdmin = () => {
-  router.push('/camera/index')
+  router.push('/node/index')
 }
 
 const currentDate = ref('')

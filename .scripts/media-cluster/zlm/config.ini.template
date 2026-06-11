@@ -38,9 +38,9 @@ udpTTL=64
 
 [hook]
 enable=1
-on_publish=http://${MEDIA_SCHEDULER_HOST}:8090/api/v1/hook/zlm/on_publish
-on_stream_changed=http://${MEDIA_SCHEDULER_HOST}:8090/api/v1/hook/zlm/on_stream_changed
-on_record_mp4=http://${MEDIA_SCHEDULER_HOST}:8090/api/v1/hook/zlm/on_record_mp4
+on_publish=http://${MEDIA_HOOK_HOST}:${MEDIA_HOOK_PORT}/video/media/hook/srs/on_publish
+on_stream_changed=http://${MEDIA_HOOK_HOST}:${MEDIA_HOOK_PORT}/video/media/hook/srs/on_unpublish
+on_record_mp4=http://${MEDIA_HOOK_HOST}:${MEDIA_HOOK_PORT}/video/media/hook/zlm/on_record_mp4
 timeoutSec=10
 alive_interval=30.0
 

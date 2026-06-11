@@ -1,0 +1,174 @@
+package com.basiclab.iot.node.util;
+
+import com.jcraft.jsch.ChannelExec;
+import com.jcraft.jsch.ChannelSftp;
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.JSchException;
+import com.jcraft.jsch.Session;
+import com.jcraft.jsch.SftpException;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Properties;
+
+@Slf4j
+public class SshSessionHelper implements AutoCloseable {
+
+    private static final int CONNECT_TIMEOUT_MS = 15000;
+
+    @Getter
+    private final Session session;
+
+    private SshSessionHelper(Session session) {
+        this.session = session;
+    }
+
+    public static SshSessionHelper connect(String host, int port, String username,
+                                           String authType, String password, String privateKey) throws JSchException {
+        JSch jsch = new JSch();
+        if ("private_key".equals(authType) && privateKey != null && !privateKey.isBlank()) {
+            jsch.addIdentity("node-key", privateKey.getBytes(StandardCharsets.UTF_8), null, null);
+        }
+        Session session = jsch.getSession(username, host, port);
+        if (!"private_key".equals(authType) && password != null && !password.isBlank()) {
+            session.setPassword(password);
+        }
+        Properties config = new Properties();
+        config.put("StrictHostKeyChecking", "no");
+        session.setConfig(config);
+        session.connect(CONNECT_TIMEOUT_MS);
+        return new SshSessionHelper(session);
+    }
+
+    public SshExecResult exec(String command, int timeoutMs) throws JSchException, InterruptedException {
+        ChannelExec channel = null;
+        try {
+            channel = (ChannelExec) session.openChannel("exec");
+            channel.setCommand(command);
+            channel.setInputStream(null);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            ByteArrayOutputStream error = new ByteArrayOutputStream();
+            channel.setOutputStream(output);
+            channel.setErrStream(error);
+            channel.connect(timeoutMs);
+            long deadline = System.currentTimeMillis() + timeoutMs;
+            while (!channel.isClosed()) {
+                if (System.currentTimeMillis() > deadline) {
+                    throw new JSchException("SSH 命令执行超时");
+                }
+                Thread.sleep(200);
+            }
+            return new SshExecResult(channel.getExitStatus(),
+                    output.toString(StandardCharsets.UTF_8),
+                    error.toString(StandardCharsets.UTF_8));
+        } finally {
+            if (channel != null) {
+                channel.disconnect();
+            }
+        }
+    }
+
+    public void ensureRemoteDir(String remoteDir) throws JSchException, SftpException {
+        ChannelSftp sftp = null;
+        try {
+            sftp = (ChannelSftp) session.openChannel("sftp");
+            sftp.connect(CONNECT_TIMEOUT_MS);
+            String[] parts = remoteDir.split("/");
+            StringBuilder path = new StringBuilder();
+            for (String part : parts) {
+                if (part.isEmpty()) {
+                    continue;
+                }
+                path.append('/').append(part);
+                try {
+                    sftp.cd(path.toString());
+                } catch (SftpException e) {
+                    sftp.mkdir(path.toString());
+                }
+            }
+        } finally {
+            if (sftp != null) {
+                sftp.disconnect();
+            }
+        }
+    }
+
+    public void uploadFile(String localPath, String remotePath) throws JSchException, SftpException, IOException {
+        File file = new File(localPath);
+        if (!file.isFile()) {
+            throw new SftpException(ChannelSftp.SSH_FX_NO_SUCH_FILE, "本地文件不存在: " + localPath);
+        }
+        ChannelSftp sftp = null;
+        try {
+            sftp = (ChannelSftp) session.openChannel("sftp");
+            sftp.connect(CONNECT_TIMEOUT_MS);
+            int lastSlash = remotePath.lastIndexOf('/');
+            if (lastSlash > 0) {
+                ensureRemoteDir(remotePath.substring(0, lastSlash));
+            }
+            try (InputStream in = new FileInputStream(file)) {
+                sftp.put(in, remotePath);
+            }
+        } finally {
+            if (sftp != null) {
+                sftp.disconnect();
+            }
+        }
+    }
+
+    @Override
+    public void close() {
+        if (session != null && session.isConnected()) {
+            session.disconnect();
+        }
+    }
+
+    public static class SshExecResult {
+        private final int exitCode;
+        private final String stdout;
+        private final String stderr;
+
+        public SshExecResult(int exitCode, String stdout, String stderr) {
+            this.exitCode = exitCode;
+            this.stdout = stdout;
+            this.stderr = stderr;
+        }
+
+        public int getExitCode() {
+            return exitCode;
+        }
+
+        public String getStdout() {
+            return stdout;
+        }
+
+        public String getStderr() {
+            return stderr;
+        }
+
+        public String combinedOutput() {
+            StringBuilder sb = new StringBuilder();
+            if (stdout != null && !stdout.isBlank()) {
+                sb.append(stdout.trim());
+            }
+            if (stderr != null && !stderr.isBlank()) {
+                if (sb.length() > 0) {
+                    sb.append('\n');
+                }
+                sb.append(stderr.trim());
+            }
+            return sb.toString();
+        }
+
+        public boolean isSuccess() {
+            return exitCode == 0;
+        }
+    }
+
+}

@@ -41,6 +41,7 @@ import { listFaceLibraries } from '@/api/device/face_library';
 import { listPlateLibraries } from '@/api/device/plate_library';
 import { getDeviceList, getDeviceInfo, registerDevice, updateDevice } from '@/api/device/camera';
 import { getModelPage } from '@/api/device/model';
+import { getNodePage } from '@/api/device/node';
 import { notifyTemplateQueryByType } from '@/api/device/notice';
 import { getDeviceChannels, queryVideoList } from '@/api/device/gb28181';
 import DefenseSchedulePicker from './DefenseSchedulePicker.vue';
@@ -82,6 +83,13 @@ const alertNotificationConfig = ref<any>({
 });
 
 const deviceOptions = ref<Array<{ label: string; value: string }>>([]);
+const nodeOptions = ref<Array<{ label: string; value: number }>>([]);
+
+const schedulePolicyOptions = [
+  { label: '本机部署', value: 'local' },
+  { label: '自动调度节点', value: 'auto' },
+  { label: '指定节点', value: 'node' },
+];
 const gbChannelOptionMap = ref<Map<string, { deviceId: string; channelId: string; name: string; label: string }>>(new Map());
 // 初始化时就包含默认模型，确保始终显示
 const defaultModels = [
@@ -248,6 +256,30 @@ const syncSelectedDeviceIds = async (selectedValues: string[] = []) => {
     }),
   );
   return Array.from(new Set(normalizedIds.filter(Boolean)));
+};
+
+// 加载在线计算节点
+const loadNodes = async () => {
+  try {
+    const res = await getNodePage({ pageNo: 1, pageSize: 200, status: 'online' });
+    const page = res?.data || res;
+    const list = (page?.list || []).filter(
+      (node: any) => node.nodeRole === 'compute' || node.nodeRole === 'hybrid',
+    );
+    nodeOptions.value = list.map((node: any) => ({
+      label: `${node.name} (${node.host})`,
+      value: node.id,
+    }));
+    updateSchema({
+      field: 'target_node_id',
+      componentProps: {
+        options: nodeOptions.value,
+      },
+    });
+  } catch (error) {
+    console.error('加载节点列表失败', error);
+    nodeOptions.value = [];
+  }
 };
 
 // 加载设备列表
@@ -467,6 +499,33 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getF
           { label: '抓拍算法任务', value: 'snap' },
         ],
       },
+    },
+    {
+      field: 'schedule_policy',
+      label: '调度策略',
+      component: 'Select',
+      defaultValue: 'local',
+      componentProps: {
+        placeholder: '请选择调度策略',
+        options: schedulePolicyOptions,
+      },
+      helpMessage: '本机：在当前 VIDEO 服务进程部署；自动/指定节点：通过 iot-node 调度到远程 Agent',
+    },
+    {
+      field: 'target_node_id',
+      label: '目标节点',
+      component: 'Select',
+      componentProps: {
+        placeholder: '选择在线计算节点',
+        options: nodeOptions,
+        showSearch: true,
+        allowClear: true,
+        filterOption: (input: string, option: any) => {
+          return option.label.toLowerCase().indexOf(input.toLowerCase()) >= 0;
+        },
+      },
+      ifShow: ({ values }) => values.schedule_policy === 'node',
+      required: ({ values }) => values.schedule_policy === 'node',
     },
     {
       field: 'device_ids',
@@ -868,7 +927,7 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
   initDefaultModels();
 
   // 加载选项数据
-  await Promise.all([loadDevices(), loadModels(), loadFaceLibraries(), loadPlateLibraries()]);
+  await Promise.all([loadDevices(), loadModels(), loadFaceLibraries(), loadPlateLibraries(), loadNodes()]);
 
   if (modalData.value.record) {
     const record = modalData.value.record;
@@ -968,6 +1027,8 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
     await setFieldsValue({
       task_name: record.task_name,
       task_type: record.task_type || 'realtime',
+      schedule_policy: record.schedule_policy || 'local',
+      target_node_id: record.target_node_id ?? undefined,
       device_ids: record.device_ids || [],
       cron_expression: record.cron_expression,
       frame_skip: record.frame_skip || 25,
@@ -1000,6 +1061,8 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
       updateSchema([
         { field: 'task_name', componentProps: { disabled: true } },
         { field: 'task_type', componentProps: { disabled: true } },
+        { field: 'schedule_policy', componentProps: { disabled: true } },
+        { field: 'target_node_id', componentProps: { disabled: true } },
         { field: 'device_ids', componentProps: { disabled: true } },
         { field: 'cron_expression', componentProps: { disabled: true } },
         { field: 'frame_skip', componentProps: { disabled: true } },
@@ -1023,6 +1086,8 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
       updateSchema([
         { field: 'task_name', componentProps: { disabled: false } },
         { field: 'task_type', componentProps: { disabled: false } },
+        { field: 'schedule_policy', componentProps: { disabled: false } },
+        { field: 'target_node_id', componentProps: { disabled: false } },
         { field: 'device_ids', componentProps: { disabled: false } },
         { field: 'cron_expression', componentProps: { disabled: false } },
         { field: 'frame_skip', componentProps: { disabled: false } },
@@ -1048,6 +1113,8 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
     updateSchema([
       { field: 'task_name', componentProps: { disabled: false } },
       { field: 'task_type', componentProps: { disabled: false } },
+      { field: 'schedule_policy', componentProps: { disabled: false } },
+      { field: 'target_node_id', componentProps: { disabled: false } },
       { field: 'device_ids', componentProps: { disabled: false } },
       { field: 'cron_expression', componentProps: { disabled: false } },
       { field: 'frame_skip', componentProps: { disabled: false } },
@@ -1068,6 +1135,7 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
     isFullDayDefense.value = true; // 默认全天布防
     await setFieldsValue({
       task_type: 'realtime',
+      schedule_policy: 'local',
       cron_expression: DEFAULT_SNAP_CRON,
       frame_skip: 25,
       extract_interval: 25,
@@ -1151,6 +1219,10 @@ const handleFieldValueChange = async (key: string, value: any) => {
     await setFieldsValue({ face_library_ids: [] });
   } else if (key === 'plate_matching_enabled' && !value) {
     await setFieldsValue({ plate_library_ids: [] });
+  } else if (key === 'schedule_policy' && value !== 'node') {
+    await setFieldsValue({ target_node_id: undefined });
+    const currentValues = await getFieldsValue();
+    formValues.value = { ...currentValues, schedule_policy: value, target_node_id: undefined };
   } else if (key === 'task_type' && value === 'snap') {
     const currentValues = await getFieldsValue();
     if (!currentValues.cron_expression?.trim()) {
@@ -1305,6 +1377,16 @@ const handleSubmit = async () => {
       return;
     }
 
+    if (values.schedule_policy === 'node' && !values.target_node_id) {
+      createMessage.error('指定节点部署时必须选择目标节点');
+      confirmLoading.value = false;
+      setDrawerProps({ confirmLoading: false });
+      return;
+    }
+    if (values.schedule_policy !== 'node') {
+      values.target_node_id = null;
+    }
+
     if (values.task_type === 'snap' && values.cron_expression) {
       const cronCheck = validateSnapCronMinInterval(values.cron_expression);
       if (!cronCheck.valid) {
@@ -1373,6 +1455,8 @@ const handleReset = () => {
     isFullDayDefense.value = true; // 默认全天布防
     setFieldsValue({
       task_type: 'realtime',
+      schedule_policy: 'local',
+      target_node_id: undefined,
       frame_skip: 25,
       extract_interval: 25,
       tracking_enabled: false,
@@ -1417,6 +1501,8 @@ const handleReset = () => {
     setFieldsValue({
       task_name: record.task_name,
       task_type: record.task_type || 'realtime',
+      schedule_policy: record.schedule_policy || 'local',
+      target_node_id: record.target_node_id ?? undefined,
       device_ids: record.device_ids || [],
       cron_expression: record.cron_expression,
       frame_skip: record.frame_skip || 25,

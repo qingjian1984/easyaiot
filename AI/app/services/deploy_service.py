@@ -15,6 +15,8 @@ from .deploy_daemon import DeployServiceDaemon
 
 logger = logging.getLogger(__name__)
 
+WORKLOAD_TYPE_AI = 'ai_service'
+
 
 # 保存当前正在运行的所有守护进程对象
 _deploy_daemons: dict[int, DeployServiceDaemon] = {}
@@ -214,6 +216,125 @@ def _download_model_to_local(model_path: str, model_id: int) -> tuple[str | None
         return None, error_msg
 
 
+def _get_ai_root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+
+
+def _use_remote_deploy(target_node_id: int | None, auto_schedule: bool) -> bool:
+    from app.utils.node_client import is_remote_deploy_enabled
+    if not is_remote_deploy_enabled():
+        return False
+    return target_node_id is not None or auto_schedule
+
+
+def _build_deploy_env(
+    ai_service: AIService,
+    model: Model,
+    model_path: str,
+    model_format: str,
+    server_ip: str,
+    start_port: int,
+    ai_root: str,
+) -> dict:
+    env = {}
+    for key in (
+        'DATABASE_URL', 'NACOS_SERVER', 'NACOS_NAMESPACE', 'NACOS_USERNAME', 'NACOS_PASSWORD',
+        'MINIO_ENDPOINT', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'MINIO_SECURE',
+        'KAFKA_BOOTSTRAP_SERVERS', 'MODEL_AI_PUSH_URL', 'CUDA_VISIBLE_DEVICES',
+        'USE_GPU', 'NVIDIA_VISIBLE_DEVICES', 'ORT_EXECUTION_PROVIDERS', 'AI_ENV',
+        'JAVA_BACKEND_URL',
+    ):
+        val = os.getenv(key)
+        if val:
+            env[key] = val
+    env['AI_ROOT'] = ai_root
+    env['MODEL_ID'] = str(ai_service.model_id)
+    env['MODEL_PATH'] = model_path
+    env['SERVICE_ID'] = str(ai_service.id)
+    env['SERVICE_NAME'] = ai_service.service_name
+    env['PORT'] = str(ai_service.port or start_port)
+    env['START_PORT'] = str(start_port)
+    env['SERVER_IP'] = server_ip
+    env['POD_IP'] = server_ip
+    env['MODEL_VERSION'] = ai_service.model_version or model.version or 'V1.0.0'
+    env['MODEL_FORMAT'] = ai_service.format or model_format
+    env['LOG_PATH'] = ai_service.log_path or ''
+    return env
+
+
+def _deploy_on_remote_node(
+    ai_service: AIService,
+    model: Model,
+    model_path: str,
+    model_format: str,
+    start_port: int,
+    target_node_id: int | None,
+    auto_schedule: bool,
+) -> dict:
+    from app.utils import node_client
+
+    allocation = node_client.allocate_node(
+        WORKLOAD_TYPE_AI,
+        str(ai_service.id),
+        capabilities=['ai_inference'],
+        target_node_id=target_node_id,
+        sticky=True,
+    )
+    node_id = allocation['nodeId']
+    host = allocation['host']
+    gpu_ids = allocation.get('gpuIds')
+
+    ai_root_remote = os.getenv('NODE_REMOTE_AI_ROOT', '/opt/easyaiot/AI')
+    work_dir = os.path.join(ai_root_remote, 'services', 'ai_service')
+    log_dir = os.path.join(ai_root_remote, 'logs', str(ai_service.id))
+    python_exec = os.getenv('NODE_REMOTE_PYTHON', 'python3')
+    deploy_script = os.path.join(ai_root_remote, 'services', 'ai_service', 'run_deploy.py')
+    command = [python_exec, deploy_script]
+
+    ai_service.log_path = log_dir
+    env = _build_deploy_env(ai_service, model, model_path, model_format, host, start_port, ai_root_remote)
+
+    result = node_client.deploy_workload(
+        node_id=node_id,
+        workload_type=WORKLOAD_TYPE_AI,
+        workload_id=str(ai_service.id),
+        command=command,
+        work_dir=work_dir,
+        log_dir=log_dir,
+        env=env,
+        gpu_ids=gpu_ids,
+    )
+
+    port = int(env.get('PORT', ai_service.port or start_port))
+    ai_service.node_id = node_id
+    ai_service.server_ip = host
+    ai_service.port = port
+    ai_service.inference_endpoint = f'http://{host}:{port}/inference'
+    ai_service.status = 'offline'
+    db.session.commit()
+
+    logger.info(
+        '远程部署已下发 node_id=%s host=%s pid=%s service_id=%s',
+        node_id, host, result.get('pid'), ai_service.id,
+    )
+    return {
+        'code': 0,
+        'msg': f'已下发到节点 {host}，服务正在启动中',
+        'data': ai_service.to_dict(),
+        'remote': True,
+    }
+
+
+def _stop_remote_service(service: AIService) -> None:
+    if not service.node_id:
+        return
+    from app.utils import node_client
+    try:
+        node_client.stop_workload(service.node_id, WORKLOAD_TYPE_AI, str(service.id))
+    except Exception as e:
+        logger.warning('远程停止服务失败 service_id=%s: %s', service.id, e)
+
+
 def _infer_model_format(model: Model, model_path: str) -> str:
     """推断模型格式"""
     model_path_lower = model_path.lower()
@@ -243,10 +364,18 @@ def _infer_model_format(model: Model, model_path: str) -> str:
             return 'pytorch'  # 默认
 
 
-def deploy_model(model_id: int, start_port: int = 8000) -> dict:
-    """部署模型服务"""
-    logger.info(f'========== 开始部署模型服务 ==========')
-    logger.info(f'模型ID: {model_id}, 起始端口: {start_port}')
+def deploy_model(
+    model_id: int,
+    start_port: int = 8000,
+    target_node_id: int | None = None,
+    auto_schedule: bool = False,
+) -> dict:
+    """部署模型服务（支持本机或远程节点）"""
+    logger.info(
+        '========== 开始部署模型服务 ========== model_id=%s start_port=%s '
+        'target_node_id=%s auto_schedule=%s',
+        model_id, start_port, target_node_id, auto_schedule,
+    )
     
     try:
         model = _get_model(model_id)
@@ -292,13 +421,14 @@ def deploy_model(model_id: int, start_port: int = 8000) -> dict:
         # 创建新的服务实例（副本）
         ai_service = None
         
-        # 获取服务器信息
+        remote_deploy = _use_remote_deploy(target_node_id, auto_schedule)
+
+        # 获取服务器信息（远程部署时先占位，分配节点后更新）
         server_ip = _get_local_ip()
         mac_address = _get_mac_address()
-        logger.info(f'服务器信息: IP={server_ip}, MAC={mac_address}')
-        
-        # 创建日志目录（按服务ID）
-        ai_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        logger.info(f'服务器信息: IP={server_ip}, MAC={mac_address}, remote={remote_deploy}')
+
+        ai_root = _get_ai_root()
         log_base_dir = os.path.join(ai_root, 'logs')
         
         if not ai_service:
@@ -353,15 +483,21 @@ def deploy_model(model_id: int, start_port: int = 8000) -> dict:
         deploy_script = os.path.join(deploy_service_dir, 'run_deploy.py')
         logger.info(f'检查部署脚本: {deploy_script}')
         
-        if not os.path.exists(deploy_script):
+        if not remote_deploy and not os.path.exists(deploy_script):
             logger.warning(f'部署脚本不存在: {deploy_script}')
             return {
                 'code': 0,
                 'msg': '服务记录已创建，但部署脚本不存在，请检查部署服务目录',
                 'data': ai_service.to_dict()
             }
-        
-        # 下载模型文件到本地（如果是MinIO URL）
+
+        if remote_deploy:
+            return _deploy_on_remote_node(
+                ai_service, model, model_path, model_format, start_port,
+                target_node_id, auto_schedule,
+            )
+
+        # 本机部署：下载模型到本地
         local_model_path, download_error = _download_model_to_local(model_path, model_id)
         
         # 如果模型下载失败，返回友好提示
@@ -496,22 +632,25 @@ def start_service(service_id: int) -> dict:
             else:
                 logger.info('守护进程已停止，重新启动...')
         
-        # 下载模型文件到本地（如果是MinIO URL）
+        if service.node_id:
+            model_format = service.format or _infer_model_format(model, model_path)
+            return _deploy_on_remote_node(
+                service, model, model_path, model_format,
+                service.port or 8000, service.node_id, False,
+            )
+
         local_model_path, download_error = _download_model_to_local(model_path, service.model_id)
-        
-        # 如果模型下载失败，返回友好提示
         if local_model_path is None:
-            logger.warning(f'模型文件下载失败，无法启动服务')
+            logger.warning('模型文件下载失败，无法启动服务')
             service.status = 'error'
             db.session.commit()
             return {
                 'code': 0,
                 'msg': download_error or '模型文件下载失败，请检查模型文件路径和MinIO配置',
                 'data': service.to_dict(),
-                'warning': True  # 标记为警告，不是错误
+                'warning': True,
             }
-        
-        # 启动守护进程（传入所有必要参数，不需要数据库连接）
+
         logger.info('启动守护进程...')
         _deploy_daemons[service_id] = DeployServiceDaemon(
             service_id=service.id,
@@ -552,11 +691,13 @@ def stop_service(service_id: int) -> dict:
             'data': service.to_dict()
         }
     
-    # 停止守护进程
+    _stop_remote_service(service)
+
+    # 停止本机守护进程
     if service_id in _deploy_daemons:
         _deploy_daemons[service_id].stop()
         del _deploy_daemons[service_id]
-    else:
+    elif not service.node_id:
         # 如果没有守护进程，尝试直接杀死进程
         if service.process_id:
             try:
@@ -605,7 +746,8 @@ def delete_service(service_id: int) -> dict:
     logger.info(f'========== 开始删除服务 ==========')
     logger.info(f'服务ID: {service_id}, 服务名称: {service_name}')
     
-    # 先停止守护进程
+    _stop_remote_service(service)
+
     if service_id in _deploy_daemons:
         logger.info(f'停止守护进程: {service_id}')
         try:
@@ -614,8 +756,8 @@ def delete_service(service_id: int) -> dict:
             logger.warning(f'停止守护进程失败: {str(e)}')
         finally:
             del _deploy_daemons[service_id]
-    
-    # 尝试杀掉 process_id（无论守护进程是否存在，都要尝试）
+
+    # 尝试杀掉本机 process_id
     if service.process_id:
         logger.info(f'尝试杀掉进程: PID={service.process_id}')
         try:

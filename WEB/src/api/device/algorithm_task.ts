@@ -85,6 +85,12 @@ export interface AlgorithmTask {
   service_names?: string; // 关联的算法服务名称列表（逗号分隔，冗余字段，用于快速显示）
   defense_mode?: string; // 布防模式: full(全防), half(半防), day(白天), night(夜间)
   defense_schedule?: string | number[][]; // 布防时段: JSON字符串或二维数组，7天×24小时
+  /** 调度策略: local(本机) | auto(自动调度) | node(指定节点) */
+  schedule_policy?: 'local' | 'auto' | 'node';
+  /** 指定部署节点 ID（schedule_policy=node 时） */
+  target_node_id?: number | null;
+  /** 实际运行节点 ID（只读，启动后由控制面写入） */
+  node_id?: number | null;
   created_at?: string;
   updated_at?: string;
 }

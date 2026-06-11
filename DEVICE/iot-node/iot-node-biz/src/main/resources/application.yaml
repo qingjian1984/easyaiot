@@ -1,0 +1,92 @@
+spring:
+  main:
+    allow-circular-references: true
+    allow-bean-definition-overriding: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
+  mvc:
+    pathmatch:
+      matching-strategy: ANT_PATH_MATCHER
+  jackson:
+    serialization:
+      write-dates-as-timestamps: true
+      write-date-timestamps-as-nanoseconds: false
+      write-durations-as-timestamps: true
+      fail-on-empty-beans: false
+  cache:
+    type: REDIS
+    redis:
+      time-to-live: 1h
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  default-flat-param-object: true
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: NONE
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+    banner: false
+  type-aliases-package: ${iot.info.base-package}.dal.dataobject
+  encryptor:
+    password: XDV71a+xqStEA3WH
+
+mybatis-plus-join:
+  banner: false
+
+iot:
+  info:
+    version: 1.0.0
+    base-package: com.basiclab.iot.node
+  web:
+    admin-ui:
+      url: http://dashboard.iot.iocoder.cn
+  swagger:
+    title: 管理后台
+    description: 服务器节点管理
+    version: ${iot.info.version}
+    base-package: ${iot.info.base-package}
+  captcha:
+    enable: true
+  tenant:
+    enable: true
+    ignore-urls:
+      - /node/agent/**
+      - /node/ws/**
+    ignore-tables:
+      - compute_node
+      - node_ssh_credential
+      - node_metric_snapshot
+      - node_workload_binding
+      - device_media_binding
+
+easyaiot:
+  media:
+    cluster-source-path: ${EASYAIOT_MEDIA_CLUSTER_PATH:}
+    hook-host: ${EASYAIOT_MEDIA_HOOK_HOST:127.0.0.1}
+    hook-port: ${EASYAIOT_MEDIA_HOOK_PORT:48080}
+  agent:
+    source-path: ${EASYAIOT_AGENT_SOURCE_PATH:}
+    control-plane-url: ${EASYAIOT_AGENT_CONTROL_PLANE_URL:}
+
+debug: false

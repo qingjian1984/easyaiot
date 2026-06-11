@@ -176,6 +176,13 @@ def create_app():
     app.config['KAFKA_RETRY_BACKOFF_MS'] = int(os.environ.get('KAFKA_RETRY_BACKOFF_MS', '100'))
     app.config['KAFKA_METADATA_MAX_AGE_MS'] = int(os.environ.get('KAFKA_METADATA_MAX_AGE_MS', '300000'))
     app.config['KAFKA_INIT_RETRY_INTERVAL'] = int(os.environ.get('KAFKA_INIT_RETRY_INTERVAL', '60'))
+    app.config['MEDIA_UPLOAD_MODE'] = os.environ.get('MEDIA_UPLOAD_MODE', 'sync')
+    app.config['MEDIA_KAFKA_DVR_TOPIC'] = os.environ.get('MEDIA_KAFKA_DVR_TOPIC', 'media.dvr.completed')
+    app.config['MEDIA_HOST_DATA_ROOT'] = os.environ.get('MEDIA_HOST_DATA_ROOT', '/mnt/easyaiot-media')
+    app.config['MEDIA_RECORD_DIR'] = os.environ.get('MEDIA_RECORD_DIR', '')
+    app.config['MEDIA_SNAP_DIR'] = os.environ.get('MEDIA_SNAP_DIR', '')
+    app.config['MEDIA_SNAP_UPLOAD_MODE'] = os.environ.get('MEDIA_SNAP_UPLOAD_MODE', '')
+    app.config['MEDIA_KAFKA_SNAP_TOPIC'] = os.environ.get('MEDIA_KAFKA_SNAP_TOPIC', 'media.snap.completed')
 
     # 创建数据目录
     os.makedirs('data/uploads', exist_ok=True)
@@ -490,7 +497,10 @@ def create_app():
                         ('service_port', 'INTEGER'),
                         ('service_process_id', 'INTEGER'),
                         ('service_last_heartbeat', 'TIMESTAMP'),
-                        ('service_log_path', 'VARCHAR(500)')
+                        ('service_log_path', 'VARCHAR(500)'),
+                        ('schedule_policy', "VARCHAR(20) NOT NULL DEFAULT 'local'"),
+                        ('target_node_id', 'BIGINT'),
+                        ('node_id', 'BIGINT'),
                     ]:
                         result = db.session.execute(text(f"""
                             SELECT EXISTS (
@@ -728,6 +738,15 @@ def create_app():
         print(f"✅ Camera Blueprint 注册成功")
     except Exception as e:
         print(f"❌ Camera Blueprint 注册失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+    try:
+        from app.blueprints import media_hook
+        app.register_blueprint(media_hook.media_hook_bp, url_prefix='/video/media')
+        print(f"✅ Media Hook Blueprint 注册成功")
+    except Exception as e:
+        print(f"❌ Media Hook Blueprint 注册失败: {str(e)}")
         import traceback
         traceback.print_exc()
     
@@ -1029,6 +1048,29 @@ def create_app():
                 print(f'⚠️ SRS回放磁盘守护启动清理失败: {boot_guard_err}')
         except Exception as e:
             print(f'❌ 启动SRS回放磁盘守护任务失败: {str(e)}')
+            import traceback
+            traceback.print_exc()
+
+        # 媒体 Janitor：孤儿 DVR/抓拍重入队 + 磁盘紧急保护
+        try:
+            from app.services.media_janitor_service import is_janitor_enabled, run_janitor_cycle
+
+            if is_janitor_enabled():
+                janitor_interval = int(os.getenv('JANITOR_INTERVAL_SECONDS', '60'))
+
+                def media_janitor_wrapper():
+                    return run_janitor_cycle()
+
+                scheduler.add_job(
+                    media_janitor_wrapper,
+                    'interval',
+                    seconds=janitor_interval,
+                    id='media_janitor',
+                    replace_existing=True,
+                )
+                print(f'✅ 媒体 Janitor 已启动（每 {janitor_interval} 秒）')
+        except Exception as e:
+            print(f'❌ 启动媒体 Janitor 失败: {str(e)}')
             import traceback
             traceback.print_exc()
         

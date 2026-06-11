@@ -34,6 +34,24 @@ export function getBasicColumns(): BasicColumn[] {
       },
     },
     {
+      title: '调度策略',
+      dataIndex: 'schedule_policy',
+      width: 110,
+      customRender: ({ text, record }) => {
+        const policy = text || 'local';
+        const labels: Record<string, string> = {
+          local: '本机',
+          auto: '自动调度',
+          node: '指定节点',
+        };
+        const label = labels[policy] || policy;
+        if (policy === 'local' || !record.node_id) {
+          return label;
+        }
+        return `${label} (#${record.node_id})`;
+      },
+    },
+    {
       title: '运行状态',
       dataIndex: 'is_enabled',
       width: 100,

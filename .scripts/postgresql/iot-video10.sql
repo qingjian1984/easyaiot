@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 2bOVuMhpSReomBLqtKdfYpNpeeET6MplVRgti77d0u7pdMMSNdgphoNAE2GBdMx
+\restrict 6o639h8PAabpbCQX79jD0dysv1QxFhRmh2qoHQRAf5acsy9Hijg9ZX7uQdpxCqa
 
 -- Dumped from database version 18.4 (Debian 18.4-1.pgdg13+1)
 -- Dumped by pg_dump version 18.4 (Debian 18.4-1.pgdg13+1)
@@ -27,10 +27,10 @@ DROP DATABASE IF EXISTS "iot-video20";
 CREATE DATABASE "iot-video20" WITH TEMPLATE = template0 ENCODING = 'UTF8' LOCALE_PROVIDER = libc LOCALE = 'en_US.utf8';
 
 
-\unrestrict 2bOVuMhpSReomBLqtKdfYpNpeeET6MplVRgti77d0u7pdMMSNdgphoNAE2GBdMx
+\unrestrict 6o639h8PAabpbCQX79jD0dysv1QxFhRmh2qoHQRAf5acsy9Hijg9ZX7uQdpxCqa
 \encoding SQL_ASCII
 \connect -reuse-previous=on "dbname='iot-video20'"
-\restrict 2bOVuMhpSReomBLqtKdfYpNpeeET6MplVRgti77d0u7pdMMSNdgphoNAE2GBdMx
+\restrict 6o639h8PAabpbCQX79jD0dysv1QxFhRmh2qoHQRAf5acsy9Hijg9ZX7uQdpxCqa
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -363,7 +363,10 @@ CREATE TABLE public.algorithm_task (
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
     face_library_id integer,
-    plate_library_id integer
+    plate_library_id integer,
+    schedule_policy character varying(20) DEFAULT 'local'::character varying NOT NULL,
+    target_node_id bigint,
+    node_id bigint
 );
 
 
@@ -924,7 +927,8 @@ CREATE TABLE public.device (
     location_source character varying(20),
     location_updated_at timestamp without time zone,
     created_at timestamp without time zone,
-    updated_at timestamp without time zone
+    updated_at timestamp without time zone,
+    heading double precision
 );
 
 
@@ -1155,7 +1159,9 @@ CREATE TABLE public.device_directory (
     description character varying(500),
     sort_order integer NOT NULL,
     created_at timestamp without time zone,
-    updated_at timestamp without time zone
+    updated_at timestamp without time zone,
+    snap_save_time integer DEFAULT 7 NOT NULL,
+    record_save_time integer DEFAULT 7 NOT NULL
 );
 
 
@@ -3104,6 +3110,134 @@ ALTER SEQUENCE public.pusher_id_seq OWNED BY public.pusher.id;
 
 
 --
+-- Name: record_file; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.record_file (
+    id integer NOT NULL,
+    space_id integer NOT NULL,
+    device_id character varying(100) NOT NULL,
+    object_name character varying(500) NOT NULL,
+    bucket_name character varying(255) NOT NULL,
+    filename character varying(255) NOT NULL,
+    file_size bigint,
+    content_type character varying(100),
+    etag character varying(128),
+    url character varying(500) NOT NULL,
+    thumbnail_url character varying(500),
+    duration smallint,
+    event_time timestamp without time zone NOT NULL,
+    source character varying(50) NOT NULL,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone
+);
+
+
+--
+-- Name: COLUMN record_file.device_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.device_id IS '设备ID';
+
+
+--
+-- Name: COLUMN record_file.object_name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.object_name IS 'MinIO 对象路径';
+
+
+--
+-- Name: COLUMN record_file.bucket_name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.bucket_name IS 'MinIO bucket';
+
+
+--
+-- Name: COLUMN record_file.filename; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.filename IS '文件名';
+
+
+--
+-- Name: COLUMN record_file.file_size; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.file_size IS '文件大小（字节）';
+
+
+--
+-- Name: COLUMN record_file.content_type; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.content_type IS 'MIME 类型';
+
+
+--
+-- Name: COLUMN record_file.etag; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.etag IS 'MinIO ETag';
+
+
+--
+-- Name: COLUMN record_file.url; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.url IS 'MinIO 下载地址';
+
+
+--
+-- Name: COLUMN record_file.thumbnail_url; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.thumbnail_url IS '封面下载地址';
+
+
+--
+-- Name: COLUMN record_file.duration; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.duration IS '时长（秒）';
+
+
+--
+-- Name: COLUMN record_file.event_time; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.event_time IS '录像时间（排序字段）';
+
+
+--
+-- Name: COLUMN record_file.source; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.record_file.source IS '来源[dvr|manual]';
+
+
+--
+-- Name: record_file_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.record_file_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: record_file_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.record_file_id_seq OWNED BY public.record_file.id;
+
+
+--
 -- Name: record_space; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3117,7 +3251,8 @@ CREATE TABLE public.record_space (
     description character varying(500),
     device_id character varying(100),
     created_at timestamp without time zone,
-    updated_at timestamp without time zone
+    updated_at timestamp without time zone,
+    save_time_custom boolean DEFAULT false NOT NULL
 );
 
 
@@ -3318,6 +3453,125 @@ ALTER SEQUENCE public.region_model_service_id_seq OWNED BY public.region_model_s
 
 
 --
+-- Name: snap_image; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.snap_image (
+    id integer NOT NULL,
+    space_id integer NOT NULL,
+    device_id character varying(100) NOT NULL,
+    object_name character varying(500) NOT NULL,
+    bucket_name character varying(255) NOT NULL,
+    filename character varying(255) NOT NULL,
+    file_size bigint,
+    content_type character varying(100),
+    etag character varying(128),
+    url character varying(500) NOT NULL,
+    captured_at timestamp without time zone NOT NULL,
+    task_id integer,
+    source character varying(50) NOT NULL,
+    created_at timestamp without time zone
+);
+
+
+--
+-- Name: COLUMN snap_image.device_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.device_id IS '设备ID';
+
+
+--
+-- Name: COLUMN snap_image.object_name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.object_name IS 'MinIO 对象路径';
+
+
+--
+-- Name: COLUMN snap_image.bucket_name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.bucket_name IS 'MinIO bucket';
+
+
+--
+-- Name: COLUMN snap_image.filename; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.filename IS '文件名';
+
+
+--
+-- Name: COLUMN snap_image.file_size; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.file_size IS '文件大小（字节）';
+
+
+--
+-- Name: COLUMN snap_image.content_type; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.content_type IS 'MIME 类型';
+
+
+--
+-- Name: COLUMN snap_image.etag; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.etag IS 'MinIO ETag';
+
+
+--
+-- Name: COLUMN snap_image.url; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.url IS 'MinIO 下载地址';
+
+
+--
+-- Name: COLUMN snap_image.captured_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.captured_at IS '抓拍时间（排序字段）';
+
+
+--
+-- Name: COLUMN snap_image.task_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.task_id IS '关联抓拍任务ID';
+
+
+--
+-- Name: COLUMN snap_image.source; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.snap_image.source IS '来源[snap|frame|algorithm]';
+
+
+--
+-- Name: snap_image_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.snap_image_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: snap_image_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.snap_image_id_seq OWNED BY public.snap_image.id;
+
+
+--
 -- Name: snap_space; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3331,7 +3585,8 @@ CREATE TABLE public.snap_space (
     description character varying(500),
     device_id character varying(100),
     created_at timestamp without time zone,
-    updated_at timestamp without time zone
+    updated_at timestamp without time zone,
+    save_time_custom boolean DEFAULT false NOT NULL
 );
 
 
@@ -3808,6 +4063,69 @@ CREATE SEQUENCE public.sorter_id_seq
 --
 
 ALTER SEQUENCE public.sorter_id_seq OWNED BY public.sorter.id;
+
+
+--
+-- Name: space_group_save_policy; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.space_group_save_policy (
+    id integer NOT NULL,
+    group_type character varying(20) NOT NULL,
+    group_key character varying(100) NOT NULL,
+    snap_save_time integer NOT NULL,
+    record_save_time integer NOT NULL,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone
+);
+
+
+--
+-- Name: COLUMN space_group_save_policy.group_type; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.space_group_save_policy.group_type IS '分组类型: nvr / gb28181';
+
+
+--
+-- Name: COLUMN space_group_save_policy.group_key; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.space_group_save_policy.group_key IS 'NVR ID 或国标 SIP 设备 ID';
+
+
+--
+-- Name: COLUMN space_group_save_policy.snap_save_time; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.space_group_save_policy.snap_save_time IS '抓拍保存天数[0:永久,>=7:天]';
+
+
+--
+-- Name: COLUMN space_group_save_policy.record_save_time; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.space_group_save_policy.record_save_time IS '录像保存天数[0:永久,>=7:天]';
+
+
+--
+-- Name: space_group_save_policy_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.space_group_save_policy_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: space_group_save_policy_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.space_group_save_policy_id_seq OWNED BY public.space_group_save_policy.id;
 
 
 --
@@ -4314,6 +4632,13 @@ ALTER TABLE ONLY public.pusher ALTER COLUMN id SET DEFAULT nextval('public.pushe
 
 
 --
+-- Name: record_file id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.record_file ALTER COLUMN id SET DEFAULT nextval('public.record_file_id_seq'::regclass);
+
+
+--
 -- Name: record_space id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -4325,6 +4650,13 @@ ALTER TABLE ONLY public.record_space ALTER COLUMN id SET DEFAULT nextval('public
 --
 
 ALTER TABLE ONLY public.region_model_service ALTER COLUMN id SET DEFAULT nextval('public.region_model_service_id_seq'::regclass);
+
+
+--
+-- Name: snap_image id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.snap_image ALTER COLUMN id SET DEFAULT nextval('public.snap_image_id_seq'::regclass);
 
 
 --
@@ -4346,6 +4678,13 @@ ALTER TABLE ONLY public.snap_task ALTER COLUMN id SET DEFAULT nextval('public.sn
 --
 
 ALTER TABLE ONLY public.sorter ALTER COLUMN id SET DEFAULT nextval('public.sorter_id_seq'::regclass);
+
+
+--
+-- Name: space_group_save_policy id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.space_group_save_policy ALTER COLUMN id SET DEFAULT nextval('public.space_group_save_policy_id_seq'::regclass);
 
 
 --
@@ -4382,7 +4721,7 @@ COPY public.algorithm_model_service (id, task_id, service_name, service_url, ser
 -- Data for Name: algorithm_task; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.algorithm_task (id, task_name, task_code, task_type, model_ids, model_names, extract_interval, rtmp_input_url, rtmp_output_url, tracking_enabled, tracking_similarity_threshold, tracking_max_age, tracking_smooth_alpha, alert_event_enabled, alert_event_suppress_time, face_detection_enabled, plate_detection_enabled, face_matching_enabled, face_library_ids, face_matching_threshold, plate_matching_enabled, plate_library_ids, matching_business_tags, alert_notification_enabled, alert_notification_config, alarm_suppress_time, last_notify_time, space_id, cron_expression, frame_skip, status, is_enabled, run_status, exception_reason, service_server_ip, service_port, service_process_id, service_last_heartbeat, service_log_path, total_frames, total_detections, total_captures, last_process_time, last_success_time, last_capture_time, description, defense_mode, defense_schedule, created_at, updated_at, face_library_id, plate_library_id) FROM stdin;
+COPY public.algorithm_task (id, task_name, task_code, task_type, model_ids, model_names, extract_interval, rtmp_input_url, rtmp_output_url, tracking_enabled, tracking_similarity_threshold, tracking_max_age, tracking_smooth_alpha, alert_event_enabled, alert_event_suppress_time, face_detection_enabled, plate_detection_enabled, face_matching_enabled, face_library_ids, face_matching_threshold, plate_matching_enabled, plate_library_ids, matching_business_tags, alert_notification_enabled, alert_notification_config, alarm_suppress_time, last_notify_time, space_id, cron_expression, frame_skip, status, is_enabled, run_status, exception_reason, service_server_ip, service_port, service_process_id, service_last_heartbeat, service_log_path, total_frames, total_detections, total_captures, last_process_time, last_success_time, last_capture_time, description, defense_mode, defense_schedule, created_at, updated_at, face_library_id, plate_library_id, schedule_policy, target_node_id, node_id) FROM stdin;
 \.
 
 
@@ -4406,7 +4745,7 @@ COPY public.detection_region (id, task_id, region_name, region_type, points, ima
 -- Data for Name: device; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.device (id, name, source, rtmp_stream, http_stream, ai_rtmp_stream, ai_http_stream, stream, ip, port, username, password, mac, manufacturer, model, firmware_version, serial_number, hardware_id, support_move, support_zoom, nvr_id, nvr_channel, rtsp_direct, channel_online, connection_status, enable_forward, auto_snap_enabled, directory_id, cover_image_path, longitude, latitude, altitude, address, location_source, location_updated_at, created_at, updated_at) FROM stdin;
+COPY public.device (id, name, source, rtmp_stream, http_stream, ai_rtmp_stream, ai_http_stream, stream, ip, port, username, password, mac, manufacturer, model, firmware_version, serial_number, hardware_id, support_move, support_zoom, nvr_id, nvr_channel, rtsp_direct, channel_online, connection_status, enable_forward, auto_snap_enabled, directory_id, cover_image_path, longitude, latitude, altitude, address, location_source, location_updated_at, created_at, updated_at, heading) FROM stdin;
 \.
 
 
@@ -4422,8 +4761,8 @@ COPY public.device_detection_region (id, device_id, region_name, region_type, po
 -- Data for Name: device_directory; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.device_directory (id, name, parent_id, description, sort_order, created_at, updated_at) FROM stdin;
-1	默认分组	\N	未手动分组的摄像头（含直连与国标）	-1000	2026-06-03 04:09:36.204543	2026-06-03 04:09:36.204548
+COPY public.device_directory (id, name, parent_id, description, sort_order, created_at, updated_at, snap_save_time, record_save_time) FROM stdin;
+1	默认分组	\N	未手动分组的摄像头（含直连与国标）	-1000	2026-06-03 04:09:36.204543	2026-06-03 04:09:36.204548	7	7
 \.
 
 
@@ -4564,10 +4903,18 @@ COPY public.pusher (id, pusher_name, pusher_code, video_stream_enabled, video_st
 
 
 --
+-- Data for Name: record_file; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.record_file (id, space_id, device_id, object_name, bucket_name, filename, file_size, content_type, etag, url, thumbnail_url, duration, event_time, source, created_at, updated_at) FROM stdin;
+\.
+
+
+--
 -- Data for Name: record_space; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.record_space (id, space_name, space_code, bucket_name, save_mode, save_time, description, device_id, created_at, updated_at) FROM stdin;
+COPY public.record_space (id, space_name, space_code, bucket_name, save_mode, save_time, description, device_id, created_at, updated_at, save_time_custom) FROM stdin;
 \.
 
 
@@ -4580,10 +4927,18 @@ COPY public.region_model_service (id, region_id, service_name, service_url, serv
 
 
 --
+-- Data for Name: snap_image; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.snap_image (id, space_id, device_id, object_name, bucket_name, filename, file_size, content_type, etag, url, captured_at, task_id, source, created_at) FROM stdin;
+\.
+
+
+--
 -- Data for Name: snap_space; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.snap_space (id, space_name, space_code, bucket_name, save_mode, save_time, description, device_id, created_at, updated_at) FROM stdin;
+COPY public.snap_space (id, space_name, space_code, bucket_name, save_mode, save_time, description, device_id, created_at, updated_at, save_time_custom) FROM stdin;
 \.
 
 
@@ -4600,6 +4955,14 @@ COPY public.snap_task (id, task_name, task_code, space_id, device_id, pusher_id,
 --
 
 COPY public.sorter (id, sorter_name, sorter_code, sorter_type, sort_order, description, is_enabled, status, server_ip, port, process_id, last_heartbeat, log_path, task_id, created_at, updated_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: space_group_save_policy; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.space_group_save_policy (id, group_type, group_key, snap_save_time, record_save_time, created_at, updated_at) FROM stdin;
 \.
 
 
@@ -4789,6 +5152,13 @@ SELECT pg_catalog.setval('public.pusher_id_seq', 1, false);
 
 
 --
+-- Name: record_file_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.record_file_id_seq', 1, false);
+
+
+--
 -- Name: record_space_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
@@ -4800,6 +5170,13 @@ SELECT pg_catalog.setval('public.record_space_id_seq', 1, false);
 --
 
 SELECT pg_catalog.setval('public.region_model_service_id_seq', 1, false);
+
+
+--
+-- Name: snap_image_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.snap_image_id_seq', 1, false);
 
 
 --
@@ -4821,6 +5198,13 @@ SELECT pg_catalog.setval('public.snap_task_id_seq', 1, false);
 --
 
 SELECT pg_catalog.setval('public.sorter_id_seq', 1, false);
+
+
+--
+-- Name: space_group_save_policy_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.space_group_save_policy_id_seq', 1, false);
 
 
 --
@@ -5118,6 +5502,14 @@ ALTER TABLE ONLY public.pusher
 
 
 --
+-- Name: record_file record_file_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.record_file
+    ADD CONSTRAINT record_file_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: record_space record_space_device_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5147,6 +5539,14 @@ ALTER TABLE ONLY public.record_space
 
 ALTER TABLE ONLY public.region_model_service
     ADD CONSTRAINT region_model_service_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: snap_image snap_image_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.snap_image
+    ADD CONSTRAINT snap_image_pkey PRIMARY KEY (id);
 
 
 --
@@ -5206,6 +5606,14 @@ ALTER TABLE ONLY public.sorter
 
 
 --
+-- Name: space_group_save_policy space_group_save_policy_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.space_group_save_policy
+    ADD CONSTRAINT space_group_save_policy_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: stream_forward_task_device stream_forward_task_device_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5238,10 +5646,41 @@ ALTER TABLE ONLY public.tracking_target
 
 
 --
+-- Name: record_file uq_record_file_bucket_object; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.record_file
+    ADD CONSTRAINT uq_record_file_bucket_object UNIQUE (bucket_name, object_name);
+
+
+--
+-- Name: snap_image uq_snap_image_bucket_object; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.snap_image
+    ADD CONSTRAINT uq_snap_image_bucket_object UNIQUE (bucket_name, object_name);
+
+
+--
+-- Name: space_group_save_policy uq_space_group_save_policy; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.space_group_save_policy
+    ADD CONSTRAINT uq_space_group_save_policy UNIQUE (group_type, group_key);
+
+
+--
 -- Name: idx_alert_correlation_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_alert_correlation_id ON public.alert USING btree (correlation_id);
+
+
+--
+-- Name: idx_algorithm_task_node_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_algorithm_task_node_id ON public.algorithm_task USING btree (node_id);
 
 
 --
@@ -5312,6 +5751,62 @@ CREATE INDEX ix_nvr_ip ON public.nvr USING btree (ip);
 --
 
 CREATE INDEX ix_plate_match_record_correlation_id ON public.plate_match_record USING btree (correlation_id);
+
+
+--
+-- Name: ix_record_file_device_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_record_file_device_id ON public.record_file USING btree (device_id);
+
+
+--
+-- Name: ix_record_file_event_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_record_file_event_time ON public.record_file USING btree (event_time);
+
+
+--
+-- Name: ix_record_file_space_event_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_record_file_space_event_time ON public.record_file USING btree (space_id, event_time);
+
+
+--
+-- Name: ix_record_file_space_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_record_file_space_id ON public.record_file USING btree (space_id);
+
+
+--
+-- Name: ix_snap_image_captured_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_snap_image_captured_at ON public.snap_image USING btree (captured_at);
+
+
+--
+-- Name: ix_snap_image_device_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_snap_image_device_id ON public.snap_image USING btree (device_id);
+
+
+--
+-- Name: ix_snap_image_space_captured_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_snap_image_space_captured_at ON public.snap_image USING btree (space_id, captured_at);
+
+
+--
+-- Name: ix_snap_image_space_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_snap_image_space_id ON public.snap_image USING btree (space_id);
 
 
 --
@@ -5499,6 +5994,14 @@ ALTER TABLE ONLY public.plate_entry
 
 
 --
+-- Name: record_file record_file_space_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.record_file
+    ADD CONSTRAINT record_file_space_id_fkey FOREIGN KEY (space_id) REFERENCES public.record_space(id) ON DELETE CASCADE;
+
+
+--
 -- Name: record_space record_space_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5512,6 +6015,14 @@ ALTER TABLE ONLY public.record_space
 
 ALTER TABLE ONLY public.region_model_service
     ADD CONSTRAINT region_model_service_region_id_fkey FOREIGN KEY (region_id) REFERENCES public.detection_region(id) ON DELETE CASCADE;
+
+
+--
+-- Name: snap_image snap_image_space_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.snap_image
+    ADD CONSTRAINT snap_image_space_id_fkey FOREIGN KEY (space_id) REFERENCES public.snap_space(id) ON DELETE CASCADE;
 
 
 --
@@ -5574,5 +6085,5 @@ ALTER TABLE ONLY public.tracking_target
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 2bOVuMhpSReomBLqtKdfYpNpeeET6MplVRgti77d0u7pdMMSNdgphoNAE2GBdMx
+\unrestrict 6o639h8PAabpbCQX79jD0dysv1QxFhRmh2qoHQRAf5acsy9Hijg9ZX7uQdpxCqa
 

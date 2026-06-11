@@ -33,11 +33,9 @@ media-cluster/
 │   └── register.sh
 ├── nginx/
 │   └── media-edge.conf.template
-├── glusterfs/
-│   ├── volume-create.sh
-│   └── mount-all.sh
-└── kafka/
-    └── topics.sh
+└── glusterfs/
+    ├── volume-create.sh
+    └── mount-all.sh
 ```
 
 ## 阅读顺序建议

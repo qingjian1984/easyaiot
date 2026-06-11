@@ -445,9 +445,11 @@ class AlgorithmTaskDaemon:
                 'WARNING',
             )
         
-        # 设置VIDEO服务API地址（用于心跳上报和告警hook）
         video_service_port = os.getenv('FLASK_RUN_PORT', '6000')
         env['VIDEO_SERVICE_PORT'] = video_service_port
+        gateway = os.getenv('JAVA_BACKEND_URL', os.getenv('GATEWAY_URL', 'http://localhost:48080')).rstrip('/')
+        env['VIDEO_CONTROL_URL'] = f'{gateway}/admin-api/video'
+        env['VIDEO_HEARTBEAT_URL'] = f'{env["VIDEO_CONTROL_URL"]}/algorithm/heartbeat/realtime'
         
         # 重要：realtime_algorithm_service 使用 host 网络模式，必须使用 localhost 访问 Kafka
         # 如果环境变量中配置了容器名（如 Kafka:9092），需要强制覆盖为 localhost:9092

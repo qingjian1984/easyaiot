@@ -121,6 +121,7 @@ RUNTIME_IMAGE_SPECS=(
     "iot-infra/iot-infra-biz/Dockerfile|iot-module-infra-biz:latest"
     "iot-device/iot-device-biz/Dockerfile|iot-module-device-biz:latest"
     "iot-dataset/iot-dataset-biz/Dockerfile|iot-module-dataset-biz:latest"
+    "iot-node/iot-node-biz/Dockerfile|iot-module-node-biz:latest"
     "iot-tdengine/iot-tdengine-biz/Dockerfile|iot-module-tdengine-biz:latest"
     "iot-file/iot-file-biz/Dockerfile|iot-module-file-biz:latest"
     "iot-message/iot-message-biz/Dockerfile|iot-module-message-biz:latest"
@@ -135,6 +136,7 @@ REQUIRED_RUNTIME_JARS=(
     iot-infra-biz.jar
     iot-device-biz.jar
     iot-dataset-biz.jar
+    iot-node-biz.jar
     iot-tdengine-biz.jar
     iot-file-biz.jar
     iot-message-biz.jar
@@ -876,6 +878,7 @@ clean() {
     print_info "清理各模块 target 目录下的 .jar 包..."
     local modules=(
         "iot-dataset"
+        "iot-node"
         "iot-device"
         "iot-file"
         "iot-gateway"
@@ -1032,6 +1035,7 @@ DEVICE模块 Docker Compose 管理脚本
     - iot-infra
     - iot-device
     - iot-dataset
+    - iot-node
     - iot-tdengine
     - iot-file
     - iot-message

@@ -50,7 +50,21 @@ def _env_float(name: str, default: float) -> float:
 
 
 def get_srs_record_dir() -> str:
+    media_record = (os.getenv('MEDIA_RECORD_DIR') or '').strip()
+    if media_record:
+        return media_record.rstrip('/\\')
+    host_root = (os.getenv('MEDIA_HOST_DATA_ROOT') or '').strip()
+    if host_root:
+        return os.path.join(host_root.rstrip('/\\'), 'playbacks')
     return (os.getenv('SRS_RECORD_DIR') or '/data/playbacks').rstrip('/\\')
+
+
+def get_snap_staging_dir() -> str:
+    snap_dir = (os.getenv('MEDIA_SNAP_DIR') or '').strip()
+    if snap_dir:
+        return snap_dir.rstrip('/\\')
+    host_root = (os.getenv('MEDIA_HOST_DATA_ROOT') or '/mnt/easyaiot-media').strip()
+    return os.path.join(host_root.rstrip('/\\'), 'snaps')
 
 
 def _playback_dir_mode() -> int:

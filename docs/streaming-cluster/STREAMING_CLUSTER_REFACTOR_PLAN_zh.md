@@ -189,9 +189,10 @@ media-cluster/
 ├── zlm/register.sh
 ├── nginx/media-edge.conf.template  # 播放入口
 ├── glusterfs/volume-create.sh      # 建卷
-├── glusterfs/mount-all.sh          # 客户端挂载
-└── kafka/topics.sh                 # Topic 创建
+└── glusterfs/mount-all.sh          # 客户端挂载
 ```
+
+流媒体 Kafka Topic（`media.dvr.completed` 等）在控制面 Kafka 上创建，见 [存储与上传流水线.md](./存储与上传流水线.md#32-创建-topic)。
 
 配置规范见 [SRS与ZLM集群配置规范.md](./SRS与ZLM集群配置规范.md)。
 
