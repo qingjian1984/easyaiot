@@ -45,12 +45,15 @@ get_compose_cmd() {
 
 # 与 install_middleware_linux.sh 约定一致：宿主机根目录 /data，避免 bind 后目录缺失或权限异常
 ensure_srs_host_data_dir() {
+    # 只设置 /data 与 playbacks 顶层 777，绝不递归整个 /data
+    # （/data 下含本仓库与录像等海量文件，递归 chmod 会严重卡顿；
+    #  SRS 容器入口已设 umask 0000 保证新录像可删，无需递归历史文件）
     if [ "$EUID" -eq 0 ]; then
         mkdir -p /data/playbacks 2>/dev/null || true
-        chmod -R 777 /data 2>/dev/null || true
+        chmod 777 /data /data/playbacks 2>/dev/null || true
     elif command -v sudo &>/dev/null; then
         sudo mkdir -p /data/playbacks 2>/dev/null || true
-        sudo chmod -R 777 /data 2>/dev/null || true
+        sudo chmod 777 /data /data/playbacks 2>/dev/null || true
     else
         mkdir -p /data/playbacks 2>/dev/null || true
     fi

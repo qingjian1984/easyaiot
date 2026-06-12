@@ -101,3 +101,7 @@ VIDEO/face_capture_head_yolov8.onnx
 # Claude Code 个人配置与本地钩子（仅本机，不随仓库分发）
 .claude/settings.local.json
 .claude/changed-files-hook.sh
+
+# 表结构同步产物（明文整库备份与差异 SQL，绝不可入库）
+.scripts/postgresql/schema-sync/backups/
+.scripts/postgresql/schema-sync/schema_diffs/

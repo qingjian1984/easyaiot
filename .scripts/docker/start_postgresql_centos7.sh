@@ -652,13 +652,15 @@ create_data_dirs() {
     print_info "准备数据目录 db_data/{data,log}..."
     mkdir -p "$data_dir" "$log_dir"
 
+    # 仅设挂载点顶层 777，绝不递归（与 docker-compose.yml 的 PGDATA=.../pgdata 子目录一致，
+    # 递归会把 pgdata 设成 777 导致 postgres 拒绝启动；属主由 chown -R 修正即可）
     if [ "$EUID" -eq 0 ]; then
         chown -R 999:999 "$data_dir" "$log_dir"
-        chmod -R 777 "$data_dir" "$log_dir"
+        chmod 777 "$data_dir" "$log_dir"
         print_success "数据目录权限已设置 (999:999)"
     elif command -v sudo >/dev/null 2>&1; then
         if sudo chown -R 999:999 "$data_dir" "$log_dir" 2>/dev/null; then
-            sudo chmod -R 777 "$data_dir" "$log_dir" 2>/dev/null || true
+            sudo chmod 777 "$data_dir" "$log_dir" 2>/dev/null || true
             print_success "数据目录权限已设置 (999:999)"
         else
             print_warning "无法设置目录属主，将依赖 PostgresSQL-init 容器修复权限"

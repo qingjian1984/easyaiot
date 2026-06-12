@@ -13,9 +13,10 @@ echo "[SRS Entrypoint] 检查并设置数据目录权限..."
 # 创建目录（如果不存在）
 mkdir -p "$DATA_DIR" "$PLAYBACKS_DIR"
 
-# 设置目录权限为 777，确保所有用户都可以读写
-# 这样即使 SRS 以 root 运行，创建的文件也可以被普通用户删除
-chmod -R 777 "$DATA_DIR" 2>/dev/null || {
+# 只设置 /data 与 playbacks 顶层 777，绝不递归整个 /data
+# （/data 下录像会持续增长，每次容器启动递归 chmod 会越来越慢；
+#  新录像文件的可删除性由下面的 umask 0000 保证，无需递归历史文件）
+chmod 777 "$DATA_DIR" "$PLAYBACKS_DIR" 2>/dev/null || {
     echo "⚠️  警告: 无法设置目录权限，可能影响文件访问"
 }
 

@@ -42,6 +42,9 @@ GPUSTACK_ADMIN_USER="${GPUSTACK_ADMIN_USER:-admin}"
 GPUSTACK_ADMIN_PASSWORD="${GPUSTACK_ADMIN_PASSWORD:-${GPUSTACK_BOOTSTRAP_PASSWORD:-basiclab@iotp4JWmQSvzdh0z4mF}}"
 # GPUSTACK_TOKEN 由 API 动态获取；若已导出则优先使用环境变量中的值
 GPUSTACK_API_COOKIE_FILE="${SCRIPT_DIR}/logs/.gpustack_api_cookie"
+# 跳过 GPUStack（Server 容器、Worker、镜像拉取、数据目录递归 chmod）。
+# 导出 SKIP_GPUSTACK=true 可避免 gpustack_data 大目录的递归 777 卡顿、加速部署。
+SKIP_GPUSTACK="${SKIP_GPUSTACK:-false}"
 
 # Dify 1.14.2（LLM 应用平台，独立 compose 部署）
 DIFY_VERSION="${DIFY_VERSION:-1.14.2}"
@@ -50,6 +53,14 @@ DIFY_COMPOSE_FILE="${DIFY_DIR}/docker-compose.yaml"
 DIFY_OVERRIDE_FILE="${DIFY_DIR}/docker-compose.override.yml"
 DIFY_PROJECT_NAME="${DIFY_PROJECT_NAME:-dify}"
 DIFY_HTTP_PORT="${DIFY_HTTP_PORT:-10190}"
+# 跳过 Dify（独立 compose 部署、镜像拉取、dify_data 目录递归权限）。
+# 导出 SKIP_DIFY=true 可避免 dify_data/volumes 大目录的递归 777 卡顿、加速部署。
+SKIP_DIFY="${SKIP_DIFY:-false}"
+
+# 强制对所有已存在的存储目录做完整递归 chmod/chown（兜底用）。
+# 默认 false：已存在目录只设顶层权限，避免对海量数据文件递归导致卡顿（容器自身写的数据权限本就正确）。
+# 仅当怀疑既有数据目录权限损坏、容器读写报错时，导出 FORCE_CHMOD=true 跑一次强制修复。
+FORCE_CHMOD="${FORCE_CHMOD:-false}"
 
 # 日志文件配置（主日志 / GPUStack / Dify 各自独立，互不混写）
 LOG_DIR="${SCRIPT_DIR}/logs"
@@ -130,6 +141,25 @@ MIDDLEWARE_HEALTH_ENDPOINTS["EMQX"]="/api/v5/status"
 MIDDLEWARE_HEALTH_ENDPOINTS["ZLMediaKit"]="/index/api/getServerConfig"
 MIDDLEWARE_HEALTH_ENDPOINTS["GPUStack"]="/"
 MIDDLEWARE_HEALTH_ENDPOINTS["Dify"]="/"
+
+# 跳过 GPUStack / Dify 时，从中间件列表中移除，避免后续的容器检测/健康检查/端口清理
+if [ "$SKIP_GPUSTACK" = "true" ] || [ "$SKIP_DIFY" = "true" ]; then
+    _filtered_services=()
+    for _svc in "${MIDDLEWARE_SERVICES[@]}"; do
+        [ "$SKIP_GPUSTACK" = "true" ] && [ "$_svc" = "GPUStack" ] && continue
+        [ "$SKIP_DIFY" = "true" ] && [ "$_svc" = "Dify" ] && continue
+        _filtered_services+=("$_svc")
+    done
+    MIDDLEWARE_SERVICES=("${_filtered_services[@]}")
+    unset _filtered_services _svc
+fi
+
+# 计算 compose up/pull 需要操作的服务列表。
+# 未跳过 GPUStack 时返回空（表示操作全部服务）；跳过时返回除 GPUStack 外的所有 compose 服务名。
+compose_service_args() {
+    [ "$SKIP_GPUSTACK" != "true" ] && return 0
+    $COMPOSE_CMD -f "$COMPOSE_FILE" config --services 2>/dev/null | grep -vx "GPUStack" | tr '\n' ' '
+}
 
 # 日志输出函数（去掉颜色代码后写入日志文件）
 log_to_file() {
@@ -1863,31 +1893,34 @@ configure_kafka_hosts() {
 }
 
 
+# 创建目录并智能设置 777 权限（owner 非空时一并 chown）。
+# 已存在目录只设顶层权限，避免对海量数据递归 chmod 卡顿；新建目录或 FORCE_CHMOD=true 时递归。
+# 用法: set_data_dir_perms <owner|""> <dir> [dir2 ...]  返回 0=成功 1=无权限/失败
+set_data_dir_perms() {
+    local owner="$1"; shift
+    local d R SUDO rc=0
+    for d in "$@"; do
+        R="-R"
+        [ -d "$d" ] && [ "$FORCE_CHMOD" != "true" ] && R=""
+        mkdir -p "$d" 2>/dev/null || true
+        SUDO=""
+        if [ "$EUID" -ne 0 ]; then
+            command -v sudo &>/dev/null && SUDO="sudo" || { rc=1; continue; }
+        fi
+        [ -z "$owner" ] || $SUDO chown $R "$owner" "$d" 2>/dev/null || true
+        $SUDO chmod $R 777 "$d" 2>/dev/null || rc=1
+    done
+    return $rc
+}
+
 # 创建并设置 NodeRED 数据目录权限
 create_nodered_directories() {
     local nodered_data_dir="${SCRIPT_DIR}/nodered_data/data"
-    
     print_info "创建 NodeRED 数据目录并设置权限..."
-    
-    # 创建目录
-    mkdir -p "$nodered_data_dir"
-    
-    # 设置目录所有者为 UID 1000 (Node-RED 容器默认用户)
-    # 如果当前用户有权限，则设置；否则只创建目录
-    if [ "$EUID" -eq 0 ]; then
-        chown -R 1000:1000 "$nodered_data_dir"
-        chmod -R 777 "$nodered_data_dir"
+    if set_data_dir_perms "1000:1000" "$nodered_data_dir"; then
         print_success "NodeRED 数据目录权限已设置 (UID 1000:1000, 777)"
     else
-        # 非 root 用户尝试使用 sudo（如果可用）
-        if command -v sudo &> /dev/null; then
-            sudo chown -R 1000:1000 "$nodered_data_dir" 2>/dev/null && \
-            sudo chmod -R 777 "$nodered_data_dir" 2>/dev/null && \
-            print_success "NodeRED 数据目录权限已设置 (UID 1000:1000, 777)" || \
-            print_warning "无法设置 NodeRED 目录权限，可能需要手动设置: sudo chmod -R 777 $nodered_data_dir"
-        else
-            print_warning "无法设置 NodeRED 目录权限，请手动执行: sudo chmod -R 777 $nodered_data_dir"
-        fi
+        print_warning "无法设置 NodeRED 目录权限，请手动执行: sudo chmod -R 777 $nodered_data_dir"
     fi
 }
 
@@ -1895,30 +1928,11 @@ create_nodered_directories() {
 create_postgresql_directories() {
     local postgresql_data_dir="${SCRIPT_DIR}/db_data/data"
     local postgresql_log_dir="${SCRIPT_DIR}/db_data/log"
-    
     print_info "创建 PostgreSQL 数据目录并设置权限..."
-    
-    # 创建目录
-    mkdir -p "$postgresql_data_dir" "$postgresql_log_dir"
-    
-    # 设置目录所有者为 UID 999 (PostgreSQL 容器默认 postgres 用户)
-    # 如果当前用户有权限，则设置；否则只创建目录
-    if [ "$EUID" -eq 0 ]; then
-        chown -R 999:999 "$postgresql_data_dir" "$postgresql_log_dir"
-        chmod -R 777 "$postgresql_data_dir"
-        chmod -R 777 "$postgresql_log_dir"
+    if set_data_dir_perms "999:999" "$postgresql_data_dir" "$postgresql_log_dir"; then
         print_success "PostgreSQL 数据目录权限已设置 (UID 999:999, 777)"
     else
-        # 非 root 用户尝试使用 sudo（如果可用）
-        if command -v sudo &> /dev/null; then
-            sudo chown -R 999:999 "$postgresql_data_dir" "$postgresql_log_dir" 2>/dev/null && \
-            sudo chmod -R 777 "$postgresql_data_dir" 2>/dev/null && \
-            sudo chmod -R 777 "$postgresql_log_dir" 2>/dev/null && \
-            print_success "PostgreSQL 数据目录权限已设置 (UID 999:999, 777)" || \
-            print_warning "无法设置 PostgreSQL 目录权限，可能需要手动设置: sudo chmod -R 777 $postgresql_data_dir $postgresql_log_dir"
-        else
-            print_warning "无法设置 PostgreSQL 目录权限，请手动执行: sudo chmod -R 777 $postgresql_data_dir $postgresql_log_dir"
-        fi
+        print_warning "无法设置 PostgreSQL 目录权限，请手动执行: sudo chmod -R 777 $postgresql_data_dir $postgresql_log_dir"
     fi
 }
 
@@ -1926,30 +1940,11 @@ create_postgresql_directories() {
 create_redis_directories() {
     local redis_data_dir="${SCRIPT_DIR}/redis_data/data"
     local redis_log_dir="${SCRIPT_DIR}/redis_data/logs"
-    
     print_info "创建 Redis 数据目录并设置权限..."
-    
-    # 创建目录
-    mkdir -p "$redis_data_dir" "$redis_log_dir"
-    
-    # Redis 容器默认使用 UID 999 (redis 用户)
-    # 如果当前用户有权限，则设置；否则只创建目录
-    if [ "$EUID" -eq 0 ]; then
-        chown -R 999:999 "$redis_data_dir" "$redis_log_dir"
-        chmod -R 777 "$redis_data_dir"
-        chmod -R 777 "$redis_log_dir"
+    if set_data_dir_perms "999:999" "$redis_data_dir" "$redis_log_dir"; then
         print_success "Redis 数据目录权限已设置 (UID 999:999, 777)"
     else
-        # 非 root 用户尝试使用 sudo（如果可用）
-        if command -v sudo &> /dev/null; then
-            sudo chown -R 999:999 "$redis_data_dir" "$redis_log_dir" 2>/dev/null && \
-            sudo chmod -R 777 "$redis_data_dir" 2>/dev/null && \
-            sudo chmod -R 777 "$redis_log_dir" 2>/dev/null && \
-            print_success "Redis 数据目录权限已设置 (UID 999:999, 777)" || \
-            print_warning "无法设置 Redis 目录权限，可能需要手动设置: sudo chmod -R 777 $redis_data_dir $redis_log_dir"
-        else
-            print_warning "无法设置 Redis 目录权限，请手动执行: sudo chmod -R 777 $redis_data_dir $redis_log_dir"
-        fi
+        print_warning "无法设置 Redis 目录权限，请手动执行: sudo chmod -R 777 $redis_data_dir $redis_log_dir"
     fi
 }
 
@@ -1968,7 +1963,7 @@ create_kafka_directories() {
         return 1
     fi
     
-    # 创建目录
+    # 创建目录（带只读文件系统错误检测）
     local mkdir_output=""
     mkdir_output=$(mkdir -p "$kafka_data_dir" 2>&1)
     local mkdir_exit_code=$?
@@ -1990,21 +1985,10 @@ create_kafka_directories() {
     fi
     
     # Kafka 容器默认使用 UID 1000, GID 1000 (appuser 用户)
-    # 如果当前用户有权限，则设置；否则只创建目录
-    if [ "$EUID" -eq 0 ]; then
-        chown -R 1000:1000 "$kafka_data_dir"
-        chmod -R 777 "$kafka_data_dir"
+    if set_data_dir_perms "1000:1000" "$kafka_data_dir"; then
         print_success "Kafka 数据目录权限已设置 (UID 1000:1000, 777)"
     else
-        # 非 root 用户尝试使用 sudo（如果可用）
-        if command -v sudo &> /dev/null; then
-            sudo chown -R 1000:1000 "$kafka_data_dir" 2>/dev/null && \
-            sudo chmod -R 777 "$kafka_data_dir" 2>/dev/null && \
-            print_success "Kafka 数据目录权限已设置 (UID 1000:1000, 777)" || \
-            print_warning "无法设置 Kafka 目录权限，可能需要手动设置: sudo chmod -R 777 $kafka_data_dir"
-        else
-            print_warning "无法设置 Kafka 目录权限，请手动执行: sudo chmod -R 777 $kafka_data_dir"
-        fi
+        print_warning "无法设置 Kafka 目录权限，请手动执行: sudo chmod -R 777 $kafka_data_dir"
     fi
 }
 
@@ -2060,7 +2044,9 @@ check_filesystem_mount_status() {
     return 0  # 可写
 }
 
-# GPUStack 内嵌 PostgreSQL 要求 PGDATA 为 0700/0750，777 会导致 postgres 拒绝启动
+# GPUStack 内嵌 PostgreSQL 要求 PGDATA 为 0700/0750，777 会导致 postgres 拒绝启动。
+# 注意：此操作又快又是正确性关键，即使 SKIP_GPUSTACK=true 也必须执行（仅在目录存在时生效），
+# 否则残留的 777 权限会让 gpustack-server 的内嵌 PG 一直拒绝启动。
 fix_gpustack_postgresql_permissions() {
     local gpustack_pg_root="${SCRIPT_DIR}/gpustack_data/postgresql"
     local gpustack_pg_data="${gpustack_pg_root}/data"
@@ -2087,6 +2073,11 @@ fix_gpustack_postgresql_permissions() {
 
 # GPUStack 数据目录：除内嵌 PostgreSQL 外其余子目录仍用 777
 set_gpustack_data_permissions() {
+    # SKIP_GPUSTACK=true 时只跳过慢的 777 递归，仍必须修正内嵌 PG 权限（否则 gpustack-server 起不来）
+    if [ "$SKIP_GPUSTACK" = "true" ]; then
+        fix_gpustack_postgresql_permissions
+        return 0
+    fi
     local gpustack_dir="${SCRIPT_DIR}/gpustack_data"
 
     mkdir -p "$gpustack_dir"
@@ -2167,13 +2158,18 @@ create_all_storage_directories() {
         "${SCRIPT_DIR}/../zlmediakit/log:::"         # ZLMediaKit 日志（使用默认权限）
         "${SCRIPT_DIR}/../zlmediakit/conf:::"        # ZLMediaKit 配置（使用默认权限）
         "${SCRIPT_DIR}/gpustack_data:::"             # GPUStack 数据（配置、内嵌库等）
-        "${DIFY_DIR}/volumes:::"                    # Dify 应用/数据库/向量库等
     )
-    
+    # Dify 卷目录（SKIP_DIFY=true 时跳过创建与递归 chmod，避免大目录卡顿）
+    [ "$SKIP_DIFY" != "true" ] && storage_dirs+=("${DIFY_DIR}/volumes:::")  # Dify 应用/数据库/向量库等
+
     local created_count=0
     local total_count=${#storage_dirs[@]}
     local failed_dirs=()
-    
+
+    if [ "$FORCE_CHMOD" = "true" ]; then
+        print_info "FORCE_CHMOD=true：对所有已存在目录做完整递归 chmod 修复（数据量大时会较慢）..."
+    fi
+
     for dir_spec in "${storage_dirs[@]}"; do
         # 解析目录规格
         IFS=':' read -r dir_path uid gid perms <<< "$dir_spec"
@@ -2191,29 +2187,35 @@ create_all_storage_directories() {
             continue
         fi
         
-        # 创建目录
+        # 创建目录（记录是否为已存在的目录：已存在则只设置顶层权限，避免对海量数据文件做递归 chmod 导致卡顿）
+        local pre_existing="false"
+        [ -d "$dir_path" ] && pre_existing="true"
+        local R="-R"
+        # 已存在目录默认只设顶层权限（去掉 -R）；FORCE_CHMOD=true 时强制递归兜底修复
+        [ "$pre_existing" = "true" ] && [ "$FORCE_CHMOD" != "true" ] && R=""
+
         local mkdir_output=""
         mkdir_output=$(mkdir -p "$dir_path" 2>&1)
         local mkdir_exit_code=$?
-        
+
         if [ $mkdir_exit_code -eq 0 ]; then
             # 如果指定了 UID/GID，尝试设置权限
             if [ -n "$uid" ] && [ -n "$gid" ]; then
                 if [ "$EUID" -eq 0 ]; then
-                    chown -R "${uid}:${gid}" "$dir_path" 2>/dev/null || true
-                    chmod -R 777 "$dir_path" 2>/dev/null || true
+                    chown $R "${uid}:${gid}" "$dir_path" 2>/dev/null || true
+                    chmod $R 777 "$dir_path" 2>/dev/null || true
                 elif command -v sudo &> /dev/null; then
-                    sudo chown -R "${uid}:${gid}" "$dir_path" 2>/dev/null || true
-                    sudo chmod -R 777 "$dir_path" 2>/dev/null || true
+                    sudo chown $R "${uid}:${gid}" "$dir_path" 2>/dev/null || true
+                    sudo chmod $R 777 "$dir_path" 2>/dev/null || true
                 fi
             else
                 # 即使没有指定 UID/GID，也设置777权限（GPUStack 内嵌 PG 除外）
                 if [ "$dir_path" = "${SCRIPT_DIR}/gpustack_data" ]; then
                     set_gpustack_data_permissions
                 elif [ "$EUID" -eq 0 ]; then
-                    chmod -R 777 "$dir_path" 2>/dev/null || true
+                    chmod $R 777 "$dir_path" 2>/dev/null || true
                 elif command -v sudo &> /dev/null; then
-                    sudo chmod -R 777 "$dir_path" 2>/dev/null || true
+                    sudo chmod $R 777 "$dir_path" 2>/dev/null || true
                 fi
             fi
             created_count=$((created_count + 1))
@@ -2235,22 +2237,10 @@ create_all_storage_directories() {
         fi
     done
     
-    # 统一设置所有已创建目录的777权限
-    print_info "统一设置所有存储目录为777权限..."
-    for dir_spec in "${storage_dirs[@]}"; do
-        IFS=':' read -r dir_path uid gid perms <<< "$dir_spec"
-        if [ -n "$dir_path" ] && [ -d "$dir_path" ]; then
-            if [ "$dir_path" = "${SCRIPT_DIR}/gpustack_data" ]; then
-                set_gpustack_data_permissions
-            elif [ "$EUID" -eq 0 ]; then
-                chmod -R 777 "$dir_path" 2>/dev/null || true
-            elif command -v sudo &> /dev/null; then
-                sudo chmod -R 777 "$dir_path" 2>/dev/null || true
-            fi
-        fi
-    done
-    
-    # 同时设置所有父目录为777权限
+    # 注意：上面的创建循环已对每个目录设置好权限（新建目录递归、已存在目录仅顶层），
+    # 此处不再重复递归 chmod，避免对已存在的海量数据目录做无意义的全量扫描导致卡顿。
+
+    # 同时设置所有父目录为777权限（仅顶层，父目录的数据子目录已在上面单独处理）
     local parent_dirs=(
         "${SCRIPT_DIR}/standalone-logs"
         "${SCRIPT_DIR}/db_data"
@@ -2262,33 +2252,43 @@ create_all_storage_directories() {
         "${SCRIPT_DIR}/milvus_config"
         "${SCRIPT_DIR}/srs_data"
         "${SCRIPT_DIR}/nodered_data"
-        "${SCRIPT_DIR}/gpustack_data"
-        "${DIFY_DIR}"
         "${SCRIPT_DIR}/../zlmediakit"
         "${SCRIPT_DIR}/logs"
     )
+    # 注：gpustack_data 不在此列——它已在上面的存储目录循环中由
+    # set_gpustack_data_permissions 处理过，重复处理会再次递归扫描大模型缓存目录。
+    # Dify 父目录（SKIP_DIFY=true 时跳过递归 chmod）
+    [ "$SKIP_DIFY" != "true" ] && parent_dirs+=("${DIFY_DIR}")
+    # 默认只设父目录顶层权限；FORCE_CHMOD=true 时递归兜底修复
+    local PR=""
+    [ "$FORCE_CHMOD" = "true" ] && PR="-R"
     for parent_dir in "${parent_dirs[@]}"; do
         if [ -d "$parent_dir" ]; then
-            if [ "$parent_dir" = "${SCRIPT_DIR}/gpustack_data" ]; then
-                set_gpustack_data_permissions
-            elif [ "$EUID" -eq 0 ]; then
-                chmod -R 777 "$parent_dir" 2>/dev/null || true
+            if [ "$EUID" -eq 0 ]; then
+                chmod $PR 777 "$parent_dir" 2>/dev/null || true
             elif command -v sudo &> /dev/null; then
-                sudo chmod -R 777 "$parent_dir" 2>/dev/null || true
+                sudo chmod $PR 777 "$parent_dir" 2>/dev/null || true
             fi
         fi
     done
 
     # SRS 容器绑定宿主机 /data -> 容器 /data（与 docker-compose.yml 一致）
+    # 注意：只对 /data 顶层和 /data/playbacks 设权限，绝不对整个 /data 分区递归
+    # （/data 下含本仓库及全部 docker 数据，递归 chmod 会扫描海量文件导致严重卡顿）
+    # playbacks 同样不递归：录像无限增长，新文件可删性由 SRS 容器入口 umask 0000 保证
+    # （与 fix_srs.sh / srs-entrypoint.sh / install_middleware_mac.sh 约定一致）
     if [ "$EUID" -eq 0 ]; then
         mkdir -p /data/playbacks 2>/dev/null || true
-        chmod -R 777 /data 2>/dev/null || true
+        chmod 777 /data 2>/dev/null || true
+        chmod 777 /data/playbacks 2>/dev/null || true
     elif command -v sudo &> /dev/null; then
         sudo mkdir -p /data/playbacks 2>/dev/null || true
-        sudo chmod -R 777 /data 2>/dev/null || true
+        sudo chmod 777 /data 2>/dev/null || true
+        sudo chmod 777 /data/playbacks 2>/dev/null || true
     else
         mkdir -p /data/playbacks 2>/dev/null || true
-        chmod -R 777 /data 2>/dev/null || true
+        chmod 777 /data 2>/dev/null || true
+        chmod 777 /data/playbacks 2>/dev/null || true
     fi
     
     if [ $created_count -eq $total_count ]; then
@@ -2660,6 +2660,7 @@ wait_for_zlmediakit() {
 
 # 配置 GPUStack 对外访问地址（供 Worker 节点注册）
 prepare_gpustack_env() {
+    [ "$SKIP_GPUSTACK" = "true" ] && return 0
     local host_ip
     host_ip=$(get_host_ip)
     if [ -z "$host_ip" ]; then
@@ -2907,6 +2908,7 @@ prepare_gpustack_worker_token() {
 
 # 等待 GPUStack Server 就绪
 wait_for_gpustack_server() {
+    [ "$SKIP_GPUSTACK" = "true" ] && return 0
     local max_attempts=60
     local attempt=0
     local check_url="http://127.0.0.1:10180/"
@@ -2927,6 +2929,10 @@ wait_for_gpustack_server() {
 
 # 部署 GPUStack Worker（检测 GPU 后选择是否启用 NVIDIA runtime）
 deploy_gpustack_worker() {
+    if [ "$SKIP_GPUSTACK" = "true" ]; then
+        print_gpustack_info "已设置 SKIP_GPUSTACK=true，跳过 GPUStack Worker 部署"
+        return 0
+    fi
     print_gpustack_section "部署 GPUStack Worker"
 
     if ! docker_cli ps &>/dev/null; then
@@ -3198,6 +3204,10 @@ print_dify_access_guide() {
 
 # 部署 Dify 1.14.2
 deploy_dify() {
+    if [ "$SKIP_DIFY" = "true" ]; then
+        print_dify_info "已设置 SKIP_DIFY=true，跳过 Dify 部署"
+        return 0
+    fi
     print_dify_section "部署 Dify ${DIFY_VERSION}"
 
     if ! docker_cli ps &>/dev/null; then
@@ -3242,27 +3252,32 @@ stop_dify() {
 # 在安装 SRS 之前创建宿主机 /data（SRS 配置中 srs_log_file、dvr_path 使用容器内 /data；compose 挂载 /data:/data）
 ensure_host_data_directory_before_srs() {
     print_info "安装 SRS 前检查宿主机目录 /data ..."
+    # 注意：只对 /data 顶层和 /data/playbacks 设权限，绝不对整个 /data 分区递归
+    # （/data 下含本仓库及全部 docker 数据，递归 chmod 会扫描海量文件导致严重卡顿）
     local created=0
     if [ "$EUID" -eq 0 ]; then
         if mkdir -p /data/playbacks 2>/dev/null; then
-            chmod -R 777 /data 2>/dev/null || true
+            chmod 777 /data 2>/dev/null || true
+            chmod 777 /data/playbacks 2>/dev/null || true
             created=1
         fi
     elif command -v sudo &>/dev/null; then
         if sudo mkdir -p /data/playbacks 2>/dev/null; then
-            sudo chmod -R 777 /data 2>/dev/null || true
+            sudo chmod 777 /data 2>/dev/null || true
+            sudo chmod 777 /data/playbacks 2>/dev/null || true
             created=1
         fi
     else
         if mkdir -p /data/playbacks 2>/dev/null; then
-            chmod -R 777 /data 2>/dev/null || true
+            chmod 777 /data 2>/dev/null || true
+            chmod 777 /data/playbacks 2>/dev/null || true
             created=1
         fi
     fi
     if [ "$created" -eq 1 ]; then
         print_success "宿主机目录已就绪: /data（含 playbacks 子目录）"
     else
-        print_warning "无法在宿主机创建 /data（请使用 root/sudo 执行安装，或手动: sudo mkdir -p /data/playbacks && sudo chmod -R 777 /data）。"
+        print_warning "无法在宿主机创建 /data（请使用 root/sudo 执行安装，或手动: sudo mkdir -p /data/playbacks && sudo chmod 777 /data /data/playbacks）。"
     fi
 }
 
@@ -5012,6 +5027,10 @@ check_and_pull_images() {
         # 匹配 image: 行，支持多种格式
         if echo "$line" | grep -qE "^\s*image:"; then
             local image=$(echo "$line" | sed -E 's/^\s*image:\s*//' | sed -E "s/^['\"]//" | sed -E "s/['\"]$//" | tr -d ' ')
+            # 跳过 GPUStack 时不检查/拉取其镜像（镜像较大，避免无谓拉取）
+            if [ "$SKIP_GPUSTACK" = "true" ] && echo "$image" | grep -qi "gpustack"; then
+                continue
+            fi
             if [ -n "$image" ] && [[ ! " ${images_to_check[@]} " =~ " ${image} " ]]; then
                 images_to_check+=("$image")
             fi
@@ -5033,7 +5052,7 @@ check_and_pull_images() {
     if [ $missing_images -gt 0 ]; then
         print_info "发现 $missing_images 个缺失镜像，开始拉取..."
         print_info "已存在 $existing_images 个镜像，跳过拉取"
-        $COMPOSE_CMD -f "$COMPOSE_FILE" pull 2>&1 | tee -a "$LOG_FILE"
+        $COMPOSE_CMD -f "$COMPOSE_FILE" pull $(compose_service_args) 2>&1 | tee -a "$LOG_FILE"
         print_success "镜像拉取完成"
     else
         if [ ${#images_to_check[@]} -gt 0 ]; then
@@ -5922,7 +5941,7 @@ install_middleware() {
     
     print_section "启动 Milvus 等中间件容器"
     print_info "启动所有中间件服务..."
-    if $COMPOSE_CMD -f "$COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"; then
+    if $COMPOSE_CMD -f "$COMPOSE_FILE" up -d $(compose_service_args) 2>&1 | tee -a "$LOG_FILE"; then
         print_success "容器启动命令执行完成"
     else
         print_error "容器启动过程中出现错误"
@@ -6577,8 +6596,8 @@ update_middleware() {
     check_and_pull_images
     
     print_info "重启所有中间件服务..."
-    $COMPOSE_CMD -f "$COMPOSE_FILE" up -d 2>&1 | tee -a "$LOG_FILE"
-    
+    $COMPOSE_CMD -f "$COMPOSE_FILE" up -d $(compose_service_args) 2>&1 | tee -a "$LOG_FILE"
+
     print_success "所有中间件更新完成"
     echo ""
     print_section "检查 Milvus 向量数据库"
@@ -6615,6 +6634,14 @@ show_help() {
     echo "  update          - 更新并重启所有中间件"
     echo "  fix-postgresql  - 修复 PostgreSQL 密码问题"
     echo "  help            - 显示此帮助信息"
+    echo ""
+    echo "环境变量:"
+    echo "  SKIP_GPUSTACK=true  - 跳过 GPUStack（Server/Worker/镜像/数据目录递归权限），加速部署"
+    echo "  SKIP_DIFY=true      - 跳过 Dify（独立 compose 部署/镜像/数据目录递归权限），加速部署"
+    echo "  FORCE_CHMOD=true    - 对已存在的数据目录强制完整递归 chmod 修复（默认只设顶层，数据量大时慢）"
+    echo "                        仅在怀疑既有目录权限损坏、容器读写报错时使用一次"
+    echo "                        示例: SKIP_GPUSTACK=true SKIP_DIFY=true ./install_middleware_linux.sh update"
+    echo "                        修复示例: FORCE_CHMOD=true ./install_middleware_linux.sh update"
     echo ""
     echo "中间件服务列表:"
     for service in "${MIDDLEWARE_SERVICES[@]}"; do

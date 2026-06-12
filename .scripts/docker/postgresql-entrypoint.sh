@@ -45,8 +45,10 @@ fix_permissions() {
                 echo "⚠️  警告: 无法修复权限，可能影响 PostgreSQL 启动"
                 return 1
             }
-            chmod -R 777 "$DATA_DIR" 2>/dev/null || true
-            chmod -R 777 "$LOG_DIR" 2>/dev/null || true
+            # 仅设挂载点顶层 777，绝不递归（PGDATA 子目录 pgdata 必须保持 0700/0750，
+            # 递归会把它设成 777 导致 postgres 拒绝启动；属主已由上面的 chown -R 修正）
+            chmod 777 "$DATA_DIR" 2>/dev/null || true
+            chmod 777 "$LOG_DIR" 2>/dev/null || true
             echo "[PostgreSQL Entrypoint] ✓ 权限已修复"
         else
             echo "[PostgreSQL Entrypoint] ✓ 数据目录权限正确 (UID: $CURRENT_UID)"
@@ -61,7 +63,8 @@ fix_permissions() {
             if [ "$CURRENT_UID" != "$PG_UID" ]; then
                 echo "[PostgreSQL Entrypoint] 修复 PGDATA 父目录权限..."
                 chown -R ${PG_UID}:${PG_GID} "$PGDATA_PARENT" 2>/dev/null || true
-                chmod -R 777 "$PGDATA_PARENT" 2>/dev/null || true
+                # 仅设父目录顶层 777，绝不递归（避免把 PGDATA 本身设成 777）
+                chmod 777 "$PGDATA_PARENT" 2>/dev/null || true
             fi
         fi
     fi
