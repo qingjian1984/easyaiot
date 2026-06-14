@@ -1053,8 +1053,11 @@ def list_algorithm_tasks(page_no: int = 1, page_size: int = 10,
         total = query.count()
         
         # 分页
+        # 排序：已开启(启动)的任务始终排在未开启的前面，同状态内再按最近更新时间倒序，
+        # 避免因 updated_at 被刷新而导致开启中的任务被挤到后面。
         offset = (page_no - 1) * page_size
         tasks = query.order_by(
+            AlgorithmTask.is_enabled.desc(),
             AlgorithmTask.updated_at.desc()
         ).offset(offset).limit(page_size).all()
         

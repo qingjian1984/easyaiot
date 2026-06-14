@@ -44,7 +44,7 @@
    chmod +x sync_schema_migra.sh
    ```
 
-> 📁 **目录结构**：脚本与本手册在 `.scripts/postgresql/schema-sync/`；各业务库的目标 `*10.sql` 仍在上一级 `.scripts/postgresql/`。脚本会自动去上一级读取 `.sql`，差异/备份产物（`schema_diffs/`、`backups/`）生成在 `schema-sync/` 内。
+> 📁 **目录结构**：脚本与本手册在 `.scripts/postgresql/schema-sync/`；各业务库的目标 `*10.sql` 仍在上一级 `.scripts/postgresql/`。脚本会自动去上一级读取 `.sql`，差异/备份产物按【库名/日期】分层归档在 `schema-sync/` 内：差异 `schema_diffs/<库>/<日期>/`、备份 `backups/<库>/<日期>/`，每次运行新建当日子目录(归当前用户所有)，不会再散落 `*.rootbak.<时间戳>` 这类零碎目录。
 
 ---
 
@@ -110,7 +110,7 @@
 | 整库备份 | `backups/<db>_<时间戳>.sql` | 仅 `--apply` 实际应用前生成（`pg_dump` 明文） |
 | 应用日志 | `schema_diffs/<db>_<时间戳>.sql.apply.log` | 仅应用阶段产生，失败时排查用 |
 
-> `<时间戳>` 格式为 `YYYYMMDD_HHMMSS`；**同一次运行的所有产物（差异/备份/日志）共享同一时间戳**，便于互相对应。
+> 产物按 `<库>/<日期>/` 两级子目录归档（`<日期>` 格式 `YYYY-MM-DD`）；`<时间戳>` 格式为 `YYYYMMDD_HHMMSS`，**同一次运行的所有产物（差异/备份/日志）共享同一时间戳**，便于互相对应。
 
 ---
 

@@ -346,7 +346,7 @@ CREATE TABLE public.algorithm_task (
     is_enabled boolean NOT NULL,
     run_status character varying(20) NOT NULL,
     exception_reason character varying(500),
-    service_server_ip character varying(45),
+    service_server_ip character varying(512),
     service_port integer,
     service_process_id integer,
     service_last_heartbeat timestamp without time zone,
@@ -928,7 +928,14 @@ CREATE TABLE public.device (
     location_updated_at timestamp without time zone,
     created_at timestamp without time zone,
     updated_at timestamp without time zone,
-    heading double precision
+    heading double precision,
+    ptz_type smallint,
+    direction_type smallint,
+    position_type smallint,
+    room_type smallint,
+    use_type smallint,
+    supply_light_type smallint,
+    resolution character varying(100)
 );
 
 
@@ -4142,7 +4149,7 @@ CREATE TABLE public.stream_forward_task (
     status smallint NOT NULL,
     is_enabled boolean NOT NULL,
     exception_reason character varying(500),
-    service_server_ip character varying(45),
+    service_server_ip character varying(512),
     service_port integer,
     service_process_id integer,
     service_last_heartbeat timestamp without time zone,
@@ -4152,7 +4159,11 @@ CREATE TABLE public.stream_forward_task (
     last_success_time timestamp without time zone,
     description character varying(500),
     created_at timestamp without time zone,
-    updated_at timestamp without time zone
+    updated_at timestamp without time zone,
+    schedule_policy character varying(20) DEFAULT 'local'::character varying NOT NULL,
+    target_node_id bigint,
+    node_id bigint,
+    device_deployments text
 );
 
 

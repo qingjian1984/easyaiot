@@ -562,7 +562,17 @@ def get_task_realtime_logs(task_id):
             log_path = os.path.join(log_base_dir, f'task_{task_id}')
         
         service_obj = AlgorithmServiceObj(log_path)
-        return get_service_logs(service_obj, lines, date if date else None)
+        resp = get_service_logs(service_obj, lines, date if date else None)
+        # 在日志响应的 data 中附带任务运行状态(task_enabled/task_run_status)，
+        # 便于前端在算法任务关闭后自动停止日志轮询，避免任务停掉后仍每隔数秒
+        # 请求日志接口并反复提示"取日志失败"。
+        resp_obj, status_code = resp if isinstance(resp, tuple) else (resp, 200)
+        payload = resp_obj.get_json(silent=True)
+        if isinstance(payload, dict) and isinstance(payload.get('data'), dict):
+            payload['data']['task_enabled'] = bool(task.is_enabled)
+            payload['data']['task_run_status'] = task.run_status or 'stopped'
+            return jsonify(payload), status_code
+        return resp
     except ValueError as e:
         return jsonify({'code': 400, 'msg': str(e)}), 400
     except Exception as e:

@@ -30,7 +30,7 @@ export interface DeviceDetectionRegion {
   id: number;
   device_id: string;
   region_name: string;
-  region_type: 'polygon' | 'line'; // polygon:多边形, line:线条
+  region_type: 'polygon' | 'line' | 'rectangle'; // polygon:多边形, line:线条, rectangle:四边形
   points: Array<{ x: number; y: number }>;
   image_id?: number;
   image_path?: string;
@@ -58,7 +58,7 @@ export const getDeviceRegions = (device_id: string) => {
  */
 export const createDeviceRegion = (device_id: string, data: {
   region_name: string;
-  region_type?: 'polygon' | 'line';
+  region_type?: 'polygon' | 'line' | 'rectangle';
   points: Array<{ x: number; y: number }>;
   image_id?: number;
   color?: string;

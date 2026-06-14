@@ -61,6 +61,8 @@ if [ "$MIGRA_BUILD_LOCAL" = true ]; then
 else
     MIGRA_IMAGE="${MIGRA_IMAGE:-djrobstep/migra:latest}"
 fi
+# 产物按【模块(库名)/日期】分层归档：差异 schema_diffs/<db>/<YYYY-MM-DD>/，备份 backups/<db>/<YYYY-MM-DD>/。
+# 每次运行新建当日子目录(归当前用户所有)，不再在 schema-sync/ 下散落 *.rootbak.<时间戳> 这类目录。
 DIFF_DIR="${SCRIPT_DIR}/schema_diffs"
 BACKUP_DIR="${SCRIPT_DIR}/backups"
 
@@ -294,6 +296,62 @@ detect_destructive() {
     grep -inE 'drop[[:space:]]+table|drop[[:space:]]+column|set[[:space:]]+data[[:space:]]+type|drop[[:space:]]+constraint|drop[[:space:]]+not[[:space:]]+null' "$diff_file"
 }
 
+# 把差异 SQL 按「涉及破坏性语句的表」拆成两份（以表为单位隔离，不再整库一刀切拒绝）：
+#   $2=安全部分：不涉及任何破坏性表的语句 —— 可安全应用
+#   $3=破坏部分：涉及破坏性表的全部语句 —— 需 --allow-destructive 或人工处理
+# 规则：某张表只要有一条破坏性语句，该表的所有变更都归入破坏部分，避免「只应用一半」破坏表内依赖。
+# 无法识别目标表的破坏性语句（极少见）一并归入破坏部分，从安全侧排除，宁可保守。
+split_destructive_by_table() {
+    local diff_file="$1" safe_file="$2" destr_file="$3"
+    : > "$safe_file"; : > "$destr_file"
+    awk -v safefile="$safe_file" -v destfile="$destr_file" '
+    # 从一条语句提取目标表名，兼容 "public"."t" / public.t 两种 migra 输出写法
+    function table_of(s,   t){
+        t=""
+        if (match(s, /"public"\."[A-Za-z_][A-Za-z_0-9]*"/)) {
+            t=substr(s,RSTART,RLENGTH); gsub(/"public"\."/,"",t); gsub(/"/,"",t)
+        } else if (match(s, /[Pp][Uu][Bb][Ll][Ii][Cc]\.[A-Za-z_][A-Za-z_0-9]*/)) {
+            t=substr(s,RSTART,RLENGTH); sub(/[Pp][Uu][Bb][Ll][Ii][Cc]\./,"",t)
+        }
+        return t
+    }
+    BEGIN{ RS=";" }
+    {
+        raw=$0
+        s=raw; gsub(/^[[:space:]]+/,"",s); gsub(/[[:space:]]+$/,"",s)
+        if (s=="") next
+        n++; stmt[n]=s; tb[n]=table_of(s)
+        sl=tolower(s)
+        if (sl ~ /drop[[:space:]]+table/ || sl ~ /drop[[:space:]]+column/ || sl ~ /set[[:space:]]+data[[:space:]]+type/ || sl ~ /drop[[:space:]]+constraint/ || sl ~ /drop[[:space:]]+not[[:space:]]+null/) {
+            if (tb[n] != "") dtab[tb[n]]=1; else dtab["__notable__"]=1
+        }
+    }
+    END{
+        for (i=1; i<=n; i++) {
+            bad = (tb[i]!="" && (tb[i] in dtab)) || (tb[i]=="" && ("__notable__" in dtab))
+            if (bad) print stmt[i] ";\n" > destfile
+            else     print stmt[i] ";\n" > safefile
+        }
+    }
+    ' "$diff_file"
+}
+
+# 列出差异中受破坏性影响的表名（逗号分隔），用于提示
+destructive_tables() {
+    local destr_file="$1"
+    awk '
+    function table_of(s,   t){
+        t=""
+        if (match(s, /"public"\."[A-Za-z_][A-Za-z_0-9]*"/)) { t=substr(s,RSTART,RLENGTH); gsub(/"public"\."/,"",t); gsub(/"/,"",t) }
+        else if (match(s, /[Pp][Uu][Bb][Ll][Ii][Cc]\.[A-Za-z_][A-Za-z_0-9]*/)) { t=substr(s,RSTART,RLENGTH); sub(/[Pp][Uu][Bb][Ll][Ii][Cc]\./,"",t) }
+        return t
+    }
+    BEGIN{ RS=";" }
+    { s=$0; gsub(/^[[:space:]]+|[[:space:]]+$/,"",s); if(s=="")next; t=table_of(s); if(t!="" && !(t in seen)){seen[t]=1; out=out (out==""?"":", ") t} }
+    END{ print out }
+    ' "$destr_file"
+}
+
 # ---- 处理单个库 ----
 # 返回: 0=成功(无论有无差异)  1=失败
 process_db() {
@@ -318,7 +376,10 @@ process_db() {
     fi
 
     ref_db="${db}_ref"
-    diff_file="${DIFF_DIR}/${db}_${RUN_TS}.sql"
+    # 差异文件按 模块(库名)/日期 分层归档：schema_diffs/<db>/<YYYY-MM-DD>/<db>_<时间戳>.sql
+    local diff_subdir="${DIFF_DIR}/${db}/${RUN_DATE}"
+    mkdir -p "$diff_subdir"
+    diff_file="${diff_subdir}/${db}_${RUN_TS}.sql"
     err_file="$(mktemp)"
 
     print_section "处理库: $db"
@@ -409,16 +470,35 @@ process_db() {
     fi
 
     # ---- 应用流程 ----
+    # 决定本次实际应用哪些 SQL：
+    #   - 无破坏性，或显式 --allow-destructive：应用整份差异（原行为）
+    #   - 有破坏性且未授权：按表隔离 —— 仅应用「不涉及破坏性表」的安全变更，
+    #     破坏性表的全部变更留到 *.destructive.sql，待 --allow-destructive 重跑或人工处理，
+    #     不再因个别表的破坏性操作而整库拒绝。
+    local apply_file="$diff_file"
+    local destr_only_file=""
     if [ -n "$destructive_lines" ] && [ "$ALLOW_DESTRUCTIVE" = false ]; then
-        print_error "$db: 差异含破坏性语句，已拒绝自动应用。"
-        print_info "  如确认要执行（含 DROP/改类型），请加 --allow-destructive；"
-        print_info "  或手动编辑 $diff_file 删除危险语句后，自行用 psql 应用。"
-        return 1
+        local safe_file="${diff_file%.sql}.safe.sql"
+        destr_only_file="${diff_file%.sql}.destructive.sql"
+        split_destructive_by_table "$diff_file" "$safe_file" "$destr_only_file"
+        local dtabs
+        dtabs="$(destructive_tables "$destr_only_file")"
+        print_warning "$db: 差异含破坏性语句，已【按表隔离】（破坏性仅影响下列表，不再整库拒绝）："
+        print_warning "      受影响表: ${dtabs:-未识别}"
+        print_warning "      这些表的变更已留存(未应用): $destr_only_file"
+        print_info    "      如确认执行：加 --allow-destructive 重跑，或人工 psql 应用上面文件"
+        if [ ! -s "$safe_file" ]; then
+            print_warning "$db: 本次差异全部涉及破坏性表，无可安全应用的变更，已跳过应用。"
+            rm -f "$safe_file"
+            return 0
+        fi
+        print_success "$db: 其余安全表变更将正常应用: $safe_file"
+        apply_file="$safe_file"
     fi
 
     if [ "$ASSUME_YES" = false ]; then
         local confirm
-        echo -ne "${YELLOW}[确认]${NC} 即将对库 ${RED}$db${NC} 应用以上差异（会先自动备份）。输入 yes 继续: "
+        echo -ne "${YELLOW}[确认]${NC} 即将对库 ${RED}$db${NC} 应用差异（会先自动备份）。输入 yes 继续: "
         read -r confirm
         if [ "$confirm" != "yes" ]; then
             print_info "$db: 已取消应用"
@@ -426,9 +506,10 @@ process_db() {
         fi
     fi
 
-    # 应用前备份
-    mkdir -p "$BACKUP_DIR"
-    local backup_file="${BACKUP_DIR}/${db}_${RUN_TS}.sql"
+    # 应用前备份（同样按 模块(库名)/日期 分层归档：backups/<db>/<YYYY-MM-DD>/）
+    local backup_subdir="${BACKUP_DIR}/${db}/${RUN_DATE}"
+    mkdir -p "$backup_subdir"
+    local backup_file="${backup_subdir}/${db}_${RUN_TS}.sql"
     print_info "$db: 备份到 $backup_file ..."
     # 退出码 + 非空双重校验：pg_dump 失败或产出空文件（连接半途断开等）都中止应用
     if docker exec -e PGPASSWORD="$PG_PASSWORD" "$CONTAINER" pg_dump -U "$PG_USER" -d "$db" > "$backup_file" 2>/dev/null \
@@ -440,10 +521,13 @@ process_db() {
         return 1
     fi
 
-    # 应用差异
+    # 应用差异（apply_file：无破坏性时=整份差异；按表隔离时=仅安全表部分）
     print_info "$db: 应用差异 SQL ..."
-    if pg_psql -d "$db" -v ON_ERROR_STOP=1 -q < "$diff_file" &> "${diff_file}.apply.log"; then
+    if pg_psql -d "$db" -v ON_ERROR_STOP=1 -q < "$apply_file" &> "${diff_file}.apply.log"; then
         print_success "$db: 结构同步完成"
+        if [ -n "$destr_only_file" ] && [ -s "$destr_only_file" ]; then
+            print_warning "$db: 注意——破坏性表的变更未应用，仍待处理: $destr_only_file"
+        fi
         return 0
     else
         print_error "$db: 应用失败，请查看日志: ${diff_file}.apply.log"
@@ -467,6 +551,7 @@ main() {
 
     # 运行级时间戳：本次运行所有产物（差异/备份/日志）共用，便于互相对应
     RUN_TS="$(date +%Y%m%d_%H%M%S)"
+    RUN_DATE="$(date +%Y-%m-%d)"   # 日期子目录：差异/备份按 模块(库名)/日期 分层归档
     mkdir -p "$DIFF_DIR"
 
     DIFF_DBS=()   # dry-run 发现差异的库（结尾汇总用）
@@ -494,8 +579,8 @@ main() {
             echo -e "  ${YELLOW}./sync_schema_migra.sh --db $d --apply${NC}"
         done
     fi
-    [ -d "$DIFF_DIR" ] && print_info "差异文件目录: $DIFF_DIR"
-    [ "$APPLY" = true ] && [ -d "$BACKUP_DIR" ] && print_info "备份目录: $BACKUP_DIR"
+    [ -d "$DIFF_DIR" ] && print_info "差异文件目录: ${DIFF_DIR}/<库>/${RUN_DATE}/"
+    [ "$APPLY" = true ] && [ -d "$BACKUP_DIR" ] && print_info "备份目录: ${BACKUP_DIR}/<库>/${RUN_DATE}/"
 
     [ $fail -gt 0 ] && exit 1 || exit 0
 }

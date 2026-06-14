@@ -78,8 +78,8 @@ def create_region(device_id):
             return jsonify({'code': 400, 'msg': '区域名称不能为空'}), 400
         
         region_type = data.get('region_type', 'polygon')
-        if region_type not in ['polygon', 'line']:
-            return jsonify({'code': 400, 'msg': '区域类型必须是 polygon 或 line'}), 400
+        if region_type not in ['polygon', 'line', 'rectangle']:
+            return jsonify({'code': 400, 'msg': '区域类型必须是 polygon、line 或 rectangle'}), 400
         
         points = data.get('points')
         if not points or not isinstance(points, list):
@@ -159,8 +159,8 @@ def update_region(region_id):
                     logger.info(f"算法任务未配置模型列表，自动禁用区域检测配置: region_id={region_id}")
         
         region_type = data.get('region_type')
-        if region_type and region_type not in ['polygon', 'line']:
-            return jsonify({'code': 400, 'msg': '区域类型必须是 polygon 或 line'}), 400
+        if region_type and region_type not in ['polygon', 'line', 'rectangle']:
+            return jsonify({'code': 400, 'msg': '区域类型必须是 polygon、line 或 rectangle'}), 400
         
         region = update_device_region(region_id, **data)
         
@@ -186,7 +186,9 @@ def delete_region(region_id):
             'msg': '删除成功'
         })
     except ValueError as e:
-        return jsonify({'code': 400, 'msg': str(e)}), 400
+        # 区域不存在视为已删除(幂等)：前端删除未保存的临时区域时也会调到这里，不应报错
+        logger.info(f"删除区域未找到记录，按幂等成功处理: region_id={region_id} ({e})")
+        return jsonify({'code': 0, 'msg': '区域不存在或已删除'})
     except Exception as e:
         logger.error(f'删除设备检测区域失败: {str(e)}', exc_info=True)
         return jsonify({'code': 500, 'msg': f'服务器内部错误: {str(e)}'}), 500
