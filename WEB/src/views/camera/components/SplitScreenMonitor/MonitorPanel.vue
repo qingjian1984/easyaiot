@@ -66,6 +66,72 @@
 
             <a-divider type="vertical" class="toolbar-divider" />
 
+            <div class="toolbar-section patrol-section">
+              <Space size="small" wrap>
+                <Select
+                  v-model:value="patrolMode"
+                  size="middle"
+                  style="width: 96px"
+                  :disabled="patrolRunning"
+                  :options="patrolModeOptions"
+                />
+                <span class="patrol-label">间隔(s)</span>
+                <InputNumber
+                  v-model:value="patrolIntervalSec"
+                  :min="3"
+                  :max="300"
+                  size="middle"
+                  style="width: 72px"
+                  :disabled="patrolRunning"
+                />
+                <span class="patrol-label">模型</span>
+                <Select
+                  v-model:value="patrolModelId"
+                  size="middle"
+                  style="width: 140px"
+                  :disabled="patrolRunning"
+                  :loading="patrolModelsLoading"
+                  :options="patrolModelOptions"
+                  show-search
+                  option-filter-prop="label"
+                  placeholder="选择模型"
+                />
+                <Button
+                  v-if="!patrolRunning"
+                  type="primary"
+                  size="middle"
+                  :loading="patrolLoading"
+                  :disabled="loadedCount === 0"
+                  @click="handleStartPatrol"
+                >
+                  开始巡检
+                </Button>
+                <Button
+                  v-if="!patrolRunning"
+                  type="default"
+                  size="middle"
+                  :loading="patrolLoading"
+                  :disabled="!selectedPatrolDirectoryId"
+                  @click="handleStartDirectoryPatrol"
+                >
+                  目录巡检
+                </Button>
+                <Button
+                  v-else
+                  type="default"
+                  danger
+                  size="middle"
+                  :loading="patrolLoading"
+                  @click="handleStopPatrol"
+                >
+                  停止巡检
+                </Button>
+                <span v-if="patrolSessionId" class="status-text patrol-status">{{ patrolStatusText }}</span>
+              </Space>
+            </div>
+
+            <a-divider type="vertical" class="toolbar-divider" />
+
             <div class="toolbar-section">
               <Space size="small">
                 <Button
@@ -148,7 +214,10 @@ import {
   Divider as ADivider,
   RadioGroup as ARadioGroup,
   RadioButton as ARadioButton,
-  Checkbox as ACheckbox} from 'ant-design-vue';
+  Checkbox as ACheckbox,
+  Select,
+  InputNumber,
+} from 'ant-design-vue';
 import { BasicTree, type TreeItem } from '@/components/Tree';
 import { BasicArrow } from '@/components/Basic';
 import { Icon } from '@/components/Icon';
@@ -165,7 +234,9 @@ import {
   collectMonitorTreeExpandedKeys,
   findMonitorDeviceById,
   findMonitorGbDeviceByChannel,
-  findMonitorTreeNodeByKey} from '@/views/camera/utils/monitorDeviceTree';
+  findMonitorTreeNodeByKey,
+  parseMonitorDirectoryId,
+} from '@/views/camera/utils/monitorDeviceTree';
 import {
   buildWvpChannelTreeNodes,
   parseGbChannelKey,
@@ -183,7 +254,19 @@ import {
 import type { TreeProps } from 'ant-design-vue';
 import { useMessage } from '@/hooks/web/useMessage';
 import Jessibuca from '@/components/Player/module/jessibuca.vue';
-import { Button } from '@/components/Button'
+import { Button } from '@/components/Button';
+import {
+  createPatrolSession,
+  createPatrolProgressEventSource,
+  getPatrolDirectoryDevices,
+  getPatrolSessionStats,
+  patchPatrolSession,
+  startPatrolSession,
+  stopPatrolSession,
+  type PatrolMode,
+  type PatrolSession,
+} from '@/api/device/patrol';
+import { getModelPage } from '@/api/device/model';
 
 
 interface PlayCell {
@@ -198,6 +281,198 @@ const { createMessage } = useMessage();
 
 /** 勾选后点播 AI 流（检测框由算法任务烧录在此路流上） */
 const enableAi = ref(true);
+
+const patrolMode = ref<PatrolMode>('pool');
+const patrolModeOptions = [
+  { label: '连接池', value: 'pool' },
+  { label: '轮询', value: 'rotate' },
+  { label: '混合', value: 'hybrid' },
+];
+const patrolIntervalSec = ref(10);
+const patrolModelId = ref<number | undefined>(undefined);
+const patrolModelOptions = ref<{ label: string; value: number }[]>([]);
+const patrolModelsLoading = ref(false);
+const patrolSessionId = ref<number | null>(null);
+const patrolRunning = ref(false);
+const patrolLoading = ref(false);
+const patrolStatusText = ref('');
+const selectedPatrolDirectoryId = ref<number | null>(null);
+const selectedPatrolDirectoryName = ref('');
+let patrolEventSource: EventSource | null = null;
+let patrolStatsTimer: number | undefined;
+
+async function loadPatrolModelOptions() {
+  patrolModelsLoading.value = true;
+  try {
+    const res = await getModelPage({ pageNo: 1, pageSize: 100 });
+    const list = res?.list || res?.data?.list || res?.items || [];
+    patrolModelOptions.value = list.map((m: { id: number; name?: string }) => ({
+      label: m.name ? `${m.name} (#${m.id})` : `模型 #${m.id}`,
+      value: m.id,
+    }));
+    if (!patrolModelId.value && patrolModelOptions.value.length) {
+      patrolModelId.value = patrolModelOptions.value[0].value;
+    }
+  } catch {
+    patrolModelOptions.value = [];
+  } finally {
+    patrolModelsLoading.value = false;
+  }
+}
+
+async function syncPatrolFocusDevice() {
+  if (!patrolRunning.value || patrolMode.value !== 'hybrid' || !patrolSessionId.value) return;
+  const focusId = state.playCells[state.playerIdx]?.deviceId;
+  if (!focusId) return;
+  try {
+    await patchPatrolSession(patrolSessionId.value, { focus_device_id: focusId });
+  } catch {
+    // ignore
+  }
+}
+
+function applyPatrolStats(data?: PatrolSession | null) {
+  if (!data) return;
+  patrolRunning.value = data.status === 'running';
+  const done = data.completed_devices ?? 0;
+  const total = data.total_devices ?? 0;
+  const detections = data.total_detections ?? 0;
+  patrolStatusText.value = `巡检 ${done}/${total} 路 · 检测 ${detections} 次`;
+}
+
+async function refreshPatrolStats() {
+  if (!patrolSessionId.value) return;
+  try {
+    const res = await getPatrolSessionStats(patrolSessionId.value);
+    const data = (res?.data ?? res) as PatrolSession;
+    applyPatrolStats(data);
+  } catch {
+    // 忽略轮询失败
+  }
+}
+
+function stopPatrolProgressStream() {
+  if (patrolEventSource) {
+    patrolEventSource.close();
+    patrolEventSource = null;
+  }
+  stopPatrolStatsPolling();
+}
+
+function startPatrolProgressStream() {
+  stopPatrolProgressStream();
+  if (!patrolSessionId.value) return;
+  void refreshPatrolStats();
+  const es = createPatrolProgressEventSource(patrolSessionId.value);
+  patrolEventSource = es;
+  const onProgress = (ev: MessageEvent) => {
+    try {
+      applyPatrolStats(JSON.parse(ev.data) as PatrolSession);
+    } catch {
+      // ignore
+    }
+  };
+  es.addEventListener('progress', onProgress);
+  es.addEventListener('status', onProgress);
+  es.onerror = () => {
+    if (patrolEventSource === es) {
+      es.close();
+      patrolEventSource = null;
+    }
+    if (!patrolStatsTimer && patrolSessionId.value) {
+      startPatrolStatsPolling();
+    }
+  };
+}
+
+function startPatrolStatsPolling() {
+  stopPatrolStatsPolling();
+  void refreshPatrolStats();
+  patrolStatsTimer = window.setInterval(() => void refreshPatrolStats(), 5000);
+}
+
+function stopPatrolStatsPolling() {
+  if (patrolStatsTimer != null) {
+    window.clearInterval(patrolStatsTimer);
+    patrolStatsTimer = undefined;
+  }
+}
+
+async function startPatrolWithDeviceIds(deviceIds: string[], sessionName: string) {
+  if (!deviceIds.length) {
+    createMessage.warning('没有可巡检的设备');
+    return;
+  }
+  if (!patrolModelId.value) {
+    createMessage.warning('请选择模型');
+    return;
+  }
+  patrolLoading.value = true;
+  try {
+    const createRes = await createPatrolSession({
+      session_name: sessionName,
+      device_ids: deviceIds,
+      model_ids: [patrolModelId.value],
+      patrol_mode: patrolMode.value,
+      interval_sec: patrolIntervalSec.value,
+      pool_size: Math.min(4, deviceIds.length),
+      focus_device_id: state.playCells[state.playerIdx]?.deviceId,
+    });
+    const session = (createRes?.data ?? createRes) as PatrolSession;
+    patrolSessionId.value = session.id;
+    await startPatrolSession(session.id);
+    patrolRunning.value = true;
+    startPatrolProgressStream();
+    createMessage.success(`巡检已启动（${deviceIds.length} 路）`);
+  } catch (e: any) {
+    createMessage.error(e?.message || '启动巡检失败');
+  } finally {
+    patrolLoading.value = false;
+  }
+}
+
+async function handleStartPatrol() {
+  const deviceIds = state.playCells.filter((c) => c?.deviceId).map((c) => c!.deviceId);
+  if (!deviceIds.length) {
+    createMessage.warning('请先在分屏中添加摄像头');
+    return;
+  }
+  await startPatrolWithDeviceIds(deviceIds, `分屏巡检-${new Date().toLocaleTimeString()}`);
+}
+
+async function handleStartDirectoryPatrol() {
+  if (!selectedPatrolDirectoryId.value) {
+    createMessage.warning('请先在左侧目录树中选择目录');
+    return;
+  }
+  patrolLoading.value = true;
+  try {
+    const res = await getPatrolDirectoryDevices(selectedPatrolDirectoryId.value);
+    const payload = res?.data ?? res;
+    const deviceIds = payload?.device_ids ?? [];
+    const dirName = payload?.directory_name || selectedPatrolDirectoryName.value || '目录';
+    await startPatrolWithDeviceIds(deviceIds, `${dirName}巡检-${new Date().toLocaleTimeString()}`);
+  } catch (e: any) {
+    createMessage.error(e?.message || '获取目录设备失败');
+    patrolLoading.value = false;
+  }
+}
+
+async function handleStopPatrol() {
+  if (!patrolSessionId.value) return;
+  patrolLoading.value = true;
+  try {
+    await stopPatrolSession(patrolSessionId.value);
+    patrolRunning.value = false;
+    stopPatrolProgressStream();
+    patrolStatusText.value = '已停止';
+    createMessage.success('巡检已停止');
+  } catch (e: any) {
+    createMessage.error(e?.message || '停止巡检失败');
+  } finally {
+    patrolLoading.value = false;
+  }
+}
 
 const selectedKeys = ref<string[]>([]);
 const expandedKeys = ref<string[]>([]);
@@ -545,9 +820,18 @@ async function handleTreeSelect(keys: string[] | string) {
   }
 
   if (String(key).startsWith('gb_dir_') || String(key).startsWith('dir_')) {
-    createMessage.info('请选择摄像头或国标通道');
+    const dirId = parseMonitorDirectoryId(String(key));
+    if (dirId) {
+      selectedPatrolDirectoryId.value = dirId;
+      const node = findMonitorTreeNodeByKey(treeData.value, key);
+      selectedPatrolDirectoryName.value = String(node?.title ?? '').replace(/\(\d+\)$/, '').trim();
+      createMessage.info('已选中目录，可点击「目录巡检」对该目录下全部摄像头启动巡检');
+    }
     return;
   }
+
+  selectedPatrolDirectoryId.value = null;
+  selectedPatrolDirectoryName.value = '';
 
   const cellIdx = resolveTargetCellIndex();
 
@@ -668,13 +952,22 @@ const handleFullscreenChange = () => {
 onMounted(() => {
   state.playCells = Array(state.splitMode).fill(null);
   loadMonitorTree();
+  void loadPatrolModelOptions();
   document.addEventListener('fullscreenchange', handleFullscreenChange);
 });
+
+watch(
+  () => state.playerIdx,
+  () => {
+    void syncPatrolFocusDevice();
+  },
+);
 
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   aiFallbackTimers.forEach((id) => window.clearTimeout(id));
   aiFallbackTimers.clear();
+  stopPatrolProgressStream();
   playerRefs.value.forEach((p) => p?.destroy?.());
 });
 
@@ -898,6 +1191,15 @@ defineExpose({ refresh: () => loadMonitorTree(), forceRefresh: handleRefresh });
   .status-text {
     color: #6b7280;
     font-size: 13px;
+  }
+
+  .patrol-label {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .patrol-status {
+    min-width: 140px;
   }
 }
 

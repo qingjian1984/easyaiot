@@ -418,12 +418,16 @@ def create_algorithm_task(task_name: str,
                          defense_mode: Optional[str] = None,
                          defense_schedule: Optional[str] = None,
                          schedule_policy: str = 'local',
-                         target_node_id: Optional[int] = None) -> AlgorithmTask:
+                         target_node_id: Optional[int] = None,
+                         patrol_mode: str = 'pool',
+                         patrol_interval_sec: int = 10,
+                         patrol_pool_size: int = 4,
+                         focus_device_id: Optional[str] = None) -> AlgorithmTask:
     """创建算法任务"""
     try:
         # 验证任务类型
-        if task_type not in ['realtime', 'snap']:
-            raise ValueError(f"无效的任务类型: {task_type}，必须是 'realtime' 或 'snap'")
+        if task_type not in ['realtime', 'snap', 'patrol']:
+            raise ValueError(f"无效的任务类型: {task_type}，必须是 'realtime'、'snap' 或 'patrol'")
         
         device_id_list = device_ids or []
         
@@ -511,8 +515,16 @@ def create_algorithm_task(task_name: str,
             if not cron_expression:
                 raise ValueError("抓拍算法任务必须指定Cron表达式")
             cron_expression = validate_snap_cron_min_interval(cron_expression)
+        elif task_type == 'patrol':
+            cron_expression = None
+            frame_skip = 25
+            if patrol_mode not in ('rotate', 'pool', 'hybrid'):
+                raise ValueError("巡检模式必须是 rotate、pool 或 hybrid")
+            patrol_interval_sec = max(3, int(patrol_interval_sec or 10))
+            patrol_pool_size = max(1, min(int(patrol_pool_size or 4), 16))
+            if focus_device_id and focus_device_id not in device_id_list:
+                focus_device_id = None
         else:
-            # 实时算法任务：不需要Cron表达式
             cron_expression = None
             frame_skip = 25
 
@@ -534,7 +546,8 @@ def create_algorithm_task(task_name: str,
                 PlateLibrary.query.get_or_404(lib_id)
         
         # 生成唯一编号
-        prefix = "REALTIME_TASK" if task_type == 'realtime' else "SNAP_TASK"
+        prefix_map = {'realtime': 'REALTIME_TASK', 'snap': 'SNAP_TASK', 'patrol': 'PATROL_TASK'}
+        prefix = prefix_map.get(task_type, 'REALTIME_TASK')
         task_code = f"{prefix}_{uuid.uuid4().hex[:8].upper()}"
         
         # 处理布防时段配置
@@ -645,11 +658,11 @@ def create_algorithm_task(task_name: str,
             alert_event_suppress_time=alert_event_suppress_time,
             face_detection_enabled=face_detection_enabled,
             plate_detection_enabled=plate_detection_enabled,
-            face_matching_enabled=face_matching_enabled,
-            face_library_ids=_serialize_library_ids(face_lib_ids),
-            face_matching_threshold=face_matching_threshold,
-            plate_matching_enabled=plate_matching_enabled,
-            plate_library_ids=_serialize_library_ids(plate_lib_ids),
+            face_matching_enabled=face_matching_enabled if task_type != 'patrol' else False,
+            face_library_ids=_serialize_library_ids(face_lib_ids) if task_type != 'patrol' else None,
+            face_matching_threshold=face_matching_threshold if task_type != 'patrol' else None,
+            plate_matching_enabled=plate_matching_enabled if task_type != 'patrol' else False,
+            plate_library_ids=_serialize_library_ids(plate_lib_ids) if task_type != 'patrol' else None,
             matching_business_tags=_serialize_matching_business_tags(matching_business_tags),
             alert_notification_enabled=alert_notification_enabled,
             alert_notification_config=alert_notification_config,
@@ -657,6 +670,10 @@ def create_algorithm_task(task_name: str,
             space_id=None,
             cron_expression=cron_expression,
             frame_skip=frame_skip,
+            patrol_mode=patrol_mode if task_type == 'patrol' else None,
+            patrol_interval_sec=patrol_interval_sec if task_type == 'patrol' else None,
+            patrol_pool_size=patrol_pool_size if task_type == 'patrol' else None,
+            focus_device_id=focus_device_id if task_type == 'patrol' else None,
             is_enabled=is_enabled,
             defense_mode=defense_mode,
             defense_schedule=defense_schedule,
@@ -784,13 +801,27 @@ def update_algorithm_task(task_id: int, **kwargs) -> AlgorithmTask:
         
         # 根据任务类型清除不相关字段
         if task_type == 'realtime':
-            # 实时算法任务：清除抓拍相关字段
             if 'space_id' in kwargs:
                 kwargs['space_id'] = None
             if 'cron_expression' in kwargs:
                 kwargs['cron_expression'] = None
             if 'frame_skip' in kwargs:
                 kwargs['frame_skip'] = 25
+            kwargs.pop('patrol_mode', None)
+            kwargs.pop('patrol_interval_sec', None)
+            kwargs.pop('patrol_pool_size', None)
+            kwargs.pop('focus_device_id', None)
+        elif task_type == 'patrol':
+            if 'cron_expression' in kwargs:
+                kwargs['cron_expression'] = None
+            if 'space_id' in kwargs:
+                kwargs['space_id'] = None
+            if 'patrol_mode' in kwargs and kwargs['patrol_mode'] not in ('rotate', 'pool', 'hybrid'):
+                raise ValueError("巡检模式必须是 rotate、pool 或 hybrid")
+            if 'patrol_interval_sec' in kwargs:
+                kwargs['patrol_interval_sec'] = max(3, int(kwargs['patrol_interval_sec'] or 10))
+            if 'patrol_pool_size' in kwargs:
+                kwargs['patrol_pool_size'] = max(1, min(int(kwargs['patrol_pool_size'] or 4), 16))
         else:
             # 抓拍算法任务：校验 cron 最短间隔
             if 'cron_expression' in kwargs and kwargs['cron_expression']:
@@ -814,7 +845,8 @@ def update_algorithm_task(task_id: int, **kwargs) -> AlgorithmTask:
             'matching_business_tags',
             'alert_notification_enabled', 'alert_notification_config',
             'alarm_suppress_time',  # 告警配置
-            'cron_expression', 'frame_skip',  # 抓拍算法任务配置
+            'cron_expression', 'frame_skip',
+            'patrol_mode', 'patrol_interval_sec', 'patrol_pool_size', 'focus_device_id',
             'is_enabled', 'status', 'exception_reason',
             'defense_mode', 'defense_schedule',
             'schedule_policy', 'target_node_id',

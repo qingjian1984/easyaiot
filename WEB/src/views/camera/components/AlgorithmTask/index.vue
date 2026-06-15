@@ -66,7 +66,7 @@
                     <div class="flex" style="justify-content: space-between;">
                       <div class="prop">
                         <div class="label">任务类型</div>
-                        <div class="value">{{ item.task_type === 'realtime' ? '实时算法任务' : '抓拍算法任务' }}</div>
+                        <div class="value">{{ item.task_type === 'realtime' ? '实时算法任务' : item.task_type === 'patrol' ? '巡检算法任务' : '抓拍算法任务' }}</div>
                       </div>
                       <div class="prop" v-if="item.device_names && item.device_names.length > 0">
                         <div class="label">关联摄像头</div>
@@ -329,7 +329,7 @@ const total = ref(0);
 // 搜索参数
 const searchParams = ref<{
   search?: string;
-  task_type?: 'realtime' | 'snap';
+  task_type?: 'realtime' | 'snap' | 'patrol';
   is_enabled?: boolean;
 }>({});
 

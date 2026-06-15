@@ -198,8 +198,8 @@ def create_app():
             from models import (
                 Device, Image, DeviceDirectory, Nvr, SnapSpace, SnapTask, DetectionRegion,
                 AlgorithmModelService, RegionModelService, DeviceStorageConfig, Playback,
-                RecordSpace, AlgorithmTask, FrameExtractor, Sorter, Pusher, DeviceDetectionRegion,
-                DeviceTrackSession, DeviceTrackPoint,
+                RecordSpace,                 AlgorithmTask, FrameExtractor, Sorter, Pusher, DeviceDetectionRegion,
+                DeviceTrackSession, DeviceTrackPoint, PatrolSession,
             )
             db.create_all()
             
@@ -724,6 +724,46 @@ def create_app():
                     traceback.print_exc()
                     db.session.rollback()
 
+                # algorithm_task 巡检字段 & patrol_session 表
+                try:
+                    for col_name, col_def in (
+                        ('patrol_mode', "VARCHAR(20) DEFAULT 'pool'"),
+                        ('patrol_interval_sec', 'INTEGER DEFAULT 10'),
+                        ('patrol_pool_size', 'INTEGER DEFAULT 4'),
+                        ('focus_device_id', 'VARCHAR(100)'),
+                    ):
+                        result = db.session.execute(text("""
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.columns
+                                WHERE table_schema = 'public'
+                                  AND table_name = 'algorithm_task'
+                                  AND column_name = :c
+                            );
+                        """), {'c': col_name})
+                        if not result.scalar():
+                            print(f"⚠️  algorithm_task.{col_name} 列不存在，正在添加...")
+                            db.session.execute(text(
+                                f'ALTER TABLE algorithm_task ADD COLUMN {col_name} {col_def};'
+                            ))
+                            db.session.commit()
+                            print(f"✅ algorithm_task.{col_name} 添加成功")
+                    result = db.session.execute(text("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables
+                            WHERE table_schema = 'public' AND table_name = 'patrol_session'
+                        );
+                    """))
+                    if not result.scalar():
+                        print("⚠️  patrol_session 表不存在，正在创建...")
+                        db.create_all()
+                        print("✅ patrol_session 表创建成功")
+                    print("✅ 巡检相关数据库结构检查完成")
+                except Exception as e:
+                    print(f"⚠️  巡检数据库迁移失败: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    db.session.rollback()
+
                 # face_person 归一化人员表 & face_entry.person_id
                 try:
                     result = db.session.execute(text("""
@@ -821,6 +861,15 @@ def create_app():
         print(f"✅ Algorithm Task Blueprint 注册成功")
     except Exception as e:
         print(f"❌ Algorithm Task Blueprint 注册失败: {str(e)}")
+
+    try:
+        from app.blueprints import patrol
+        app.register_blueprint(patrol.patrol_bp, url_prefix='/video/patrol')
+        print(f"✅ Patrol Blueprint 注册成功")
+    except Exception as e:
+        print(f"❌ Patrol Blueprint 注册失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
     
     try:
         app.register_blueprint(stream_forward.stream_forward_bp, url_prefix='/video/stream-forward')

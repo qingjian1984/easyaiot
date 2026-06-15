@@ -873,8 +873,8 @@ class AlgorithmTask(db.Model):
     task_name = db.Column(db.String(255), nullable=False, comment='任务名称')
     task_code = db.Column(db.String(255), nullable=False, unique=True, comment='任务编号（唯一标识）')
     
-    # 任务类型：realtime=实时算法任务（分析RTSP/RTMP流），snap=抓拍算法任务（分析抽帧图片）
-    task_type = db.Column(db.String(20), default='realtime', nullable=False, comment='任务类型[realtime:实时算法任务,snap:抓拍算法任务]')
+    # 任务类型：realtime=实时算法任务，snap=抓拍算法任务，patrol=巡检算法任务
+    task_type = db.Column(db.String(20), default='realtime', nullable=False, comment='任务类型[realtime,snap,patrol]')
     
     # 模型配置（直接选择模型列表，不再依赖模型服务接口）
     model_ids = db.Column(db.Text, nullable=True, comment='关联的模型ID列表（JSON格式，如[1,2,3]）')
@@ -913,6 +913,13 @@ class AlgorithmTask(db.Model):
     space_id = db.Column(db.Integer, db.ForeignKey('snap_space.id', ondelete='CASCADE'), nullable=True, comment='所属抓拍空间ID（仅抓拍算法任务）')
     cron_expression = db.Column(db.String(255), nullable=True, comment='Cron表达式（仅抓拍算法任务）')
     frame_skip = db.Column(db.Integer, default=1, nullable=False, comment='抽帧间隔（每N帧抓一次，仅抓拍算法任务）')
+
+    # 巡检算法任务配置（仅 patrol 类型）
+    patrol_mode = db.Column(db.String(20), default='pool', nullable=True,
+                            comment='巡检模式[rotate,pool,hybrid]')
+    patrol_interval_sec = db.Column(db.Integer, default=10, nullable=True, comment='巡检间隔（秒）')
+    patrol_pool_size = db.Column(db.Integer, default=4, nullable=True, comment='连接池大小')
+    focus_device_id = db.Column(db.String(100), nullable=True, comment='焦点设备ID（hybrid）')
     
     # 状态管理
     status = db.Column(db.SmallInteger, default=0, nullable=False, comment='状态[0:正常,1:异常]')
@@ -1056,6 +1063,10 @@ class AlgorithmTask(db.Model):
             'space_name': self.snap_space.space_name if self.snap_space else None,
             'cron_expression': self.cron_expression,
             'frame_skip': self.frame_skip,
+            'patrol_mode': self.patrol_mode,
+            'patrol_interval_sec': self.patrol_interval_sec,
+            'patrol_pool_size': self.patrol_pool_size,
+            'focus_device_id': self.focus_device_id,
             'status': self.status,
             'is_enabled': self.is_enabled,
             'exception_reason': self.exception_reason,
@@ -1915,4 +1926,96 @@ class StreamForwardTask(db.Model):
             'description': self.description,
             'created_at': utc_isoformat_z(self.created_at),
             'updated_at': utc_isoformat_z(self.updated_at)
+        }
+
+
+class PatrolSession(db.Model):
+    """摄像头巡检会话（分屏监控临时或计划性 AI 分析）"""
+    __tablename__ = 'patrol_session'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    session_name = db.Column(db.String(255), nullable=False, comment='会话名称')
+    patrol_mode = db.Column(db.String(20), default='pool', nullable=False,
+                            comment='巡检模式[rotate:轮询,pool:连接池,hybrid:混合]')
+    interval_sec = db.Column(db.Integer, default=10, nullable=False, comment='每路巡检间隔（秒）')
+    pool_size = db.Column(db.Integer, default=4, nullable=False, comment='连接池并发拉流数（pool/hybrid）')
+    device_ids = db.Column(db.Text, nullable=False, comment='设备ID列表（JSON数组）')
+    model_ids = db.Column(db.Text, nullable=False, comment='模型ID列表（JSON数组）')
+    focus_device_id = db.Column(db.String(100), nullable=True, comment='焦点设备ID（hybrid）')
+    algorithm_task_id = db.Column(db.Integer, nullable=True, comment='关联算法任务模板ID')
+
+    alert_event_enabled = db.Column(db.Boolean, default=True, nullable=False, comment='是否启用告警')
+    alert_event_suppress_time = db.Column(db.Integer, default=5, nullable=False, comment='告警抑制间隔（秒）')
+    face_detection_enabled = db.Column(db.Boolean, default=True, nullable=False)
+    plate_detection_enabled = db.Column(db.Boolean, default=True, nullable=False)
+
+    status = db.Column(db.String(20), default='stopped', nullable=False,
+                       comment='状态[running,stopped,error]')
+    exception_reason = db.Column(db.String(500), nullable=True)
+    service_server_ip = db.Column(db.String(512), nullable=True)
+    service_process_id = db.Column(db.Integer, nullable=True)
+    service_last_heartbeat = db.Column(db.DateTime, nullable=True)
+    service_log_path = db.Column(db.String(500), nullable=True)
+    progress_json = db.Column(db.Text, nullable=True, comment='每设备巡检进度（JSON）')
+
+    total_patrols = db.Column(db.Integer, default=0, nullable=False, comment='累计巡检次数')
+    total_detections = db.Column(db.Integer, default=0, nullable=False, comment='累计检测次数')
+    last_patrol_time = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.utcnow())
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
+
+    @staticmethod
+    def _parse_json_list(raw):
+        import json
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+
+    def to_dict(self):
+        import json
+        device_ids = self._parse_json_list(self.device_ids)
+        model_ids = self._parse_json_list(self.model_ids)
+        progress = {}
+        if self.progress_json:
+            try:
+                progress = json.loads(self.progress_json) if isinstance(self.progress_json, str) else self.progress_json
+            except Exception:
+                progress = {}
+        device_names = []
+        if device_ids:
+            devices = Device.query.filter(Device.id.in_(device_ids)).all()
+            name_map = {d.id: d.name or d.id for d in devices}
+            device_names = [name_map.get(did, did) for did in device_ids]
+        return {
+            'id': self.id,
+            'session_name': self.session_name,
+            'patrol_mode': self.patrol_mode,
+            'interval_sec': self.interval_sec,
+            'pool_size': self.pool_size,
+            'device_ids': device_ids,
+            'device_names': device_names,
+            'model_ids': model_ids,
+            'focus_device_id': self.focus_device_id,
+            'algorithm_task_id': self.algorithm_task_id,
+            'alert_event_enabled': self.alert_event_enabled,
+            'alert_event_suppress_time': self.alert_event_suppress_time,
+            'face_detection_enabled': self.face_detection_enabled,
+            'plate_detection_enabled': self.plate_detection_enabled,
+            'status': self.status,
+            'exception_reason': self.exception_reason,
+            'service_server_ip': self.service_server_ip,
+            'service_process_id': self.service_process_id,
+            'service_last_heartbeat': utc_isoformat_z(self.service_last_heartbeat),
+            'service_log_path': self.service_log_path,
+            'progress': progress,
+            'total_patrols': self.total_patrols,
+            'total_detections': self.total_detections,
+            'last_patrol_time': utc_isoformat_z(self.last_patrol_time),
+            'created_at': utc_isoformat_z(self.created_at),
+            'updated_at': utc_isoformat_z(self.updated_at),
         }

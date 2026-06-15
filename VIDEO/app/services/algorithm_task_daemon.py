@@ -388,7 +388,9 @@ class AlgorithmTaskDaemon:
         video_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         if self._task_type == 'snap':
             deploy_service_dir = os.path.join(video_root, 'services', 'snapshot_algorithm_service')
-        else:  # realtime
+        elif self._task_type == 'patrol':
+            deploy_service_dir = os.path.join(video_root, 'services', 'patrol_algorithm_service')
+        else:
             deploy_service_dir = os.path.join(video_root, 'services', 'realtime_algorithm_service')
         
         deploy_script = os.path.join(deploy_service_dir, 'run_deploy.py')
@@ -449,7 +451,10 @@ class AlgorithmTaskDaemon:
         env['VIDEO_SERVICE_PORT'] = video_service_port
         gateway = os.getenv('JAVA_BACKEND_URL', os.getenv('GATEWAY_URL', 'http://localhost:48080')).rstrip('/')
         env['VIDEO_CONTROL_URL'] = f'{gateway}/admin-api/video'
-        env['VIDEO_HEARTBEAT_URL'] = f'{env["VIDEO_CONTROL_URL"]}/algorithm/heartbeat/realtime'
+        if self._task_type == 'patrol':
+            env['VIDEO_HEARTBEAT_URL'] = f'{env["VIDEO_CONTROL_URL"]}/algorithm/heartbeat/patrol'
+        else:
+            env['VIDEO_HEARTBEAT_URL'] = f'{env["VIDEO_CONTROL_URL"]}/algorithm/heartbeat/realtime'
         
         # 重要：realtime_algorithm_service 使用 host 网络模式，必须使用 localhost 访问 Kafka
         # 如果环境变量中配置了容器名（如 Kafka:9092），需要强制覆盖为 localhost:9092

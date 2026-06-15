@@ -32,7 +32,7 @@ export interface AlgorithmTask {
   id: number;
   task_name: string;
   task_code: string;
-  task_type: 'realtime' | 'snap'; // realtime:实时算法任务, snap:抓拍算法任务
+  task_type: 'realtime' | 'snap' | 'patrol';
   device_ids?: string[];
   device_names?: string[];
   pusher_id?: number;

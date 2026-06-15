@@ -53,7 +53,10 @@
                 <PictureOutlined v-else class="no-img" />
               </div>
               <div class="alert-info">
-                <div class="alert-event">{{ formatAlertEvent(alert.event) }}</div>
+                <div class="alert-event">
+                  {{ formatAlertEvent(alert.event) }}
+                  <Tag v-if="isPatrolAlert(alert)" color="purple" class="patrol-tag">巡检</Tag>
+                </div>
                 <div class="alert-time">{{ formatTime(alert.time) }}</div>
                 <div class="alert-object">{{ alert.object || alert.device_name || '-' }}</div>
               </div>
@@ -119,7 +122,7 @@
 
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue';
-import { DatePicker, Empty, Spin } from 'ant-design-vue';
+import { DatePicker, Empty, Spin, Tag } from 'ant-design-vue';
 import { PictureOutlined } from '@ant-design/icons-vue';
 import dayjs, { type Dayjs } from 'dayjs';
 import { Button } from '@/components/Button';
@@ -137,6 +140,8 @@ export interface SpaceAlertItem {
   device_id?: string;
   device_name?: string;
   image_url?: string;
+  task_type?: string;
+  information?: string;
 }
 
 defineOptions({ name: 'SpaceAlgorithmAlertPanel' });
@@ -181,6 +186,18 @@ function formatTime(time?: string, fmt = 'YYYY-MM-DD HH:mm:ss') {
 function formatAlertEvent(event?: string) {
   if (!event) return '未知告警';
   return event;
+}
+
+function isPatrolAlert(alert: SpaceAlertItem) {
+  if (alert.task_type === 'patrol') return true;
+  const info = alert.information;
+  if (!info) return false;
+  try {
+    const parsed = typeof info === 'string' ? JSON.parse(info) : info;
+    return parsed?.task_type === 'patrol';
+  } catch {
+    return false;
+  }
 }
 
 function selectDate(date: string) {

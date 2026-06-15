@@ -16,8 +16,8 @@ export function getBasicColumns(): BasicColumn[] {
       width: 120,
       customRender: ({ text }) => {
         return (
-          <Tag color={text === 'realtime' ? 'blue' : 'green'}>
-            {text === 'realtime' ? '实时算法任务' : '抓拍算法任务'}
+          <Tag color={text === 'realtime' ? 'blue' : text === 'patrol' ? 'purple' : 'green'}>
+            {text === 'realtime' ? '实时算法任务' : text === 'patrol' ? '巡检算法任务' : '抓拍算法任务'}
           </Tag>
         );
       },
@@ -161,6 +161,7 @@ export function getFormConfig(): Partial<FormProps> {
             { value: '', label: '全部' },
             { value: 'realtime', label: '实时算法任务' },
             { value: 'snap', label: '抓拍算法任务' },
+            { value: 'patrol', label: '巡检算法任务' },
           ],
         },
       },

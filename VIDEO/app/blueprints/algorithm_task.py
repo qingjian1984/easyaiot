@@ -77,8 +77,8 @@ def create_task():
             return jsonify({'code': 400, 'msg': '任务名称不能为空'}), 400
         
         task_type = data.get('task_type', 'realtime')
-        if task_type not in ['realtime', 'snap']:
-            return jsonify({'code': 400, 'msg': '任务类型必须是 realtime 或 snap'}), 400
+        if task_type not in ['realtime', 'snap', 'patrol']:
+            return jsonify({'code': 400, 'msg': '任务类型必须是 realtime、snap 或 patrol'}), 400
         
         task = create_algorithm_task(
             task_name=task_name,
@@ -117,6 +117,10 @@ def create_task():
             defense_schedule=data.get('defense_schedule'),
             schedule_policy=data.get('schedule_policy', 'local'),
             target_node_id=data.get('target_node_id'),
+            patrol_mode=data.get('patrol_mode', 'pool'),
+            patrol_interval_sec=data.get('patrol_interval_sec', 10),
+            patrol_pool_size=data.get('patrol_pool_size', 4),
+            focus_device_id=data.get('focus_device_id'),
         )
         
         return jsonify({
@@ -320,6 +324,44 @@ def receive_realtime_heartbeat():
         }), 500
 
 
+@algorithm_task_bp.route('/heartbeat/patrol', methods=['POST'])
+def receive_patrol_task_heartbeat():
+    """接收巡检算法任务（持久化 AlgorithmTask）心跳"""
+    try:
+        data = request.get_json() or {}
+        task_id = data.get('task_id')
+        if not task_id:
+            return jsonify({'code': 400, 'msg': '缺少必要参数：task_id'}), 400
+
+        task = AlgorithmTask.query.get(int(task_id))
+        if not task or task.task_type != 'patrol':
+            return jsonify({'code': 400, 'msg': f'巡检任务不存在：task_id={task_id}'}), 400
+
+        task.service_last_heartbeat = datetime.utcnow()
+        if data.get('server_ip'):
+            task.service_server_ip = data['server_ip']
+        if data.get('process_id'):
+            task.service_process_id = data['process_id']
+        if data.get('log_path'):
+            task.service_log_path = data['log_path']
+        elif not task.service_log_path:
+            video_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            task.service_log_path = os.path.join(video_root, 'logs', f'task_{task_id}')
+        if data.get('total_patrols') is not None:
+            task.total_captures = int(data.get('total_patrols') or 0)
+        if data.get('total_detections') is not None:
+            task.total_detections = int(data.get('total_detections') or 0)
+        task.last_process_time = datetime.utcnow()
+        if task.run_status != 'stopped':
+            task.run_status = 'running'
+        db.session.commit()
+        return jsonify({'code': 0, 'msg': '心跳接收成功', 'data': {'task_id': task.id}})
+    except Exception as e:
+        logger.error('接收巡检任务心跳失败: %s', e, exc_info=True)
+        db.session.rollback()
+        return jsonify({'code': 500, 'msg': str(e)}), 500
+
+
 # ====================== 服务状态查询接口 ======================
 @algorithm_task_bp.route('/task/<int:task_id>/services/status', methods=['GET'])
 def get_task_services_status(task_id):
@@ -331,7 +373,8 @@ def get_task_services_status(task_id):
         
         result = {
             'realtime_service': None,
-            'snap_service': None,  # 抓拍算法任务的统一服务
+            'snap_service': None,
+            'patrol_service': None,
             'extractor': None,
             'sorter': None,
             'pusher': None
@@ -388,6 +431,22 @@ def get_task_services_status(task_id):
                 'run_status': task.run_status
             }
             result['snap_service'] = snap_service
+        elif task.task_type == 'patrol':
+            patrol_service = {
+                'task_id': task.id,
+                'task_name': task.task_name,
+                'server_ip': task.service_server_ip,
+                'port': task.service_port,
+                'process_id': task.service_process_id,
+                'last_heartbeat': utc_isoformat_z(task.service_last_heartbeat),
+                'log_path': task.service_log_path,
+                'status': service_status,
+                'run_status': task.run_status,
+                'patrol_mode': task.patrol_mode,
+                'patrol_interval_sec': task.patrol_interval_sec,
+                'patrol_pool_size': task.patrol_pool_size,
+            }
+            result['patrol_service'] = patrol_service
         
         return jsonify({
             'code': 0,
@@ -541,7 +600,7 @@ def get_task_realtime_logs(task_id):
         if not task:
             return jsonify({'code': 400, 'msg': '算法任务不存在'}), 400
         
-        if task.task_type not in ['realtime', 'snap']:
+        if task.task_type not in ['realtime', 'snap', 'patrol']:
             return jsonify({'code': 400, 'msg': f'不支持的任务类型: {task.task_type}'}), 400
         
         lines = int(request.args.get('lines', 100))
