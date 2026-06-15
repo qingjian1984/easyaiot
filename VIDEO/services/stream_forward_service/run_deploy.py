@@ -50,8 +50,7 @@ for _key, _val in _preserved_launcher_env.items():
 
 # 导入VIDEO模块的模型
 from models import db, StreamForwardTask, Device
-from app.utils.async_video_stream import AsyncVideoStream, async_rtsp_read_enabled
-from app.utils.rtsp_stream_utils import open_network_videocapture
+from app.utils.decode.stream_adapter import is_async_stream, open_device_stream, stream_mode_label
 
 # Flask应用实例（延迟创建）
 _flask_app = None
@@ -396,8 +395,8 @@ task_config = None
 # 最新帧缓存（拉流线程写、推流线程读，只保留最新一帧）
 device_latest_frames = {}  # {device_id: {'frame': np.ndarray, 'w': int, 'h': int} | None}
 device_latest_frame_locks = {}  # {device_id: threading.Lock}
-# 摄像头流连接（VideoCapture 或 AsyncVideoStream）
-device_caps = {}  # {device_id: cv2.VideoCapture | AsyncVideoStream}
+# 摄像头流连接（FFmpeg 解码 / OpenCV / 异步缓冲）
+device_caps = {}  # {device_id: FfmpegVideoStream | AsyncVideoStream | cv2.VideoCapture}
 # 摄像头推送进程（FFmpeg进程）
 device_pushers = {}  # {device_id: subprocess.Popen}
 native_mux_process: Optional[subprocess.Popen] = None
@@ -1168,13 +1167,15 @@ def buffer_worker(device_id: str):
                 logger.info(f"正在连接设备 {device_id} 的 {stream_type} 流: {rtsp_url} (重试次数: {retry_count})")
                 
                 try:
-                    cap = open_network_videocapture(
+                    cap = open_device_stream(
                         rtsp_url,
+                        device_id,
+                        task_id=str(TASK_ID),
                         open_timeout_msec=rtsp_open_timeout_msec,
                         read_timeout_msec=rtsp_read_timeout_msec,
                     )
                 except Exception as e:
-                    logger.error(f"设备 {device_id} 创建 VideoCapture 时出错: {str(e)}")
+                    logger.error(f"设备 {device_id} 打开视频流时出错: {str(e)}")
                     if cap is not None:
                         try:
                             cap.release()
@@ -1211,19 +1212,7 @@ def buffer_worker(device_id: str):
                     continue
                 
                 retry_count = 0
-                if async_rtsp_read_enabled() and (
-                    rtsp_url.startswith("rtsp://") or rtsp_url.startswith("rtmp://")
-                ):
-                    cap = AsyncVideoStream(cap).start()
-                    _fifo = getattr(cap, "queue_max", 1)
-                    logger.info(
-                        f"📌 设备 {device_id} 已启用异步拉流（AI_RTSP_ASYNC_READ；设为 0 可关闭）"
-                        + (
-                            f"，FIFO {_fifo} 帧（AI_RTSP_ASYNC_QUEUE_MAX）"
-                            if _fifo > 1
-                            else ""
-                        )
-                    )
+                logger.info(f"📌 设备 {device_id} {stream_mode_label(cap)}")
                 device_caps[device_id] = cap
                 logger.info(f"✅ 设备 {device_id} {stream_type} 流连接成功")
             
@@ -1231,7 +1220,7 @@ def buffer_worker(device_id: str):
             ret, frame = cap.read()
             
             if not ret or frame is None:
-                if isinstance(cap, AsyncVideoStream):
+                if is_async_stream(cap):
                     if cap.read_failed:
                         logger.warning(f"设备 {device_id} 异步拉流结束或解码失败，重新连接...")
                         if cap is not None:
