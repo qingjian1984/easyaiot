@@ -58,6 +58,8 @@ export interface SamModelStatus {
   path?: string;
   size_bytes: number;
   downloading: boolean;
+  /** 存在未完成的 .downloading 文件，可断点续传 */
+  resumable?: boolean;
   /** idle | downloading | installing | done | error */
   stage?: string;
   progress: number;

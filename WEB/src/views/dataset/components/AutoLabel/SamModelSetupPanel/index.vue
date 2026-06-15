@@ -50,7 +50,8 @@
                 <div class="panel-model-name">{{ modelStatus?.filename || 'model.pt' }}</div>
                 <div class="panel-model-sub">Ultralytics SAM3 · 文本/框选开放词汇分割</div>
               </div>
-              <Tag v-if="!showProgress && modelStatus?.stage !== 'error'" color="blue">待安装</Tag>
+              <Tag v-if="!showProgress && modelStatus?.resumable" color="warning">可续传</Tag>
+              <Tag v-else-if="!showProgress && modelStatus?.stage !== 'error'" color="blue">待安装</Tag>
               <Tag v-else-if="modelStatus?.stage === 'error'" color="error">安装失败</Tag>
               <Tag v-else-if="finished" color="success">已完成</Tag>
               <Tag v-else color="processing">安装中</Tag>
@@ -110,6 +111,22 @@
                 <CloseCircleFilled />
               </div>
               <p class="panel-error-msg">{{ modelStatus.error || '下载失败，请检查网络或 SAM_MODEL_DOWNLOAD_URL 配置后重试' }}</p>
+              <p v-if="modelStatus?.resumable && showPartialProgress" class="panel-resume-hint">
+                已下载 {{ formatSize(modelStatus?.downloaded_bytes) }}，点击「继续下载」将从断点续传
+              </p>
+            </div>
+
+            <div v-else-if="showPartialProgress" class="panel-idle panel-idle--resume">
+              <div class="panel-idle-visual">
+                <div class="panel-idle-ring panel-idle-ring--outer" />
+                <div class="panel-idle-ring panel-idle-ring--inner" />
+                <CloudDownloadOutlined class="panel-idle-icon" />
+              </div>
+              <p class="panel-idle-text">
+                检测到未完成下载：<strong>{{ formatSize(modelStatus?.downloaded_bytes) }}</strong>
+                <span v-if="modelStatus?.total_bytes"> / {{ formatSize(modelStatus?.total_bytes) }}</span>
+              </p>
+              <p class="panel-resume-hint">下载在 AI 服务端后台进行，可关闭页面后稍后回来继续</p>
             </div>
 
             <div v-else class="panel-idle">
@@ -135,7 +152,7 @@
                 @click="$emit('download')"
               >
                 <template #icon><CloudDownloadOutlined /></template>
-                {{ modelStatus?.stage === 'error' ? '重新下载模型' : '立即下载并安装' }}
+                {{ downloadButtonText }}
               </Button>
             </div>
           </div>
@@ -215,7 +232,21 @@ const tipText = computed(() => {
   if (props.finished) return '请稍候，系统正在刷新模型状态';
   const stage = props.modelStatus?.stage;
   if (stage === 'installing') return '写入阶段通常只需数秒，请勿关闭页面';
-  return '下载过程中请保持网络畅通，勿关闭或刷新当前页面';
+  if (props.modelStatus?.resumable) {
+    return '下载在服务端后台进行，支持断点续传；关闭或刷新页面后可再次点击继续下载';
+  }
+  return '下载在服务端后台进行，支持断点续传；网络中断后可继续下载';
+});
+
+const showPartialProgress = computed(() => {
+  const downloaded = props.modelStatus?.downloaded_bytes ?? 0;
+  return !!props.modelStatus?.resumable && downloaded > 0 && !props.showProgress;
+});
+
+const downloadButtonText = computed(() => {
+  if (props.modelStatus?.resumable) return '继续下载';
+  if (props.modelStatus?.stage === 'error') return '重新下载模型';
+  return '立即下载并安装';
 });
 
 const showBytes = computed(() => {
@@ -638,6 +669,13 @@ function formatSize(bytes?: number) {
   margin: 0;
   font-size: 14px;
   color: rgba(0, 0, 0, 0.65);
+  line-height: 1.6;
+}
+
+.panel-resume-hint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #266cfb;
   line-height: 1.6;
 }
 

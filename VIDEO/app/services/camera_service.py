@@ -389,6 +389,38 @@ def _is_custom_camera(camera: Device) -> bool:
     return False
 
 
+def is_device_available_for_stream(device: Device) -> bool:
+    """设备是否允许启动推流。摄像头/NVR 通道常屏蔽 ICMP，不能仅用 ping 判定离线。"""
+    if not device:
+        return False
+
+    source_lower = (device.source or '').strip().lower()
+    if source_lower.startswith('rtmp://'):
+        return False
+
+    if _is_custom_camera(device):
+        return True
+
+    if device.channel_online is True:
+        return True
+
+    conn = (device.connection_status or '').strip().lower()
+    if conn == 'online':
+        return True
+
+    if device.enable_forward and (device.http_stream or device.rtmp_stream):
+        return True
+
+    if device.ip and _monitor.is_watching(device.id) and _monitor.is_online(device.id):
+        return True
+
+    stream_source = (device.source or device.rtsp_direct or '').strip()
+    if stream_source.startswith(('rtsp://', 'http://', 'https://', 'gb28181://')):
+        return True
+
+    return False
+
+
 def _to_dict(camera: Device) -> dict:
     """设备对象转字典"""
     # 如果是RTMP设备或自定义摄像头，默认在线状态为True，不需要通过IP监控判断
@@ -398,7 +430,7 @@ def _to_dict(camera: Device) -> dict:
         # 自定义摄像头（通过视频源添加的）默认在线
         online_status = True
     else:
-        online_status = _monitor.is_online(camera.id)
+        online_status = is_device_available_for_stream(camera)
     
     source = (camera.source or '').strip()
     payload = {

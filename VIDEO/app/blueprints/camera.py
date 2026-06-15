@@ -471,7 +471,7 @@ def auto_start_streaming():
                 continue
             
             # 如果设备离线，则不启动推送
-            if not camera_service._monitor.is_online(device.id):
+            if not camera_service.is_device_available_for_stream(device):
                 logger.info(f"设备 {device.id} 处于离线状态，跳过推送启动")
                 continue
             
@@ -506,8 +506,8 @@ def start_ffmpeg_stream(device_id):
                 'msg': '摄像头源地址是 RTMP，不支持推送功能'
             }), 400
         
-        # 如果设备离线，则不启动推送
-        if not camera_service._monitor.is_online(device_id):
+        # 如果设备离线，则不启动推送（不 sole 依赖 ICMP ping）
+        if not camera_service.is_device_available_for_stream(device):
             return jsonify({
                 'code': 400,
                 'msg': '设备处于离线状态，无法启动推送'
@@ -517,7 +517,11 @@ def start_ffmpeg_stream(device_id):
             if device_id in ffmpeg_processes:
                 daemon = ffmpeg_processes[device_id]
                 if daemon._running:
-                    return jsonify({'code': 400, 'msg': '转码任务已在运行'}), 400
+                    return jsonify({
+                        'code': 0,
+                        'msg': '流媒体转发已在运行',
+                        'data': {'rtmp_url': device.rtmp_stream, 'status': 'running'}
+                    })
                 daemon.stop()
 
             # 启动新进程并更新数据库

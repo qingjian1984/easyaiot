@@ -258,6 +258,14 @@ async function refreshModelStatus() {
     const res = await getFaceRecModelStatus();
     if (res?.data) {
       modelStatus.value = res.data;
+      if (res.data.progress != null && res.data.progress > smoothProgress.value) {
+        smoothProgress.value = res.data.progress;
+      } else if (res.data.resumable && res.data.downloaded_bytes && res.data.total_bytes) {
+        smoothProgress.value = Math.min(
+          85,
+          Math.round((res.data.downloaded_bytes / res.data.total_bytes) * 85),
+        );
+      }
       if (res.data.exists) {
         stopModelPolling();
         downloadStarted.value = false;
@@ -295,7 +303,7 @@ function startModelPolling() {
 
 async function handleDownloadModel() {
   try {
-    smoothProgress.value = 0;
+    smoothProgress.value = modelStatus.value?.progress ?? 0;
     modelDownloadJustFinished.value = false;
     downloadStarted.value = true;
     const res = await downloadFaceRecModel();
@@ -305,6 +313,7 @@ async function handleDownloadModel() {
         filename: res.data.filename || 'face_rec.onnx',
         size_bytes: res.data.size_bytes ?? 0,
         downloading: !!res.data.downloading,
+        resumable: !!res.data.resumable,
         stage: res.data.stage,
         progress: res.data.progress ?? 0,
         downloaded_bytes: res.data.downloaded_bytes,

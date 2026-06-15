@@ -7,6 +7,7 @@ import logging
 import multiprocessing
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -16,6 +17,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
+from urllib.parse import urlparse
 
 import cv2
 import numpy as np
@@ -28,6 +30,61 @@ from db_models import Model, InferenceTask, db
 from app.utils.onnx_inference import ONNXInference
 from app.utils.yolo_chinese_font import ensure_ultralytics_chinese_plot_font
 from app.utils.model_class_utils import parse_class_names_json, resolve_class_ids_from_names
+
+
+_active_rtsp_sessions: Dict[str, dict] = {}
+_rtsp_sessions_lock = threading.Lock()
+
+
+class _FfmpegFrameReader:
+    """通过 ffmpeg 解码 RTSP/RTMP/HTTP-FLV，避免 OpenCV 拉 RTMP 出现 FLV packet mismatch。"""
+
+    def __init__(self, url: str, width: int, height: int, fps: float, process: subprocess.Popen):
+        self.url = url
+        self.width = width
+        self.height = height
+        self.fps = fps
+        self.process = process
+        self._frame_bytes = width * height * 3
+        self._pending_frame: Optional[np.ndarray] = None
+
+    @property
+    def alive(self) -> bool:
+        return self.process is not None and self.process.poll() is None
+
+    def read(self) -> Optional[np.ndarray]:
+        if self._pending_frame is not None:
+            frame = self._pending_frame
+            self._pending_frame = None
+            return frame
+        if not self.alive:
+            return None
+        raw = self.process.stdout.read(self._frame_bytes)
+        if not raw or len(raw) < self._frame_bytes:
+            return None
+        return np.frombuffer(raw, dtype=np.uint8).reshape((self.height, self.width, 3))
+
+    def release(self) -> None:
+        proc = self.process
+        self.process = None
+        if proc is None:
+            return
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=2)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        try:
+            if proc.stdout:
+                proc.stdout.close()
+            if proc.stderr:
+                proc.stderr.close()
+        except Exception:
+            pass
 
 
 def _save_yolo_annotated_image(result, out_path: str) -> None:
@@ -61,6 +118,272 @@ class InferenceService:
         if not push_url.startswith('rtmp://'):
             push_url = f'rtmp://{push_url}'
         return push_url.rstrip('/')
+
+    def _get_srs_host(self) -> str:
+        parsed = urlparse(self.media_server)
+        return parsed.hostname or '127.0.0.1'
+
+    def _get_local_srs_host(self) -> str:
+        """本机 SRS 地址（拉流/推流优先走 localhost，与 VIDEO 转发一致）"""
+        host = (os.getenv('MODEL_AI_SRS_HOST') or '127.0.0.1').strip()
+        return host or '127.0.0.1'
+
+    def _get_local_srs_rtmp_port(self) -> int:
+        try:
+            return int(os.getenv('MODEL_AI_SRS_RTMP_PORT', '1935'))
+        except (TypeError, ValueError):
+            return 1935
+
+    def _get_local_media_server(self) -> str:
+        return f'rtmp://{self._get_local_srs_host()}:{self._get_local_srs_rtmp_port()}'
+
+    def _get_srs_http_port(self) -> int:
+        raw = os.getenv('MODEL_AI_HTTP_PORT', '8080')
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 8080
+
+    @staticmethod
+    def _normalize_model_suffix(model_id) -> str:
+        if model_id is None:
+            return 'default'
+        text = str(model_id).strip()
+        safe = re.sub(r'[^a-zA-Z0-9_-]+', '_', text)
+        return safe or 'default'
+
+    def _build_inference_stream_urls(self, device_id: str, model_id=None) -> tuple[str, str]:
+        """约定推理输出路径：ai/infer_{device_id}_m{model_id}（单层 app，兼容 SRS）"""
+        model_suffix = self._normalize_model_suffix(model_id if model_id is not None else self.model_id)
+        stream_path = f'ai/infer_{device_id}_m{model_suffix}'
+        local_server = self._get_local_media_server()
+        output_rtmp = f'{local_server}/{stream_path}'
+        output_http = (
+            f'http://{self._get_local_srs_host()}:{self._get_srs_http_port()}/{stream_path}.flv'
+        )
+        return output_rtmp, output_http
+
+    def _resolve_input_stream_candidates(self, input_source: str, device_id: Optional[str]) -> list[str]:
+        """输入流优先级：1) RTSP 直连  2) 本机 SRS RTMP  3) 本机 HTTP-FLV  4) 显式 RTMP"""
+        candidates: list[str] = []
+        seen: set[str] = set()
+        source = (input_source or '').strip()
+
+        def add(url: str) -> None:
+            url = (url or '').strip()
+            if url and url not in seen:
+                seen.add(url)
+                candidates.append(url)
+
+        if source.startswith('rtsp://'):
+            add(source)
+
+        if device_id:
+            host = self._get_local_srs_host()
+            rtmp_port = self._get_local_srs_rtmp_port()
+            http_port = self._get_srs_http_port()
+            add(f'rtmp://{host}:{rtmp_port}/live/{device_id}')
+            add(f'http://{host}:{http_port}/live/{device_id}.flv')
+
+        if source.startswith('rtmp://'):
+            add(source)
+        if source.startswith(('http://', 'https://')) and source.endswith('.flv'):
+            add(source)
+
+        if not candidates:
+            raise ValueError('缺少有效的输入流地址，请提供 device_id 或 input_source')
+        return candidates
+
+    @staticmethod
+    def _parse_ffprobe_fps(rate_str: str) -> float:
+        rate_str = (rate_str or '').strip()
+        if not rate_str or rate_str == '0/0':
+            return 25.0
+        if '/' in rate_str:
+            num, den = rate_str.split('/', 1)
+            try:
+                den_f = float(den)
+                return float(num) / den_f if den_f else 25.0
+            except ValueError:
+                return 25.0
+        try:
+            val = float(rate_str)
+            return val if val > 0 else 25.0
+        except ValueError:
+            return 25.0
+
+    def _probe_stream_info(self, url: str, timeout_sec: float = 5.0) -> Optional[tuple[int, int, float]]:
+        cmd = ['ffprobe', '-v', 'error']
+        if url.startswith('rtsp://'):
+            cmd += [
+                '-rtsp_transport', 'tcp',
+                '-stimeout', str(int(timeout_sec * 1_000_000)),
+            ]
+        cmd += [
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height,avg_frame_rate',
+            '-of', 'csv=p=0',
+            url,
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout_sec + 2,
+            )
+            if result.returncode != 0:
+                return None
+            parts = [p.strip() for p in result.stdout.strip().split(',')]
+            if len(parts) < 3:
+                return None
+            width, height = int(parts[0]), int(parts[1])
+            fps = self._parse_ffprobe_fps(parts[2])
+            if width > 0 and height > 0:
+                return width, height, fps
+        except Exception as exc:
+            logging.debug(f'ffprobe 探测失败 {url}: {exc}')
+        return None
+
+    def _start_ffmpeg_input_reader(self, url: str) -> subprocess.Popen:
+        if url.startswith('rtsp://'):
+            cmd = [
+                'ffmpeg', '-nostdin', '-loglevel', 'error',
+                '-rtsp_transport', 'tcp', '-stimeout', '5000000',
+                '-i', url,
+                '-an', '-sn', '-dn',
+                '-f', 'rawvideo', '-pix_fmt', 'bgr24',
+                'pipe:1',
+            ]
+        else:
+            cmd = [
+                'ffmpeg', '-nostdin', '-loglevel', 'error',
+                '-rw_timeout', '5000000',
+                '-probesize', '500000', '-analyzeduration', '1000000',
+                '-fflags', 'nobuffer', '-flags', 'low_delay',
+                '-i', url,
+                '-an', '-sn', '-dn',
+                '-f', 'rawvideo', '-pix_fmt', 'bgr24',
+                'pipe:1',
+            ]
+        return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def _open_input_reader(
+        self,
+        candidates: list[str],
+        stop_event: threading.Event,
+        session_key: Optional[str] = None,
+    ) -> _FfmpegFrameReader:
+        """按优先级依次尝试打开输入流（ffmpeg 解码，RTSP 超时 5s）"""
+        errors: list[str] = []
+        for url in candidates:
+            if stop_event.is_set():
+                raise RuntimeError('推理已取消')
+            logging.info(f'尝试打开输入流: {url}')
+            info = self._probe_stream_info(url, timeout_sec=5.0)
+            if stop_event.is_set():
+                raise RuntimeError('推理已取消')
+            if not info:
+                errors.append(f'{url}: 无法探测流信息')
+                continue
+            width, height, fps = info
+            proc = self._start_ffmpeg_input_reader(url)
+            reader = _FfmpegFrameReader(url, width, height, fps, proc)
+            if session_key:
+                with _rtsp_sessions_lock:
+                    session = _active_rtsp_sessions.get(session_key)
+                    if session:
+                        session['reader'] = reader
+            first_frame = reader.read()
+            if stop_event.is_set():
+                reader.release()
+                raise RuntimeError('推理已取消')
+            if first_frame is not None:
+                reader._pending_frame = first_frame
+                logging.info(f'输入流已连接: {url} ({width}x{height} @ {fps:.1f}fps)')
+                return reader
+            stderr = ''
+            try:
+                stderr = (proc.stderr.read() or b'').decode('utf-8', errors='ignore')[:200]
+            except Exception:
+                pass
+            errors.append(f'{url}: 无有效视频帧{(" - " + stderr) if stderr else ""}')
+            reader.release()
+            if session_key:
+                with _rtsp_sessions_lock:
+                    session = _active_rtsp_sessions.get(session_key)
+                    if session and session.get('reader') is reader:
+                        session['reader'] = None
+
+        raise RuntimeError(
+            '无法打开输入流（已按 RTSP → 本机 RTMP/HTTP-FLV 顺序尝试）: ' + '; '.join(errors)
+        )
+
+    @staticmethod
+    def _rtsp_session_key(device_id: str, model_id=None) -> str:
+        suffix = InferenceService._normalize_model_suffix(model_id)
+        return f'{device_id}::{suffix}'
+
+    @staticmethod
+    def _terminate_ffmpeg_push(process: Optional[subprocess.Popen]) -> None:
+        if process is None:
+            return
+        try:
+            if process.stdin:
+                process.stdin.close()
+        except Exception:
+            pass
+        if process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=2)
+            except Exception:
+                try:
+                    process.kill()
+                    process.wait(timeout=1)
+                except Exception:
+                    pass
+
+    @classmethod
+    def _terminate_session_resources(cls, session: dict) -> None:
+        reader = session.get('reader')
+        if reader:
+            try:
+                reader.release()
+            except Exception:
+                pass
+            session['reader'] = None
+        cls._terminate_ffmpeg_push(session.get('push_process'))
+        session['push_process'] = None
+
+    @classmethod
+    def stop_rtsp_inference(
+        cls,
+        device_id: Optional[str] = None,
+        record_id: Optional[int] = None,
+        stop_all: bool = False,
+    ) -> int:
+        stopped = 0
+        with _rtsp_sessions_lock:
+            keys = list(_active_rtsp_sessions.keys())
+            for key in keys:
+                session = _active_rtsp_sessions.get(key)
+                if not session:
+                    continue
+                if not stop_all:
+                    if record_id is not None and session.get('record_id') != record_id:
+                        continue
+                    if device_id is not None and session.get('device_id') != device_id:
+                        continue
+                cls._terminate_session_resources(session)
+                stop_event = session.get('stop_event')
+                if stop_event:
+                    stop_event.set()
+                output_url = session.get('output_url', '')
+                if output_url:
+                    logging.info(f'已停止摄像头推理推流: {output_url}')
+                stopped += 1
+        return stopped
 
     def _get_model_dir(self):
         """获取模型存储目录路径"""
@@ -1097,9 +1420,11 @@ class InferenceService:
             self._cleanup_resources(video_path, temp_dir)
 
     def inference_rtsp(self, rtsp_url: str, parameters: Dict[str, Any] = None, record_id: int = None) -> Dict[str, Any]:
-        """RTSP流实时处理，支持低延迟推流"""
+        """RTSP/RTMP 流实时处理：从 SRS 拉 live 流，推理后推到 ai/infer/{device_id}/m{model_id}"""
         if parameters is None:
             parameters = {}
+
+        device_id = (parameters.get('device_id') or '').strip() or None
 
         # 如果提供了 record_id，使用已存在的记录；否则创建新记录
         if record_id:
@@ -1122,28 +1447,58 @@ class InferenceService:
             record = InferenceTask(
                 model_id=actual_model_id,
                 inference_type='rtsp',
-                input_source=rtsp_url,
+                input_source=rtsp_url or (f'device:{device_id}' if device_id else ''),
                 status='PROCESSING'
             )
             db.session.add(record)
             db.session.commit()
 
         try:
-            # 生成推流地址
-            stream_name = f"stream_{self.model_id}_{int(time.time())}"
-            output_url = f"{self.media_server}/live/{stream_name}"
+            input_candidates = self._resolve_input_stream_candidates(rtsp_url, device_id)
+            # 同一时刻仅保留一路推理推流，启动前先停掉所有旧会话
+            self.stop_rtsp_inference(stop_all=True)
+            time.sleep(0.3)
 
-            # 启动流处理线程
+            local_server = self._get_local_media_server()
+            if device_id:
+                output_url, play_url = self._build_inference_stream_urls(device_id, self.model_id)
+            else:
+                stream_name = f"stream_{self.model_id}_{int(time.time())}"
+                output_url = f"{local_server}/live/{stream_name}"
+                play_url = (
+                    f"http://{self._get_local_srs_host()}:{self._get_srs_http_port()}"
+                    f"/live/{stream_name}.flv"
+                )
+
+            stop_event = threading.Event()
+            session_key = self._rtsp_session_key(device_id or f'record_{record.id}', self.model_id)
+            with _rtsp_sessions_lock:
+                _active_rtsp_sessions[session_key] = {
+                    'record_id': record.id,
+                    'device_id': device_id,
+                    'model_id': self.model_id,
+                    'output_url': output_url,
+                    'stop_event': stop_event,
+                    'reader': None,
+                    'push_process': None,
+                }
+
+            # 启动流处理线程（子线程无 Flask 请求上下文，须传入 app 实例）
+            app = current_app._get_current_object()
             thread = threading.Thread(
                 target=self._process_rtsp_stream,
-                args=(rtsp_url, output_url, record.id, parameters),
+                args=(app, input_candidates, output_url, record.id, parameters, stop_event, session_key),
                 daemon=True
             )
             thread.start()
 
             return {
-                'stream_url': output_url,
+                'stream_url': play_url,
+                'rtmp_url': output_url,
+                'input_url': input_candidates[0],
+                'input_candidates': input_candidates,
                 'record_id': record.id,
+                'device_id': device_id,
                 'status': 'streaming_started'
             }
 
@@ -1154,10 +1509,22 @@ class InferenceService:
             logging.error(f"RTSP流启动失败: {str(e)}")
             raise
 
-    def _process_rtsp_stream(self, rtsp_url: str, output_url: str, record_id: int, parameters: Dict[str, Any]):
-        """RTSP流处理线程"""
-        cap = None
+    def _process_rtsp_stream(
+        self,
+        app,
+        input_candidates: list[str],
+        output_url: str,
+        record_id: int,
+        parameters: Dict[str, Any],
+        stop_event: threading.Event,
+        session_key: str,
+    ):
+        """从 RTSP/本机 SRS 拉流，推理后推送到本机 SRS"""
+        ctx = app.app_context()
+        ctx.push()
+        reader: Optional[_FfmpegFrameReader] = None
         ffmpeg_process = None
+        input_url = input_candidates[0] if input_candidates else ''
 
         try:
             model = self.get_model()
@@ -1178,20 +1545,17 @@ class InferenceService:
                     'verbose': False
                 }
 
-            # RTSP流配置
-            cap = cv2.VideoCapture(rtsp_url)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 减少缓冲区
+            reader = self._open_input_reader(input_candidates, stop_event, session_key)
+            input_url = reader.url
+            width, height, fps = reader.width, reader.height, reader.fps
+            logging.info(f'摄像头推理输入流: {input_url} ({width}x{height} @ {fps:.1f}fps)')
+            logging.info(f'摄像头推理输出流: {output_url}')
 
-            # 获取视频参数
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            if fps <= 0:
-                fps = 25
+            if width <= 0 or height <= 0:
+                raise RuntimeError(f'输入流无有效视频帧: {input_url}')
 
             # FFmpeg推流命令 - 根据平台选择编码器
             if platform.system() == "Darwin":  # macOS
-                # 在macOS上使用VideoToolbox编码器
                 command = [
                     'ffmpeg',
                     '-y',
@@ -1206,11 +1570,11 @@ class InferenceService:
                     '-level', '4.0',
                     '-preset', 'ultrafast',
                     '-tune', 'zerolatency',
+                    '-pix_fmt', 'yuv420p',
                     '-f', 'flv',
                     output_url
                 ]
             else:
-                # 在其他平台上使用libx264编码器
                 command = [
                     'ffmpeg',
                     '-y',
@@ -1223,71 +1587,84 @@ class InferenceService:
                     '-c:v', 'libx264',
                     '-preset', 'ultrafast',
                     '-tune', 'zerolatency',
+                    '-pix_fmt', 'yuv420p',
                     '-f', 'flv',
                     output_url
                 ]
 
             ffmpeg_process = subprocess.Popen(command, stdin=subprocess.PIPE)
+            with _rtsp_sessions_lock:
+                session = _active_rtsp_sessions.get(session_key)
+                if session:
+                    session['reader'] = reader
+                    session['push_process'] = ffmpeg_process
 
             # 更新状态
-            with current_app.app_context():
-                record = InferenceTask.query.get(record_id)
-                record.stream_output_url = output_url
-                record.status = 'RUNNING'
-                db.session.commit()
+            record = InferenceTask.query.get(record_id)
+            record.stream_output_url = output_url
+            record.status = 'RUNNING'
+            db.session.commit()
 
             # 流处理循环
             frame_skip = parameters.get('frame_skip', 2)
             frame_count = 0
 
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
+            while reader.alive and not stop_event.is_set():
+                frame = reader.read()
+                if frame is None:
+                    time.sleep(0.02)
+                    continue
 
                 # 跳帧处理
                 if frame_count % frame_skip == 0:
                     if is_onnx:
-                        # 使用新的ONNX推理模块
                         processed_frame, _ = model.detect(
                             frame,
                             conf_threshold=conf_thres,
                             iou_threshold=iou_thres,
                             draw=True
                         )
-                        # 将标注后的帧调整回原始尺寸
                         processed_frame = cv2.resize(processed_frame, (width, height), interpolation=cv2.INTER_LINEAR)
                     else:
-                        # 使用YOLO模型推理
                         results = model(frame, **inference_kwargs)
                         processed_frame = results[0].plot()
-                    ffmpeg_process.stdin.write(processed_frame.tobytes())
+                    try:
+                        ffmpeg_process.stdin.write(processed_frame.tobytes())
+                    except BrokenPipeError:
+                        break
                 else:
-                    ffmpeg_process.stdin.write(frame.tobytes())
+                    try:
+                        ffmpeg_process.stdin.write(frame.tobytes())
+                    except BrokenPipeError:
+                        break
 
                 frame_count += 1
 
             # 流结束
-            with current_app.app_context():
-                record = InferenceTask.query.get(record_id)
-                record.status = 'COMPLETED'
+            record = InferenceTask.query.get(record_id)
+            if record:
+                record.status = 'COMPLETED' if not stop_event.is_set() else 'STOPPED'
                 db.session.commit()
 
         except Exception as e:
             logging.error(f"RTSP处理失败: {str(e)}")
-            with current_app.app_context():
+            try:
                 record = InferenceTask.query.get(record_id)
-                record.status = 'FAILED'
-                record.error_message = str(e)
-                db.session.commit()
+                if record:
+                    record.status = 'FAILED'
+                    record.error_message = str(e)
+                    db.session.commit()
+            except Exception as db_error:
+                logging.error(f"更新RTSP任务失败状态失败: {str(db_error)}")
         finally:
-            # 清理资源
-            if cap and cap.isOpened():
-                cap.release()
+            with _rtsp_sessions_lock:
+                _active_rtsp_sessions.pop(session_key, None)
+            if reader:
+                reader.release()
             if ffmpeg_process:
-                ffmpeg_process.stdin.close()
-                ffmpeg_process.terminate()
+                self._terminate_ffmpeg_push(ffmpeg_process)
             self._cleanup_memory()
+            ctx.pop()
 
     def _cleanup_memory(self):
         """清理内存和显存资源"""

@@ -135,8 +135,9 @@ def create_Inference_task():
     input_source = data.get('input_source', '')
 
     if inference_type == 'rtsp':
-        if not input_source or not input_source.startswith('rtsp://'):
-            return jsonify({'code': 400, 'msg': 'RTSP流地址格式不正确'}), 400
+        device_id = (data.get('device_id') or '').strip()
+        if not device_id and (not input_source or not input_source.startswith(('rtsp://', 'rtmp://'))):
+            return jsonify({'code': 400, 'msg': '请提供 device_id 或有效的流地址（rtsp:// / rtmp://）'}), 400
     elif inference_type in ['image', 'video']:
         if not input_source:
             return jsonify({'code': 400, 'msg': '请提供输入源URL'}), 400
@@ -338,8 +339,9 @@ def run_inference(model_id):
     
     # 验证输入源
     if inference_type == 'rtsp':
-        if not input_source or not input_source.startswith('rtsp://'):
-            return jsonify({'code': 400, 'msg': 'RTSP流地址格式不正确'}), 400
+        device_id = (data.get('device_id') or '').strip()
+        if not device_id and (not input_source or not input_source.startswith(('rtsp://', 'rtmp://'))):
+            return jsonify({'code': 400, 'msg': '请提供 device_id 或有效的流地址（rtsp:// / rtmp://）'}), 400
     elif inference_type in ['image', 'video']:
         # 对于图片和视频，必须提供input_source（URL）或文件上传
         if not input_source and not has_valid_upload_file:
@@ -468,6 +470,8 @@ def run_inference(model_id):
         
         # 获取推理参数
         parameters = data.get('parameters', {})
+        if not isinstance(parameters, dict):
+            parameters = {}
 
         # 根据类型执行推理
         inference_type = data['inference_type']
@@ -534,8 +538,12 @@ def run_inference(model_id):
                 })
                 
             elif inference_type == 'rtsp':
-                result = inference_service.inference_rtsp(data['input_source'], parameters, record_id)
-                record.stream_output_url = result.get('stream_url')
+                device_id = (data.get('device_id') or '').strip()
+                if device_id:
+                    parameters = dict(parameters)
+                    parameters['device_id'] = device_id
+                result = inference_service.inference_rtsp(data.get('input_source', ''), parameters, record_id)
+                record.stream_output_url = result.get('stream_url') or result.get('rtmp_url')
                 record.status = 'STREAMING'
                 record.end_time = datetime.utcnow()
                 db.session.commit()
@@ -602,6 +610,31 @@ def run_inference(model_id):
             'msg': f'推理执行失败: {str(e)}',
             'data': {'record_id': record_id if 'record_id' in locals() else None}
         }), 500
+
+
+@inference_task_bp.route('/inference/rtsp/stop', methods=['POST'])
+def stop_rtsp_inference():
+    """停止摄像头实时推理推流"""
+    data = request.json if request.is_json else request.form.to_dict()
+    device_id = (data.get('device_id') or '').strip() or None
+    record_id = data.get('record_id')
+    stop_all = str(data.get('stop_all', '')).lower() in ('1', 'true', 'yes')
+    if record_id is not None:
+        try:
+            record_id = int(record_id)
+        except (TypeError, ValueError):
+            return jsonify({'code': 400, 'msg': 'record_id 格式不正确'}), 400
+
+    if not stop_all and not device_id and record_id is None:
+        return jsonify({'code': 400, 'msg': '请提供 stop_all、device_id 或 record_id'}), 400
+
+    stopped = InferenceService.stop_rtsp_inference(
+        device_id=device_id,
+        record_id=record_id,
+        stop_all=stop_all,
+    )
+    return jsonify({'code': 0, 'msg': '实时推理已停止', 'data': {'stopped': stopped}})
+
 
 # ========== 全局异常处理 ==========
 @inference_task_bp.errorhandler(404)

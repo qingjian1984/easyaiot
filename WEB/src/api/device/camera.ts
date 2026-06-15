@@ -36,10 +36,17 @@ export const signStreamTicket = (path: string, ttl = 90): Promise<StreamTicketRe
 /**
  * 启动FFmpeg转发RTSP流到RTMP服务器
  * @param device_id 设备ID
- * @returns 包含RTMP URL和进程ID的响应
+ * @param silent 为 true 时不弹出全局错误提示（推理/预览场景）
  */
-export const startStreamForwarding = (device_id: string) => {
-  return commonApi('post', `${CAMERA_PREFIX}/device/${device_id}/stream/start`, {}, {}, false);
+export const startStreamForwarding = (device_id: string, silent = false) => {
+  return defHttp.post({
+    url: `${CAMERA_PREFIX}/device/${device_id}/stream/start`,
+    data: {},
+    headers: { 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') },
+  }, {
+    isTransformResponse: false,
+    errorMessageMode: silent ? 'none' : 'message',
+  });
 };
 
 /**

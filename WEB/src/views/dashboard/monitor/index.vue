@@ -52,7 +52,7 @@ const videoMonitorRef = ref<InstanceType<typeof VideoMonitor> | null>(null)
 // 选中的设备
 const selectedDevice = ref<any>({
   id: '1',
-  name: '华南小区西四路23号',
+  name: '',
   location: ''
 })
 
@@ -162,6 +162,9 @@ let refreshTimer: any = null
 let delayTimer: any = null
 let isMounted = false
 
+/** 大屏层 z-index 为 9999，需抬高挂载在 body 上的弹层，否则确认框/提示会被挡住 */
+const MONITOR_OVERLAY_Z_INDEX = 10050
+
 // 动态添加样式，隐藏顶部导航栏、标签页和左侧菜单，让大屏覆盖整个屏幕
 onMounted(() => {
   isMounted = true
@@ -190,6 +193,13 @@ onMounted(() => {
       height: 100vh !important;
       overflow: hidden !important;
       margin-left: 0 !important;
+    }
+    .ant-modal-root,
+    .ant-modal-wrap,
+    .ant-modal-mask,
+    .ant-message,
+    .ant-notification {
+      z-index: ${MONITOR_OVERLAY_Z_INDEX} !important;
     }
   `
   document.head.appendChild(style)

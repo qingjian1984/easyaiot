@@ -172,6 +172,13 @@ def _should_spread_shards(task: StreamForwardTask) -> bool:
     return policy == 'auto' and _spread_shards_enabled()
 
 
+def _remote_fallback_local_enabled() -> bool:
+    """远程分片部署失败时是否回退到本机（单节点/SSH 未配置时避免整任务部分失败）。"""
+    return os.getenv('STREAM_FORWARD_REMOTE_FALLBACK_LOCAL', 'true').strip().lower() in (
+        '1', 'true', 'yes', 'on',
+    )
+
+
 def _deploy_shard_for_schedule(
     task_id: int,
     task: StreamForwardTask,
@@ -183,11 +190,23 @@ def _deploy_shard_for_schedule(
 ) -> Dict[str, Any]:
     if _should_deploy_shard_locally(task, shard_index, total_shards):
         return _deploy_shard_locally(task_id, task, shard_index, device_ids)
-    deployment = _deploy_shard_on_remote_node(
-        task_id, task, shard_index, device_ids,
-        spread_assigned_node_ids=spread_assigned_node_ids,
-        fresh_allocate=fresh_allocate,
-    )
+    try:
+        deployment = _deploy_shard_on_remote_node(
+            task_id, task, shard_index, device_ids,
+            spread_assigned_node_ids=spread_assigned_node_ids,
+            fresh_allocate=fresh_allocate,
+        )
+    except Exception as e:
+        if not _remote_fallback_local_enabled():
+            raise
+        logger.warning(
+            '推流转发远程分片部署失败，回退本机 task_id=%s shard=%s devices=%s: %s',
+            task_id, shard_index, device_ids, e,
+        )
+        deployment = _deploy_shard_locally(task_id, task, shard_index, device_ids)
+        deployment['remote_fallback'] = True
+        deployment['remote_error'] = str(e)[:200]
+        return deployment
     if spread_assigned_node_ids is not None:
         node_id = deployment.get('node_id')
         if node_id is not None:
@@ -445,7 +464,10 @@ def _build_stream_forward_deploy_env(
         'AI_RTSP_ASYNC_READ', 'AI_RTSP_ASYNC_QUEUE_MAX', 'AI_RTSP_TRANSPORT',
         'OPENCV_FFMPEG_RTSP_TRANSPORT', 'RTSP_OPEN_TIMEOUT_MSEC', 'RTSP_READ_TIMEOUT_MSEC',
         'PUSH_FLUSH_EVERY',
-        'STREAM_FORWARD_FFMPEG_NATIVE', 'STREAM_FORWARD_ENSURE_SRS',
+        'STREAM_FORWARD_FFMPEG_NATIVE', 'STREAM_FORWARD_FFMPEG_MUX',
+        'STREAM_FORWARD_RELAY_RESTART_DELAY_SEC', 'STREAM_FORWARD_RELAY_RESTART_COOLDOWN_SEC',
+        'STREAM_FORWARD_RELAY_MAX_BACKOFF_SEC', 'STREAM_FORWARD_REMOTE_FALLBACK_LOCAL',
+        'STREAM_FORWARD_ENSURE_SRS',
         'STREAM_FORWARD_DEVICES_PER_SHARD', 'STREAM_FORWARD_LOCAL_MAX_SHARDS',
         'SRS_RTMP_PORT', 'SRS_HTTP_PORT', 'SRS_API_PORT',
     ):

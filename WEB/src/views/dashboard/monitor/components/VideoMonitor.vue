@@ -1,25 +1,51 @@
 <template>
-  <div class="video-monitor">
-    <div class="monitor-header">
+  <div class="video-monitor" :class="{ 'preset-panel-open': presetPanelOpen }">
+    <div class="monitor-header" :class="{ 'panel-open': presetPanelOpen }">
       <div class="header-title">实时监控</div>
       <div class="enable-ai-wrap">
         <a-checkbox v-model:checked="enableAi">启用 AI</a-checkbox>
       </div>
       <div class="header-time">{{ currentTime }}</div>
       <div class="header-location">{{ currentLocation }}</div>
-      <!-- 分屏切换工具栏 -->
-      <div class="split-toolbar">
+      <div class="header-toolbar">
+        <!-- 分屏切换 -->
+        <div class="split-toolbar">
+          <div
+            v-for="layout in splitLayouts"
+            :key="layout.value"
+            :class="['split-btn', { active: currentLayout === layout.value }]"
+            :title="layout.label"
+            @click="switchLayout(layout.value)"
+          >
+            {{ layout.label }}
+          </div>
+        </div>
+        <!-- 布局方案入口 -->
         <div
-          v-for="layout in splitLayouts"
-          :key="layout.value"
-          :class="['split-btn', { active: currentLayout === layout.value }]"
-          :title="layout.label"
-          @click="switchLayout(layout.value)"
+          :class="['toolbar-trigger', 'layout-preset-trigger', { open: presetPanelOpen, 'has-active': !!activePresetId }]"
+          @click="presetPanelOpen = !presetPanelOpen"
         >
-          {{ layout.label }}
+          <Icon icon="ant-design:layout-outlined" :size="15" />
+          <span class="trigger-label">布局方案</span>
+          <span v-if="activePresetSummary" class="trigger-badge">{{ activePresetSummary }}</span>
+          <Icon :icon="presetPanelOpen ? 'ant-design:up-outlined' : 'ant-design:down-outlined'" :size="12" />
         </div>
       </div>
+      <LayoutPresetPanel
+        :open="presetPanelOpen"
+        :presets="layoutPresets"
+        :active-preset-id="activePresetId"
+        :current-layout="currentLayout"
+        :current-camera-count="currentCameraCount"
+        :can-save-current="canSaveCurrentLayout"
+        @close="presetPanelOpen = false"
+        @apply="handleApplyPreset"
+        @save="handleSavePreset"
+        @delete="handleDeletePreset"
+      />
     </div>
+
+    <div v-if="presetPanelOpen" class="preset-panel-backdrop" @click="presetPanelOpen = false"></div>
 
     <div class="monitor-content" :class="`layout-${currentLayout}`">
       <!-- 根据当前布局渲染视频窗口 -->
@@ -27,14 +53,13 @@
         v-for="(video, index) in displayVideos"
         :key="video.id || index"
         :class="['video-window', getVideoClass(index)]"
-        :style="getVideoStyle(index)"
         @click="handleVideoClick(index)"
         @contextmenu.prevent="handleVideoRightClick(index, $event)"
       >
         <div class="video-container">
           <div v-if="!video.url" class="video-placeholder">
             <img src="@/assets/images/bigscreen/camera-icon.svg" alt="摄像头" class="camera-icon" />
-            <div class="placeholder-text">{{ video.name || `视频${index + 1}` }}</div>
+            <div class="placeholder-text">{{ displayVideoName(video, index) }}</div>
           </div>
           <Jessibuca
             v-else
@@ -43,7 +68,7 @@
             :ref="el => setVideoRef(el, index)"
             class="video-player"
           />
-          <div class="video-label">{{ video.name || `视频${index + 1}` }}</div>
+          <div class="video-label" :title="displayVideoName(video, index)">{{ displayVideoName(video, index) }}</div>
           <div v-if="index === activeVideoIndex" class="video-active-indicator"></div>
         </div>
       </div>
@@ -116,10 +141,11 @@ import { resolveAlertRecordVideoUrl } from '@/utils/alertRecord'
 import { useMessage } from '@/hooks/web/useMessage'
 import Jessibuca from '@/components/Player/module/jessibuca.vue'
 import DialogPlayer from '@/components/VideoPlayer/DialogPlayer.vue'
+import LayoutPresetPanel from './LayoutPresetPanel.vue'
 import { useModal } from '@/components/Modal'
 import { resolveAlertImageDisplayUrl } from '@/utils/alertMinioImage'
 import { formatAlertListTitle } from '@/views/alert/alertDisplay'
-import { formatCameraDeviceLabel, isGb28181Device } from '@/views/camera/utils/deviceLabel'
+import { formatCameraDeviceLabel, formatCameraShortName, isGb28181Device } from '@/views/camera/utils/deviceLabel'
 import {
   AI_PLAY_FALLBACK_MS,
   pickDirectPlayUrls,
@@ -127,6 +153,17 @@ import {
 } from '@/views/camera/utils/devicePlay'
 import { parseGbChannelKey } from '@/views/camera/utils/gb28181Tree'
 import type { MonitorTreeDeviceNode } from '@/api/device/camera'
+import {
+  MAX_MONITOR_LAYOUT_PRESETS,
+  loadMonitorLayoutStorage,
+  saveMonitorLayoutStorage,
+  serializeDeviceSnapshot,
+  type MonitorLayoutPreset,
+  type MonitorLayoutSlot,
+} from '../utils/monitorLayoutStorage'
+
+/** 与 monitor/index.vue 中 MONITOR_OVERLAY_Z_INDEX 保持一致 */
+const MONITOR_OVERLAY_Z_INDEX = 10050
 
 defineOptions({
   name: 'VideoMonitor'
@@ -141,7 +178,7 @@ const emit = defineEmits<{
   'video-list-change': [videos: any[]]
 }>()
 
-const { createMessage } = useMessage()
+const { createMessage, createConfirm } = useMessage()
 
 // 播放器弹窗
 const [registerPlayerModal, { openModal: openPlayerModal }] = useModal()
@@ -158,6 +195,265 @@ const scrollContainerRef = ref<HTMLElement | null>(null)
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
 const internalVideoList = ref<any[]>([])
+const skipDefaultVideoInit = ref(false)
+const layoutPresets = ref<Record<number, MonitorLayoutPreset>>({})
+const activePresetId = ref<number | null>(null)
+const isRestoringLayout = ref(false)
+const presetPanelOpen = ref(false)
+
+function displayVideoName(video: { name?: string }, index: number) {
+  const shortName = formatCameraShortName(video?.name)
+  return shortName || `视频${index + 1}`
+}
+
+function getPresetDisplayName(preset: MonitorLayoutPreset | undefined, id: number) {
+  if (!preset) return `方案 ${id}`
+  return preset.name?.trim() || `方案 ${id}`
+}
+
+const currentCameraCount = computed(() =>
+  internalVideoList.value.filter((v) => v?.deviceId).length,
+)
+
+const canSaveCurrentLayout = computed(() => currentCameraCount.value > 0)
+
+const activePresetSummary = computed(() => {
+  if (!activePresetId.value) return ''
+  const preset = layoutPresets.value[activePresetId.value]
+  if (!preset) return `方案 ${activePresetId.value}`
+  const count = preset.slots.filter((s) => s.deviceId).length
+  return `${getPresetDisplayName(preset, activePresetId.value)} · ${count}路`
+})
+
+function initLayoutPresetsFromStorage() {
+  const storage = loadMonitorLayoutStorage()
+  const presets: Record<number, MonitorLayoutPreset> = {}
+  for (const [key, preset] of Object.entries(storage.presets)) {
+    const id = Number(key)
+    if (id >= 1 && id <= MAX_MONITOR_LAYOUT_PRESETS) {
+      presets[id] = preset
+    }
+  }
+  layoutPresets.value = presets
+  activePresetId.value = storage.activePresetId
+}
+
+function persistLayoutPresets() {
+  const presets: Record<string, MonitorLayoutPreset> = {}
+  for (const [key, preset] of Object.entries(layoutPresets.value)) {
+    presets[String(key)] = preset
+  }
+  saveMonitorLayoutStorage({
+    presets,
+    activePresetId: activePresetId.value,
+  })
+}
+
+function saveToLayoutPreset(presetId: number, options?: { keepName?: boolean }) {
+  if (!canSaveCurrentLayout.value) {
+    createMessage.warning('当前没有已选摄像头，无法保存布局')
+    return false
+  }
+
+  const existing = layoutPresets.value[presetId]
+  const preset: MonitorLayoutPreset = {
+    id: presetId,
+    name: options?.keepName !== false && existing?.name ? existing.name : undefined,
+    layout: currentLayout.value,
+    enableAi: enableAi.value,
+    slots: buildCurrentLayoutSlots(),
+    updatedAt: Date.now(),
+  }
+  layoutPresets.value = { ...layoutPresets.value, [presetId]: preset }
+  activePresetId.value = presetId
+  persistLayoutPresets()
+  createMessage.success(`已保存到${getPresetDisplayName(preset, presetId)}`)
+  return true
+}
+
+function buildCurrentLayoutSlots(): MonitorLayoutSlot[] {
+  const maxCount = getMaxVideoCount(currentLayout.value)
+  const slots: MonitorLayoutSlot[] = []
+  for (let i = 0; i < maxCount; i++) {
+    const video = internalVideoList.value[i]
+    if (video?.deviceId) {
+      slots.push({
+        deviceId: video.deviceId,
+        name: video.name || `视频${i + 1}`,
+        location: video.location || '',
+        device: serializeDeviceSnapshot(video.device),
+      })
+    } else {
+      slots.push({
+        deviceId: '',
+        name: video?.name || `视频${i + 1}`,
+      })
+    }
+  }
+  return slots
+}
+
+function applyPresetStructure(preset: MonitorLayoutPreset) {
+  skipDefaultVideoInit.value = true
+  currentLayout.value = normalizeSplitLayout(preset.layout)
+  enableAi.value = preset.enableAi
+  activeVideoIndex.value = 0
+
+  const maxCount = getMaxVideoCount(currentLayout.value)
+  internalVideoList.value = []
+  for (let i = 0; i < maxCount; i++) {
+    const saved = preset.slots[i]
+    if (saved?.deviceId) {
+      internalVideoList.value.push({
+        id: `video-${saved.deviceId}-${i}`,
+        url: '',
+        name: saved.name,
+        deviceId: saved.deviceId,
+        location: saved.location || '',
+        device: saved.device,
+        pendingRestore: true,
+      })
+    } else {
+      internalVideoList.value.push({
+        id: `placeholder-${i}`,
+        url: '',
+        name: saved?.name || `视频${i + 1}`,
+      })
+    }
+  }
+}
+
+async function playSavedSlot(index: number, saved: MonitorLayoutSlot) {
+  const playId = saved.deviceId
+  if (!playId) return
+
+  if (playId.startsWith('gb_ch_')) {
+    const gb = parseGbChannelKey(playId)
+    if (!gb) return
+    const { url, fallbackUrl, preferAi } = await resolveGbChannelPlayUrls(
+      gb.sipDeviceId,
+      gb.channelId,
+      { enableAi: enableAi.value, synced: saved.device },
+    )
+    if (!url) {
+      createMessage.warn(`方案恢复失败：${saved.name}`)
+      return
+    }
+    await startPlayAtScreen(index, {
+      id: `video-${playId}-${index}`,
+      name: saved.name,
+      url,
+      deviceId: playId,
+      location: saved.location,
+      device: saved.device,
+      fallbackUrl,
+      preferAi,
+    })
+    return
+  }
+
+  const dev = saved.device
+  if (!dev) {
+    createMessage.warn(`方案恢复失败：${saved.name}（缺少设备信息）`)
+    return
+  }
+  const { url, fallbackUrl, preferAi } = await resolvePlayUrlsForDevice(dev)
+  if (!url) {
+    createMessage.warn(`方案恢复失败：${saved.name}`)
+    return
+  }
+  await startPlayAtScreen(index, {
+    id: `video-${playId}-${index}`,
+    name: saved.name,
+    url,
+    deviceId: playId,
+    location: saved.location,
+    device: dev,
+    fallbackUrl,
+    preferAi,
+  })
+}
+
+async function restorePendingVideos() {
+  if (isRestoringLayout.value) return
+  isRestoringLayout.value = true
+  try {
+    const tasks: Promise<void>[] = []
+    internalVideoList.value.forEach((slot, idx) => {
+      if (!slot?.pendingRestore || !slot.deviceId) return
+      tasks.push(
+        playSavedSlot(idx, {
+          deviceId: slot.deviceId,
+          name: slot.name,
+          location: slot.location,
+          device: slot.device,
+        }).finally(() => {
+          slot.pendingRestore = false
+        }),
+      )
+    })
+    await Promise.all(tasks)
+  } finally {
+    isRestoringLayout.value = false
+  }
+}
+
+async function activateLayoutPreset(presetId: number) {
+  const preset = layoutPresets.value[presetId]
+  if (!preset) return
+
+  videoRefs.value.forEach((ref) => {
+    if (ref?.jessibuca) {
+      try {
+        ref.destroy()
+      } catch {
+        /* ignore */
+      }
+    }
+  })
+  videoRefs.value = []
+  aiFallbackTimers.forEach((id) => window.clearTimeout(id))
+  aiFallbackTimers.clear()
+
+  activePresetId.value = presetId
+  persistLayoutPresets()
+  applyPresetStructure(preset)
+  await nextTick()
+  await restorePendingVideos()
+}
+
+async function handleApplyPreset(presetId: number) {
+  await activateLayoutPreset(presetId)
+  presetPanelOpen.value = false
+}
+
+function handleSavePreset(presetId: number) {
+  saveToLayoutPreset(presetId)
+}
+
+function handleDeletePreset(presetId: number) {
+  const preset = layoutPresets.value[presetId]
+  if (!preset) return
+  const label = getPresetDisplayName(preset, presetId)
+  createConfirm({
+    iconType: 'warning',
+    title: '删除布局方案',
+    content: `确定删除「${label}」吗？删除后无法恢复。`,
+    zIndex: MONITOR_OVERLAY_Z_INDEX,
+    onOk: () => {
+      const next = { ...layoutPresets.value }
+      delete next[presetId]
+      layoutPresets.value = next
+      if (activePresetId.value === presetId) {
+        activePresetId.value = null
+      }
+      persistLayoutPresets()
+      createMessage.success('已删除布局方案')
+    },
+  })
+}
+
+initLayoutPresetsFromStorage()
 
 // 防重复提示：记录最近提示的时间和内容
 let lastVideoErrorTime = 0
@@ -198,11 +494,18 @@ function showVideoErrorOnce(message: string) {
 const splitLayouts = [
   { value: '1', label: '1分屏' },
   { value: '4', label: '4分屏' },
-  { value: '6', label: '6分屏' },
-  { value: '8', label: '8分屏' },
   { value: '9', label: '9分屏' },
   { value: '16', label: '16分屏' }
 ]
+
+function normalizeSplitLayout(layout: string) {
+  if (splitLayouts.some((item) => item.value === layout)) return layout
+  const count = parseInt(layout) || 1
+  if (count <= 1) return '1'
+  if (count <= 4) return '4'
+  if (count <= 9) return '9'
+  return '16'
+}
 
 // 设置视频引用
 const setVideoRef = (el: any, index: number) => {
@@ -211,14 +514,24 @@ const setVideoRef = (el: any, index: number) => {
   }
 }
 
+// 获取当前布局需要的最大视频数量
+const getMaxVideoCount = (layout: string) => {
+  const count = parseInt(layout)
+  return isNaN(count) ? 1 : count
+}
+
+if (activePresetId.value && layoutPresets.value[activePresetId.value]) {
+  applyPresetStructure(layoutPresets.value[activePresetId.value])
+}
+
 // 获取视频列表（填充到需要的数量）
 const videoListWithPlaceholder = computed(() => {
   // 合并内部列表和props列表
   const baseList = props.videoList || []
   const maxCount = getMaxVideoCount(currentLayout.value)
   
-  // 初始化内部列表（如果为空）
-  if (internalVideoList.value.length === 0 && baseList.length > 0) {
+  // 初始化内部列表（如果为空且未从布局方案恢复）
+  if (!skipDefaultVideoInit.value && internalVideoList.value.length === 0 && baseList.length > 0) {
     internalVideoList.value = baseList.map((v, i) => ({
       ...v,
       id: v.id || `video-${i}`,
@@ -239,12 +552,6 @@ const videoListWithPlaceholder = computed(() => {
   return internalVideoList.value.slice(0, maxCount)
 })
 
-// 获取当前布局需要的最大视频数量
-const getMaxVideoCount = (layout: string) => {
-  const count = parseInt(layout)
-  return isNaN(count) ? 1 : count
-}
-
 // 显示的视频列表
 const displayVideos = computed(() => {
   return videoListWithPlaceholder.value
@@ -255,21 +562,14 @@ const activeVideos = computed(() => {
   return internalVideoList.value.filter(video => video && video.url && video.url.trim() !== '')
 })
 
-// 获取当前应该显示的 location
+// 获取当前应该显示的摄像头短名（不含目录路径与类型前缀）
 const currentLocation = computed(() => {
-  // 如果有正在播放的视频，优先使用第一个视频的 location
   if (activeVideos.value.length > 0) {
-    const firstVideo = activeVideos.value[0]
-    // 如果视频对象有 location，使用它
-    if (firstVideo.location) {
-      return firstVideo.location
-    }
-    // 如果视频对象没有 location，但 props.device 有，使用 props.device 的 location
-    if (props.device?.location) {
-      return props.device.location
-    }
+    const shortName = formatCameraShortName(activeVideos.value[0].name)
+    if (shortName) return shortName
   }
-  // 如果没有正在播放的视频，重置为初始状态
+  const deviceShortName = formatCameraShortName(props.device?.name || props.device?.device)
+  if (deviceShortName) return deviceShortName
   return '未选择设备'
 })
 
@@ -285,7 +585,7 @@ function clearAiFallbackTimer(screenIdx: number) {
 
 // 切换布局
 const switchLayout = (layout: string) => {
-  currentLayout.value = layout
+  currentLayout.value = normalizeSplitLayout(layout)
   activeVideoIndex.value = 0
 }
 
@@ -298,86 +598,6 @@ const getVideoClass = (index: number) => {
   }
 
   return classes.join(' ')
-}
-
-// 获取视频窗口的样式（用于特殊布局）
-const getVideoStyle = (index: number) => {
-  const layout = currentLayout.value
-
-  // 6分屏：左上大屏（2x2）+ 5个小屏，网格：3行3列
-  if (layout === '6') {
-    if (index === 0) {
-      // 左上大屏，占据2行2列
-      return {
-        gridColumn: '1 / 3',
-        gridRow: '1 / 3'
-      }
-    } else {
-      // 其他5个小屏：第1行第3列、第2行第3列、第3行第1、2、3列
-      const pos = index - 1
-      if (pos === 0) {
-        // 第1行第3列
-        return {
-          gridColumn: '3',
-          gridRow: '1'
-        }
-      } else if (pos === 1) {
-        // 第2行第3列
-        return {
-          gridColumn: '3',
-          gridRow: '2'
-        }
-      } else {
-        // 第3行的3个位置
-        return {
-          gridColumn: `${pos - 1}`,
-          gridRow: '3'
-        }
-      }
-    }
-  }
-
-  // 8分屏：左侧大屏（2x2）+ 右侧3个小屏（一列）+ 下侧4个小屏，网格：3行4列
-  if (layout === '8') {
-    if (index === 0) {
-      // 左侧大屏，占据第1-2行，第1-2列（2x2）
-      return {
-        gridColumn: '1 / 4',
-        gridRow: '1 / 3'
-      }
-    } else if (index < 4) {
-      // 右侧3个小屏：全部放在第4列，垂直排列
-      const pos = index - 1
-      if (pos === 0) {
-        // 第1行第4列
-        return {
-          gridColumn: '4',
-          gridRow: '1'
-        }
-      } else if (pos === 1) {
-        // 第2行第4列
-        return {
-          gridColumn: '4',
-          gridRow: '2'
-        }
-      } else {
-        // 第3行第4列
-        return {
-          gridColumn: '4',
-          gridRow: '3'
-        }
-      }
-    } else {
-      // 下侧4个小屏：第3行第1、2、3列，第4列已经被占用
-      const pos = index - 4
-      return {
-        gridColumn: `${pos + 1}`,
-        gridRow: '3'
-      }
-    }
-  }
-
-  return {}
 }
 
 // 处理视频点击
@@ -589,7 +809,8 @@ watch(enableAi, () => {
 const playDeviceStream = async (device: any) => {
   const dev: MonitorTreeDeviceNode = (device.device || device) as MonitorTreeDeviceNode
   const playId = String(device.id || dev.id || '')
-  const displayName = device.name || formatCameraDeviceLabel(dev) || playId
+  const displayName =
+    formatCameraShortName(device.name || formatCameraDeviceLabel(dev) || playId) || playId
 
   const maxCount = getMaxVideoCount(currentLayout.value)
   if (internalVideoList.value.length === 0) {
@@ -693,6 +914,7 @@ watch(() => props.device, (newDevice) => {
 
 // 监听视频列表变化
 watch(() => props.videoList, (newList) => {
+  if (skipDefaultVideoInit.value) return
   if (newList && newList.length > 0) {
     // 如果内部列表为空，则初始化内部列表
     if (internalVideoList.value.length === 0) {
@@ -846,6 +1068,10 @@ onMounted(() => {
   
   updateTime()
   timeTimer = setInterval(updateTime, 1000)
+
+  if (internalVideoList.value.some((slot) => slot?.pendingRestore)) {
+    restorePendingVideos()
+  }
   
   // 初始加载告警录像列表
   loadAlertRecords()
@@ -947,6 +1173,10 @@ watch(() => alertRecordList.value, () => {
   min-height: 0;
   overflow: hidden;
 
+  &.preset-panel-open {
+    overflow: visible;
+  }
+
   &::before {
     content: '';
     position: absolute;
@@ -964,18 +1194,23 @@ watch(() => alertRecordList.value, () => {
 
 .monitor-header {
   flex-shrink: 0;
-  height: 50px;
   min-height: 50px;
+  height: auto;
   background: rgba(52, 134, 218, 0.08);
   border-bottom: 1px solid rgba(52, 134, 218, 0.3);
   color: #fff;
   font-size: 14px;
-  padding: 0 20px;
+  padding: 8px 20px;
   display: flex;
   align-items: center;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 12px 20px;
   position: relative;
   z-index: 1;
+
+  &.panel-open {
+    z-index: 210;
+  }
 
   .header-title {
     font-size: 14px;
@@ -992,6 +1227,10 @@ watch(() => alertRecordList.value, () => {
     font-size: 14px;
     color: rgba(255, 255, 255, 0.6);
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .enable-ai-wrap {
@@ -1037,11 +1276,19 @@ watch(() => alertRecordList.value, () => {
     }
   }
 
+  .header-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
   .split-toolbar {
     display: flex;
     gap: 8px;
     align-items: center;
-    margin-left: auto;
+    flex-shrink: 0;
 
     .split-btn {
       min-width: 60px;
@@ -1074,6 +1321,65 @@ watch(() => alertRecordList.value, () => {
       }
     }
   }
+
+  .toolbar-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(52, 134, 218, 0.35);
+    background: rgba(52, 134, 218, 0.12);
+    color: rgba(214, 235, 255, 0.92);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    user-select: none;
+    flex-shrink: 0;
+
+    &:hover,
+    &.open {
+      background: rgba(52, 134, 218, 0.28);
+      border-color: rgba(52, 134, 218, 0.6);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(52, 134, 218, 0.25);
+    }
+
+    .trigger-label {
+      font-weight: 500;
+    }
+  }
+
+  .layout-preset-trigger {
+    &.has-active {
+      border-color: rgba(82, 196, 26, 0.45);
+    }
+
+    .trigger-badge {
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 6px;
+      height: 20px;
+      line-height: 20px;
+      border-radius: 10px;
+      font-size: 11px;
+      color: #b7eb8f;
+      background: rgba(82, 196, 26, 0.15);
+      border: 1px solid rgba(82, 196, 26, 0.25);
+    }
+  }
+}
+
+.preset-panel-backdrop {
+  position: absolute;
+  inset: 0;
+  top: 52px;
+  z-index: 150;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
 }
 
 .monitor-content {
@@ -1099,18 +1405,6 @@ watch(() => alertRecordList.value, () => {
   &.layout-4 {
     grid-template-columns: repeat(2, 1fr);
     grid-template-rows: repeat(2, 1fr);
-  }
-
-  // 6分屏 - 左上大屏（2x2）+ 5个小屏，网格：3行3列
-  &.layout-6 {
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-  }
-
-  // 8分屏 - 左侧大屏（2x2）+ 右侧3个小屏（一列）+ 下侧4个小屏，网格：3行4列
-  &.layout-8 {
-    grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: repeat(3, 1fr);
   }
 
   // 9分屏 - 3行3列
@@ -1198,6 +1492,9 @@ watch(() => alertRecordList.value, () => {
       padding: 4px 8px;
       text-align: left;
       pointer-events: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .video-active-indicator {

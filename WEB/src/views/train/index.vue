@@ -15,7 +15,7 @@
           <TrainTaskList :tab-active="state.activeKey === '6'" />
         </TabPane>
         <TabPane key="2" tab="模型推理">
-          <AiModelTool :initialLLMId="initialLLMId"></AiModelTool>
+          <AiModelTool :initialLLMId="initialLLMId" :tab-active="state.activeKey === '2'" />
         </TabPane>
         <TabPane key="7" tab="SAM 万物识别">
           <SamInferencePage />

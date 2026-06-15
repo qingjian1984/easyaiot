@@ -179,6 +179,32 @@
                 </label>
               </div>
             </div>
+            <div class="source-content" v-else-if="state.activeSource === 'camera'">
+              <div class="camera-select-combo">
+                <select class="select-field camera-select-field" v-model="state.selectedCameraId" @change="handleCameraChange">
+                  <option value="">请选择在线摄像头</option>
+                  <option v-for="cam in cameraOptions" :key="cam.id" :value="cam.id">
+                    {{ cam.name || cam.id }}{{ getCameraOnlineLabel(cam) }}
+                  </option>
+                </select>
+                <button
+                  type="button"
+                  class="camera-refresh-btn"
+                  :disabled="state.camerasLoading"
+                  title="刷新摄像头列表"
+                  @click="refreshCameras"
+                >
+                  <SyncOutlined :spin="state.camerasLoading" />
+                </button>
+              </div>
+              <div v-if="state.camerasLoading" class="class-tags-status">正在加载摄像头列表...</div>
+              <div v-else-if="cameraOptions.length === 0" class="class-tags-status class-tags-status--warn">
+                暂无可用 RTSP 摄像头，请先在摄像头管理中注册设备
+              </div>
+              <div v-else-if="selectedCameraRtsp" class="camera-rtsp-hint">
+                取流地址：{{ maskRtspUrl(selectedCameraRtsp) }}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -190,10 +216,24 @@
           </div>
           <div class="config-options">
             <div class="button-group">
-              <button class="btn btn-primary" @click="startDetection" :disabled="getStartButtonDisabled()">
+              <button
+                v-if="state.activeSource !== 'camera' || !state.cameraStreamActive"
+                class="btn btn-primary"
+                @click="startDetection"
+                :disabled="getStartButtonDisabled()"
+              >
                 <PlayCircleOutlined class="icon" />
                 <span v-if="state.inferenceLoading">推理中...</span>
+                <span v-else-if="state.activeSource === 'camera'">开始实时推理</span>
                 <span v-else>开始检测</span>
+              </button>
+              <button
+                v-if="state.activeSource === 'camera' && state.cameraStreamActive"
+                class="btn btn-white"
+                @click="stopCameraInference()"
+              >
+                <CloseOutlined class="icon" />
+                <span>停止推理</span>
               </button>
               <button class="btn btn-success" @click="state.showOriginal = true" v-if="!state.showOriginal">
                 <EyeOutlined class="icon" />
@@ -299,8 +339,77 @@
             </div>
           </div>
 
+          <!-- 在线摄像头实时推理 -->
+          <div v-else-if="state.activeSource === 'camera'">
+            <div v-if="state.showOriginal" class="dual-video">
+              <div class="video-wrapper">
+                <div class="video-title">
+                  <span>原始画面</span>
+                </div>
+                <div class="video-content stream-player-content">
+                  <Jessibuca
+                    v-if="state.cameraPreviewUrl"
+                    :key="'camera-preview-' + state.selectedCameraId"
+                    :playUrl="state.cameraPreviewUrl"
+                    :hasAudio="false"
+                  />
+                  <div v-else class="video-placeholder">
+                    <VideoCameraOutlined class="icon" />
+                    <span>{{ state.selectedCameraId ? '正在加载预览...' : '请选择摄像头' }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="video-wrapper">
+                <div class="video-title">
+                  <span>推理结果</span>
+                  <span v-if="state.cameraStreamActive" class="stream-live-badge">LIVE</span>
+                </div>
+                <div class="video-content stream-player-content">
+                  <Jessibuca
+                    v-if="state.cameraResultUrl"
+                    :key="'camera-result-' + state.selectedCameraId + '-' + state.selectedModelId"
+                    :playUrl="state.cameraResultUrl"
+                    :hasAudio="false"
+                  />
+                  <div v-else-if="state.inferenceLoading" class="video-placeholder">
+                    <SearchOutlined class="icon" />
+                    <span>正在启动实时推理...</span>
+                  </div>
+                  <div v-else class="video-placeholder">
+                    <SearchOutlined class="icon" />
+                    <span>点击「开始实时推理」查看检测结果</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="single-video">
+              <div class="video-wrapper">
+                <div class="video-title">
+                  <span>推理结果</span>
+                  <span v-if="state.cameraStreamActive" class="stream-live-badge">LIVE</span>
+                </div>
+                <div class="video-content stream-player-content">
+                  <Jessibuca
+                    v-if="state.cameraResultUrl"
+                    :key="'camera-result-single-' + state.selectedCameraId + '-' + state.selectedModelId"
+                    :playUrl="state.cameraResultUrl"
+                    :hasAudio="false"
+                  />
+                  <div v-else-if="state.inferenceLoading" class="video-placeholder">
+                    <SearchOutlined class="icon" />
+                    <span>正在启动实时推理...</span>
+                  </div>
+                  <div v-else class="video-placeholder">
+                    <SearchOutlined class="icon" />
+                    <span>点击「开始实时推理」查看检测结果</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- 视频模式 -->
-          <div v-else>
+          <div v-else-if="state.activeSource === 'video'">
             <div v-if="state.showOriginal" class="dual-video">
               <div class="video-wrapper">
                 <div class="video-title">
@@ -406,8 +515,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getModelPage, runInference, runClusterInference, uploadInputFile, getInferenceTaskDetail, getInferenceTasks, getDeployServicePage, getModelClasses, parseModelClassPayload } from "@/api/device/model";
+import { getModelPage, runInference, runClusterInference, uploadInputFile, getInferenceTaskDetail, getInferenceTasks, getDeployServicePage, getModelClasses, parseModelClassPayload, stopRtspInference } from "@/api/device/model";
 import { getLLMList, visionInference, activateLLM, type LLMModel } from "@/api/device/llm";
+import { getDeviceList, startStreamForwarding, getStreamStatus, type DeviceInfo } from '@/api/device/camera';
+import { rewriteStreamHostToPageHost, convertRtmpToHttp, resolveMonitorPlayUrl } from '@/views/camera/utils/devicePlay';
+import Jessibuca from '@/components/Player/module/jessibuca.vue';
 import { useMessage } from '@/hooks/web/useMessage';
 import { ApiSelect } from '@/components/Form';
 import { BasicHelp } from '@/components/Basic';
@@ -427,6 +539,7 @@ import {
   ExperimentOutlined,
   SearchOutlined,
   ReloadOutlined,
+  SyncOutlined,
   HistoryOutlined,
   QuestionCircleOutlined
 } from '@ant-design/icons-vue';
@@ -438,6 +551,7 @@ const formatVersion = formatModelVersionDisplay;
 // 接收父组件传递的初始大模型ID
 const props = defineProps<{
   initialLLMId?: number | null;
+  tabActive?: boolean;
 }>();
 
 // 类型定义
@@ -515,6 +629,14 @@ interface AppState {
   availableClassNames: string[];
   selectedClassNames: string[];
   classesLoading: boolean;
+  cameras: DeviceInfo[];
+  camerasLoading: boolean;
+  selectedCameraId: string;
+  cameraPreviewUrl: string | null;
+  cameraResultUrl: string | null;
+  cameraStreamActive: boolean;
+  cameraInferenceRecordId: number | null;
+  cameraInferenceDeviceId: string;
 }
 
 // 状态管理
@@ -557,6 +679,14 @@ const state = reactive<AppState>({
   availableClassNames: [],
   selectedClassNames: [],
   classesLoading: false,
+  cameras: [],
+  camerasLoading: false,
+  selectedCameraId: '',
+  cameraPreviewUrl: null,
+  cameraResultUrl: null,
+  cameraStreamActive: false,
+  cameraInferenceRecordId: null,
+  cameraInferenceDeviceId: '',
 });
 
 // 轮询超时时间（30分钟）
@@ -567,7 +697,8 @@ const POLLING_INTERVAL = 2000;
 
 const sourceOptions = [
   { value: 'image', label: '图片上传' },
-  { value: 'video', label: '视频上传' }
+  { value: 'video', label: '视频上传' },
+  { value: 'camera', label: '在线摄像头' },
 ];
 
 const imageInput = ref<HTMLInputElement | null>(null);
@@ -587,6 +718,43 @@ const isCustomModelSelected = computed(() => {
 const classNameOptions = computed(() =>
   state.availableClassNames.map((name) => ({ label: name, value: name })),
 );
+
+const getCameraRtspUrl = (device: DeviceInfo): string | null => {
+  const url = (device.rtsp_direct || device.source || '').trim();
+  return url.startsWith('rtsp://') ? url : null;
+};
+
+const cameraOptions = computed(() => state.cameras.filter((cam) => getCameraRtspUrl(cam)));
+
+const selectedCamera = computed(() =>
+  state.cameras.find((cam) => cam.id === state.selectedCameraId) || null,
+);
+
+const selectedCameraRtsp = computed(() =>
+  selectedCamera.value ? getCameraRtspUrl(selectedCamera.value) : null,
+);
+
+const maskRtspUrl = (url: string): string =>
+  url.replace(/\/\/([^:@/]+):([^@/]+)@/, '//$1:***@');
+
+const getCameraOnlineLabel = (device: DeviceInfo): string => {
+  if (device.connection_status === 'online' || device.channel_online === true) {
+    return '（在线）';
+  }
+  if (device.connection_status === 'offline' || device.channel_online === false) {
+    return '（离线）';
+  }
+  return '';
+};
+
+const toStreamPlayUrl = (url: string): string => {
+  if (!url) return '';
+  let playUrl = url;
+  if (url.startsWith('rtmp://')) {
+    playUrl = convertRtmpToHttp(url) || url;
+  }
+  return rewriteStreamHostToPageHost(playUrl);
+};
 
 const loadClassesForModel = async (model?: Model | null) => {
   if (!model?.id) {
@@ -631,6 +799,19 @@ watch(
     await loadClassesForModel(model);
   },
   { immediate: true },
+);
+
+watch(
+  () => props.tabActive,
+  (active) => {
+    if (!active && state.cameraStreamActive) {
+      void stopCameraInference(false);
+      return;
+    }
+    if (active && state.activeSource === 'camera') {
+      refreshCameras();
+    }
+  },
 );
 
 const setActiveSource = (source: string) => {
@@ -767,6 +948,14 @@ const getStartButtonDisabled = (): boolean => {
     const hasVideo = state.uploadedVideoFile || state.historyInputSource;
     return !hasModel || !hasVideo;
   }
+
+  // 在线摄像头：需要有模型和摄像头，且未在推流中
+  if (state.activeSource === 'camera') {
+    if (state.cameraStreamActive) return true;
+    const hasModel = state.selectedModelId;
+    const hasCamera = !!state.selectedCameraId;
+    return !hasModel || !hasCamera;
+  }
   
   // 默认禁用
   return true;
@@ -798,6 +987,17 @@ const startDetection = async () => {
     return;
   }
 
+  if (state.activeSource === 'camera') {
+    if (!state.selectedCameraId) {
+      createMessage.warning('请选择有效的在线摄像头');
+      return;
+    }
+    if (!state.selectedModelId) {
+      createMessage.warning('请先选择模型');
+      return;
+    }
+  }
+
   state.inferenceLoading = true;
   state.detectionStatus = 'running';
   state.statusText = '推理中...';
@@ -805,8 +1005,11 @@ const startDetection = async () => {
   try {
     const formData = new FormData();
     
-    // 设置推理类型
-    formData.append('inference_type', state.activeSource);
+    // 设置推理类型（在线摄像头走后端 rtsp 推理）
+    formData.append(
+      'inference_type',
+      state.activeSource === 'camera' ? 'rtsp' : state.activeSource,
+    );
     
     // 设置推理参数
     const parameters: Record<string, any> = {
@@ -878,6 +1081,15 @@ const startDetection = async () => {
     } else if (state.activeSource === 'video' && state.historyInputSource) {
       // 从历史记录还原的视频，使用 input_source URL
       formData.append('input_source', state.historyInputSource);
+    } else if (state.activeSource === 'camera' && state.selectedCameraId) {
+      const device = selectedCamera.value;
+      if (device) {
+        await ensureCameraStreamReady(device);
+      }
+      formData.append('device_id', state.selectedCameraId);
+      if (selectedCameraRtsp.value) {
+        formData.append('input_source', selectedCameraRtsp.value);
+      }
     }
 
     // 判断使用哪个接口：优先级 大模型 > 模型服务 > 模型选择
@@ -1094,6 +1306,21 @@ const startDetection = async () => {
           state.statusText = '推理失败';
           return;
         }
+      } else if (state.activeSource === 'camera') {
+        const streamUrl = result?.stream_url || responseData.data?.result?.stream_url;
+        const recordId = responseData.data?.record_id || result?.record_id;
+        if (streamUrl) {
+          state.cameraResultUrl = toStreamPlayUrl(streamUrl);
+          state.cameraInferenceRecordId = recordId ?? null;
+          state.cameraInferenceDeviceId = state.selectedCameraId;
+          state.cameraStreamActive = true;
+          state.detectionStatus = 'running';
+          state.statusText = '实时推理中';
+          createMessage.success('实时推理已启动');
+          return;
+        } else {
+          throw new Error('未获取到推理推流地址');
+        }
       }
       
       // 图片推理在这里设置完成状态
@@ -1136,7 +1363,9 @@ const startDetection = async () => {
     createMessage.error(errorMessage);
   } finally {
     // 视频推理提交后会进入轮询阶段，此时不要在finally里提前关闭loading
-    if (state.currentInferenceRecordId === null) {
+    if (state.currentInferenceRecordId === null && state.activeSource !== 'camera') {
+      state.inferenceLoading = false;
+    } else if (state.activeSource === 'camera') {
       state.inferenceLoading = false;
     }
   }
@@ -1346,16 +1575,43 @@ const handleModelChange = async () => {
   state.detectionCount = 0;
   state.averageConfidence = 0;
   stopPollingInferenceResult();
+
+  if (state.activeSource === 'camera' && state.cameraStreamActive && state.selectedCameraId) {
+    const cameraId = state.selectedCameraId;
+    await stopCameraInference(false);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    if (state.selectedModelId) {
+      await startDetection();
+    } else {
+      state.selectedCameraId = cameraId;
+    }
+  }
 };
 
 // 切换输入源时清理
-const handleSourceChange = () => {
+const handleSourceChange = async () => {
   stopPollingInferenceResult();
   cleanupVideoUrl();
   state.historyInputSource = null; // 清除历史记录的 input_source
   state.detectionResult = null;
   state.llmTextResult = null;
-  
+
+  if (state.activeSource === 'camera') {
+    state.showOriginal = true;
+    state.selectedLLMId = null;
+    state.selectedDeployServiceId = null;
+    refreshCameras();
+    return;
+  }
+
+  await stopCameraInference(false);
+  state.selectedCameraId = '';
+  state.cameraPreviewUrl = null;
+  state.cameraResultUrl = null;
+  state.cameraStreamActive = false;
+  state.cameraInferenceRecordId = null;
+  state.cameraInferenceDeviceId = '';
+
   // 如果切换到图片推理，加载大模型列表和部署服务列表；否则清空选择
   if (state.activeSource === 'image') {
     loadLLMs();
@@ -1364,6 +1620,137 @@ const handleSourceChange = () => {
     // 非图片推理时，清空大模型和模型服务选择（因为大模型和模型服务只支持图片推理）
     state.selectedLLMId = null;
     state.selectedDeployServiceId = null;
+  }
+};
+
+const loadCameras = async () => {
+  state.camerasLoading = true;
+  try {
+    const response = await getDeviceList({ pageNo: 1, pageSize: 1000 });
+    const list = Array.isArray(response)
+      ? response
+      : (response?.data || response?.list || []);
+    state.cameras = Array.isArray(list) ? list : [];
+  } catch (error: any) {
+    console.error('加载摄像头列表失败:', error);
+    createMessage.error('加载摄像头列表失败');
+  } finally {
+    state.camerasLoading = false;
+  }
+};
+
+const refreshCameras = async () => {
+  await loadCameras();
+  await reloadSelectedCameraPreview();
+};
+
+const ensureCameraStreamReady = async (device: DeviceInfo): Promise<void> => {
+  try {
+    const statusResp = await getStreamStatus(device.id);
+    const statusData = statusResp?.data ?? statusResp;
+    if (statusData?.status === 'running') {
+      return;
+    }
+  } catch (error) {
+    console.warn('查询摄像头推流状态失败:', error);
+  }
+
+  if (device.http_stream || device.rtmp_stream) {
+    return;
+  }
+
+  try {
+    const resp = await startStreamForwarding(device.id, true);
+    const payload = resp?.data ?? resp;
+    if (payload?.code === 0 || payload?.code === undefined) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  } catch (error) {
+    console.warn('启动摄像头推流失败，将继续尝试推理:', error);
+  }
+};
+
+const resolveCameraPreviewUrl = async (device: DeviceInfo): Promise<string | null> => {
+  let url = await resolveMonitorPlayUrl(device, 'video');
+  if (url) {
+    return toStreamPlayUrl(url);
+  }
+
+  await ensureCameraStreamReady(device);
+
+  try {
+    const statusResp = await getStreamStatus(device.id);
+    const statusData = statusResp?.data ?? statusResp;
+    const httpStream = statusData?.http_stream || device.http_stream;
+    if (httpStream) {
+      return toStreamPlayUrl(httpStream);
+    }
+    const rtmpStream = statusData?.rtmp_url || statusData?.rtmp_stream || device.rtmp_stream;
+    if (rtmpStream) {
+      return toStreamPlayUrl(rtmpStream);
+    }
+  } catch (error) {
+    console.warn('获取摄像头预览流失败:', error);
+  }
+
+  if (device.http_stream || device.rtmp_stream) {
+    return toStreamPlayUrl(device.http_stream || device.rtmp_stream || '');
+  }
+
+  return null;
+};
+
+const reloadSelectedCameraPreview = async () => {
+  if (state.activeSource !== 'camera' || !state.selectedCameraId) return;
+
+  state.cameraPreviewUrl = null;
+
+  const device = selectedCamera.value;
+  if (!device) return;
+
+  try {
+    const previewUrl = await resolveCameraPreviewUrl(device);
+    state.cameraPreviewUrl = previewUrl;
+    if (!previewUrl) {
+      createMessage.warning('无法获取摄像头预览流，请确认设备在线且已开启推流');
+    }
+  } catch (error: any) {
+    console.error('加载摄像头预览失败:', error);
+    createMessage.error('加载摄像头预览失败');
+  }
+};
+
+const handleCameraChange = async () => {
+  if (state.cameraStreamActive || state.cameraInferenceRecordId) {
+    await stopCameraInference(false);
+  }
+  if (!state.selectedCameraId) {
+    state.cameraPreviewUrl = null;
+    return;
+  }
+  await reloadSelectedCameraPreview();
+};
+
+const stopCameraInference = async (showMsg = true) => {
+  if (!state.cameraStreamActive && !state.cameraInferenceRecordId) {
+    return;
+  }
+  try {
+    await stopRtspInference({ stop_all: true });
+  } catch (error) {
+    console.warn('停止实时推理失败:', error);
+  }
+  state.cameraStreamActive = false;
+  state.cameraResultUrl = null;
+  state.cameraInferenceRecordId = null;
+  state.cameraInferenceDeviceId = '';
+  state.inferenceLoading = false;
+  if (state.detectionStatus === 'running' && state.activeSource === 'camera') {
+    state.detectionStatus = 'idle';
+    state.statusText = '就绪 - 等待输入源';
+  }
+  if (showMsg && state.activeSource === 'camera') {
+    createMessage.info('已停止实时推理');
   }
 };
 
@@ -1705,10 +2092,18 @@ const formatHistoryRecordLabel = (record: InferenceHistoryRecord): string => {
   const statusMap: Record<string, string> = {
     'COMPLETED': '已完成',
     'PROCESSING': '处理中',
-    'FAILED': '失败'
+    'FAILED': '失败',
+    'STREAMING': '推流中',
+    'RUNNING': '运行中',
   };
+  const typeMap: Record<string, string> = {
+    image: '图片',
+    video: '视频',
+    rtsp: '摄像头',
+  };
+  const typeLabel = typeMap[record.inference_type || ''] || '';
   const status = statusMap[record.status] || record.status;
-  return `${dateStr} - ${status}`;
+  return `${dateStr}${typeLabel ? ` - ${typeLabel}` : ''} - ${status}`;
 };
 
 // 处理历史记录选择
@@ -1813,6 +2208,14 @@ const handleHistoryRecordChange = async () => {
       if (inputSource && (inputSource.startsWith('http://') || inputSource.startsWith('https://') || inputSource.startsWith('/'))) {
         state.uploadedVideoUrl = getMediaUrl(inputSource);
       }
+    } else if (inferenceType === 'rtsp') {
+      state.activeSource = 'camera';
+      await loadCameras();
+      const matchedCamera = state.cameras.find((cam) => getCameraRtspUrl(cam) === inputSource);
+      if (matchedCamera) {
+        state.selectedCameraId = matchedCamera.id;
+        await handleCameraChange();
+      }
     } else if (inputSource) {
       // 如果没有 inference_type，尝试根据 input_source 推断
       const lowerSource = inputSource.toLowerCase();
@@ -1833,7 +2236,12 @@ const handleHistoryRecordChange = async () => {
     if (taskData.output_path) {
       state.detectionResult = getMediaUrl(taskData.output_path);
     } else if (taskData.stream_output_url) {
-      state.detectionResult = taskData.stream_output_url;
+      if (inferenceType === 'rtsp') {
+        state.cameraResultUrl = toStreamPlayUrl(taskData.stream_output_url);
+        state.cameraStreamActive = ['STREAMING', 'RUNNING'].includes(taskData.status);
+      } else {
+        state.detectionResult = taskData.stream_output_url;
+      }
     }
 
     // 还原状态信息
@@ -1887,6 +2295,7 @@ onMounted(() => {
 // 组件卸载时清理
 onUnmounted(() => {
   stopPollingInferenceResult();
+  stopCameraInference(false);
   cleanupVideoUrl();
 });
 </script>
@@ -2091,6 +2500,77 @@ body {
         font-size: 12px;
         color: @text-muted;
         line-height: 1.4;
+      }
+
+      .camera-select-combo {
+        display: flex;
+        align-items: stretch;
+        width: 100%;
+        border: 1px solid @border-color;
+        border-radius: 6px;
+        background: #fff;
+        box-shadow: @shadow-sm;
+        overflow: hidden;
+        transition: @panel-transition;
+
+        &:hover {
+          border-color: @border-hover;
+        }
+
+        &:focus-within {
+          border-color: @primary-color;
+          box-shadow: 0 0 0 3px rgba(44, 62, 80, 0.1), @shadow-sm;
+        }
+
+        .camera-select-field {
+          flex: 1;
+          min-width: 0;
+          border: none;
+          border-radius: 0;
+          box-shadow: none;
+          background: transparent;
+
+          &:focus {
+            outline: none;
+            box-shadow: none;
+          }
+
+          &:hover {
+            border-color: transparent;
+          }
+        }
+
+        .camera-refresh-btn {
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 40px;
+          border: none;
+          border-left: 1px solid @border-color;
+          background: transparent;
+          color: @text-secondary;
+          cursor: pointer;
+          transition: @panel-transition;
+          padding: 0;
+          font-size: 14px;
+
+          &:hover:not(:disabled) {
+            color: @primary-color;
+          }
+
+          &:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+          }
+        }
+      }
+
+      .camera-rtsp-hint {
+        font-size: 12px;
+        color: @text-muted;
+        line-height: 1.4;
+        word-break: break-all;
       }
 
       .source-content {
@@ -2514,6 +2994,13 @@ body {
         align-items: center;
         color: @light-text;
         font-size: 16px;
+
+        .stream-live-badge {
+          font-size: 12px;
+          font-weight: 700;
+          color: @error-color;
+          letter-spacing: 0.5px;
+        }
       }
 
       .video-content {
@@ -2537,6 +3024,22 @@ body {
           align-items: flex-start;
           overflow-y: auto;
           overflow-x: hidden;
+        }
+
+        &.stream-player-content {
+          align-items: stretch;
+          justify-content: stretch;
+          padding: 0;
+          background: #000;
+          min-height: 280px;
+
+          :deep(.jessibuca-container),
+          :deep(.container-shell),
+          :deep(#container) {
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 280px;
+          }
         }
 
         .image-preview {

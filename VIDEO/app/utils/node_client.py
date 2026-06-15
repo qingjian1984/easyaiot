@@ -35,7 +35,13 @@ def _post(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     resp.raise_for_status()
     data = resp.json()
     if data.get('code') != 0:
-        raise RuntimeError(data.get('msg') or f'节点 API 失败: {url}')
+        msg = data.get('msg') or data.get('message') or f'节点 API 失败: {url}'
+        if msg == '系统异常':
+            logger.error(
+                '节点 API 返回系统异常（详见 iot-node 日志）url=%s payload_keys=%s resp=%s',
+                url, list(payload.keys()), data,
+            )
+        raise RuntimeError(msg)
     return data.get('data') or {}
 
 

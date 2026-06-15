@@ -152,3 +152,38 @@ export function formatCameraDeviceLabel(device: {
   if (name.startsWith('[直连]') || name.startsWith('[NVR]')) return name;
   return `[直连] ${name}`;
 }
+
+const MONITOR_PATH_SEP = ' / ';
+
+/** 监控画面用短名：去掉目录路径、[NVR]/[直连]/[GB28181] 前缀与 CH 号 */
+export function formatCameraShortName(
+  input?:
+    | string
+    | {
+        name?: string | null;
+        id?: string;
+        source?: string | null;
+        device_kind?: string;
+        nvr_id?: number | null;
+        nvr_channel?: number;
+      }
+    | null,
+): string {
+  let name = '';
+  if (typeof input === 'string') {
+    name = input.trim();
+    if (name.includes(MONITOR_PATH_SEP)) {
+      const parts = name.split(MONITOR_PATH_SEP).map((p) => p.trim()).filter(Boolean);
+      name = parts[parts.length - 1] || name;
+    }
+  } else if (input) {
+    name = formatCameraDeviceLabel(input);
+  }
+  name = name
+    .replace(/^\[(?:NVR|直连|GB28181)\]\s*/i, '')
+    .replace(/^CH\d+\s*/i, '')
+    .trim();
+  if (name) return name;
+  if (input && typeof input === 'object' && input.id) return String(input.id).trim();
+  return '';
+}

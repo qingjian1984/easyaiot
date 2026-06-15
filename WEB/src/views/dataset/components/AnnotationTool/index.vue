@@ -81,21 +81,12 @@
           type="button"
           class="action-btn sam-bootstrap-btn"
           :disabled="batchTaskRunning || totalImages === 0"
-          title="SAM 零样本冷启动：首批约 200 张开放词汇标注"
+          title="SAM 零样本冷启动：首批约 200 张开放词汇标注（未安装模型时将先引导下载）"
           @click="openSamBootstrapWizard"
         >
           <Icon icon="ant-design:experiment-outlined"/>
           SAM 冷启动
           <span v-if="samModelChecked && !samModelReady" class="sam-model-badge" title="SAM 模型未安装">!</span>
-        </button>
-        <button
-          type="button"
-          class="action-btn sam-model-btn"
-          title="下载并安装 SAM3 模型权重"
-          @click="openSamModelSetup"
-        >
-          <Icon icon="ant-design:cloud-download-outlined"/>
-          SAM 模型
         </button>
         <span class="top-actions-divider"/>
         <Dropdown :trigger="['click']" placement="bottomRight">
@@ -463,6 +454,7 @@
       ref="samModelSetupRef"
       :get-container="getModalContainer"
       @ready="onSamModelReady"
+      @closed="onSamModelSetupClosed"
     />
     <ImportDatasetModal
       ref="importModalRef"
@@ -588,6 +580,8 @@ const samBootstrapRef = ref<InstanceType<typeof SamBootstrapWizard> | null>(null
 const samModelSetupRef = ref<InstanceType<typeof SamModelSetupModal> | null>(null);
 const samModelChecked = ref(false);
 const samModelReady = ref(false);
+/** 用户从「SAM 冷启动」进入下载弹框，安装完成后自动打开业务向导 */
+const samBootstrapPending = ref(false);
 const importModalRef = ref<InstanceType<typeof ImportDatasetModal> | null>(null);
 const exportModalRef = ref<InstanceType<typeof ExportDatasetModal> | null>(null);
 
@@ -2123,14 +2117,11 @@ async function refreshSamModelStatus(): Promise<boolean> {
   return samModelReady.value;
 }
 
-function openSamModelSetup(): void {
-  samModelSetupRef.value?.openModal();
-}
-
 async function openSamBootstrapWizard(): Promise<void> {
   const ready = await refreshSamModelStatus();
   if (!ready) {
-    openSamModelSetup();
+    samBootstrapPending.value = true;
+    samModelSetupRef.value?.openModal();
     return;
   }
   samBootstrapRef.value?.openModal();
@@ -2139,6 +2130,14 @@ async function openSamBootstrapWizard(): Promise<void> {
 function onSamModelReady(): void {
   samModelReady.value = true;
   samModelChecked.value = true;
+  if (samBootstrapPending.value) {
+    samBootstrapPending.value = false;
+    samBootstrapRef.value?.openModal();
+  }
+}
+
+function onSamModelSetupClosed(): void {
+  samBootstrapPending.value = false;
 }
 
 function openImportModal(): void {
@@ -2668,9 +2667,6 @@ onUnmounted(() => {
 
       &.sam-bootstrap-btn {
         position: relative;
-      }
-
-      &.sam-model-btn {
         background: #f0f5ff;
         border-color: #adc6ff;
         color: #266cfb;

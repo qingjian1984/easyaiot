@@ -153,6 +153,22 @@ export const runInference = (modelId, formData) => {
   });
 };
 
+export const stopRtspInference = (payload: {
+  device_id?: string;
+  record_id?: number;
+  stop_all?: boolean;
+}) => {
+  return defHttp.post({
+    url: `${Api.InferenceTask}/inference/rtsp/stop`,
+    data: payload,
+    headers: {
+      'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token')
+    }
+  }, {
+    isTransformResponse: false
+  });
+};
+
 // 集群推理接口（模型服务接口）
 export const runClusterInference = (modelId, formData) => {
   return defHttp.post({

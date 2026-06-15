@@ -154,6 +154,8 @@ export interface FaceRecModelStatus {
   path?: string;
   size_bytes: number;
   downloading: boolean;
+  /** 存在未完成的 zip 下载，可断点续传 */
+  resumable?: boolean;
   /** idle | downloading | extracting | done | error */
   stage?: string;
   progress: number;

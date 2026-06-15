@@ -209,7 +209,9 @@ def remove_playback_file(file_path: str, reason: str = '') -> bool:
             logger.info('已删除本地回放录像(sudo): %s%s', file_path, suffix)
             _prune_empty_parents(file_path, stop_at=get_srs_record_dir())
             return True
-        logger.warning('删除本地回放录像失败: %s, %s', file_path, exc)
+        if getattr(exc, 'errno', None) == errno.ENOENT:
+            return False
+        logger.debug('删除本地回放录像失败: %s, %s', file_path, exc)
         return False
 
 

@@ -66,7 +66,6 @@ import { BasicModal, useModal } from '@/components/Modal';
 import {
   startSamBootstrap,
   getAutoLabelTask,
-  getSamBootstrapStatus,
   completeSamBootstrapReview,
 } from '@/api/device/auto-label';
 import { useMessage } from '@/hooks/web/useMessage';
@@ -104,7 +103,12 @@ const progressPercent = computed(() => {
   return Math.min(100, Math.round((done / total) * 100));
 });
 
-const [register, { openModal }] = useModal();
+const [register, { openModal: openModalInner }] = useModal();
+
+function openModal() {
+  currentStep.value = 0;
+  openModalInner();
+}
 
 defineExpose({ openModal });
 
