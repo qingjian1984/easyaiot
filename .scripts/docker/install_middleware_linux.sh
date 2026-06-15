@@ -1751,7 +1751,8 @@ get_host_ip() {
     # 方法1: 通过路由获取（最可靠，通常返回物理网络接口的 IP）
     if command -v ip &> /dev/null; then
         host_ip=$(ip route get 8.8.8.8 2>/dev/null | awk '{print $7}' | head -n 1)
-        if [ -n "$host_ip" ] && [ "$host_ip" != "127.0.0.1" ] && ! is_docker_network_ip "$host_ip"; then
+        # ip route get 返回的是出站路由源地址，即物理网卡 IP；不因 172.17-172.31 网段误判为 Docker 网段
+        if [ -n "$host_ip" ] && [ "$host_ip" != "127.0.0.1" ]; then
             echo "$host_ip"
             return 0
         fi
