@@ -84,8 +84,8 @@ def _resolve_split_path(raw_path, split_name, yaml_dir, dataset_root):
 
     normalized_raw = str(raw_path).replace('\\', '/')
     candidate_bases = [
-        yaml_dir,
         dataset_root,
+        yaml_dir,
         os.path.dirname(dataset_root),
     ]
 
@@ -111,44 +111,99 @@ def _resolve_split_path(raw_path, split_name, yaml_dir, dataset_root):
     return None
 
 
-def _find_first_data_yaml(root_dir):
+def _resolve_dataset_root(cfg, yaml_dir):
+    """解析 YAML 中 path 字段，得到数据集根目录（兼容 COCO 原生格式）。"""
+    path_val = cfg.get('path')
+    if path_val is None or path_val == '':
+        return yaml_dir
+    path_str = str(path_val).strip()
+    if path_str in ('.', './'):
+        return yaml_dir
+    candidate = os.path.normpath(os.path.join(yaml_dir, path_str))
+    if os.path.isdir(candidate):
+        return os.path.abspath(candidate)
+    return yaml_dir
+
+
+def _looks_like_dataset_yaml(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        return isinstance(cfg, dict) and ('train' in cfg or 'names' in cfg)
+    except Exception:
+        return False
+
+
+def _find_dataset_yaml(root_dir):
+    """查找数据集 YAML：优先 data.yaml，否则匹配任意含 train/names 的 .yaml/.yml。"""
+    preferred = os.path.join(root_dir, 'data.yaml')
+    if os.path.isfile(preferred):
+        return preferred
+
+    candidates = []
     for root, _, files in os.walk(root_dir):
+        depth = root[len(root_dir):].count(os.sep)
         for file_name in files:
-            if file_name.lower() == 'data.yaml':
-                return os.path.join(root, file_name)
+            lower = file_name.lower()
+            if not lower.endswith(('.yaml', '.yml')):
+                continue
+            candidates.append((depth, file_name.lower(), os.path.join(root, file_name)))
+
+    for _, _, candidate in sorted(candidates):
+        if _looks_like_dataset_yaml(candidate):
+            return candidate
     return None
+
+
+def _parse_class_names(names_raw):
+    """解析 names 字段，支持列表与 COCO 风格的「序号: 类型」字典。"""
+    if names_raw is None:
+        return ['object']
+    if isinstance(names_raw, dict):
+        if not names_raw:
+            return ['object']
+        max_idx = max(int(k) for k in names_raw.keys())
+        result = [''] * (max_idx + 1)
+        for key, value in names_raw.items():
+            result[int(key)] = str(value)
+        return [name for name in result if name] or ['object']
+    if isinstance(names_raw, list):
+        return [str(name) for name in names_raw if str(name).strip()] or ['object']
+    return [str(names_raw)]
 
 
 def _normalize_dataset_yaml(dataset_root, output_dir=None):
     """
-    将 data.yaml 中的 train/val/test 转为绝对路径，避免 path: . 导致 Ultralytics 解析到错误目录。
-    兼容本地导出（train/images）与 MinIO 同步（images/train）两种目录结构。
+    将数据集 YAML 中的 train/val/test 转为绝对路径，并生成标准 data.yaml。
+    兼容：本地 YOLO 导出、MinIO 同步、COCO 原生（path + 外层 yaml）等格式。
     """
-    data_yaml = _find_first_data_yaml(dataset_root)
-    if not data_yaml:
-        raise ValueError('未找到 data.yaml，无法开始训练')
+    dataset_yaml = _find_dataset_yaml(dataset_root)
+    if not dataset_yaml:
+        raise ValueError('未找到数据集 YAML 配置文件，无法开始训练')
 
-    with open(data_yaml, 'r', encoding='utf-8') as f:
+    with open(dataset_yaml, 'r', encoding='utf-8') as f:
         cfg = yaml.safe_load(f) or {}
 
-    yaml_dir = os.path.dirname(data_yaml)
-    train_path = _resolve_split_path(cfg.get('train'), 'train', yaml_dir, dataset_root)
-    val_path = _resolve_split_path(cfg.get('val'), 'val', yaml_dir, dataset_root)
+    yaml_dir = os.path.dirname(dataset_yaml)
+    effective_root = _resolve_dataset_root(cfg, yaml_dir)
+    train_path = _resolve_split_path(cfg.get('train'), 'train', yaml_dir, effective_root)
+    val_path = _resolve_split_path(cfg.get('val'), 'val', yaml_dir, effective_root)
     test_path = (
-        _resolve_split_path(cfg.get('test'), 'test', yaml_dir, dataset_root)
+        _resolve_split_path(cfg.get('test'), 'test', yaml_dir, effective_root)
         if cfg.get('test') else None
     )
 
     if not train_path:
-        raise ValueError('数据集 train 路径无效，请检查 data.yaml 或目录结构')
+        raise ValueError('数据集 train 路径无效，请检查 YAML 配置或目录结构')
     if not val_path:
-        raise ValueError('数据集 val/valid 路径无效，请检查 data.yaml 或目录结构')
+        raise ValueError('数据集 val/valid 路径无效，请检查 YAML 配置或目录结构')
 
+    names = _parse_class_names(cfg.get('names'))
     normalized_cfg = {
         'train': train_path,
         'val': val_path,
-        'nc': cfg.get('nc', 1),
-        'names': cfg.get('names', ['object']),
+        'nc': len(names),
+        'names': names,
     }
     if test_path:
         normalized_cfg['test'] = test_path
@@ -171,9 +226,8 @@ def _prepare_train_dataset_in_dir(dataset_path: str, model_dir: str, log_fn):
             raise RuntimeError(f'本地数据集不存在: {dataset_path}')
         source_abs = os.path.abspath(dataset_path)
         if os.path.isdir(source_abs):
-            data_yaml = os.path.join(source_abs, 'data.yaml')
-            if not os.path.exists(data_yaml):
-                raise RuntimeError(f'本地数据集目录缺少 data.yaml: {source_abs}')
+            if not _find_dataset_yaml(source_abs):
+                raise RuntimeError(f'本地数据集目录缺少 YAML 配置文件: {source_abs}')
             if source_abs != os.path.abspath(model_dir):
                 for name in os.listdir(source_abs):
                     src = os.path.join(source_abs, name)
@@ -933,33 +987,21 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                 update_log_local(log_msg)
                 return
 
-            # data/datasets/train_<id>/
-            # ├── images /
-            # │   ├── train /
-            # │   └── val /
-            # ├── labels /
-            # │   ├── train /
-            # │   └── val /
-            # └── data.yaml
-            # 检查数据集目录是否存在
+            # 支持 YOLO 标准目录（images/labels + data.yaml）与 COCO 原生（path + 外层 yaml）
             model_dir = os.path.join(get_project_root(), 'data/datasets', f'train_{task_id}')
             model_dir_for_cleanup = model_dir
             dataset_path_for_cleanup = dataset_zip_path
             data_yaml_path = os.path.join(model_dir, 'data.yaml')
+            dataset_yaml = _find_dataset_yaml(model_dir)
 
-            # 检查数据集目录结构完整性
-            required_dirs = ['images/train', 'images/val', 'images/test', 'labels/train', 'labels/val', 'labels/test']
-            all_dirs_exist = all(os.path.exists(os.path.join(model_dir, d)) for d in required_dirs)
-
-            if os.path.exists(data_yaml_path) and all_dirs_exist:
-                # 不再更新训练记录中的数据集路径，保持原始URL
+            if dataset_yaml and os.path.exists(data_yaml_path):
                 update_log_local(f"数据集验证成功，使用原始路径: {dataset_zip_path}")
 
             update_log_local(f"项目目录: {model_dir}")
-            update_log_local(f"数据配置文件路径: {data_yaml_path}")
+            update_log_local(f"数据配置文件路径: {dataset_yaml or data_yaml_path}")
             update_log_local("检查数据集配置文件...")
 
-            if not os.path.exists(data_yaml_path):
+            if not dataset_yaml and not os.path.exists(data_yaml_path):
                 source_label = '本地' if dataset_source == 'local' else '云端'
                 log_msg = f'数据集配置文件不存在，正在准备{source_label}数据集...'
                 train_status[task_id].update({
@@ -990,20 +1032,11 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                 update_log_local(log_msg)
                 return
 
-            # 检查data.yaml文件是否存在
-            if not os.path.exists(data_yaml_path):
-                error_msg = "数据集配置文件不存在"
-                update_log_local(error_msg)
-                train_task.status = 'error'
-                train_task.error_log = error_msg
-                db.session.commit()
-                raise Exception(error_msg)
-
             try:
                 data_yaml_path = _normalize_dataset_yaml(model_dir, output_dir=model_dir)
                 update_log_local(f'已标准化 data.yaml 路径: {data_yaml_path}')
             except Exception as norm_err:
-                error_msg = f'data.yaml 路径标准化失败: {norm_err}'
+                error_msg = f'数据集 YAML 标准化失败: {norm_err}'
                 update_log_local(error_msg)
                 train_task.status = 'error'
                 train_task.error_log = error_msg

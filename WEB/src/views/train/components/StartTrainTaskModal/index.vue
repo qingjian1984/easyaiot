@@ -114,7 +114,9 @@
                 {{ localFileList?.length ? '重新选择压缩包' : '上传数据集压缩包' }}
               </Button>
             </Upload>
-            <div class="form-hint">上传 YOLO 格式数据集 ZIP 压缩包，单文件最大 5GB</div>
+            <div class="form-hint">
+              上传 YOLO 或 COCO 格式数据集 ZIP 压缩包（含 YAML 配置），单文件最大 5GB
+            </div>
           </FormItem>
           <FormItem v-else label="选择数据集">
             <Select
