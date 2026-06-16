@@ -22,6 +22,7 @@ public final class AgentDeployUtil {
 
     public static String buildEnvContent(long nodeId, String agentToken, int agentPort, String controlPlaneUrl) {
         return "# EasyAIoT Node Agent 配置\n"
+                + "PLATFORM_AGENT=0\n"
                 + "NODE_ID=" + nodeId + "\n"
                 + "AGENT_TOKEN=" + agentToken + "\n"
                 + "CONTROL_PLANE_URL=" + controlPlaneUrl + "\n"

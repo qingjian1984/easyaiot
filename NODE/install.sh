@@ -123,13 +123,19 @@ cmd_logs() {
 }
 
 sync_agent_sources() {
-  local resolved_install_dir
+  local resolved_install_dir resolved_script_dir
   resolved_install_dir="$(readlink -f "$INSTALL_DIR")"
-  echo "==> 同步 Agent 源码: ${SCRIPT_DIR} -> ${resolved_install_dir}"
+  resolved_script_dir="$(readlink -f "$SCRIPT_DIR")"
+  if [ "$resolved_script_dir" = "$resolved_install_dir" ]; then
+    echo "==> Agent 源码已在安装目录: ${resolved_install_dir}（跳过同步）"
+    return 0
+  fi
+  echo "==> 同步 Agent 源码: ${resolved_script_dir} -> ${resolved_install_dir}"
   sudo mkdir -p "$resolved_install_dir"
-  sudo cp "$SCRIPT_DIR/run_agent.py" "$SCRIPT_DIR/agent_server.py" "$SCRIPT_DIR/media_manager.py" \
-    "$SCRIPT_DIR/workload_manager.py" "$SCRIPT_DIR/requirements.txt" \
-    "$SCRIPT_DIR/agent.env.example" "$SCRIPT_DIR/install.sh" "$resolved_install_dir/"
+  sudo cp "$resolved_script_dir/run_agent.py" "$resolved_script_dir/agent_server.py" \
+    "$resolved_script_dir/media_manager.py" "$resolved_script_dir/workload_manager.py" \
+    "$resolved_script_dir/requirements.txt" "$resolved_script_dir/agent.env.example" \
+    "$resolved_script_dir/install.sh" "$resolved_install_dir/"
   sudo chmod +x "$resolved_install_dir/install.sh"
   if [ -d "$SCRIPT_DIR/pip-wheels" ]; then
     sudo rm -rf "$resolved_install_dir/pip-wheels"
@@ -367,7 +373,8 @@ PY
   cat <<UNIT | sudo tee "$(service_unit_file)" > /dev/null
 [Unit]
 Description=EasyAIoT Node Agent
-After=network.target
+After=network.target docker.service
+Wants=docker.service
 
 [Service]
 Type=simple

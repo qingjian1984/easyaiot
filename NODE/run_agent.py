@@ -30,6 +30,17 @@ CONTROL_PLANE_URL = os.environ.get(
 HEARTBEAT_INTERVAL = int(os.environ.get('HEARTBEAT_INTERVAL', '10'))
 AGENT_VERSION = '1.0.0'
 AGENT_ENV_FILE = os.environ.get('AGENT_ENV_FILE', '')
+BOOTSTRAP_WAIT_SECONDS = int(os.environ.get('BOOTSTRAP_WAIT_SECONDS', '180'))
+BOOTSTRAP_RETRY_INTERVAL = int(os.environ.get('BOOTSTRAP_RETRY_INTERVAL', '3'))
+
+
+def _detect_platform_agent() -> bool:
+  """仅当 agent.env 显式设置 PLATFORM_AGENT=1 时才视为控制面宿主机 Agent。"""
+  explicit = os.environ.get('PLATFORM_AGENT', '').strip().lower()
+  return explicit in ('1', 'true', 'yes')
+
+
+PLATFORM_AGENT = _detect_platform_agent()
 
 
 def bootstrap_url() -> str:
@@ -67,7 +78,7 @@ def persist_credentials() -> None:
         logger.debug('无法持久化 agent.env: %s', e)
 
 
-def try_refresh_credentials() -> bool:
+def try_refresh_credentials(*, allow_node_id_change: bool = False) -> bool:
     global NODE_ID, AGENT_TOKEN
     url = bootstrap_url()
     try:
@@ -85,11 +96,14 @@ def try_refresh_credentials() -> bool:
         if not new_id or not new_token:
             return False
         new_id = int(new_id)
-        if NODE_ID and NODE_ID != new_id:
+        can_change_id = allow_node_id_change or PLATFORM_AGENT
+        if NODE_ID and NODE_ID != new_id and not can_change_id:
             logger.debug('bootstrap nodeId=%s 与当前 NODE_ID=%s 不一致，跳过刷新', new_id, NODE_ID)
             return False
         if new_token == AGENT_TOKEN and new_id == NODE_ID:
-            return False
+            return True
+        if NODE_ID and NODE_ID != new_id:
+            logger.info('bootstrap 同步 nodeId %s -> %s', NODE_ID, new_id)
         NODE_ID = new_id
         AGENT_TOKEN = new_token
         logger.info('已从 bootstrap 刷新凭据 nodeId=%s', NODE_ID)
@@ -100,11 +114,29 @@ def try_refresh_credentials() -> bool:
     return False
 
 
-def is_token_auth_error(msg: str) -> bool:
+def is_credential_error(msg: str) -> bool:
     if not msg:
         return False
-    lowered = msg.lower()
-    return '令牌' in msg or 'token' in lowered and 'invalid' in lowered
+    text = str(msg)
+    if '节点不存在' in text:
+        return True
+    if '令牌' in text:
+        return True
+    lowered = text.lower()
+    return 'token' in lowered and 'invalid' in lowered
+
+
+def wait_for_platform_credentials() -> None:
+    """控制面 Agent 启动时等待 iot-node bootstrap 就绪并同步凭据。"""
+    if not PLATFORM_AGENT:
+        return
+    deadline = time.time() + BOOTSTRAP_WAIT_SECONDS
+    logger.info('控制面 Agent 等待 bootstrap 就绪（最长 %ss）...', BOOTSTRAP_WAIT_SECONDS)
+    while time.time() < deadline:
+        if try_refresh_credentials(allow_node_id_change=True):
+            return
+        time.sleep(BOOTSTRAP_RETRY_INTERVAL)
+    logger.warning('bootstrap 等待超时，将使用本地 agent.env 继续尝试注册')
 
 
 def get_gpu_info() -> List[Dict[str, Any]]:
@@ -173,9 +205,13 @@ def post_json(path: str, payload: Dict[str, Any], *, allow_refresh: bool = True)
             if data.get('code') == 0:
                 return True
             msg = data.get('msg', data)
-            if allow_refresh and is_token_auth_error(str(msg)) and try_refresh_credentials():
-                payload = {**payload, 'nodeId': NODE_ID, 'agentToken': AGENT_TOKEN}
-                return post_json(path, payload, allow_refresh=False)
+            if allow_refresh and is_credential_error(str(msg)):
+                node_missing = '节点不存在' in str(msg)
+                if try_refresh_credentials(
+                    allow_node_id_change=node_missing or PLATFORM_AGENT,
+                ):
+                    payload = {**payload, 'nodeId': NODE_ID, 'agentToken': AGENT_TOKEN}
+                    return post_json(path, payload, allow_refresh=False)
             logger.warning('请求失败 %s: %s', url, msg)
         else:
             logger.warning('HTTP %s: %s', resp.status_code, url)
@@ -214,7 +250,28 @@ def heartbeat_loop():
         time.sleep(HEARTBEAT_INTERVAL)
 
 
+def _wait_for_control_plane() -> None:
+    """iot-node 重启后再次尝试 bootstrap，避免使用过期凭据上报。"""
+    if not PLATFORM_AGENT:
+        return
+    deadline = time.time() + min(BOOTSTRAP_WAIT_SECONDS, 60)
+    url = bootstrap_url()
+    while time.time() < deadline:
+        if try_refresh_credentials(allow_node_id_change=True):
+            return
+        try:
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200 and (resp.json() or {}).get('code') == 0:
+                try_refresh_credentials(allow_node_id_change=True)
+                return
+        except Exception:
+            pass
+        time.sleep(BOOTSTRAP_RETRY_INTERVAL)
+
+
 def main():
+    wait_for_platform_credentials()
+    _wait_for_control_plane()
     if not NODE_ID or not AGENT_TOKEN:
         logger.error('请设置环境变量 NODE_ID 和 AGENT_TOKEN')
         sys.exit(1)

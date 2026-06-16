@@ -48,7 +48,10 @@ public class GlobalExceptionHandler {
     /**
      * 忽略的 ServiceException 错误提示，避免打印过多 logger
      */
-    public static final Set<String> IGNORE_ERROR_MESSAGES = SetUtils.asSet("无效的刷新令牌");
+    public static final Set<String> IGNORE_ERROR_MESSAGES = SetUtils.asSet(
+            "无效的刷新令牌",
+            "服务器节点不存在",
+            "Agent 认证令牌无效");
 
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     private final String applicationName;

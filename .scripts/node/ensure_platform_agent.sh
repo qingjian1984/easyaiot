@@ -96,10 +96,13 @@ write_agent_env() {
   local work_dir="$1" node_id="$2" agent_token="$3" port="$4"
   local cp_url="${EASYAIOT_AGENT_CONTROL_PLANE_URL:-${GATEWAY_URL%/}/admin-api/node/agent}"
   cat >"${work_dir}/agent.env" <<EOF
+PLATFORM_AGENT=1
 NODE_ID=${node_id}
 AGENT_TOKEN=${agent_token}
 CONTROL_PLANE_URL=${cp_url}
 HEARTBEAT_INTERVAL=10
+BOOTSTRAP_WAIT_SECONDS=${AGENT_BOOTSTRAP_WAIT_SECONDS}
+BOOTSTRAP_RETRY_INTERVAL=${AGENT_BOOTSTRAP_RETRY_INTERVAL}
 AGENT_LISTEN_HOST=0.0.0.0
 AGENT_LISTEN_PORT=${port}
 AI_ROOT=/opt/easyaiot/AI
@@ -173,6 +176,12 @@ resolve_credentials() {
 }
 
 stop_running_agent() {
+  if pkill -f '/opt/easyaiot/node-agent/run_agent.py' 2>/dev/null; then
+    sleep 1
+  fi
+  if pkill -f 'NODE/run_agent.py' 2>/dev/null; then
+    sleep 1
+  fi
   if [[ -f /etc/systemd/system/easyaiot-node-agent.service ]]; then
     if systemctl is-active easyaiot-node-agent >/dev/null 2>&1; then
       sudo systemctl stop easyaiot-node-agent 2>/dev/null || true
@@ -191,8 +200,34 @@ stop_running_agent() {
   fi
 }
 
+sync_agent_runtime_files() {
+  local work_dir="$1"
+  if [[ "$work_dir" != "$INSTALL_DIR" || ! -d "$SOURCE_DIR" ]]; then
+    return 0
+  fi
+  local f
+  for f in run_agent.py agent_server.py media_manager.py workload_manager.py; do
+    if [[ ! -f "${SOURCE_DIR}/${f}" ]]; then
+      continue
+    fi
+    if [[ -f "${INSTALL_DIR}/${f}" ]] && cmp -s "${SOURCE_DIR}/${f}" "${INSTALL_DIR}/${f}"; then
+      continue
+    fi
+    if cp "${SOURCE_DIR}/${f}" "${INSTALL_DIR}/${f}" 2>/dev/null \
+      || sudo cp "${SOURCE_DIR}/${f}" "${INSTALL_DIR}/${f}" 2>/dev/null; then
+      echo "[platform-agent] 已同步 ${f} -> ${INSTALL_DIR}/" >&2
+    fi
+  done
+}
+
+agent_code_stale() {
+  [[ -f "${SOURCE_DIR}/run_agent.py" && -f "${INSTALL_DIR}/run_agent.py" ]] || return 1
+  ! cmp -s "${SOURCE_DIR}/run_agent.py" "${INSTALL_DIR}/run_agent.py"
+}
+
 restart_agent_service() {
   local work_dir="$1"
+  sync_agent_runtime_files "$work_dir"
   stop_running_agent
   if [[ -f /etc/systemd/system/easyaiot-node-agent.service ]]; then
     if [[ -x "${INSTALL_DIR}/install.sh" ]]; then
@@ -247,19 +282,39 @@ main() {
     creds_changed=1
   fi
 
-  if is_port_listening "$AGENT_PORT" && [[ "$creds_changed" -eq 0 ]]; then
-    echo "[platform-agent] 端口 ${AGENT_PORT} 已有 Agent 监听且凭据一致，跳过"
-    exit 0
+  if is_port_listening "$AGENT_PORT" && [[ "$creds_changed" -eq 0 ]] && ! agent_code_stale; then
+    if [[ -f "${work_dir}/agent.env" ]] && grep -q '^PLATFORM_AGENT=1' "${work_dir}/agent.env" 2>/dev/null; then
+      echo "[platform-agent] 端口 ${AGENT_PORT} 已有 Agent 监听且凭据一致，跳过"
+      exit 0
+    fi
+    echo "[platform-agent] agent.env 缺少 PLATFORM_AGENT=1，将刷新并重启"
+    creds_changed=1
   fi
 
   if is_port_listening "$AGENT_PORT" && [[ "$creds_changed" -eq 1 ]]; then
     echo "[platform-agent] 检测到凭据变更，重启 Agent (nodeId=${node_id})"
   fi
 
-  write_agent_env "$work_dir" "$node_id" "$agent_token" "${port:-$AGENT_PORT}"
-  echo "[platform-agent] 已写入 ${work_dir}/agent.env (nodeId=${node_id})"
+  if is_port_listening "$AGENT_PORT" && agent_code_stale; then
+    echo "[platform-agent] 检测到 Agent 代码更新，将同步并重启"
+  fi
 
-  restart_agent_service "$work_dir"
+  local needs_env_write=0
+  if [[ "$creds_changed" -eq 1 ]]; then
+    needs_env_write=1
+  elif [[ ! -f "${work_dir}/agent.env" ]] \
+    || ! grep -q '^PLATFORM_AGENT=1' "${work_dir}/agent.env" 2>/dev/null; then
+    needs_env_write=1
+  fi
+
+  if [[ "$needs_env_write" -eq 1 ]]; then
+    write_agent_env "$work_dir" "$node_id" "$agent_token" "${port:-$AGENT_PORT}"
+    echo "[platform-agent] 已写入 ${work_dir}/agent.env (nodeId=${node_id})"
+  fi
+
+  if [[ "$needs_env_write" -eq 1 ]] || agent_code_stale; then
+    restart_agent_service "$work_dir"
+  fi
 }
 
 main "$@"
