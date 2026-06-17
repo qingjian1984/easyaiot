@@ -25,7 +25,7 @@ from app.utils.video_env import load_video_env
 from app.blueprints import camera, alert, snap, playback, record, algorithm_task, stream_forward, face
 
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-_lib_root = os.path.join(_repo_root, 'lib')
+_lib_root = os.path.join(_repo_root, '.scripts', 'lib')
 for _p in (_repo_root, _lib_root, os.path.dirname(os.path.abspath(__file__))):
     if _p not in sys.path:
         sys.path.append(_p)

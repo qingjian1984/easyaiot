@@ -37,7 +37,7 @@ import concurrent.futures
 video_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, video_root)
 _repo_root = os.path.abspath(os.path.join(video_root, '..'))
-_lib_root = os.path.join(_repo_root, 'lib')
+_lib_root = os.path.join(_repo_root, '.scripts', 'lib')
 for _p in (_lib_root,):
     if _p not in sys.path:
         sys.path.insert(0, _p)

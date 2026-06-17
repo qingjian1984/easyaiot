@@ -22,7 +22,7 @@ from sqlalchemy import text
 from app.utils.ai_env import load_ai_env
 
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-_lib_root = os.path.join(_repo_root, 'lib')
+_lib_root = os.path.join(_repo_root, '.scripts', 'lib')
 for _p in (_repo_root, _lib_root, os.path.dirname(os.path.abspath(__file__))):
     if _p not in sys.path:
         sys.path.append(_p)

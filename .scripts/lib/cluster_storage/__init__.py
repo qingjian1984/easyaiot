@@ -188,9 +188,9 @@ def _local_ai_root() -> str:
     env_root = (os.getenv('NODE_REMOTE_AI_ROOT') or os.getenv('AI_ROOT') or '').strip()
     if env_root:
         return env_root
-    # 从 lib/cluster_storage 向上两级到 repo 根，再进 AI
+    # 从 .scripts/lib/cluster_storage 向上三级到 repo 根，再进 AI
     here = os.path.dirname(os.path.abspath(__file__))
-    candidate = os.path.join(here, '..', '..', 'AI')
+    candidate = os.path.join(here, '..', '..', '..', 'AI')
     if os.path.isdir(candidate):
         return os.path.abspath(candidate)
     return os.path.abspath(os.path.join(os.getcwd(), 'AI'))
@@ -201,7 +201,7 @@ def _local_video_root() -> str:
     if env_root:
         return env_root
     here = os.path.dirname(os.path.abspath(__file__))
-    candidate = os.path.join(here, '..', '..', 'VIDEO')
+    candidate = os.path.join(here, '..', '..', '..', 'VIDEO')
     if os.path.isdir(candidate):
         return os.path.abspath(candidate)
     return os.path.abspath(os.path.join(os.getcwd(), 'VIDEO'))

@@ -3,9 +3,11 @@ import os
 import sys
 import unittest
 
-_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+_LIB_ROOT = os.path.join(_REPO_ROOT, '.scripts', 'lib')
+for _p in (_LIB_ROOT,):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from cluster_storage import (  # noqa: E402
     apply_cluster_env_defaults,

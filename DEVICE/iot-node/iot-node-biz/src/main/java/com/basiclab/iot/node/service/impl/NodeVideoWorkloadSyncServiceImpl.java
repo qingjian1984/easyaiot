@@ -114,16 +114,16 @@ public class NodeVideoWorkloadSyncServiceImpl implements NodeVideoWorkloadSyncSe
         return new ArrayList<>(paths);
     }
 
-    /** 同步仓库 lib/ 下的共享 Python 模块（cluster_storage、model_resolver）到计算节点 */
+    /** 同步仓库 .scripts/lib/ 下的共享 Python 模块（cluster_storage、model_resolver）到计算节点 */
     private void syncSharedLibModules(SshSessionHelper ssh, String videoSourceRoot) throws Exception {
         File videoDir = new File(videoSourceRoot);
         File repoRoot = videoDir.getParentFile();
         if (repoRoot == null) {
             return;
         }
-        File libDir = new File(repoRoot, "lib");
+        File libDir = new File(repoRoot, ".scripts/lib");
         if (!libDir.isDirectory()) {
-            log.debug("未找到 lib 目录，跳过共享模块同步 path={}", libDir.getAbsolutePath());
+            log.debug("未找到 .scripts/lib 目录，跳过共享模块同步 path={}", libDir.getAbsolutePath());
             return;
         }
         String remoteLibRoot = WorkloadBundleDeployUtil.REMOTE_LIB_ROOT;
