@@ -2094,6 +2094,7 @@ def on_dvr_callback():
     from app.services.media_kafka_service import (
         build_event_from_srs_hook,
         enqueue_srs_dvr_hook,
+        is_hybrid_upload_mode,
         is_kafka_upload_mode,
     )
 
@@ -2107,9 +2108,11 @@ def on_dvr_callback():
         device_id, _ = resolve_device_from_hook(data.get('stream', ''), data.get('file', ''))
         if is_kafka_upload_mode():
             enqueue_srs_dvr_hook(data, device_id=device_id)
-            return jsonify({'code': 0, 'msg': None})
+            if not is_hybrid_upload_mode():
+                return jsonify({'code': 0, 'msg': None})
         event = build_event_from_srs_hook(data, device_id=device_id)
-        process_dvr_event(event)
+        if is_hybrid_upload_mode() or not is_kafka_upload_mode():
+            process_dvr_event(event)
         return jsonify({'code': 0, 'msg': None})
     except Exception as e:
         logger.error(f"on_dvr回调处理失败: {str(e)}", exc_info=True)

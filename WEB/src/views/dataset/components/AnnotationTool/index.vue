@@ -81,7 +81,7 @@
           type="button"
           class="action-btn sam-bootstrap-btn"
           :disabled="batchTaskRunning"
-          title="智能标注流水线：SAM 冷启动 + YOLO 量产，无人值守采集标注打包"
+          title="SAM 冷启动批量标注，对数据集中已有图片生成初始标注"
           @click="openSamAutoLabelDrawer"
         >
           <Icon icon="ant-design:experiment-outlined"/>
@@ -92,6 +92,16 @@
             title="SAM 模型未安装，点击前往安装"
             @click.stop="openSamModelSetupPage"
           >!</span>
+        </button>
+        <button
+          type="button"
+          class="action-btn unattended-label-btn"
+          :disabled="batchTaskRunning"
+          title="选择摄像头抽帧任务，自动打标扩充本数据集"
+          @click="openUnattendedLabelDrawer"
+        >
+          <Icon icon="ant-design:cluster-outlined"/>
+          无人值守扩充
         </button>
         <span class="top-actions-divider"/>
         <Dropdown :trigger="['click']" placement="bottomRight">
@@ -457,6 +467,12 @@
       @open-frame-tasks="openManageDrawer('frame')"
       @open-auto-label="openAiBatchModal"
     />
+    <UnattendedLabelDrawer
+      @register="registerUnattendedDrawer"
+      :dataset-id="datasetId"
+      @success="onUnattendedLabelSuccess"
+      @open-frame-tasks="openManageDrawer('frame')"
+    />
     <ImportDatasetModal
       ref="importModalRef"
       :dataset-id="datasetId"
@@ -475,6 +491,7 @@
       :initial-tab="manageDrawerTab"
       :get-container="getModalContainer"
       @tags-changed="fetchLabels"
+      @open-unattended="openUnattendedLabelDrawer"
     />
   </div>
   </ConfigProvider>
@@ -518,6 +535,7 @@ import { getSamModelStatus } from '@/api/device/sam';
 import { useDrawer } from '@/components/Drawer';
 import AILabelModal from '@/views/dataset/components/AutoLabel/AILabelModal/index.vue';
 import SamAutoLabelDrawer from '@/views/dataset/components/AutoLabel/SamAutoLabelDrawer/index.vue';
+import UnattendedLabelDrawer from '@/views/dataset/components/AutoLabel/UnattendedLabelDrawer/index.vue';
 import ImportDatasetModal from '@/views/dataset/components/AutoLabel/ImportDatasetModal/index.vue';
 import ExportDatasetModal from '@/views/dataset/components/AutoLabel/ExportDatasetModal/index.vue';
 import DatasetImageModal from '@/views/dataset/components/DatasetImageModal/index.vue';
@@ -579,6 +597,7 @@ async function refreshSyncCheck() {
 }
 const aiLabelModalRef = ref<InstanceType<typeof AILabelModal> | null>(null);
 const [registerSamDrawer, { openDrawer: openSamDrawer }] = useDrawer();
+const [registerUnattendedDrawer, { openDrawer: openUnattendedDrawer }] = useDrawer();
 const samModelChecked = ref(false);
 const samModelReady = ref(false);
 const importModalRef = ref<InstanceType<typeof ImportDatasetModal> | null>(null);
@@ -2129,6 +2148,14 @@ async function openSamAutoLabelDrawer(): Promise<void> {
     return;
   }
   openSamDrawer(true);
+}
+
+function openUnattendedLabelDrawer(): void {
+  openUnattendedDrawer(true);
+}
+
+async function onUnattendedLabelSuccess(): Promise<void> {
+  await fetchImages();
 }
 
 function openSamModelSetupPage(): void {

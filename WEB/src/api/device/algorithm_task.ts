@@ -99,6 +99,8 @@ export interface AlgorithmTask {
   defense_schedule?: string | number[][]; // 布防时段: JSON字符串或二维数组，7天×24小时
   /** 调度策略: local(本机) | auto(自动调度) | node(指定节点) */
   schedule_policy?: 'local' | 'auto' | 'node';
+  /** 自动调度时是否优先 GPU 节点 */
+  prefer_gpu?: boolean;
   /** 指定部署节点 ID（schedule_policy=node 时） */
   target_node_id?: number | null;
   /** 实际运行节点 ID（只读，启动后由控制面写入） */

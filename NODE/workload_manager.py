@@ -5,12 +5,19 @@ import logging
 import os
 import socket
 import subprocess
+import sys
 import threading
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import psutil
+
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+_lib_root = os.path.join(_repo_root, 'lib')
+for _p in (_lib_root,):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 logger = logging.getLogger('easyaiot-node-agent.workload')
 
@@ -144,7 +151,18 @@ def _terminate_process_tree(pid: int):
 
 
 def _ensure_model_local(model_path: str, model_id: str) -> Optional[str]:
-    """若 MODEL_PATH 为 MinIO URL 则下载到本地。"""
+    """若 MODEL_PATH 为 MinIO URL 则下载到本地；集群模式优先读 CephFS 共享缓存。"""
+    try:
+        mid = int(model_id)
+        if mid > 0:
+            from model_resolver import try_resolve_cluster_model_path
+            cluster_path = try_resolve_cluster_model_path(mid)
+            if cluster_path:
+                logger.info('使用集群共享模型 model_id=%s path=%s', model_id, cluster_path)
+                return cluster_path
+    except (ImportError, ValueError, TypeError):
+        pass
+
     if not model_path.startswith('/api/v1/buckets/') and not model_path.startswith('http'):
         if os.path.isabs(model_path) and os.path.exists(model_path):
             return model_path
@@ -164,7 +182,14 @@ def _ensure_model_local(model_path: str, model_id: str) -> Optional[str]:
             return model_path
 
         ai_root = os.environ.get('AI_ROOT', '/opt/easyaiot/AI')
-        storage_dir = os.path.join(ai_root, 'data', 'models', str(model_id))
+        models_base = os.environ.get('AI_MODELS_DIR', '').strip()
+        if not models_base:
+            try:
+                from cluster_storage import get_ai_models_dir
+                models_base = get_ai_models_dir()
+            except ImportError:
+                models_base = os.path.join(ai_root, 'data', 'models')
+        storage_dir = os.path.join(models_base, str(model_id))
         os.makedirs(storage_dir, exist_ok=True)
         filename = os.path.basename(object_key) or f'model_{model_id}'
         local_path = os.path.join(storage_dir, filename)

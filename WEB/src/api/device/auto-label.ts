@@ -106,6 +106,7 @@ export interface StartSamPipelineParams {
   model_id?: number;
 }
 
+/** 无人值守扩充：多路摄像头分布式自动打标，写入指定数据集 */
 export const startSamPipeline = (datasetId: number, data: StartSamPipelineParams) => {
   return commonApi('post', `${Api.AutoLabel}/dataset/${datasetId}/auto-label/pipeline/start`, { data });
 };

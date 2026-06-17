@@ -30,8 +30,12 @@ public class NodeSchedulerAllocateReqVO {
         private List<String> capabilities;
         private Integer gpuCount;
         private Integer minGpuMemMb;
+        /** 是否优先调度 GPU 节点（未指定时使用全局默认） */
+        private Boolean preferGpu;
         private String region;
         private List<Long> excludeNodeIds;
+        /** 是否要求节点 CephFS 已挂载就绪（集群算法/模型共享存储） */
+        private Boolean requireCephMount;
     }
 
 }

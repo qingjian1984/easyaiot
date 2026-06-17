@@ -111,5 +111,18 @@ const markSize = computed(() => (props.size === 'lg' ? 20 : 16));
       background: @node-hybrid-badge;
     }
   }
+
+  &--storage {
+    color: @node-storage-server;
+
+    .node-server-icon__body {
+      color: @node-storage-server;
+      filter: drop-shadow(0 4px 8px @node-storage-shadow);
+    }
+
+    .node-server-icon__role-mark {
+      background: @node-storage-badge;
+    }
+  }
 }
 </style>

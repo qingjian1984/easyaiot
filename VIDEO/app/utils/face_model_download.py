@@ -42,6 +42,22 @@ def _onnx_partial_path() -> str:
     return f'{FACE_MATCH_MODEL_PATH}.downloading'
 
 
+def _prepare_model_target() -> None:
+    """确保模型目标为可写文件路径，修复 Docker 文件挂载误建目录的情况。"""
+    if os.path.isdir(FACE_MATCH_MODEL_PATH):
+        try:
+            os.rmdir(FACE_MATCH_MODEL_PATH)
+        except OSError as exc:
+            raise RuntimeError(
+                f'模型目标 {FACE_MATCH_MODEL_PATH} 是目录而非文件（多为 Docker 将 '
+                f'{os.path.basename(FACE_MATCH_MODEL_PATH)} 单独挂载为卷时宿主机文件不存在导致）。'
+                f'请在宿主机 VIDEO 目录执行: rm -rf {os.path.basename(FACE_MATCH_MODEL_PATH)}，'
+                '然后重新下载模型。'
+            ) from exc
+    parent = os.path.dirname(FACE_MATCH_MODEL_PATH) or '.'
+    os.makedirs(parent, exist_ok=True)
+
+
 def _get_zip_partial_bytes() -> int:
     path = _zip_partial_path()
     if not os.path.isfile(path):
@@ -305,7 +321,7 @@ def _do_download() -> None:
                 _state['downloaded_bytes'] = 0
                 _state['total_bytes'] = ESTIMATED_ZIP_SIZE_BYTES
 
-        os.makedirs(os.path.dirname(FACE_MATCH_MODEL_PATH) or '.', exist_ok=True)
+        _prepare_model_target()
 
         if not zip_complete:
             _download_with_progress(FACE_REC_DOWNLOAD_URL, zip_path)

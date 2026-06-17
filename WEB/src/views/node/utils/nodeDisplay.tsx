@@ -1,6 +1,6 @@
 import { h, type VNode } from 'vue';
 import type { ComputeNodeVO } from '@/api/device/node';
-import { NODE_ROLE_MAP, NODE_STATUS_MAP, NODE_TERM, SETUP_COPY } from './constants';
+import { NODE_ROLE_MAP, NODE_STATUS_MAP, NODE_TERM, SETUP_COPY, CEPH_MOUNT_LABELS, readCephMountFromTags, type CephMountStatus } from './constants';
 import { isPlatformNode } from './platformNode';
 
 type SshCredentialNode = Pick<ComputeNodeVO, 'sshUsername' | 'sshCredentialConfigured'>;
@@ -30,7 +30,9 @@ function resolveStatusKey(status?: string) {
 }
 
 function resolveRoleKey(role?: string) {
-  return role === 'media' || role === 'hybrid' || role === 'compute' ? role : 'compute';
+  return role === 'media' || role === 'hybrid' || role === 'gpu' || role === 'storage' || role === 'compute'
+    ? role
+    : 'compute';
 }
 
 export function renderNodeStatusBadge(status?: string) {
@@ -57,6 +59,19 @@ export function renderNodeReadinessBadge(ready: boolean) {
 
 export function renderPlatformNodeBadge() {
   return h('span', { class: 'node-meta-badge node-meta-badge--scope-control-plane' }, NODE_TERM.controlPlaneNode);
+}
+
+function cephBadgeClass(status: CephMountStatus): string {
+  if (status === 'ready') return 'node-meta-badge--ceph-ready';
+  if (status === 'not_ready') return 'node-meta-badge--ceph-not-ready';
+  return 'node-meta-badge--ceph-unknown';
+}
+
+export function renderCephMountBadge(tags?: Record<string, string | undefined>) {
+  const { status, mountPath } = readCephMountFromTags(tags);
+  const label = CEPH_MOUNT_LABELS[status];
+  const title = mountPath ? `${label} · ${mountPath}` : label;
+  return h('span', { class: `node-meta-badge ${cephBadgeClass(status)}`, title }, label);
 }
 
 export function renderNodeNameWithPlatformBadge(

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -80,6 +81,7 @@ public class NodeVideoWorkloadSyncServiceImpl implements NodeVideoWorkloadSyncSe
                     throw exception(VIDEO_SOURCE_NOT_FOUND);
                 }
             }
+            syncSharedLibModules(ssh, sourceRoot);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
@@ -102,6 +104,7 @@ public class NodeVideoWorkloadSyncServiceImpl implements NodeVideoWorkloadSyncSe
         } else if ("algorithm_task".equals(t)) {
             paths.addAll(WorkloadBundleDeployUtil.syncScriptRelativePaths(WorkloadBundleTypeEnum.ALGORITHM_REALTIME));
             paths.addAll(WorkloadBundleDeployUtil.syncScriptRelativePaths(WorkloadBundleTypeEnum.ALGORITHM_SNAP));
+            paths.addAll(WorkloadBundleDeployUtil.syncScriptRelativePaths(WorkloadBundleTypeEnum.ALGORITHM_PATROL));
         } else {
             WorkloadBundleTypeEnum bundle = WorkloadBundleTypeEnum.of(t);
             if (bundle != null && "VIDEO".equals(bundle.getModule())) {
@@ -109,6 +112,35 @@ public class NodeVideoWorkloadSyncServiceImpl implements NodeVideoWorkloadSyncSe
             }
         }
         return new ArrayList<>(paths);
+    }
+
+    /** 同步仓库 lib/ 下的共享 Python 模块（cluster_storage、model_resolver）到计算节点 */
+    private void syncSharedLibModules(SshSessionHelper ssh, String videoSourceRoot) throws Exception {
+        File videoDir = new File(videoSourceRoot);
+        File repoRoot = videoDir.getParentFile();
+        if (repoRoot == null) {
+            return;
+        }
+        File libDir = new File(repoRoot, "lib");
+        if (!libDir.isDirectory()) {
+            log.debug("未找到 lib 目录，跳过共享模块同步 path={}", libDir.getAbsolutePath());
+            return;
+        }
+        String remoteLibRoot = WorkloadBundleDeployUtil.REMOTE_LIB_ROOT;
+        ssh.ensureRemoteDir(remoteLibRoot);
+        for (String module : Arrays.asList("cluster_storage", "model_resolver")) {
+            File localModule = new File(libDir, module);
+            if (!localModule.isDirectory()) {
+                continue;
+            }
+            String remoteModule = remoteLibRoot + "/" + module;
+            ssh.uploadDirectoryRecursive(
+                    localModule,
+                    remoteModule,
+                    WorkloadBundleDeployUtil::shouldSkipDirectory,
+                    WorkloadBundleDeployUtil::shouldSkipFile);
+            log.info("已同步共享 lib 模块 {} -> {}", module, remoteModule);
+        }
     }
 
     private String resolveVideoSourceRoot() {

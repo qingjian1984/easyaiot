@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DVR Upload Worker：消费 media.dvr.completed，上传 MinIO 并清理 GlusterFS 本地段。
+DVR Upload Worker：消费 media.dvr.completed，上传 MinIO 并清理 CephFS 本地段。
 """
 import json
 import logging

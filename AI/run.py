@@ -21,7 +21,11 @@ from sqlalchemy import text
 
 from app.utils.ai_env import load_ai_env
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+_lib_root = os.path.join(_repo_root, 'lib')
+for _p in (_repo_root, _lib_root, os.path.dirname(os.path.abspath(__file__))):
+    if _p not in sys.path:
+        sys.path.append(_p)
 
 # 设置multiprocessing启动方法为'spawn'以支持CUDA
 # 这必须在导入使用multiprocessing的模块之前设置
@@ -256,6 +260,22 @@ def create_app():
     app.config['PREFERRED_URL_SCHEME'] = os.getenv('FLASK_PREFERRED_URL_SCHEME', 'http')
     print(f"✅ Flask URL配置: SERVER_NAME={server_name or '(未设置，从请求推断)'}, APPLICATION_ROOT={app.config['APPLICATION_ROOT']}, PREFERRED_URL_SCHEME={app.config['PREFERRED_URL_SCHEME']}")
 
+    try:
+        from cluster_storage import apply_cluster_env_defaults, ensure_cluster_dirs, get_ai_datasets_dir, get_ai_models_dir, is_cluster_mode
+        applied = apply_cluster_env_defaults()
+        if applied:
+            print(f'✅ 集群存储环境已应用: {", ".join(applied.keys())}')
+        if is_cluster_mode():
+            ensure_cluster_dirs()
+            app.config['CLUSTER_MODE'] = True
+            datasets_dir = get_ai_datasets_dir()
+            models_dir = get_ai_models_dir()
+            os.makedirs(datasets_dir, exist_ok=True)
+            os.makedirs(models_dir, exist_ok=True)
+            os.makedirs(os.path.join(datasets_dir, 'uploads'), exist_ok=True)
+    except ImportError:
+        pass
+
     # 创建数据目录
     os.makedirs('data/uploads', exist_ok=True)
     os.makedirs('data/datasets', exist_ok=True)
@@ -291,9 +311,11 @@ def create_app():
                 AutoLabelResult,
                 AutoLabelModelHistory,
                 ensure_model_table_status_column,
+                ensure_model_origin_columns,
                 ensure_model_class_columns,
                 ensure_train_task_name_column,
                 ensure_train_task_dataset_columns,
+                ensure_train_task_cluster_columns,
                 ensure_auto_label_task_model_id_column,
                 ensure_auto_label_task_sam_columns,
                 ensure_auto_label_task_pipeline_column,
@@ -304,9 +326,11 @@ def create_app():
             )
             db.create_all()
             ensure_model_table_status_column(db.engine)
+            ensure_model_origin_columns(db.engine)
             ensure_model_class_columns(db.engine)
             ensure_train_task_name_column(db.engine)
             ensure_train_task_dataset_columns(db.engine)
+            ensure_train_task_cluster_columns(db.engine)
             ensure_auto_label_task_model_id_column(db.engine)
             ensure_auto_label_task_sam_columns(db.engine)
             ensure_auto_label_task_pipeline_column(db.engine)

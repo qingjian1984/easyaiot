@@ -79,7 +79,7 @@ const canAutoDeploy = computed(
 );
 
 const autoDisabledReason = computed(() => {
-  if (!guide.value.isReady) return '请先在节点配置中填写主机地址与流媒体服务端口';
+  if (!guide.value.isReady) return '请先在节点配置中填写主机地址与流媒体引擎端口';
   if (!props.formValues?.nodeId) return '请先保存节点信息';
   if (!props.formValues?.sshUsername?.trim() && props.formValues?.sshCredentialConfigured !== true) {
     return '请先在节点配置中填写 SSH 用户名及认证凭据';

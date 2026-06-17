@@ -17,6 +17,7 @@ public final class WorkloadBundleDeployUtil {
 
     public static final String REMOTE_VIDEO_ROOT = "/opt/easyaiot/VIDEO";
     public static final String REMOTE_AI_ROOT = "/opt/easyaiot/AI";
+    public static final String REMOTE_LIB_ROOT = "/opt/easyaiot/lib";
     public static final String BUNDLE_SUBDIR = ".bundles";
     public static final String PIP_WHEELS_DIR = "pip-wheels";
     public static final String EXPORT_PIP_WHEELS_SCRIPT = "export_node_pip_wheels.sh";
@@ -56,8 +57,12 @@ public final class WorkloadBundleDeployUtil {
                 return "requirements-node-algorithm-realtime.txt";
             case ALGORITHM_SNAP:
                 return "requirements-node-algorithm-snap.txt";
+            case ALGORITHM_PATROL:
+                return "requirements-node-algorithm-patrol.txt";
             case AI_SERVICE:
                 return "requirements-node-ai-service.txt";
+            case MODEL_TRAIN:
+                return "requirements-node-model-train.txt";
             default:
                 throw new IllegalArgumentException("unknown bundle: " + bundle);
         }
@@ -88,6 +93,12 @@ public final class WorkloadBundleDeployUtil {
                         "app",
                         "services/snapshot_algorithm_service"
                 );
+            case ALGORITHM_PATROL:
+                return Arrays.asList(
+                        "models.py",
+                        "app",
+                        "services/patrol_algorithm_service"
+                );
             case AI_SERVICE:
                 return Arrays.asList(
                         "db_models.py",
@@ -96,6 +107,8 @@ public final class WorkloadBundleDeployUtil {
                 );
             case AUTO_LABEL:
                 return syncAutoLabelRelativePaths();
+            case MODEL_TRAIN:
+                return syncModelTrainRelativePaths();
             default:
                 return Collections.emptyList();
         }
@@ -110,10 +123,14 @@ public final class WorkloadBundleDeployUtil {
                 return "services/realtime_algorithm_service/run_deploy.py";
             case ALGORITHM_SNAP:
                 return "services/snapshot_algorithm_service/run_deploy.py";
+            case ALGORITHM_PATROL:
+                return "services/patrol_algorithm_service/run_deploy.py";
             case AI_SERVICE:
                 return "services/ai_service/run_deploy.py";
             case AUTO_LABEL:
                 return "services/auto_label_worker/run_worker.py";
+            case MODEL_TRAIN:
+                return "services/train_worker/run_worker.py";
             default:
                 return "";
         }
@@ -130,9 +147,12 @@ public final class WorkloadBundleDeployUtil {
                 return launcher + " -c \"import cv2, flask, sqlalchemy, requests; print('OK')\"";
             case ALGORITHM_REALTIME:
             case ALGORITHM_SNAP:
+            case ALGORITHM_PATROL:
                 return launcher + " -c \"import cv2, flask, sqlalchemy, onnxruntime; print('OK')\"";
             case AI_SERVICE:
                 return launcher + " -c \"import flask, cv2, numpy, onnxruntime; print('OK')\"";
+            case MODEL_TRAIN:
+                return launcher + " -c \"import torch, ultralytics, yaml; print('OK')\"";
             default:
                 return launcher + " -c \"print('OK')\"";
         }
@@ -183,7 +203,8 @@ public final class WorkloadBundleDeployUtil {
     public static boolean requiresAiSync(String workloadType) {
         String t = workloadType == null ? "" : workloadType.trim().toLowerCase(Locale.ROOT);
         return WorkloadBundleTypeEnum.AI_SERVICE.getType().equals(t)
-                || WorkloadBundleTypeEnum.AUTO_LABEL.getType().equals(t);
+                || WorkloadBundleTypeEnum.AUTO_LABEL.getType().equals(t)
+                || WorkloadBundleTypeEnum.MODEL_TRAIN.getType().equals(t);
     }
 
     /** 自动标注 Worker 需同步的源码路径（相对 AI 根目录） */
@@ -192,6 +213,16 @@ public final class WorkloadBundleDeployUtil {
                 "db_models.py",
                 "app",
                 "services/auto_label_worker"
+        );
+    }
+
+    /** 模型训练 Worker 需同步的源码路径（相对 AI 根目录） */
+    public static List<String> syncModelTrainRelativePaths() {
+        return Arrays.asList(
+                "db_models.py",
+                "run.py",
+                "app",
+                "services/train_worker"
         );
     }
 }

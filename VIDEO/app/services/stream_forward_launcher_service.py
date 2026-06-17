@@ -563,12 +563,14 @@ def _allocate_stream_forward_node(
     full_excludes = _merge_exclude_node_ids(base_excludes, spread_excludes)
 
     sticky = not fresh_allocate
+    prefer_gpu = getattr(task, 'prefer_gpu', True)
     try:
         return node_client.allocate_node(
             WORKLOAD_TYPE_STREAM_FORWARD,
             workload_id,
             capabilities=['stream_forward', 'srs_live'],
             gpu_count=1,
+            prefer_gpu=prefer_gpu,
             target_node_id=target_node_id if policy == 'node' else None,
             sticky=sticky,
             exclude_node_ids=full_excludes,
@@ -584,6 +586,7 @@ def _allocate_stream_forward_node(
                 workload_id,
                 capabilities=['stream_forward', 'srs_live'],
                 gpu_count=1,
+                prefer_gpu=prefer_gpu,
                 target_node_id=target_node_id if policy == 'node' else None,
                 sticky=sticky,
                 exclude_node_ids=base_excludes,

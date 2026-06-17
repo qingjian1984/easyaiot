@@ -28,7 +28,7 @@ public class ComputeNodeSaveReqVO {
     @Schema(description = "Agent 端口", example = "9100")
     private Integer agentPort;
 
-    @Schema(description = "节点角色: compute | media | hybrid", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "节点角色: compute | gpu | media | storage | hybrid", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "节点角色不能为空")
     private String nodeRole;
 

@@ -176,6 +176,9 @@ def deploy_model_route():
         start_port = int(data.get('start_port', 8000))
         target_node_id = data.get('target_node_id')
         auto_schedule = bool(data.get('auto_schedule', False))
+        prefer_gpu = data.get('prefer_gpu')
+        if prefer_gpu is not None:
+            prefer_gpu = bool(prefer_gpu)
         if target_node_id is not None:
             target_node_id = int(target_node_id)
 
@@ -190,6 +193,7 @@ def deploy_model_route():
             start_port,
             target_node_id=target_node_id,
             auto_schedule=auto_schedule,
+            prefer_gpu=prefer_gpu,
         )
         return jsonify(result)
 

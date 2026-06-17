@@ -40,6 +40,86 @@ train_processes = {}
 ACTIVE_TRAIN_STATUSES = ('preparing', 'train', 'Train', 'running', 'stopping')
 
 
+def _is_stop_requested(task_id, train_task=None) -> bool:
+    if train_status.get(task_id, {}).get('stop_requested'):
+        return True
+    if train_task is not None and (train_task.status or '').lower() == 'stopping':
+        return True
+    return False
+
+
+def _apply_train_schedule_fields(train_task: TrainTask, data: dict) -> None:
+    from app.services.train_launcher_service import resolve_schedule_policy
+
+    explicit_policy = data.get('schedulePolicy') or data.get('schedule_policy')
+    train_task.schedule_policy = resolve_schedule_policy(explicit_policy)
+    raw_target = data.get('targetNodeId') if 'targetNodeId' in data else data.get('target_node_id')
+    if raw_target is not None and str(raw_target).strip() != '':
+        train_task.target_node_id = int(raw_target)
+    elif train_task.schedule_policy != 'node':
+        train_task.target_node_id = None
+
+
+def _start_train_execution(
+    train_task: TrainTask,
+    *,
+    task_id: int,
+    epochs,
+    model_arch,
+    img_size,
+    batch_size,
+    use_gpu,
+    dataset_zip_path,
+    request_gpu_ids,
+    dataset_source,
+    is_resume: bool,
+) -> tuple[bool, str]:
+    """本机线程或集群远程下发训练。"""
+    from app.services.train_launcher_service import dispatch_train_to_node, use_remote_deploy
+
+    train_status[task_id] = {
+        'status': 'preparing',
+        'message': '准备训练数据...',
+        'progress': 0,
+        'log': '',
+        'stop_requested': False,
+    }
+
+    if use_remote_deploy(train_task.schedule_policy):
+        ok, msg = dispatch_train_to_node(
+            train_task,
+            epochs=int(epochs),
+            model_arch=model_arch,
+            img_size=int(img_size),
+            batch_size=int(batch_size),
+            use_gpu=bool(use_gpu),
+            dataset_zip_path=dataset_zip_path,
+            dataset_source=dataset_source,
+            resume_mode=is_resume,
+            gpu_ids=request_gpu_ids,
+        )
+        if not ok:
+            train_task.status = 'error'
+            train_task.train_log = (train_task.train_log or '') + f'集群调度失败: {msg}\n'
+            db.session.commit()
+            train_status.pop(task_id, None)
+            return False, msg
+        train_status[task_id]['message'] = msg
+        return True, msg
+
+    train_thread = threading.Thread(
+        target=train_model,
+        args=(
+            task_id, epochs, model_arch, img_size, batch_size,
+            use_gpu, dataset_zip_path, train_task.id, request_gpu_ids, dataset_source,
+            is_resume,
+        ),
+    )
+    train_thread.daemon = True
+    train_thread.start()
+    return True, '训练已启动'
+
+
 def _build_train_hyperparameters(
     epochs,
     model_arch,
@@ -434,7 +514,7 @@ def _persist_stop_checkpoint(train_task, model_dir, completed_epochs, update_log
 def _is_uploaded_dataset_zip(path: str) -> bool:
     if not path or not os.path.isfile(path):
         return False
-    uploads_root = os.path.join(get_project_root(), 'data', 'datasets', 'uploads')
+    uploads_root = os.path.join(get_datasets_root(), 'uploads')
     try:
         return os.path.commonpath([
             os.path.abspath(path),
@@ -524,7 +604,7 @@ def api_upload_train_dataset():
             'msg': '数据集压缩包不能超过 5GB',
         }), 400
 
-    upload_dir = os.path.join(get_project_root(), 'data', 'datasets', 'uploads')
+    upload_dir = os.path.join(get_datasets_root(), 'uploads')
     os.makedirs(upload_dir, exist_ok=True)
     unique_name = f'{uuid.uuid4().hex}.zip'
     local_path = os.path.join(upload_dir, unique_name)
@@ -570,10 +650,18 @@ def api_start_train():
         use_gpu = data.get('use_gpu', True)
         request_gpu_ids = normalize_request_gpu_ids(data.get('gpu_ids'))
 
+        schedule_data = data
+
         if not dataset_zip_path:
             return jsonify({'success': False, 'code': 400, 'msg': '缺少数据集路径'}), 400
+
+        from app.services.train_launcher_service import resolve_schedule_policy, use_remote_deploy
+        resolved_policy = resolve_schedule_policy(
+            data.get('schedulePolicy') or data.get('schedule_policy')
+        )
         if dataset_source == 'local' and not os.path.exists(dataset_zip_path):
-            return jsonify({'success': False, 'code': 400, 'msg': '本地数据集文件不存在，请重新上传'}), 400
+            if not use_remote_deploy(resolved_policy):
+                return jsonify({'success': False, 'code': 400, 'msg': '本地数据集文件不存在，请重新上传'}), 400
 
         if record_id:
             train_task = TrainTask.query.get(record_id)
@@ -587,7 +675,7 @@ def api_start_train():
                     return jsonify({'success': False, 'code': 0, 'msg': '该训练任务已在进行中'}), 200
 
                 task_base_name = task_name or resolve_task_base_name(train_task)
-                model_dir = os.path.join(get_project_root(), 'data/datasets', f'train_{train_task.id}')
+                model_dir = get_train_task_dir(train_task.id)
 
                 if is_resume:
                     if train_task.status != 'stopped':
@@ -633,6 +721,7 @@ def api_start_train():
                         train_task.dataset_version,
                         train_task.id,
                     )
+                    _apply_train_schedule_fields(train_task, schedule_data)
                     db.session.commit()
                 else:
                     train_task.dataset_path = dataset_zip_path
@@ -659,6 +748,7 @@ def api_start_train():
                         train_task.id,
                     )
                     _clear_train_results_dirs(model_dir)
+                    _apply_train_schedule_fields(train_task, schedule_data)
                     db.session.commit()
                 is_new_record = False
 
@@ -683,6 +773,7 @@ def api_start_train():
             train_task.name = build_train_task_name(
                 task_base_name, dataset_name, dataset_version, train_task.id
             )
+            _apply_train_schedule_fields(train_task, schedule_data)
             db.session.commit()
             is_new_record = True
 
@@ -693,29 +784,33 @@ def api_start_train():
         if is_resume:
             dataset_zip_path = dataset_zip_path or train_task.dataset_path
 
-        train_status[task_id] = {
-            'status': 'preparing',
-            'message': '准备训练数据...',
-            'progress': 0,
-            'log': '',
-            'stop_requested': False
-        }
+        _apply_train_schedule_fields(train_task, schedule_data)
+        db.session.commit()
 
-        train_thread = threading.Thread(
-            target=train_model,
-            args=(task_id, epochs, model_arch, img_size, batch_size,
-                  use_gpu, dataset_zip_path, train_task.id, request_gpu_ids, dataset_source,
-                  is_resume)
+        ok, launch_msg = _start_train_execution(
+            train_task,
+            task_id=task_id,
+            epochs=epochs,
+            model_arch=model_arch,
+            img_size=img_size,
+            batch_size=batch_size,
+            use_gpu=use_gpu,
+            dataset_zip_path=dataset_zip_path,
+            request_gpu_ids=request_gpu_ids,
+            dataset_source=dataset_source,
+            is_resume=is_resume,
         )
-        train_thread.daemon = True
-        train_thread.start()
+        if not ok:
+            return jsonify({'success': False, 'code': 400, 'msg': launch_msg}), 400
 
-        start_msg = '训练已继续' if is_resume else ('重新训练已启动' if record_id else '训练已启动')
+        start_msg = launch_msg if launch_msg != '训练已启动' else (
+            '训练已继续' if is_resume else ('重新训练已启动' if record_id else '训练已启动')
+        )
         return jsonify({
             'success': True,
             'code': 0,
             'msg': start_msg,
-            'record_id': train_task.id  # 返回记录ID给前端
+            'record_id': train_task.id
         }), 200
     except Exception as e:
         # 如果创建了训练记录但在启动线程前失败，需要回滚或删除记录
@@ -742,6 +837,24 @@ def get_project_root():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 
 
+def get_datasets_root():
+    """训练数据集根目录（集群模式下为 CephFS 共享路径）。"""
+    try:
+        from cluster_storage import get_ai_datasets_dir
+        return get_ai_datasets_dir()
+    except ImportError:
+        return os.path.join(get_project_root(), 'data', 'datasets')
+
+
+def get_train_task_dir(task_id):
+    """单个训练任务的工作目录。"""
+    try:
+        from cluster_storage import get_ai_train_dir
+        return get_ai_train_dir(task_id)
+    except ImportError:
+        return os.path.join(get_project_root(), 'data', 'datasets', f'train_{task_id}')
+
+
 def recover_stale_train_tasks(app=None):
     """
     服务重启后，将数据库中仍为进行中、但本进程无训练线程的任务标记为失败。
@@ -765,7 +878,9 @@ def recover_stale_train_tasks(app=None):
         for task in stale_tasks:
             if task.id in train_status:
                 continue
-            model_dir = os.path.join(get_project_root(), 'data/datasets', f'train_{task.id}')
+            if task.node_id and (task.status or '').lower() in ACTIVE_TRAIN_STATUSES:
+                continue
+            model_dir = get_train_task_dir(task.id)
             checkpoint_path = _resolve_resume_checkpoint(task, model_dir)
             if checkpoint_path:
                 completed_epochs = _get_completed_epochs(task.hyperparameters)
@@ -862,19 +977,26 @@ def _resolve_pretrained_model_path(model_arch: str, task_id: int):
 def api_stop_train(task_id):
     update_log(f"收到停止训练请求，任务ID: {task_id}", task_id)
 
+    train_task = TrainTask.query.get(task_id)
+
     if task_id in train_status:
         train_status[task_id]['stop_requested'] = True
         train_status[task_id]['status'] = 'stopping'
         train_status[task_id]['message'] = '正在停止训练...'
         update_log("设置停止请求标志", task_id)
 
-        if task_id in train_processes:
-            pass
+        if train_task and train_task.node_id:
+            from app.services.train_launcher_service import stop_remote_train
+            stop_remote_train(train_task)
 
         return jsonify({'success': True, 'code': 0, 'msg': '停止请求已发送'}), 200
 
-    train_task = TrainTask.query.get(task_id)
     if train_task and train_task.status in ACTIVE_TRAIN_STATUSES:
+        if train_task.node_id:
+            from app.services.train_launcher_service import stop_remote_train
+            stop_remote_train(train_task)
+            return jsonify({'success': True, 'code': 0, 'msg': '已向远程训练节点发送停止请求'}), 200
+
         stop_msg = (
             f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
             "训练已停止（训练进程不在当前服务实例中）。"
@@ -891,11 +1013,22 @@ def api_stop_train(task_id):
 
 @train_bp.route('/<int:task_id>/status')
 def api_train_status(task_id):
-    status = train_status.get(task_id, {
-        'status': 'idle',
-        'message': '等待开始',
-        'progress': 0
-    })
+    if task_id in train_status:
+        status = train_status[task_id]
+    else:
+        train_task = TrainTask.query.get(task_id)
+        if train_task:
+            status = {
+                'status': train_task.status or 'idle',
+                'message': '远程训练中' if train_task.node_id else '等待开始',
+                'progress': train_task.progress or 0,
+            }
+        else:
+            status = {
+                'status': 'idle',
+                'message': '等待开始',
+                'progress': 0,
+            }
     return jsonify({'status': status, 'code': 0, 'msg': 'success'}), 200
 
 
@@ -983,7 +1116,7 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
             task_label = train_task.name if train_task and train_task.name else f'任务{task_id}'
             update_log_local(f"开始准备训练数据，任务: {task_label}")
 
-            if train_status.get(task_id, {}).get('stop_requested'):
+            if _is_stop_requested(task_id, train_task):
                 log_msg = '训练已停止'
                 train_status[task_id] = {
                     'status': 'stopped',
@@ -995,7 +1128,7 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                 return
 
             # 支持 YOLO 标准目录（images/labels + data.yaml）与 COCO 原生（path + 外层 yaml）
-            model_dir = os.path.join(get_project_root(), 'data/datasets', f'train_{task_id}')
+            model_dir = get_train_task_dir(task_id)
             model_dir_for_cleanup = model_dir
             dataset_path_for_cleanup = dataset_zip_path
             data_yaml_path = os.path.join(model_dir, 'data.yaml')
@@ -1028,7 +1161,7 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                     update_log_local('未提供数据集路径，无法准备训练数据')
 
             # 检查是否应该停止训练
-            if train_status.get(task_id, {}).get('stop_requested'):
+            if _is_stop_requested(task_id, train_task):
                 log_msg = '训练已停止'
                 train_status[task_id] = {
                     'status': 'stopped',
@@ -1132,7 +1265,11 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                 update_log_local(f"开始训练模型，共{epochs}个epochs...", progress=15)
 
             def on_train_epoch_end(trainer):
-                if train_status.get(task_id, {}).get('stop_requested'):
+                try:
+                    db.session.refresh(train_task)
+                except Exception:
+                    pass
+                if _is_stop_requested(task_id, train_task):
                     raise RuntimeError('训练已被用户停止')
                 total_epochs_count = max(1, int(getattr(trainer, 'epochs', epochs)))
                 now_epoch = int(getattr(trainer, 'epoch', 0)) + 1
@@ -1255,7 +1392,7 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                 update_log_local(f"未找到训练结果图表文件: {results_png_path}")
 
             # 检查是否应该停止训练
-            if train_status.get(task_id, {}).get('stop_requested'):
+            if _is_stop_requested(task_id, train_task):
                 log_msg = '训练已停止'
                 train_status[task_id] = {
                     'status': 'stopped',
@@ -1373,7 +1510,7 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
         from run import create_app
         user_stopped = (
             '训练已被用户停止' in str(e)
-            or train_status.get(task_id, {}).get('stop_requested')
+            or _is_stop_requested(task_id, train_task)
         )
         application = create_app()
         with application.app_context():
@@ -1386,9 +1523,7 @@ def train_model(task_id, epochs=20, model_arch='yolov8n.pt',
                 task.end_time = datetime.utcnow()
                 if user_stopped:
                     task.train_log = (task.train_log or '') + log_msg + '\n'
-                    model_dir = os.path.join(
-                        get_project_root(), 'data/datasets', f'train_{task_id}'
-                    )
+                    model_dir = get_train_task_dir(task_id)
                     completed_epochs = _get_completed_epochs(task.hyperparameters)
                     if completed_epochs <= 0 and task_id in train_status:
                         progress = train_status[task_id].get('progress', 0) or 0

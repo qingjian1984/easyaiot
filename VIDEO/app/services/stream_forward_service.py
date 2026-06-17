@@ -81,6 +81,7 @@ def create_stream_forward_task(task_name: str,
                                description: Optional[str] = None,
                                is_enabled: bool = False,
                                schedule_policy: str = 'local',
+                               prefer_gpu: bool = True,
                                target_node_id: Optional[int] = None) -> StreamForwardTask:
     """创建推流转发任务"""
     try:
@@ -107,6 +108,7 @@ def create_stream_forward_task(task_name: str,
             is_enabled=is_enabled,
             total_streams=len(device_id_list),
             schedule_policy=schedule_policy or 'local',
+            prefer_gpu=prefer_gpu if prefer_gpu is not None else True,
             target_node_id=target_node_id,
         )
         
@@ -198,6 +200,8 @@ def update_stream_forward_task(task_id: int, auto_rebalance: bool = True, **kwar
         if 'target_node_id' in kwargs:
             schedule_changed = schedule_changed or kwargs['target_node_id'] != previous_target_node
             task.target_node_id = kwargs['target_node_id']
+        if 'prefer_gpu' in kwargs:
+            task.prefer_gpu = bool(kwargs['prefer_gpu'])
         
         task.updated_at = datetime.utcnow()
         db.session.commit()

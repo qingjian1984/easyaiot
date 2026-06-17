@@ -1,5 +1,5 @@
 """
-抓拍媒体客户端：本地 GlusterFS 暂存 + Kafka 入队，或直接同步上传。
+抓拍媒体客户端：本地 CephFS 暂存 + Kafka 入队，或直接同步上传。
 """
 import logging
 import os

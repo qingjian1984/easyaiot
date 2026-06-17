@@ -14,6 +14,7 @@ import com.basiclab.iot.node.domain.vo.NodeSchedulerAllocateRespVO;
 import com.basiclab.iot.node.enums.NodeRoleEnum;
 import com.basiclab.iot.node.enums.NodeStatusEnum;
 import com.basiclab.iot.node.service.NodeSchedulerService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
@@ -39,6 +40,9 @@ public class NodeSchedulerServiceImpl implements NodeSchedulerService {
     @Resource
     private NodeWorkloadBindingMapper nodeWorkloadBindingMapper;
 
+    @Value("${easyaiot.scheduler.prefer-gpu-default:true}")
+    private boolean preferGpuDefault;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public NodeSchedulerAllocateRespVO allocate(NodeSchedulerAllocateReqVO reqVO) {
@@ -48,7 +52,9 @@ public class NodeSchedulerServiceImpl implements NodeSchedulerService {
             if (existing != null && "running".equals(existing.getStatus())) {
                 ComputeNodeDO node = computeNodeMapper.selectById(existing.getNodeId());
                 if (node != null && NodeStatusEnum.ONLINE.getStatus().equals(node.getStatus())) {
-                    return buildResp(node, existing.getId(), null);
+                    if (!requiresCephMount(reqVO) || isCephMountReady(node)) {
+                        return buildResp(node, existing.getId(), null);
+                    }
                 }
             }
         }
@@ -64,7 +70,7 @@ public class NodeSchedulerServiceImpl implements NodeSchedulerService {
         final String workloadType = reqVO.getWorkloadType();
         List<ComputeNodeDO> candidates = page.getList().stream()
                 .filter(node -> matchRequirements(node, reqVO))
-                .sorted(Comparator.comparingDouble((ComputeNodeDO node) -> scoreNode(node, workloadType)).reversed())
+                .sorted(Comparator.comparingDouble((ComputeNodeDO node) -> scoreNode(node, reqVO)).reversed())
                 .toList();
 
         if (candidates.isEmpty()) {
@@ -122,8 +128,46 @@ public class NodeSchedulerServiceImpl implements NodeSchedulerService {
         if (!isNodeResourceHealthy(node, reqVO.getWorkloadType())) {
             return false;
         }
+        if (requiresGpu(req) && !isGpuNode(node)) {
+            return false;
+        }
+        if (requiresCephMount(reqVO) && !isCephMountReady(node)) {
+            return false;
+        }
         long running = nodeWorkloadBindingMapper.countRunningByNodeId(node.getId());
         return running < node.getMaxTaskCount();
+    }
+
+    private boolean requiresGpu(NodeSchedulerAllocateReqVO.Requirements req) {
+        return req != null && req.getGpuCount() != null && req.getGpuCount() > 0;
+    }
+
+    private boolean resolvePreferGpu(NodeSchedulerAllocateReqVO reqVO) {
+        NodeSchedulerAllocateReqVO.Requirements req = reqVO.getRequirements();
+        if (req != null && req.getPreferGpu() != null) {
+            return req.getPreferGpu();
+        }
+        if (requiresGpu(req)) {
+            return true;
+        }
+        return preferGpuDefault;
+    }
+
+    /** GPU 节点：角色为 gpu，或配置了 maxGpuCount，或心跳上报了 GPU 硬件 */
+    private boolean isGpuNode(ComputeNodeDO node) {
+        if (NodeRoleEnum.GPU.getRole().equals(node.getNodeRole())) {
+            return true;
+        }
+        if (node.getMaxGpuCount() != null && node.getMaxGpuCount() > 0) {
+            return true;
+        }
+        NodeMetricSnapshotDO metric = nodeMetricSnapshotMapper.selectLatestByNodeId(node.getId());
+        return metric != null && CollUtil.isNotEmpty(metric.getGpuInfo());
+    }
+
+    /** 纯计算节点（无 GPU）：角色为 compute 且未声明 GPU */
+    private boolean isComputeOnlyNode(ComputeNodeDO node) {
+        return NodeRoleEnum.COMPUTE.getRole().equals(node.getNodeRole()) && !isGpuNode(node);
     }
 
     /**
@@ -154,7 +198,9 @@ public class NodeSchedulerServiceImpl implements NodeSchedulerService {
             return NodeRoleEnum.MEDIA.getRole().equals(role) || NodeRoleEnum.HYBRID.getRole().equals(role);
         }
         if (isComputeWorkload(workloadType)) {
-            return NodeRoleEnum.COMPUTE.getRole().equals(role) || NodeRoleEnum.HYBRID.getRole().equals(role);
+            return NodeRoleEnum.COMPUTE.getRole().equals(role)
+                    || NodeRoleEnum.GPU.getRole().equals(role)
+                    || NodeRoleEnum.HYBRID.getRole().equals(role);
         }
         return true;
     }
@@ -165,7 +211,8 @@ public class NodeSchedulerServiceImpl implements NodeSchedulerService {
 
     private boolean isComputeWorkload(String workloadType) {
         return "ai_service".equals(workloadType) || "algorithm_task".equals(workloadType)
-                || "stream_forward".equals(workloadType) || "auto_label".equals(workloadType);
+                || "stream_forward".equals(workloadType) || "auto_label".equals(workloadType)
+                || "model_train".equals(workloadType);
     }
 
     private List<String> resolveRequiredCapabilities(NodeSchedulerAllocateReqVO reqVO) {
@@ -181,7 +228,44 @@ public class NodeSchedulerServiceImpl implements NodeSchedulerService {
         return capabilities;
     }
 
-    private double scoreNode(ComputeNodeDO node, String workloadType) {
+    /** 算法任务等需读取 CephFS 共享模型/抓拍路径时要求节点挂载就绪 */
+    private boolean requiresCephMount(NodeSchedulerAllocateReqVO reqVO) {
+        NodeSchedulerAllocateReqVO.Requirements req = reqVO.getRequirements();
+        if (req != null && Boolean.TRUE.equals(req.getRequireCephMount())) {
+            return true;
+        }
+        String workloadType = reqVO.getWorkloadType();
+        if ("model_train".equals(workloadType)) {
+            return true;
+        }
+        if (!"algorithm_task".equals(workloadType)) {
+            return false;
+        }
+        if (req == null || CollUtil.isEmpty(req.getCapabilities())) {
+            return false;
+        }
+        for (String capability : req.getCapabilities()) {
+            if (capability != null && capability.startsWith("algorithm_")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isCephMountReady(ComputeNodeDO node) {
+        if (ComputeNodeServiceImpl.isPlatformNode(node)) {
+            return true;
+        }
+        Map<String, String> tags = node.getTags();
+        if (tags == null || !tags.containsKey("ceph_mount_ready")) {
+            return false;
+        }
+        String ready = tags.get("ceph_mount_ready");
+        return "true".equalsIgnoreCase(ready) || "1".equals(ready) || "yes".equalsIgnoreCase(ready);
+    }
+
+    private double scoreNode(ComputeNodeDO node, NodeSchedulerAllocateReqVO reqVO) {
+        String workloadType = reqVO.getWorkloadType();
         double weight = node.getWeight() != null ? node.getWeight() : 100;
         NodeMetricSnapshotDO metric = nodeMetricSnapshotMapper.selectLatestByNodeId(node.getId());
         double cpu = metric != null && metric.getCpuPercent() != null
@@ -209,6 +293,12 @@ public class NodeSchedulerServiceImpl implements NodeSchedulerService {
             } else if (isComputeWorkload(workloadType)) {
                 score *= 0.1;
             }
+        }
+        boolean preferGpu = resolvePreferGpu(reqVO);
+        if (preferGpu && isGpuNode(node)) {
+            score *= 2.0;
+        } else if (!preferGpu && isComputeOnlyNode(node)) {
+            score *= 1.5;
         }
         return score;
     }

@@ -59,18 +59,43 @@ def is_remote_deploy_enabled() -> bool:
     return os.getenv('NODE_REMOTE_DEPLOY', 'true').lower() in ('1', 'true', 'yes')
 
 
+def _is_cluster_mode() -> bool:
+    try:
+        from cluster_storage import is_cluster_mode
+        return is_cluster_mode()
+    except ImportError:
+        return os.getenv('CLUSTER_MODE', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _node_ceph_mount_ready(node: Dict[str, Any]) -> bool:
+    if node.get('isPlatform') or node.get('is_platform'):
+        return True
+    tags = node.get('tags') or {}
+    ready = str(tags.get('ceph_mount_ready', '')).strip().lower()
+    return ready in ('true', '1', 'yes', 'on')
+
+
 def allocate_node(
     workload_type: str,
     workload_id: str,
     capabilities: Optional[List[str]] = None,
     gpu_count: int = 0,
+    prefer_gpu: Optional[bool] = None,
     region: Optional[str] = None,
     sticky: bool = True,
     target_node_id: Optional[int] = None,
     exclude_node_ids: Optional[List[int]] = None,
+    require_ceph_mount: Optional[bool] = None,
 ) -> Dict[str, Any]:
+    if require_ceph_mount is None:
+        require_ceph_mount = _is_cluster_mode()
+
     if target_node_id:
         node = get_node(target_node_id)
+        if require_ceph_mount and not _node_ceph_mount_ready(node):
+            raise RuntimeError(
+                f'指定节点 #{target_node_id} CephFS 未挂载就绪，请先在节点管理部署存储客户端'
+            )
         return {
             'nodeId': target_node_id,
             'host': node.get('host'),
@@ -84,8 +109,12 @@ def allocate_node(
         'gpuCount': gpu_count,
         'region': region,
     }
+    if prefer_gpu is not None:
+        requirements['preferGpu'] = prefer_gpu
     if exclude_node_ids:
         requirements['excludeNodeIds'] = exclude_node_ids
+    if require_ceph_mount:
+        requirements['requireCephMount'] = True
 
     payload = {
         'workloadType': workload_type,

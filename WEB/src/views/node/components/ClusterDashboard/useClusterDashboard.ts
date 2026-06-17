@@ -29,6 +29,7 @@ import {
   type ClusterWsStatus,
 } from '../../utils/clusterMetricsWs';
 import { NODE_TERM, TREND_SAMPLE_INTERVAL_DEFAULT } from '../../utils/constants';
+import { useClusterNodeScope } from '../../utils/useClusterNodeScope';
 import { sortNodesWithPlatformFirst } from '../../utils/platformNode';
 
 export type { TrendViewMode };
@@ -59,13 +60,23 @@ export function useClusterDashboard() {
   const nodeLoads = ref<NodeLoadItem[]>([]);
   const nodeDisks = ref<NodeDiskItem[]>([]);
   const lastUpdated = ref('');
+  const {
+    lanes,
+    activeLaneKey,
+    centralLaneOptions,
+    scopeNodes,
+    loadLanes,
+    setActiveLaneKey: setScopeLaneKey,
+  } = useClusterNodeScope();
+
+  const scopedNodes = computed(() => scopeNodes(nodes.value));
 
   const focusNodes = computed(() => {
     if (!overviewFocusNodeId.value) {
-      return nodes.value;
+      return scopedNodes.value;
     }
-    const target = nodes.value.find((node) => node.id === overviewFocusNodeId.value);
-    return target ? [target] : nodes.value;
+    const target = scopedNodes.value.find((node) => node.id === overviewFocusNodeId.value);
+    return target ? [target] : scopedNodes.value;
   });
 
   const displaySnapshot = computed(() => buildClusterSnapshot(focusNodes.value));
@@ -141,12 +152,27 @@ export function useClusterDashboard() {
     }
   }
 
+  function setActiveLaneKey(laneKey: string) {
+    setScopeLaneKey(laneKey);
+    overviewFocusNodeId.value = undefined;
+    selectedNodeIds.value = [];
+  }
+
+  watch(scopedNodes, (scoped) => {
+    if (overviewFocusNodeId.value && !scoped.some((node) => node.id === overviewFocusNodeId.value)) {
+      overviewFocusNodeId.value = undefined;
+    }
+    const allowedIds = new Set(scoped.map((node) => node.id).filter((id): id is number => id != null));
+    selectedNodeIds.value = selectedNodeIds.value.filter((id) => allowedIds.has(id));
+  });
+
   async function loadInitialData() {
     loading.value = nodes.value.length === 0;
     try {
       const [pageRes] = await Promise.all([
         getNodePage({ pageNo: 1, pageSize: 200 }),
         loadMetricHistory(),
+        loadLanes(),
       ]);
       if (!nodes.value.length) {
         applySnapshot(pageRes?.data?.list ?? []);
@@ -208,10 +234,14 @@ export function useClusterDashboard() {
     displayNodeDisks,
     lastUpdated,
     computeNodeOptions: computed(() =>
-      sortNodesWithPlatformFirst(nodes.value.filter(isComputeNode)).map((node) => ({
+      sortNodesWithPlatformFirst(scopedNodes.value.filter(isComputeNode)).map((node) => ({
         label: node.isPlatform ? `${node.name} [${NODE_TERM.controlPlaneNode}] (${node.host})` : `${node.name} (${node.host})`,
         value: node.id!,
       })),
     ),
+    lanes,
+    activeLaneKey,
+    setActiveLaneKey,
+    centralLaneOptions,
   };
 }

@@ -410,7 +410,7 @@ watch(
           <div v-if="!canCheckDeploy" class="form-hint">{{ autoDisabledReason || '请先保存节点并配置 SSH' }}</div>
           <PortCheckResult v-else-if="portCheckResult" :result="portCheckResult" @close="portCheckResult = null" />
           <div v-else class="form-hint">
-            检测节点代理监听端口（agentPort）是否被其他进程占用
+            检测监测代理监听端口（agentPort）是否被其他进程占用
           </div>
         </FormItem>
 

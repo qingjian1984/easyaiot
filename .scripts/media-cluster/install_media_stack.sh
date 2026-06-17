@@ -120,6 +120,24 @@ require_docker() {
   fi
 }
 
+ensure_ceph_mount() {
+  local mount_root="${MOUNT_ROOT:-/mnt/easyaiot-media}"
+  if [[ "${SKIP_CEPH_CHECK:-0}" == "1" ]]; then
+    print_skip "跳过 CephFS 检查（SKIP_CEPH_CHECK=1）"
+    return 0
+  fi
+  if mountpoint -q "${mount_root}" 2>/dev/null; then
+    print_ok "CephFS 已挂载: ${mount_root}"
+    return 0
+  fi
+  if [[ -d "${mount_root}/playbacks" ]] && [[ -w "${mount_root}/playbacks" ]]; then
+    print_ok "媒体缓冲目录可写: ${mount_root}/playbacks"
+    return 0
+  fi
+  print_err "CephFS 未挂载到 ${mount_root}，请先: bash .scripts/media-cluster/ceph/mount-all.sh"
+  exit 1
+}
+
 resolve_compose_cmd() {
   if docker compose version >/dev/null 2>&1; then
     COMPOSE_CMD="docker compose"
@@ -280,6 +298,7 @@ main() {
     exit 0
   fi
   require_docker
+  ensure_ceph_mount
   resolve_compose_cmd
   print_ok "Compose 命令: ${COMPOSE_CMD}"
   ensure_dirs

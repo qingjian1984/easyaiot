@@ -44,7 +44,7 @@ export const deleteTrainTask = (recordId: number) => {
   return commonApi('delete', `${Api.TrainTask}/delete/${recordId}`);
 };
 
-export const startTrain = (config: Record<string, unknown>) => {
+export const startTrain = (config: TrainStartConfig | Record<string, unknown>) => {
   return commonApi('post', `${Api.TrainTask}/start`, {data: config});
 };
 
@@ -63,6 +63,28 @@ export const getTrainLogs = (taskId: number) => {
 export const getTrainGpuStatus = () => {
   return commonApi('get', `${Api.TrainTask}/gpu/status`);
 };
+
+export type TrainSchedulePolicy = 'local' | 'auto' | 'node';
+
+export interface TrainStartConfig {
+  epochs: number;
+  batch_size: number;
+  imgsz: number;
+  taskName?: string;
+  modelPath: string;
+  datasetSource?: 'local' | 'cloud';
+  datasetPath: string;
+  datasetName?: string;
+  datasetVersion?: string;
+  use_gpu?: boolean;
+  gpu_ids?: number[];
+  taskId?: number;
+  resume?: boolean;
+  schedulePolicy?: TrainSchedulePolicy;
+  schedule_policy?: TrainSchedulePolicy;
+  targetNodeId?: number | null;
+  target_node_id?: number | null;
+}
 
 /** 上传本地 YOLO 数据集 zip，返回服务端路径供训练使用 */
 export const uploadTrainDataset = (formData: FormData) => {

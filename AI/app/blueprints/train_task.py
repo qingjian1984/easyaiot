@@ -240,6 +240,14 @@ def _get_project_root() -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 
 
+def _get_train_task_dir(task_id) -> str:
+    try:
+        from cluster_storage import get_ai_train_dir
+        return get_ai_train_dir(task_id)
+    except ImportError:
+        return os.path.join(_get_project_root(), 'data', 'datasets', f'train_{task_id}')
+
+
 def _safe_remove_path(path: str) -> None:
     """删除本地文件或目录；路径不存在时静默跳过。"""
     if not path or not os.path.exists(path):
@@ -252,7 +260,7 @@ def _safe_remove_path(path: str) -> None:
 
 def _cleanup_train_task_artifacts(record: TrainTask) -> None:
     """清理训练任务关联的本地文件（数据集工作区、断点权重等）。"""
-    model_dir = os.path.join(_get_project_root(), 'data', 'datasets', f'train_{record.id}')
+    model_dir = _get_train_task_dir(record.id)
     _safe_remove_path(model_dir)
 
     # checkpoint_dir 实际存的是 last.pt 文件路径，不是目录
@@ -303,7 +311,7 @@ def _task_can_resume(task: TrainTask) -> bool:
     checkpoint = (task.checkpoint_dir or '').strip()
     if checkpoint and os.path.isfile(checkpoint):
         return True
-    model_dir = os.path.join(_get_project_root(), 'data', 'datasets', f'train_{task.id}')
+    model_dir = _get_train_task_dir(task.id)
     return _resolve_train_checkpoint_path(model_dir) is not None
 
 
@@ -503,6 +511,11 @@ def _serialize_task(task: TrainTask) -> dict:
         'published_model_id': published_model_id,
         'published_version': _get_published_version(task.hyperparameters),
         'suggested_publish_version': suggested_publish_version,
+        'schedule_policy': getattr(task, 'schedule_policy', None) or 'local',
+        'target_node_id': getattr(task, 'target_node_id', None),
+        'node_id': getattr(task, 'node_id', None),
+        'service_server_ip': getattr(task, 'service_server_ip', None),
+        'service_process_id': getattr(task, 'service_process_id', None),
     }
 
 
@@ -602,6 +615,18 @@ def train_detail(record_id):
         }), 500
 
 
+def _apply_train_model_provenance(
+    model: Model,
+    model_origin: str | None,
+    origin_ref: str | None,
+    task: TrainTask,
+):
+    origin = (model_origin or 'train').strip() or 'train'
+    ref = origin_ref or f'train_task:{task.id}'
+    model.model_origin = origin
+    model.origin_ref = ref
+
+
 def publish_train_task_to_model(
     task: TrainTask,
     *,
@@ -610,6 +635,8 @@ def publish_train_task_to_model(
     version: str | None = None,
     published_model_id: int | None = None,
     class_names: list[str] | None = None,
+    model_origin: str | None = None,
+    origin_ref: str | None = None,
 ) -> int:
     """
     将已完成训练任务的权重发布到模型管理（供编排器/脚本调用，无需 HTTP 请求）。
@@ -660,6 +687,9 @@ def publish_train_task_to_model(
         if class_names:
             existing_model.class_names = dump_class_names_json(class_names)
             existing_model.selected_class_names = dump_class_names_json(class_names)
+        _apply_train_model_provenance(
+            existing_model, model_origin, origin_ref, task,
+        )
         model = existing_model
     else:
         conflict = Model.query.filter(
@@ -679,6 +709,7 @@ def publish_train_task_to_model(
             class_names=dump_class_names_json(class_names) if class_names else None,
             selected_class_names=dump_class_names_json(class_names) if class_names else None,
         )
+        _apply_train_model_provenance(model, model_origin, origin_ref, task)
         db.session.add(model)
 
     db.session.flush()
@@ -725,6 +756,8 @@ def publish_train_task(record_id):
             description=description,
             version=version,
             published_model_id=published_model_id,
+            model_origin='train',
+            origin_ref=f'train_task:{task.id}',
         )
         model = Model.query.get(model_id)
         action_msg = '模型已更新发布' if published_model_id else '模型发布成功'

@@ -45,6 +45,7 @@ export interface StreamForwardTask {
   service_last_heartbeat?: string;
   service_log_path?: string;
   schedule_policy?: 'local' | 'auto' | 'node';
+  prefer_gpu?: boolean;
   target_node_id?: number | null;
   node_id?: number | null;
   device_deployments?: Array<{
@@ -106,6 +107,7 @@ export const createStreamForwardTask = (data: {
   description?: string;
   is_enabled?: boolean;
   schedule_policy?: 'local' | 'auto' | 'node';
+  prefer_gpu?: boolean;
   target_node_id?: number | null;
 }) => {
   return commonApi<{ code: number; msg: string; data: StreamForwardTask }>(

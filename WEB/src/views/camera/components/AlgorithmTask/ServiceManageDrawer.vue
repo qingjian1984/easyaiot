@@ -276,6 +276,7 @@ const sorterInfo = ref<Sorter | null>(null);
 const pusherInfo = ref<Pusher | null>(null);
 const realtimeServiceInfo = ref<RealtimeServiceStatus | null>(null);
 const snapServiceInfo = ref<RealtimeServiceStatus | null>(null);
+const patrolServiceInfo = ref<RealtimeServiceStatus | null>(null);
 
 const drawerTitle = computed(() => {
   return '帧管道管理器';
@@ -420,6 +421,44 @@ const serviceList = computed(() => {
         console.log('添加默认抓拍服务项（无设备）:', defaultItem);
       list.push(defaultItem);
       }
+    }
+  }
+
+  // 巡检算法任务：显示统一巡检服务
+  if (taskInfo.value && taskInfo.value.task_type === 'patrol') {
+    const deviceNames = taskInfo.value.device_names || [];
+    const deviceNameStr = deviceNames.length > 0 ? deviceNames.join(', ') : undefined;
+
+    if (patrolServiceInfo.value) {
+      list.push({
+        id: `patrol_${taskInfo.value.id}`,
+        service_type: 'patrol',
+        service_name: '巡检算法服务',
+        device_name: deviceNameStr,
+        status: patrolServiceInfo.value.status || patrolServiceInfo.value.run_status || 'stopped',
+        server_ip: patrolServiceInfo.value.server_ip,
+        port: patrolServiceInfo.value.port,
+        process_id: patrolServiceInfo.value.process_id,
+        last_heartbeat: patrolServiceInfo.value.last_heartbeat,
+        log_path: patrolServiceInfo.value.log_path,
+        raw_data: patrolServiceInfo.value,
+        actionLoading: false,
+      });
+    } else {
+      list.push({
+        id: `patrol_${taskInfo.value.id}`,
+        service_type: 'patrol',
+        service_name: '巡检算法服务',
+        device_name: deviceNameStr,
+        status: 'stopped',
+        server_ip: undefined,
+        port: undefined,
+        process_id: undefined,
+        last_heartbeat: undefined,
+        log_path: undefined,
+        raw_data: null,
+        actionLoading: false,
+      });
     }
   }
 
@@ -616,6 +655,7 @@ const loadServiceInfo = async (taskId: number) => {
           // 即使 realtime_service 为 null，也要设置为 null（而不是 undefined）
           realtimeServiceInfo.value = servicesStatusResponse.data.realtime_service ?? null;
           snapServiceInfo.value = servicesStatusResponse.data.snap_service ?? null;
+          patrolServiceInfo.value = servicesStatusResponse.data.patrol_service ?? null;
           console.log('服务状态数据:', servicesStatusResponse.data);
           console.log('实时服务信息:', realtimeServiceInfo.value);
           console.log('实时服务信息类型:', typeof realtimeServiceInfo.value);
@@ -632,6 +672,7 @@ const loadServiceInfo = async (taskId: number) => {
         pusherInfo.value = statusData.pusher || null;
         realtimeServiceInfo.value = statusData.realtime_service ?? null;
         snapServiceInfo.value = statusData.snap_service ?? null;
+        patrolServiceInfo.value = statusData.patrol_service ?? null;
         console.log('服务状态数据（已转换）:', statusData);
         console.log('实时服务信息（已转换）:', realtimeServiceInfo.value);
         console.log('实时服务信息类型（已转换）:', typeof realtimeServiceInfo.value);
@@ -733,8 +774,11 @@ const handleViewLogs = async (record: any) => {
     return;
   }
 
-  // 对于抓拍算法任务，使用 'snap' 作为服务类型，但实际调用 realtime 日志接口
-  const serviceType = record.service_type === 'snap' ? 'realtime' : record.service_type;
+  // 对于抓拍/巡检算法任务，日志接口与实时算法共用 realtime 路径
+  const serviceType =
+    record.service_type === 'snap' || record.service_type === 'patrol'
+      ? 'realtime'
+      : record.service_type;
   
   openLogsModal(true, {
     title: `${record.service_name} - 日志`,

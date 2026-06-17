@@ -64,6 +64,9 @@ export interface ComputeNodeVO {
   activeTasks?: number;
   gpuInfo?: string;
   isPlatform?: boolean;
+  controlPlaneId?: number;
+  isRemote?: boolean;
+  peerId?: number;
   createTime?: string;
   updateTime?: string;
 }
@@ -258,6 +261,25 @@ export interface MediaStackCheckResult {
   steps?: MediaDeployStepVO[];
 }
 
+export interface StorageStackCheckResult {
+  success?: boolean;
+  deployed?: boolean;
+  cephHealthy?: boolean;
+  osdRunning?: boolean;
+  cephfsReady?: boolean;
+  poolExists?: boolean;
+  mountReady?: boolean;
+  message?: string;
+  steps?: MediaDeployStepVO[];
+}
+
+export interface StorageMountCheckResult {
+  success?: boolean;
+  mountReady?: boolean;
+  message?: string;
+  steps?: MediaDeployStepVO[];
+}
+
 export interface AgentCheckResult {
   success?: boolean;
   deployed?: boolean;
@@ -370,6 +392,90 @@ export const checkMediaPortsBySsh = async (nodeId: number): Promise<PortCheckRes
   return unwrapNodeApiData<PortCheckResult>(res);
 };
 
+/** 通过 SSH 检测 Ceph 存储节点集群状态 */
+export const checkStorageStackBySsh = async (nodeId: number): Promise<StorageStackCheckResult> => {
+  const res = await commonApi(
+    'post',
+    `${Api.Node}/storage/check-ssh?nodeId=${nodeId}`,
+    {},
+    { isTransformResponse: false, timeout: 2 * 60 * 1000 },
+  );
+  return unwrapNodeApiData<StorageStackCheckResult>(res);
+};
+
+/** 通过 SSH 检测 CephFS 客户端挂载 */
+export const checkStorageMountBySsh = async (nodeId: number): Promise<StorageMountCheckResult> => {
+  const res = await commonApi(
+    'post',
+    `${Api.Node}/storage/check-mount-ssh?nodeId=${nodeId}`,
+    {},
+    { isTransformResponse: false, timeout: 2 * 60 * 1000 },
+  );
+  return unwrapNodeApiData<StorageMountCheckResult>(res);
+};
+
+/** 通过 SSH 在存储节点准备 Ceph OSD */
+export const deployStorageOsdBySsh = async (
+  nodeId: number,
+  options?: { signal?: AbortSignal },
+): Promise<MediaRemoteDeployResult> => {
+  const res = await commonApi(
+    'post',
+    `${Api.Node}/storage/deploy-osd-ssh?nodeId=${nodeId}`,
+    { signal: options?.signal },
+    { isTransformResponse: false, timeout: 30 * 60 * 1000 },
+  );
+  return unwrapNodeApiData<MediaRemoteDeployResult>(res);
+};
+
+/** 通过 SSH 在目标节点挂载 CephFS */
+export const deployStorageClientBySsh = async (
+  nodeId: number,
+  options?: { signal?: AbortSignal },
+): Promise<MediaRemoteDeployResult> => {
+  const res = await commonApi(
+    'post',
+    `${Api.Node}/storage/deploy-client-ssh?nodeId=${nodeId}`,
+    { signal: options?.signal },
+    { isTransformResponse: false, timeout: 15 * 60 * 1000 },
+  );
+  return unwrapNodeApiData<MediaRemoteDeployResult>(res);
+};
+
+/** 通过 SSH 在 MON 节点创建 Ceph 存储池 */
+export const deployStoragePoolBySsh = async (
+  nodeId: number,
+  options?: { signal?: AbortSignal },
+): Promise<MediaRemoteDeployResult> => {
+  const res = await commonApi(
+    'post',
+    `${Api.Node}/storage/deploy-pool-ssh?nodeId=${nodeId}`,
+    { signal: options?.signal },
+    { isTransformResponse: false, timeout: 15 * 60 * 1000 },
+  );
+  return unwrapNodeApiData<MediaRemoteDeployResult>(res);
+};
+
+export const stopStorageOsdBySsh = async (nodeId: number): Promise<MediaRemoteDeployResult> => {
+  const res = await commonApi(
+    'post',
+    `${Api.Node}/storage/stop-osd-ssh?nodeId=${nodeId}`,
+    {},
+    { isTransformResponse: false, timeout: 3 * 60 * 1000 },
+  );
+  return unwrapNodeApiData<MediaRemoteDeployResult>(res);
+};
+
+export const unmountStorageBySsh = async (nodeId: number): Promise<MediaRemoteDeployResult> => {
+  const res = await commonApi(
+    'post',
+    `${Api.Node}/storage/unmount-ssh?nodeId=${nodeId}`,
+    {},
+    { isTransformResponse: false, timeout: 3 * 60 * 1000 },
+  );
+  return unwrapNodeApiData<MediaRemoteDeployResult>(res);
+};
+
 /** 通过 SSH 检测目标机 Node Agent 是否已部署 */
 export const checkAgentBySsh = async (
   nodeId: number,
@@ -447,13 +553,19 @@ export const releaseDeviceMedia = (deviceId: string) => {
   return commonApi('post', `${Api.Node}/media/release?deviceId=${encodeURIComponent(deviceId)}`);
 };
 
-/** 获取可用于调度的在线节点（compute / hybrid） */
+/** 可参与计算工作负载调度的节点角色 */
+const SCHEDULABLE_COMPUTE_ROLES = ['compute', 'gpu', 'hybrid'] as const;
+
+function isSchedulableComputeNode(node?: Pick<ComputeNodeVO, 'nodeRole'> | null): boolean {
+  const role = node?.nodeRole;
+  return !!role && (SCHEDULABLE_COMPUTE_ROLES as readonly string[]).includes(role);
+}
+
+/** 获取可用于调度的在线节点（compute / gpu / hybrid） */
 export const listScheduleNodes = async () => {
   const res = await getNodePage({ pageNo: 1, pageSize: 200, status: 'online' });
   const list = res?.data?.list ?? [];
-  return list.filter(
-    (node: ComputeNodeVO) => node.nodeRole === 'compute' || node.nodeRole === 'hybrid',
-  );
+  return list.filter((node: ComputeNodeVO) => isSchedulableComputeNode(node));
 };
 
 /** 获取可用于媒体调度的在线节点（media / hybrid） */
@@ -644,4 +756,109 @@ export const batchRemoveFfmpegBySsh = async (data: NodeFfmpegBatchReq): Promise<
     { isTransformResponse: false, timeout: BUNDLE_TIMEOUT },
   );
   return unwrapNodeApiData<WorkloadBundleBatchResult>(res);
+};
+
+// ── 中心节点联邦 / 泳道 ──
+
+export interface ClusterLaneVO {
+  laneKey: string;
+  controlPlaneId?: number;
+  isLocal?: boolean;
+  peerId?: number;
+  centralNode?: ComputeNodeVO;
+  workerNodes?: ComputeNodeVO[];
+  syncStatus?: string;
+}
+
+export interface ControlPlanePeerVO {
+  id?: number;
+  name: string;
+  apiBaseUrl: string;
+  host?: string;
+  status?: string;
+  remotePlatformNodeId?: number;
+  lastSyncAt?: string;
+  remark?: string;
+}
+
+export interface ControlPlanePeerSaveVO {
+  name: string;
+  apiBaseUrl: string;
+  peerToken?: string;
+  remark?: string;
+}
+
+export interface ClusterLaneBatchReq {
+  laneKey?: string;
+  nodeIds: number[];
+  action?: 'maintenance_on' | 'maintenance_off';
+}
+
+export interface ClusterLanePageResult {
+  data: {
+    list: ClusterLaneVO[];
+    total: number;
+  };
+}
+
+function normalizeClusterLanePageResult(res: unknown): ClusterLanePageResult {
+  const empty: ClusterLanePageResult = { data: { list: [], total: 0 } };
+  if (!res || typeof res !== 'object') return empty;
+
+  const r = res as Record<string, unknown>;
+
+  if (Array.isArray(r.list)) {
+    return { data: { list: r.list as ClusterLaneVO[], total: Number(r.total ?? 0) } };
+  }
+
+  const wrapped = r.data as Record<string, unknown> | undefined;
+  if (wrapped && Array.isArray(wrapped.list)) {
+    return { data: { list: wrapped.list as ClusterLaneVO[], total: Number(wrapped.total ?? 0) } };
+  }
+
+  const envelope = r.data as Record<string, unknown> | undefined;
+  const page = envelope?.data as Record<string, unknown> | undefined;
+  if (page && Array.isArray(page.list)) {
+    return { data: { list: page.list as ClusterLaneVO[], total: Number(page.total ?? 0) } };
+  }
+
+  if (Array.isArray(r)) {
+    return { data: { list: r as ClusterLaneVO[], total: r.length } };
+  }
+
+  if (Array.isArray(wrapped)) {
+    return { data: { list: wrapped as ClusterLaneVO[], total: wrapped.length } };
+  }
+
+  return empty;
+}
+
+export const getClusterLanes = async (params?: { pageNo?: number; pageSize?: number }): Promise<ClusterLanePageResult> => {
+  const res = await commonApi('get', `${Api.Node}/control-plane/lanes`, {
+    params: {
+      pageNo: params?.pageNo ?? 1,
+      pageSize: params?.pageSize ?? 10,
+    },
+  });
+  return normalizeClusterLanePageResult(res);
+};
+
+export const getControlPlanePeers = () => {
+  return commonApi('get', `${Api.Node}/control-plane/peers`);
+};
+
+export const createControlPlanePeer = (data: ControlPlanePeerSaveVO) => {
+  return commonApi('post', `${Api.Node}/control-plane/peers/create`, { data });
+};
+
+export const deleteControlPlanePeer = (id: number) => {
+  return commonApi('delete', `${Api.Node}/control-plane/peers/delete?id=${id}`);
+};
+
+export const syncControlPlanePeer = (id: number) => {
+  return commonApi('post', `${Api.Node}/control-plane/peers/sync?id=${id}`);
+};
+
+export const batchClusterLaneAction = (data: ClusterLaneBatchReq) => {
+  return commonApi('post', `${Api.Node}/control-plane/lane/batch`, { data });
 };

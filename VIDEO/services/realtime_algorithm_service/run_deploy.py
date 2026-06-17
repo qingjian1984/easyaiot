@@ -36,6 +36,11 @@ import concurrent.futures
 # 添加VIDEO模块路径
 video_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, video_root)
+_repo_root = os.path.abspath(os.path.join(video_root, '..'))
+_lib_root = os.path.join(_repo_root, 'lib')
+for _p in (_lib_root,):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from app.utils.video_env import load_video_env
 
@@ -988,6 +993,16 @@ def download_model_file(model_id: int, model_path: str) -> Optional[str]:
                 return None
 
         # 正数ID，从数据库或MinIO下载
+        # 集群模式：优先读 CephFS 共享缓存
+        try:
+            from model_resolver import try_resolve_cluster_model_path
+            cluster_path = try_resolve_cluster_model_path(model_id)
+            if cluster_path:
+                logger.info(f"使用集群共享模型: model_id={model_id}, path={cluster_path}")
+                return cluster_path
+        except ImportError:
+            pass
+
         # 创建模型存储目录
         model_storage_dir = os.path.join(video_root, 'data', 'models', str(model_id))
         os.makedirs(model_storage_dir, exist_ok=True)

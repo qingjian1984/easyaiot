@@ -40,6 +40,10 @@ class Model(db.Model):
     torchscript_model_path = db.Column(db.String(500))
     tensorrt_model_path = db.Column(db.String(500))
     openvino_model_path = db.Column(db.String(500))
+    # 模型来源：upload | auto_label | smart_label | train | import
+    model_origin = db.Column(db.String(32), default='upload', nullable=True)
+    # 来源引用，如 dataset:15 / train_task:88
+    origin_ref = db.Column(db.String(128), nullable=True)
 
     export_records = db.relationship('ExportRecord', back_populates='model', cascade='all, delete-orphan')
 
@@ -60,6 +64,12 @@ class TrainTask(db.Model):
     metrics_path = db.Column(db.Text)
     minio_model_path = db.Column(db.String(500))
     train_results_path = db.Column(db.String(500))
+    schedule_policy = db.Column(db.String(20), default='local', nullable=True,
+                               comment='调度策略: local/auto/node')
+    target_node_id = db.Column(db.BigInteger, nullable=True, comment='指定部署节点ID')
+    node_id = db.Column(db.BigInteger, nullable=True, comment='实际运行节点ID')
+    service_server_ip = db.Column(db.String(128), nullable=True, comment='实际运行节点 IP/主机')
+    service_process_id = db.Column(db.BigInteger, nullable=True, comment='远程 Worker PID')
 
 class ExportRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -715,6 +725,33 @@ def ensure_train_task_dataset_columns(engine):
         log.warning('ensure_train_task_dataset_columns: %s', e)
 
 
+def ensure_train_task_cluster_columns(engine):
+    """老库 train_task 表补集群调度相关列。"""
+    import logging
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    columns = {
+        'schedule_policy': 'VARCHAR(20) DEFAULT \'local\'',
+        'target_node_id': 'BIGINT',
+        'node_id': 'BIGINT',
+        'service_server_ip': 'VARCHAR(128)',
+        'service_process_id': 'BIGINT',
+    }
+    try:
+        inspector = inspect(engine)
+        if 'train_task' not in inspector.get_table_names():
+            return
+        col_names = {c['name'] for c in inspector.get_columns('train_task')}
+        with engine.begin() as conn:
+            for col, ddl in columns.items():
+                if col not in col_names:
+                    conn.execute(text(f'ALTER TABLE train_task ADD COLUMN {col} {ddl}'))
+                    log.info('已为 train_task 表添加 %s 列', col)
+    except Exception as e:
+        log.warning('ensure_train_task_cluster_columns: %s', e)
+
+
 def ensure_model_class_columns(engine):
     """老库 model 表无 class_names / selected_class_names 列时补列。"""
     import logging
@@ -864,6 +901,59 @@ def ensure_auto_label_model_history_table(engine):
         log.info('已创建 auto_label_model_history 表')
     except Exception as e:
         log.warning('ensure_auto_label_model_history_table: %s', e)
+
+
+def ensure_model_origin_columns(engine):
+    """老库 model 表无 model_origin / origin_ref 列时补列。"""
+    import logging
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    try:
+        inspector = inspect(engine)
+        if 'model' not in inspector.get_table_names():
+            return
+        col_names = {c['name'] for c in inspector.get_columns('model')}
+        with engine.begin() as conn:
+            if 'model_origin' not in col_names:
+                conn.execute(text("ALTER TABLE model ADD COLUMN model_origin VARCHAR(32) DEFAULT 'upload'"))
+                log.info('已为 model 表添加 model_origin 列')
+            if 'origin_ref' not in col_names:
+                conn.execute(text('ALTER TABLE model ADD COLUMN origin_ref VARCHAR(128)'))
+                log.info('已为 model 表添加 origin_ref 列')
+        backfill_model_origin(engine)
+    except Exception as e:
+        log.warning('ensure_model_origin_columns: %s', e)
+
+
+def backfill_model_origin(engine):
+    """根据名称/描述推断历史模型的 model_origin（仅填空值）。"""
+    import logging
+    from sqlalchemy import text
+
+    log = logging.getLogger(__name__)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                UPDATE model SET model_origin = 'auto_label'
+                WHERE (model_origin IS NULL OR model_origin = '' OR model_origin = 'upload')
+                  AND (name ILIKE 'auto-label-%' OR description ILIKE '%自动标注%')
+            """))
+            conn.execute(text("""
+                UPDATE model SET model_origin = 'smart_label'
+                WHERE (model_origin IS NULL OR model_origin = '' OR model_origin = 'upload')
+                  AND (description ILIKE '%智能标注%' OR description ILIKE '%sam_pipeline%'
+                       OR description ILIKE '%sam 冷启动%')
+            """))
+            conn.execute(text("""
+                UPDATE model SET model_origin = 'train'
+                WHERE (model_origin IS NULL OR model_origin = '' OR model_origin = 'upload')
+                  AND (description ILIKE '%训练任务%' OR description ILIKE '%train_task%'
+                       OR description ILIKE '%从训练任务%')
+            """))
+        log.info('已尝试回填历史 model_origin')
+    except Exception as e:
+        log.warning('backfill_model_origin: %s', e)
 
 
 def ensure_model_table_status_column(engine):

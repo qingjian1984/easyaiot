@@ -12,6 +12,7 @@ from app.services.media_kafka_service import (
     build_event_from_zlm_hook,
     enqueue_srs_dvr_hook,
     enqueue_zlm_record_hook,
+    is_hybrid_upload_mode,
     is_kafka_upload_mode,
     is_snap_kafka_mode,
     publish_dvr_event,
@@ -36,9 +37,11 @@ def srs_on_dvr():
     device_id, _ = resolve_device_from_hook(data.get('stream', ''), data.get('file', ''))
     if is_kafka_upload_mode():
         enqueue_srs_dvr_hook(data, device_id=device_id)
-        return _hook_ok()
+        if not is_hybrid_upload_mode():
+            return _hook_ok()
     event = build_event_from_srs_hook(data, device_id=device_id)
-    process_dvr_event(event)
+    if is_hybrid_upload_mode() or not is_kafka_upload_mode():
+        process_dvr_event(event)
     return _hook_ok()
 
 
@@ -87,7 +90,9 @@ def zlm_on_record():
     device_id, _ = resolve_device_from_hook(stream, file_path)
     if is_kafka_upload_mode():
         enqueue_zlm_record_hook(data, device_id=device_id)
-        return _hook_ok()
+        if not is_hybrid_upload_mode():
+            return _hook_ok()
     event = build_event_from_zlm_hook(data, device_id=device_id)
-    process_dvr_event(event)
+    if is_hybrid_upload_mode() or not is_kafka_upload_mode():
+        process_dvr_event(event)
     return _hook_ok()

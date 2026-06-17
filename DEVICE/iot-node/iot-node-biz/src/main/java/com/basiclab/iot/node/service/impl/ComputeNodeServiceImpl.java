@@ -102,12 +102,17 @@ public class ComputeNodeServiceImpl implements ComputeNodeService {
         node.setAgentPort(defaultPort(createReqVO.getAgentPort(), DEFAULT_AGENT_PORT));
         node.setStatus(NodeStatusEnum.PENDING.getStatus());
         node.setWeight(createReqVO.getWeight() != null ? createReqVO.getWeight() : 100);
-        node.setMaxGpuCount(createReqVO.getMaxGpuCount() != null ? createReqVO.getMaxGpuCount() : 0);
+        applyRoleGpuDefaults(node, createReqVO.getMaxGpuCount());
         node.setMaxTaskCount(createReqVO.getMaxTaskCount() != null ? createReqVO.getMaxTaskCount() : 50);
         if (node.getCapabilities() == null) {
             node.setCapabilities(defaultCapabilities(createReqVO.getNodeRole()));
         }
         node.setAgentToken(IdUtil.fastSimpleUUID());
+        ensurePlatformNode();
+        ComputeNodeDO platformNode = computeNodeMapper.selectPlatformNode();
+        if (platformNode != null) {
+            node.setControlPlaneId(platformNode.getId());
+        }
         computeNodeMapper.insert(node);
         saveSshCredential(node.getId(), createReqVO);
         return toRespVO(node, true);
@@ -130,6 +135,7 @@ public class ComputeNodeServiceImpl implements ComputeNodeService {
         updateObj.setAgentToken(existing.getAgentToken());
         updateObj.setStatus(existing.getStatus());
         updateObj.setLastHeartbeatAt(existing.getLastHeartbeatAt());
+        applyRoleGpuDefaults(updateObj, updateReqVO.getMaxGpuCount());
         computeNodeMapper.updateById(updateObj);
         saveSshCredential(updateReqVO.getId(), updateReqVO);
     }
@@ -222,6 +228,8 @@ public class ComputeNodeServiceImpl implements ComputeNodeService {
         node.setAgentToken(IdUtil.fastSimpleUUID());
         node.setRemark("平台控制面宿主机，自动纳管");
         computeNodeMapper.insert(node);
+        node.setControlPlaneId(node.getId());
+        computeNodeMapper.updateById(node);
         log.info("已自动纳管控制面节点: id={}, host={}", node.getId(), node.getHost());
     }
 
@@ -890,10 +898,13 @@ public class ComputeNodeServiceImpl implements ComputeNodeService {
 
     private Map<String, Boolean> defaultCapabilities(String nodeRole) {
         Map<String, Boolean> caps = new HashMap<>();
-        if (NodeRoleEnum.COMPUTE.getRole().equals(nodeRole) || NodeRoleEnum.HYBRID.getRole().equals(nodeRole)) {
+        if (NodeRoleEnum.COMPUTE.getRole().equals(nodeRole)
+                || NodeRoleEnum.GPU.getRole().equals(nodeRole)
+                || NodeRoleEnum.HYBRID.getRole().equals(nodeRole)) {
             caps.put("ai_inference", true);
             caps.put("algorithm_realtime", true);
             caps.put("algorithm_snap", true);
+            caps.put("algorithm_patrol", true);
             caps.put("stream_forward", true);
         }
         if (NodeRoleEnum.MEDIA.getRole().equals(nodeRole) || NodeRoleEnum.HYBRID.getRole().equals(nodeRole)) {
@@ -901,7 +912,29 @@ public class ComputeNodeServiceImpl implements ComputeNodeService {
             caps.put("srs_ai", true);
             caps.put("zlm", true);
         }
+        if (NodeRoleEnum.STORAGE.getRole().equals(nodeRole)) {
+            caps.put("ceph_osd", true);
+            caps.put("media_storage", true);
+        }
         return caps;
+    }
+
+    /**
+     * 按节点角色规范化 GPU 数量：计算节点无 GPU，GPU 节点至少 1 张。
+     */
+    private void applyRoleGpuDefaults(ComputeNodeDO node, Integer requestedMaxGpuCount) {
+        String role = node.getNodeRole();
+        if (NodeRoleEnum.COMPUTE.getRole().equals(role)
+                || NodeRoleEnum.STORAGE.getRole().equals(role)) {
+            node.setMaxGpuCount(0);
+            return;
+        }
+        if (NodeRoleEnum.GPU.getRole().equals(role)) {
+            int count = requestedMaxGpuCount != null && requestedMaxGpuCount > 0 ? requestedMaxGpuCount : 1;
+            node.setMaxGpuCount(count);
+            return;
+        }
+        node.setMaxGpuCount(requestedMaxGpuCount != null ? requestedMaxGpuCount : 0);
     }
 
     private String resolveControlPlaneUrl(String override) {

@@ -111,7 +111,7 @@ function handleCopyLog() {
     </div>
 
     <div v-if="serviceCards.length" class="media-check__section">
-      <div class="media-check__section-title">流媒体服务</div>
+      <div class="media-check__section-title">{{ NODE_TERM.mediaService }}</div>
       <div class="media-check__grid media-check__grid--services">
         <div
           v-for="item in serviceCards"

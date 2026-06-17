@@ -2,9 +2,10 @@
 import os
 
 
-def resolve_ai_bundle_python(ai_root: str | None = None) -> str:
+def resolve_ai_bundle_python(ai_root: str | None = None, bundle: str = 'ai_service') -> str:
     explicit = os.getenv('NODE_REMOTE_PYTHON', '').strip()
     if explicit:
         return explicit
     root = ai_root or os.getenv('NODE_REMOTE_AI_ROOT', '/opt/easyaiot/AI')
-    return os.path.join(root, '.bundles', 'ai_service', 'run-python.sh')
+    bundle_key = (bundle or 'ai_service').strip()
+    return os.path.join(root, '.bundles', bundle_key, 'run-python.sh')

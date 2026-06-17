@@ -19,7 +19,12 @@ _producer = None
 
 
 def is_kafka_upload_mode() -> bool:
-    return os.getenv('MEDIA_UPLOAD_MODE', 'sync').lower() == 'kafka'
+    mode = os.getenv('MEDIA_UPLOAD_MODE', 'sync').lower()
+    return mode in ('kafka', 'hybrid')
+
+
+def is_hybrid_upload_mode() -> bool:
+    return os.getenv('MEDIA_UPLOAD_MODE', 'sync').lower() == 'hybrid'
 
 
 def is_snap_kafka_mode() -> bool:

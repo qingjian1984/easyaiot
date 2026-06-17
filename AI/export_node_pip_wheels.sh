@@ -12,6 +12,11 @@ TARGET_PLATFORM="${BUNDLE_TARGET_PLATFORM:-manylinux2014_x86_64}"
 GET_PIP_URL="${GET_PIP_URL:-https://bootstrap.pypa.io/get-pip.py}"
 GET_PIP_LOCAL="${ROOT}/get-pip.py"
 REQ_FILE="${ROOT}/requirements-node-ai-service.txt"
+case "${BUNDLE_TYPE}" in
+  model_train)
+    REQ_FILE="${ROOT}/requirements-node-model-train.txt"
+    ;;
+esac
 
 if [[ ! -f "${REQ_FILE}" ]]; then
   echo "[ERROR] requirements not found: ${REQ_FILE}" >&2

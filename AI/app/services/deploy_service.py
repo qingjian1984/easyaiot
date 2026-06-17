@@ -169,9 +169,12 @@ def _download_model_to_local(model_path: str, model_id: int) -> tuple[str | None
             logger.warning(error_msg)
             return None, error_msg
         
-        # 创建模型存储目录（使用模型ID，而不是服务ID）
-        # 使用绝对路径，相对于AI模块根目录
-        model_storage_dir = os.path.join(ai_root, 'data', 'models', str(model_id))
+        # 创建模型存储目录（集群模式下使用 CephFS 共享缓存）
+        try:
+            from cluster_storage import get_ai_models_dir
+            model_storage_dir = os.path.join(get_ai_models_dir(), str(model_id))
+        except ImportError:
+            model_storage_dir = os.path.join(ai_root, 'data', 'models', str(model_id))
         os.makedirs(model_storage_dir, exist_ok=True)
         
         # 从object_key中提取文件名
@@ -244,6 +247,7 @@ def _build_deploy_env(
         'KAFKA_BOOTSTRAP_SERVERS', 'MODEL_AI_PUSH_URL', 'CUDA_VISIBLE_DEVICES',
         'USE_GPU', 'NVIDIA_VISIBLE_DEVICES', 'ORT_EXECUTION_PROVIDERS', 'AI_ENV',
         'JAVA_BACKEND_URL',
+        'CLUSTER_MODE', 'MEDIA_HOST_DATA_ROOT', 'AI_DATASETS_DIR', 'AI_MODELS_DIR',
     ):
         val = os.getenv(key)
         if val:
@@ -271,6 +275,7 @@ def _deploy_on_remote_node(
     start_port: int,
     target_node_id: int | None,
     auto_schedule: bool,
+    prefer_gpu: bool | None = None,
 ) -> dict:
     from app.utils import node_client
 
@@ -279,6 +284,7 @@ def _deploy_on_remote_node(
         str(ai_service.id),
         capabilities=['ai_inference'],
         target_node_id=target_node_id,
+        prefer_gpu=prefer_gpu,
         sticky=True,
     )
     node_id = allocation['nodeId']
@@ -370,12 +376,13 @@ def deploy_model(
     start_port: int = 8000,
     target_node_id: int | None = None,
     auto_schedule: bool = False,
+    prefer_gpu: bool | None = None,
 ) -> dict:
     """部署模型服务（支持本机或远程节点）"""
     logger.info(
         '========== 开始部署模型服务 ========== model_id=%s start_port=%s '
-        'target_node_id=%s auto_schedule=%s',
-        model_id, start_port, target_node_id, auto_schedule,
+        'target_node_id=%s auto_schedule=%s prefer_gpu=%s',
+        model_id, start_port, target_node_id, auto_schedule, prefer_gpu,
     )
     
     try:
@@ -495,7 +502,7 @@ def deploy_model(
         if remote_deploy:
             return _deploy_on_remote_node(
                 ai_service, model, model_path, model_format, start_port,
-                target_node_id, auto_schedule,
+                target_node_id, auto_schedule, prefer_gpu,
             )
 
         # 本机部署：下载模型到本地

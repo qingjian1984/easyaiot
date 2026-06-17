@@ -7,7 +7,7 @@ import { BasicDrawer, useDrawerInner } from '@/components/Drawer';
 import { BasicForm, useForm } from '@/components/Form';
 import { Button } from '@/components/Button';
 import { createNode, updateNode, type ComputeNodeVO } from '@/api/device/node';
-import { generateDefaultAgentPort, generateRandomDeployPorts, SETUP_COPY, readMediaPortsFromTags, buildMediaPortTags } from '../../utils/constants';
+import { generateDefaultAgentPort, generateRandomDeployPorts, SETUP_COPY, readMediaPortsFromTags, buildMediaPortTags, readStorageTagsFromTags, buildStorageTags } from '../../utils/constants';
 import {
   nodeFormHistoryToFields,
   saveNodeFormHistory,
@@ -44,21 +44,23 @@ function isComputeRole(role: unknown) {
   return role !== 'media' && role !== 'hybrid';
 }
 
-function flattenMediaTags(record: ComputeNodeVO) {
+function flattenNodeTags(record: ComputeNodeVO) {
   return {
     ...record,
     ...readMediaPortsFromTags(record.tags),
+    ...readStorageTagsFromTags(record.tags),
   };
 }
 
-function buildMediaTags(values: Record<string, unknown>) {
-  if (values.nodeRole !== 'media' && values.nodeRole !== 'hybrid') {
-    return values.tags as Record<string, string> | undefined;
+function buildNodeTags(values: Record<string, unknown>) {
+  const base = (values.tags as Record<string, string> | undefined) || {};
+  if (values.nodeRole === 'media' || values.nodeRole === 'hybrid') {
+    return { ...base, ...buildMediaPortTags(values) };
   }
-  return {
-    ...(values.tags as Record<string, string> | undefined),
-    ...buildMediaPortTags(values),
-  };
+  if (values.nodeRole === 'storage') {
+    return { ...base, ...buildStorageTags(values) };
+  }
+  return base;
 }
 
 const [registerDrawer, { closeDrawer }] = useDrawerInner(async (data) => {
@@ -66,7 +68,7 @@ const [registerDrawer, { closeDrawer }] = useDrawerInner(async (data) => {
   isUpdate.value = !!data?.isUpdate;
   editRecord.value = data?.isUpdate && data.record ? data.record : null;
   if (unref(isUpdate) && data.record) {
-    setFieldsValue(flattenMediaTags(data.record));
+    setFieldsValue(flattenNodeTags(data.record));
   } else {
     setFieldsValue({
       sshUsername: 'root',
@@ -98,10 +100,20 @@ async function handleSubmit() {
   }
   const values = {
     ...raw,
-    tags: buildMediaTags(raw),
+    tags: buildNodeTags(raw),
   };
+  if (values.nodeRole === 'compute' || values.nodeRole === 'storage') {
+    values.maxGpuCount = 0;
+  } else if (values.nodeRole === 'gpu') {
+    values.maxGpuCount = Number(values.maxGpuCount) > 0 ? Number(values.maxGpuCount) : 1;
+  }
   if (unref(isUpdate) && editRecord.value) {
-    values.maxGpuCount = editRecord.value.maxGpuCount ?? 0;
+    if (values.nodeRole !== 'gpu') {
+      values.maxGpuCount =
+        values.nodeRole === 'compute' || values.nodeRole === 'storage'
+          ? 0
+          : (editRecord.value.maxGpuCount ?? 0);
+    }
     values.maxTaskCount = editRecord.value.maxTaskCount ?? 50;
     values.weight = editRecord.value.weight ?? 100;
   }

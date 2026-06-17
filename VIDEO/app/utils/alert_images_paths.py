@@ -18,10 +18,15 @@ def resolve_alert_images_root(project_video_root: str) -> str:
 
     优先级：
     1. 环境变量 ALERT_IMAGES_DIR（Docker 推荐 /app/alert_images）
-    2. 默认：{project_video_root}/alert_images（本地开发未配置时）
+    2. 集群模式 CephFS：/mnt/easyaiot-media/alert_images
+    3. 默认：{project_video_root}/alert_images（本地开发未配置时）
     """
-    raw = (os.getenv('ALERT_IMAGES_DIR') or '').strip()
-    if raw:
-        return os.path.abspath(os.path.expanduser(raw))
-    base = (project_video_root or '').rstrip(os.sep)
-    return os.path.join(base, 'alert_images')
+    try:
+        from cluster_storage import get_alert_images_dir
+        return get_alert_images_dir(project_video_root)
+    except ImportError:
+        raw = (os.getenv('ALERT_IMAGES_DIR') or '').strip()
+        if raw:
+            return os.path.abspath(os.path.expanduser(raw))
+        base = (project_video_root or '').rstrip(os.sep)
+        return os.path.join(base, 'alert_images')

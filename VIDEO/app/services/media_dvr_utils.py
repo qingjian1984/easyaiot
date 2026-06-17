@@ -92,26 +92,32 @@ def wait_dvr_file_stable(
 
 
 def resolve_playback_absolute_path(local_path: str, cwd: str = '') -> str:
-    """规范化 Hook 中的录像路径（容器 /data → 宿主机 GlusterFS 挂载）。"""
+    """规范化 Hook 中的录像路径（容器 /data → 宿主机 CephFS 挂载）。"""
     if not local_path:
         return local_path
     if not os.path.isabs(local_path) and cwd:
         local_path = os.path.join(cwd, local_path)
 
-    media_root = (os.getenv('MEDIA_HOST_DATA_ROOT') or os.getenv('SRS_HOST_DATA_ROOT') or '').strip()
-    if media_root:
-        media_root = os.path.normpath(os.path.expanduser(os.path.expandvars(media_root)))
-        for prefix in ('/data', '/mnt/easyaiot-media'):
-            p = os.path.normpath(local_path)
-            if p == prefix or p.startswith(prefix + os.sep):
-                if not os.path.lexists(p):
-                    try:
-                        rel = os.path.relpath(p, prefix)
-                        mapped = os.path.join(media_root, rel)
-                        if os.path.lexists(mapped) or prefix == '/data':
-                            return mapped
-                    except ValueError:
-                        pass
+    try:
+        from cluster_storage import resolve_container_path
+        mapped = resolve_container_path(local_path, cwd='')
+        if mapped != local_path:
+            return mapped
+    except ImportError:
+        media_root = (os.getenv('MEDIA_HOST_DATA_ROOT') or os.getenv('SRS_HOST_DATA_ROOT') or '').strip()
+        if media_root:
+            media_root = os.path.normpath(os.path.expanduser(os.path.expandvars(media_root)))
+            for prefix in ('/data', '/mnt/easyaiot-media'):
+                p = os.path.normpath(local_path)
+                if p == prefix or p.startswith(prefix + os.sep):
+                    if not os.path.lexists(p):
+                        try:
+                            rel = os.path.relpath(p, prefix)
+                            mapped = os.path.join(media_root, rel)
+                            if os.path.lexists(mapped) or prefix == '/data':
+                                return mapped
+                        except ValueError:
+                            pass
 
     container_root = (os.getenv('SRS_CONTAINER_DATA_ROOT') or '/data').rstrip('/\\')
     try:

@@ -27,4 +27,7 @@ public class ComputeNodePageReqVO extends PageParam {
     @Schema(description = "区域")
     private String region;
 
+    @Schema(description = "所属中心节点 ID")
+    private Long controlPlaneId;
+
 }

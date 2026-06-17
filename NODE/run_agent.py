@@ -13,6 +13,12 @@ import threading
 import time
 from typing import Any, Dict, List
 
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+_lib_root = os.path.join(_repo_root, 'lib')
+for _p in (_repo_root, _lib_root):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import psutil
 import requests
 
@@ -181,7 +187,7 @@ def collect_metrics() -> Dict[str, Any]:
     cpu = round(psutil.cpu_percent(interval=0.5), 2)
     mem = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
-    return {
+    metrics = {
         'cpuPercent': cpu,
         'memPercent': round(mem.percent, 2),
         'memUsedBytes': mem.used,
@@ -194,6 +200,14 @@ def collect_metrics() -> Dict[str, Any]:
         'gpuInfo': get_gpu_info(),
         'workloads': workloads,
     }
+    try:
+        from cluster_storage import get_mount_root, is_cluster_mode, verify_ceph_mount
+        metrics['clusterMode'] = is_cluster_mode()
+        metrics['cephMountRoot'] = get_mount_root()
+        metrics['cephMountReady'] = verify_ceph_mount()
+    except ImportError:
+        pass
+    return metrics
 
 
 def post_json(path: str, payload: Dict[str, Any], *, allow_refresh: bool = True) -> bool:

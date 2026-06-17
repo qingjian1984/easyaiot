@@ -319,7 +319,11 @@ def start_bootstrap_auto_label(dataset_id):
 
 @auto_label_bp.route('/dataset/<int:dataset_id>/auto-label/pipeline/start', methods=['POST'])
 def start_pipeline_auto_label(dataset_id):
-    """无人值守流水线：摄像头采集 → SAM 标注 → 自动打包（支持本机/集群队列）"""
+    """
+    无人值守标注流水线：多路摄像头抽帧 → 模型自动打标 → 写入数据集（可选打包导出）。
+
+    与在线推理/告警（VIDEO AlgorithmTask）无关；集群模式按摄像头分片调度到多台计算节点。
+    """
     try:
         data = request.json or {}
         execution_mode = (data.get('execution_mode') or 'local').lower()
@@ -334,9 +338,25 @@ def start_pipeline_auto_label(dataset_id):
         if not text_prompts:
             return jsonify({'code': 400, 'msg': '请提供检测类别词 text_prompts'}), 400
 
+        strategy_pre = data.get('strategy') or {}
+        skip_sam_cold_start = bool(
+            data.get('skip_sam_cold_start') or strategy_pre.get('skip_sam_cold_start')
+        )
+        initial_model_id = (
+            data.get('initial_model_id')
+            or data.get('model_id')
+            or strategy_pre.get('initial_model_id')
+        )
         sam_svc = get_sam_service()
-        if not sam_svc.enabled and execution_mode == 'local':
-            return jsonify({'code': 503, 'msg': 'SAM 未启用，请设置 SAM_ENABLED=true'}), 503
+        if (
+            not sam_svc.enabled
+            and execution_mode == 'local'
+            and not (skip_sam_cold_start and initial_model_id)
+        ):
+            return jsonify({
+                'code': 503,
+                'msg': 'SAM 未启用：请设置 SAM_ENABLED=true，或指定 model_id 并 skip_sam_cold_start',
+            }), 503
 
         duration_hours = max(1, min(48, int(data.get('duration_hours', 8))))
         capture_interval_sec = max(5, min(600, int(data.get('capture_interval_sec', 30))))

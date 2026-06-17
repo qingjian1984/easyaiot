@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { Alert, Tabs } from 'ant-design-vue';
 import { BasicDrawer, useDrawerInner } from '@/components/Drawer';
 import { BasicTitle } from '@/components/Basic';
@@ -13,29 +13,23 @@ import {
   NODE_DETAIL,
   NODE_ROLE_DESC,
   NODE_TERM,
-  loadNodeControlPlaneUrlAsync,
-  saveNodeControlPlaneUrl,
-  readMediaPortsFromTags,
+  readCephMountFromTags,
+  isClusterComputeRole,
 } from '../../utils/constants';
-import { mediaDetailSchema, nodeSetupSummarySchema } from '../../Data';
+import { mediaDetailSchema, nodeSetupSummarySchema, storageDetailSchema, cephMountDetailSchema } from '../../Data';
 import NodeMetaBadge from '../NodeMetaBadge/index.vue';
 import { isPlatformNode } from '../../utils/platformNode';
 import SetupOverviewPanel from '../SetupOverviewPanel/index.vue';
 import NodeDetailResourcePanel from '../NodeDetailResourcePanel/index.vue';
-import MediaStackSetupPanel from '../MediaStackSetupPanel/index.vue';
-import AgentDeployPanel from '../AgentDeployPanel/index.vue';
-import SetupVerifyPanel from '../SetupVerifyPanel/index.vue';
 
 defineOptions({ name: 'NodeDetailDrawer' });
 
-type DetailTabKey = 'resource' | 'config' | 'access' | 'mediaDeploy' | 'agentDeploy';
+type DetailTabKey = 'resource' | 'config' | 'access';
 
 const emit = defineEmits([
   'register',
   'edit',
-  'resetToken',
   'maintenance',
-  'deployMedia',
   'continueSetup',
   'refresh',
   'closed',
@@ -43,43 +37,25 @@ const emit = defineEmits([
 
 const { createMessage } = useMessage();
 
-const loading = ref(false);
 const drawerOpen = ref(false);
 const testingSsh = ref(false);
 const activeTab = ref<DetailTabKey>('resource');
 const node = ref<ComputeNodeVO | null>(null);
-const controlPlaneUrl = ref('');
-const skipControlPlanePersist = ref(false);
-
-watch(controlPlaneUrl, (url) => {
-  if (skipControlPlanePersist.value) return;
-  if (node.value?.id) saveNodeControlPlaneUrl(node.value.id, url);
-});
+const metricsLoading = ref(false);
 
 const isMediaNode = computed(
   () => node.value?.nodeRole === 'media' || node.value?.nodeRole === 'hybrid',
 );
 
-const isPlatformReadonly = computed(() => isPlatformNode(node.value));
+const isStorageNode = computed(() => node.value?.nodeRole === 'storage');
 
-const roleDesc = computed(() => NODE_ROLE_DESC[node.value?.nodeRole || ''] || '');
+const showCephMountBadge = computed(
+  () => isClusterComputeRole(node.value?.nodeRole) && !isPlatformNode(node.value),
+);
 
-const mediaFormValues = computed(() => {
-  const current = node.value;
-  if (!current) return undefined;
-  const tags = current.tags || {};
-  return {
-    nodeRole: current.nodeRole,
-    nodeId: current.id,
-    name: current.name,
-    host: current.host,
-    sshUsername: current.sshUsername,
-    sshCredentialConfigured: current.sshCredentialConfigured,
-    sshLastTestOk: current.sshLastTestOk,
-    sshPort: current.sshPort,
-    ...readMediaPortsFromTags(tags),
-  };
-});
+const cephMountStatus = computed(
+  () => readCephMountFromTags(node.value?.tags).status,
+);
 
 const statusAlert = computed(() => {
   const status = node.value?.status;
@@ -95,17 +71,9 @@ const statusAlert = computed(() => {
   return null;
 });
 
-const mediaPanelActive = computed(
-  () => drawerOpen.value && activeTab.value === 'mediaDeploy',
-);
+const isPlatformReadonly = computed(() => isPlatformNode(node.value));
 
-const agentPanelActive = computed(
-  () => drawerOpen.value && activeTab.value === 'agentDeploy',
-);
-
-const verifyPanelActive = computed(
-  () => drawerOpen.value && activeTab.value === 'agentDeploy' && node.value?.status !== 'online',
-);
+const roleDesc = computed(() => NODE_ROLE_DESC[node.value?.nodeRole || ''] || '');
 
 const [registerMediaDesc] = useDescription({
   useCollapse: false,
@@ -115,34 +83,62 @@ const [registerMediaDesc] = useDescription({
   data: node,
 });
 
+const [registerStorageDesc] = useDescription({
+  useCollapse: false,
+  bordered: true,
+  column: 2,
+  schema: storageDetailSchema,
+  data: node,
+});
+
+const [registerCephDesc] = useDescription({
+  useCollapse: false,
+  bordered: true,
+  column: 2,
+  schema: cephMountDetailSchema,
+  data: node,
+});
+
 const [registerDrawer, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) => {
   drawerOpen.value = true;
-  const platformReadonly = isPlatformNode(data?.record);
-  const pending = data?.record?.status === 'pending';
-  const isMedia =
-    data?.record?.nodeRole === 'media' || data?.record?.nodeRole === 'hybrid';
-  activeTab.value = platformReadonly
-    ? 'resource'
-    : pending
-      ? (isMedia ? 'mediaDeploy' : 'agentDeploy')
-      : 'resource';
-  setDrawerProps({ showFooter: true, showOkBtn: false, showCancelBtn: false });
-  if (data?.record?.id) {
-    skipControlPlanePersist.value = true;
-    controlPlaneUrl.value = await loadNodeControlPlaneUrlAsync(data.record.id);
-    skipControlPlanePersist.value = false;
-    await loadDetail(data.record.id);
+  activeTab.value = 'resource';
+  setDrawerProps({ showFooter: true, showOkBtn: false, showCancelBtn: false, loading: false });
+  const record = data?.record as ComputeNodeVO | undefined;
+  if (record) {
+    node.value = { ...record };
+  }
+  if (record?.id) {
+    await loadDetail(record.id);
   }
 });
 
+function normalizeNodeDetail(res: unknown): ComputeNodeVO | null {
+  if (!res || typeof res !== 'object') return null;
+  const payload = res as Record<string, unknown>;
+  if (payload.id != null || payload.name != null) {
+    return payload as ComputeNodeVO;
+  }
+  const nested = payload.data;
+  if (nested && typeof nested === 'object') {
+    return nested as ComputeNodeVO;
+  }
+  return null;
+}
+
 async function loadDetail(id: number) {
-  loading.value = true;
+  metricsLoading.value = true;
   try {
-    node.value = await getNode(id);
+    const res = await getNode(id);
+    const detail = normalizeNodeDetail(res);
+    if (detail) {
+      node.value = detail;
+    } else {
+      createMessage.warning('节点详情数据格式异常');
+    }
   } catch {
     createMessage.error('加载节点详情失败');
   } finally {
-    loading.value = false;
+    metricsLoading.value = false;
   }
 }
 
@@ -170,6 +166,8 @@ async function handleTestSsh() {
 function handleDrawerOpenChange(open: boolean) {
   drawerOpen.value = open;
   if (!open) {
+    metricsLoading.value = false;
+    setDrawerProps({ loading: false });
     node.value = null;
     activeTab.value = 'resource';
     emit('closed');
@@ -195,7 +193,6 @@ defineExpose({
     placement="right"
     destroy-on-close
     root-class-name="node-detail-drawer"
-    :loading="loading"
     @register="registerDrawer"
     @open-change="handleDrawerOpenChange"
   >
@@ -220,6 +217,12 @@ defineExpose({
         </div>
         <div class="detail-drawer-header__tags">
           <NodeMetaBadge v-if="isPlatformNode(node)" type="scope" size="lg" />
+          <NodeMetaBadge
+            v-if="showCephMountBadge"
+            type="ceph"
+            :ceph-status="cephMountStatus"
+            size="lg"
+          />
           <NodeMetaBadge type="status" :status="node.status" size="lg" />
           <NodeMetaBadge type="role" :role="node.nodeRole" size="lg" />
         </div>
@@ -243,9 +246,6 @@ defineExpose({
           <Button @click="emit('edit', node)">{{ NODE_DETAIL.actionEdit }}</Button>
           <Button @click="emit('maintenance', node, node?.status !== 'maintenance')">
             {{ node?.status === 'maintenance' ? '退出维护' : NODE_DETAIL.actionMaintenance }}
-          </Button>
-          <Button danger ghost @click="emit('resetToken', node)">
-            {{ NODE_DETAIL.actionResetToken }}
           </Button>
         </div>
       </div>
@@ -279,7 +279,7 @@ defineExpose({
         <Tabs.TabPane :key="'resource'" :tab="NODE_DETAIL.tabResource">
           <div class="detail-tab-pane">
             <p class="detail-tab-hint">{{ NODE_DETAIL.sectionResourceHint }}</p>
-            <NodeDetailResourcePanel :node="node" />
+            <NodeDetailResourcePanel :node="node" :loading="metricsLoading" />
           </div>
         </Tabs.TabPane>
 
@@ -299,6 +299,14 @@ defineExpose({
               <h4 class="detail-subtitle">{{ NODE_DETAIL.sectionMedia }}</h4>
               <Description @register="registerMediaDesc" />
             </div>
+            <div v-if="isStorageNode" class="media-desc-block">
+              <h4 class="detail-subtitle">{{ NODE_DETAIL.sectionStorage }}</h4>
+              <Description @register="registerStorageDesc" />
+            </div>
+            <div v-if="showCephMountBadge" class="media-desc-block">
+              <h4 class="detail-subtitle">集群共享存储</h4>
+              <Description @register="registerCephDesc" />
+            </div>
           </div>
         </Tabs.TabPane>
 
@@ -312,43 +320,6 @@ defineExpose({
               @edit="emit('edit', node)"
               @test-ssh="handleTestSsh"
             />
-          </div>
-        </Tabs.TabPane>
-
-        <Tabs.TabPane
-          v-if="isMediaNode && !isPlatformReadonly"
-          :key="'mediaDeploy'"
-          :tab="NODE_DETAIL.tabMediaDeploy"
-        >
-          <div class="detail-tab-pane detail-tab-pane--flush">
-            <MediaStackSetupPanel
-              :active="mediaPanelActive"
-              :form-values="mediaFormValues"
-              @deployed="handleRefresh"
-            />
-          </div>
-        </Tabs.TabPane>
-
-        <Tabs.TabPane v-if="!isPlatformReadonly" :key="'agentDeploy'" :tab="NODE_DETAIL.tabAgentDeploy">
-          <div class="detail-tab-pane detail-tab-pane--flush">
-            <div class="detail-tab-stack">
-              <AgentDeployPanel
-                v-model:control-plane-url="controlPlaneUrl"
-                :active="agentPanelActive"
-                :node="node"
-                :agent-token="node.agentToken"
-                @deployed="handleRefresh"
-              />
-
-              <SetupVerifyPanel
-                v-if="node.status !== 'online'"
-                v-model:control-plane-url="controlPlaneUrl"
-                :node-id="node.id"
-                :active="verifyPanelActive"
-                :ssh-ready="!!node.sshUsername?.trim() || node.sshCredentialConfigured === true"
-                @online="handleRefresh"
-              />
-            </div>
           </div>
         </Tabs.TabPane>
       </Tabs>

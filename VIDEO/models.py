@@ -930,6 +930,8 @@ class AlgorithmTask(db.Model):
     # 节点调度（跨节点部署）
     schedule_policy = db.Column(db.String(20), default='local', nullable=False,
                                 comment='调度策略[local:本机,auto:自动节点,node:指定节点]')
+    prefer_gpu = db.Column(db.Boolean, default=True, nullable=False,
+                           comment='自动调度时是否优先 GPU 节点')
     target_node_id = db.Column(db.BigInteger, nullable=True, comment='指定部署节点ID')
     node_id = db.Column(db.BigInteger, nullable=True, comment='实际运行节点ID')
 
@@ -1083,6 +1085,7 @@ class AlgorithmTask(db.Model):
             'defense_mode': self.defense_mode,
             'defense_schedule': self.defense_schedule,
             'schedule_policy': self.schedule_policy,
+            'prefer_gpu': self.prefer_gpu if self.prefer_gpu is not None else True,
             'target_node_id': self.target_node_id,
             'node_id': self.node_id,
             'service_server_ip': self.service_server_ip,
@@ -1869,6 +1872,8 @@ class StreamForwardTask(db.Model):
     # 节点调度（跨节点部署）
     schedule_policy = db.Column(db.String(20), default='local', nullable=False,
                                 comment='调度策略[local:本机,auto:自动节点,node:指定节点]')
+    prefer_gpu = db.Column(db.Boolean, default=True, nullable=False,
+                           comment='自动调度时是否优先 GPU 节点')
     target_node_id = db.Column(db.BigInteger, nullable=True, comment='指定部署节点ID')
     node_id = db.Column(db.BigInteger, nullable=True, comment='实际运行节点ID（单节点部署）')
     device_deployments = db.Column(db.Text, nullable=True,
@@ -1923,6 +1928,7 @@ class StreamForwardTask(db.Model):
             'service_last_heartbeat': utc_isoformat_z(self.service_last_heartbeat),
             'service_log_path': self.service_log_path,
             'schedule_policy': self.schedule_policy,
+            'prefer_gpu': self.prefer_gpu if self.prefer_gpu is not None else True,
             'target_node_id': self.target_node_id,
             'node_id': self.node_id,
             'device_deployments': self._parse_device_deployments(),

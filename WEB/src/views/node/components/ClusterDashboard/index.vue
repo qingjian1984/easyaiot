@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { computed } from 'vue';
-import { Button, RadioButton, RadioGroup, Select } from 'ant-design-vue';
-import { Icon } from '@/components/Icon';
+import { Button } from '@/components/Button';
+import { ApiSelect, RadioButtonGroup } from '@/components/Form';
 import TrendChart from './TrendChart.vue';
 import GaugePanel from './GaugePanel.vue';
 import GpuVramOverview from './GpuVramOverview.vue';
@@ -30,6 +30,9 @@ const {
   lastUpdated,
   computeNodeOptions,
   trendSampleIntervalSec,
+  activeLaneKey,
+  setActiveLaneKey,
+  centralLaneOptions,
 } = useClusterDashboard();
 
 const trendSampleIntervalOptions = TREND_SAMPLE_INTERVAL_OPTIONS.map((item) => ({
@@ -48,6 +51,15 @@ const overviewFocusSelectValue = computed({
     overviewFocusNodeId.value = value === OVERVIEW_ALL_NODES_ID ? undefined : value;
   },
 });
+
+const centralLaneSelectValue = computed({
+  get: () => activeLaneKey.value,
+  set: (value: string) => setActiveLaneKey(value),
+});
+
+function filterLane(input: string, option: { label?: string }) {
+  return (option.label || '').toLowerCase().includes(input.toLowerCase());
+}
 
 function backToAllNodes() {
   overviewFocusNodeId.value = undefined;
@@ -89,6 +101,11 @@ const metricOptions = computed(() => [
   { label: NODE_METRIC.vram, value: 'gpuMem' as const },
   { label: NODE_METRIC.gpuUtil, value: 'gpuUtil' as const },
   { label: NODE_METRIC.disk, value: 'disk' as const },
+]);
+
+const trendViewOptions = computed(() => [
+  { label: NODE_DASHBOARD.trendViewCluster, value: 'cluster' as const },
+  { label: NODE_DASHBOARD.trendViewNode, value: 'node' as const },
 ]);
 
 const wsStatusLabel = computed(() => {
@@ -135,24 +152,41 @@ const effectiveSelectedNodeIds = computed(() => {
       <div class="load-section__head">
         <h2 class="load-section__title">{{ NODE_DASHBOARD.clusterLoad }}</h2>
         <div class="load-section__head-right">
-          <label class="control-item load-section__node-focus">
-            <span>{{ NODE_DASHBOARD.overviewNodeFocus }}</span>
-            <Select
-              v-model:value="overviewFocusSelectValue"
-              :options="overviewNodeOptions"
-              size="small"
-              class="load-section__node-select"
-            />
-            <Button
-              v-if="overviewFocusNodeId"
-              type="link"
-              size="small"
-              class="load-section__back"
-              @click="backToAllNodes"
-            >
-              {{ NODE_DASHBOARD.overviewBackToAll }}
-            </Button>
-          </label>
+          <div class="load-section__scope-controls">
+            <label class="control-item load-section__central-node">
+              <span>{{ NODE_DASHBOARD.overviewCentralNode }}</span>
+              <ApiSelect
+                v-model:value="centralLaneSelectValue"
+                show-search
+                class="load-section__scope-select"
+                :options="centralLaneOptions"
+                :filter-option="filterLane"
+                :immediate="false"
+              />
+            </label>
+            <label class="control-item load-section__node-focus">
+              <span>{{ NODE_DASHBOARD.overviewNodeFocus }}</span>
+              <ApiSelect
+                v-model:value="overviewFocusSelectValue"
+                show-search
+                allow-clear
+                size="small"
+                class="load-section__scope-select"
+                :options="overviewNodeOptions"
+                :filter-option="filterLane"
+                :immediate="false"
+              />
+              <Button
+                v-if="overviewFocusNodeId"
+                type="link"
+                size="small"
+                class="load-section__back"
+                @click="backToAllNodes"
+              >
+                {{ NODE_DASHBOARD.overviewBackToAll }}
+              </Button>
+            </label>
+          </div>
           <div class="load-section__status">
             <span class="ws-status" :class="`ws-status--${wsStatus}`">{{ wsStatusLabel }}</span>
             <span v-if="lastUpdated" class="action-sep" aria-hidden="true">·</span>
@@ -164,34 +198,22 @@ const effectiveSelectedNodeIds = computed(() => {
       </div>
 
       <div class="mode-toolbar">
-        <RadioGroup
+        <RadioButtonGroup
           v-model:value="trendViewMode"
-          button-style="solid"
+          :options="trendViewOptions"
           size="middle"
           class="mode-radio-group"
           :disabled="!!overviewFocusNodeId"
-        >
-          <RadioButton value="cluster">
-            <span class="mode-radio-item">
-              <Icon icon="ant-design:line-chart-outlined" />
-              {{ NODE_DASHBOARD.trendViewCluster }}
-            </span>
-          </RadioButton>
-          <RadioButton value="node">
-            <span class="mode-radio-item">
-              <Icon icon="ant-design:cluster-outlined" />
-              {{ NODE_DASHBOARD.trendViewNode }}
-            </span>
-          </RadioButton>
-        </RadioGroup>
+        />
         <span class="mode-hint">{{ trendHint }}</span>
         <label class="control-item mode-toolbar__interval" :title="NODE_DASHBOARD.trendSampleIntervalHint">
           <span>{{ NODE_DASHBOARD.trendSampleIntervalLabel }}</span>
-          <Select
+          <ApiSelect
             v-model:value="trendSampleIntervalSec"
             :options="trendSampleIntervalOptions"
             size="small"
             style="width: 88px"
+            :immediate="false"
           />
         </label>
       </div>
@@ -199,16 +221,17 @@ const effectiveSelectedNodeIds = computed(() => {
       <div v-if="!overviewFocusNodeId" class="load-section__filters">
         <label v-if="trendViewMode === 'node'" class="control-item">
           <span>{{ NODE_DASHBOARD.trendMetricLabel }}</span>
-          <Select
+          <ApiSelect
             v-model:value="trendMetric"
             :options="metricOptions"
             size="small"
             style="min-width: 120px"
+            :immediate="false"
           />
         </label>
         <label class="control-item">
           <span>{{ NODE_DASHBOARD.trendNodeFilter }}</span>
-          <Select
+          <ApiSelect
             v-model:value="selectedNodeIds"
             mode="multiple"
             allow-clear
@@ -217,6 +240,7 @@ const effectiveSelectedNodeIds = computed(() => {
             :placeholder="NODE_DASHBOARD.trendNodeFilterAll"
             size="small"
             style="min-width: 220px"
+            :immediate="false"
           />
         </label>
       </div>
@@ -365,11 +389,20 @@ const effectiveSelectedNodeIds = computed(() => {
   min-width: 0;
 }
 
+.load-section__scope-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  flex-shrink: 0;
+}
+
+.load-section__central-node,
 .load-section__node-focus {
   flex-shrink: 0;
 }
 
-.load-section__node-select {
+.load-section__scope-select {
   min-width: 220px;
 }
 
@@ -439,12 +472,6 @@ const effectiveSelectedNodeIds = computed(() => {
       line-height: 1;
       padding: 6px 14px;
     }
-  }
-
-  .mode-radio-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
   }
 
   .mode-hint {
@@ -584,7 +611,14 @@ const effectiveSelectedNodeIds = computed(() => {
     gap: 8px;
   }
 
-  .load-section__node-select {
+  .load-section__scope-controls {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .load-section__scope-select {
     min-width: 0;
     width: 100%;
   }

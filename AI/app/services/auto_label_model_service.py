@@ -283,6 +283,8 @@ def run_dataset_model_update(
                 name=model_name,
                 published_model_id=publish_id,
                 class_names=class_names or None,
+                model_origin='auto_label',
+                origin_ref=f'dataset:{dataset_id}',
             )
 
             set_dataset_auto_label_model(dataset_id, model_id)

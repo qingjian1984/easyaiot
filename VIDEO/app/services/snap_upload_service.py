@@ -1,5 +1,5 @@
 """
-抓拍图上传流水线：本地 GlusterFS → MinIO snap-space → 元数据 → 删本地。
+抓拍图上传流水线：本地 CephFS → MinIO snap-space → 元数据 → 删本地。
 """
 import logging
 import os

@@ -12,6 +12,12 @@ if [ -f "$TARGET" ] && [ "$(stat -c%s "$TARGET" 2>/dev/null || stat -f%z "$TARGE
   exit 0
 fi
 
+# Docker 单独挂载不存在的文件时会建成目录，需先清理
+if [ -d "$TARGET" ]; then
+  echo "[WARN] $TARGET 误为目录（多为 Docker 文件卷导致），正在删除..."
+  rm -rf "$TARGET"
+fi
+
 # 清理空文件或损坏的占位文件
 if [ -e "$TARGET" ]; then
   rm -f "$TARGET"

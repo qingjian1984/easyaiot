@@ -4,7 +4,7 @@
       <Icon icon="ant-design:cloud-server-outlined"/>
       <div>
         <p class="intro-title">数据来源</p>
-        <p class="intro-desc">除「添加」菜单导入外，可通过视频抽帧或视频库持续向本数据集补充图片。</p>
+        <p class="intro-desc">除「添加」菜单导入外，可通过视频抽帧、无人值守自动打标或视频库持续向本数据集补充图片。</p>
       </div>
     </div>
 
@@ -19,6 +19,25 @@
         </template>
         <p class="panel-tip">创建任务后，系统按间隔从实时流抓取帧并写入当前数据集，适合监控场景持续采标。</p>
         <DatasetFrameTask/>
+      </CollapsePanel>
+
+      <CollapsePanel key="unattended">
+        <template #header>
+          <span class="panel-header-inner">
+            <Icon icon="ant-design:cluster-outlined"/>
+            无人值守扩充
+            <span class="panel-badge">自动打标</span>
+          </span>
+        </template>
+        <p class="panel-tip">
+          在已配置的抽帧任务上，选择检测模型与摄像头，由系统在后台持续抽帧并自动标注，扩充本数据集，无需人工逐张打标。
+        </p>
+        <Button type="primary" @click="emit('open-unattended')">
+          <template #icon>
+            <Icon icon="ant-design:play-circle-outlined"/>
+          </template>
+          配置无人值守扩充
+        </Button>
       </CollapsePanel>
 
       <CollapsePanel key="video">
@@ -39,13 +58,18 @@
 <script setup lang="ts">
 import {ref} from 'vue';
 import {Collapse, CollapsePanel} from 'ant-design-vue';
+import {Button} from '@/components/Button';
 import {Icon} from '@/components/Icon';
 import DatasetFrameTask from '@/views/dataset/components/DatasetFrameTask/index.vue';
 import DatasetVideo from '@/views/dataset/components/DatasetVideo/index.vue';
 
 defineOptions({name: 'DatasetSourcePanel'});
 
-const activeKeys = ref(['frame']);
+const emit = defineEmits<{
+  'open-unattended': [];
+}>();
+
+const activeKeys = ref(['frame', 'unattended']);
 </script>
 
 <style lang="less" scoped>

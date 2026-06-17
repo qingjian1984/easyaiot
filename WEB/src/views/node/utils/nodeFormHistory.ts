@@ -1,4 +1,4 @@
-import { NODE_ROLE_MAP, MEDIA_PORT_DEFAULTS } from './constants';
+import { NODE_ROLE_MAP, MEDIA_PORT_DEFAULTS, STORAGE_TAG_DEFAULTS } from './constants';
 
 export interface NodeFormHistoryEntry {
   id: string;
@@ -24,6 +24,11 @@ export interface NodeFormHistoryEntry {
   zlmRtcPort?: number;
   zlmRtpPortMin?: number;
   zlmRtpPortMax?: number;
+  cephPool?: string;
+  cephOsdPath?: string;
+  cephfsName?: string;
+  cephMonHost?: string;
+  mediaMountPath?: string;
 }
 
 const STORAGE_KEY = 'easyaiot_node_form_history_v1';
@@ -125,6 +130,11 @@ export function nodeFormHistoryToFields(entry: NodeFormHistoryEntry): Record<str
     zlmRtcPort: entry.zlmRtcPort ?? MEDIA_PORT_DEFAULTS.zlmRtcPort,
     zlmRtpPortMin: entry.zlmRtpPortMin ?? MEDIA_PORT_DEFAULTS.zlmRtpPortMin,
     zlmRtpPortMax: entry.zlmRtpPortMax ?? MEDIA_PORT_DEFAULTS.zlmRtpPortMax,
+    cephPool: entry.cephPool ?? STORAGE_TAG_DEFAULTS.cephPool,
+    cephOsdPath: entry.cephOsdPath ?? STORAGE_TAG_DEFAULTS.cephOsdPath,
+    cephfsName: entry.cephfsName ?? STORAGE_TAG_DEFAULTS.cephfsName,
+    cephMonHost: entry.cephMonHost ?? STORAGE_TAG_DEFAULTS.cephMonHost,
+    mediaMountPath: entry.mediaMountPath ?? STORAGE_TAG_DEFAULTS.mediaMountPath,
   };
 }
 
@@ -151,5 +161,10 @@ export function valuesToNodeFormHistoryEntry(values: Record<string, unknown>): O
     zlmRtcPort: values.zlmRtcPort != null ? Number(values.zlmRtcPort) : undefined,
     zlmRtpPortMin: values.zlmRtpPortMin != null ? Number(values.zlmRtpPortMin) : undefined,
     zlmRtpPortMax: values.zlmRtpPortMax != null ? Number(values.zlmRtpPortMax) : undefined,
+    cephPool: values.cephPool ? String(values.cephPool) : undefined,
+    cephOsdPath: values.cephOsdPath ? String(values.cephOsdPath) : undefined,
+    cephfsName: values.cephfsName ? String(values.cephfsName) : undefined,
+    cephMonHost: values.cephMonHost ? String(values.cephMonHost) : undefined,
+    mediaMountPath: values.mediaMountPath ? String(values.mediaMountPath) : undefined,
   };
 }

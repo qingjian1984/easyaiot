@@ -15,7 +15,7 @@ public class NodeWorkloadBundleBatchReqVO {
     @NotEmpty(message = "节点列表不能为空")
     private List<Long> nodeIds;
 
-    @Schema(description = "bundle 类型: stream_forward | algorithm_realtime | algorithm_snap | ai_service",
+    @Schema(description = "bundle 类型: stream_forward | algorithm_realtime | algorithm_snap | algorithm_patrol | ai_service",
             requiredMode = Schema.RequiredMode.REQUIRED)
     @NotNull(message = "bundleType 不能为空")
     private String bundleType;

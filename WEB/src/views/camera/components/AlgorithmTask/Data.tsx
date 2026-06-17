@@ -2,6 +2,7 @@
 import { BasicColumn, FormProps } from "@/components/Table";
 import { Tag } from "ant-design-vue";
 import { summarizeMatchingForList } from "@/views/camera/utils/libraryMatching";
+import { formatClusterRuntime, formatSchedulePolicy } from '@/utils/clusterRuntime';
 
 export function getBasicColumns(): BasicColumn[] {
   return [
@@ -37,19 +38,13 @@ export function getBasicColumns(): BasicColumn[] {
       title: '调度策略',
       dataIndex: 'schedule_policy',
       width: 110,
-      customRender: ({ text, record }) => {
-        const policy = text || 'local';
-        const labels: Record<string, string> = {
-          local: '本机',
-          auto: '自动调度',
-          node: '指定节点',
-        };
-        const label = labels[policy] || policy;
-        if (policy === 'local' || !record.node_id) {
-          return label;
-        }
-        return `${label} (#${record.node_id})`;
-      },
+      customRender: ({ text, record }) => formatSchedulePolicy(text, record),
+    },
+    {
+      title: '运行节点',
+      dataIndex: 'service_server_ip',
+      width: 180,
+      customRender: ({ record }) => formatClusterRuntime(record),
     },
     {
       title: '运行状态',

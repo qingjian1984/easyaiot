@@ -1,6 +1,7 @@
 // 推流转发任务表格列定义
 import { BasicColumn, FormProps } from "@/components/Table";
 import { Tag } from "ant-design-vue";
+import { formatClusterRuntime, formatSchedulePolicy } from '@/utils/clusterRuntime';
 
 export function getBasicColumns(): BasicColumn[] {
   return [
@@ -57,22 +58,14 @@ export function getBasicColumns(): BasicColumn[] {
     {
       title: '调度策略',
       dataIndex: 'schedule_policy',
-      width: 120,
-      customRender: ({ text, record }) => {
-        const policyMap: Record<string, string> = {
-          local: '本机',
-          auto: '自动节点',
-          node: '指定节点',
-        };
-        const label = policyMap[text as string] || text || '本机';
-        if (text === 'node' && record?.node_id) {
-          return `${label}(#${record.node_id})`;
-        }
-        if (text === 'auto' && record?.node_id) {
-          return `${label}(#${record.node_id})`;
-        }
-        return label;
-      },
+      width: 110,
+      customRender: ({ text, record }) => formatSchedulePolicy(text, record),
+    },
+    {
+      title: '运行节点',
+      dataIndex: 'service_server_ip',
+      width: 180,
+      customRender: ({ record }) => formatClusterRuntime(record),
     },
     {
       title: '运行状态',

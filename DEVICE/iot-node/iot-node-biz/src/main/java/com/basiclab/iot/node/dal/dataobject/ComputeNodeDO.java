@@ -56,4 +56,7 @@ public class ComputeNodeDO extends BaseDO {
 
     private LocalDateTime lastHeartbeatAt;
 
+    /** 所属中心节点（平台节点）ID */
+    private Long controlPlaneId;
+
 }

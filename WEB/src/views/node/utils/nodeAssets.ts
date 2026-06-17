@@ -13,11 +13,23 @@ export const NODE_ROLE_VISUAL: Record<string, NodeRoleVisual> = {
     bodyIcon: 'mdi:server',
     roleMarkIcon: 'mdi:chip',
   },
+  gpu: {
+    coverClass: 'node-card-cover--compute',
+    iconClass: 'node-server-icon--compute',
+    bodyIcon: 'mdi:server',
+    roleMarkIcon: 'mdi:expansion-card',
+  },
   media: {
     coverClass: 'node-card-cover--media',
     iconClass: 'node-server-icon--media',
     bodyIcon: 'mdi:server',
     roleMarkIcon: 'mdi:cast',
+  },
+  storage: {
+    coverClass: 'node-card-cover--storage',
+    iconClass: 'node-server-icon--storage',
+    bodyIcon: 'mdi:server',
+    roleMarkIcon: 'mdi:database',
   },
   hybrid: {
     coverClass: 'node-card-cover--hybrid',

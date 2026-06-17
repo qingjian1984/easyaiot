@@ -99,13 +99,10 @@ def start_yolo_train(
     strategy: dict,
     pretrained_arch: str | None = None,
 ) -> TrainTask:
-    """创建 TrainTask 并后台启动 train_model。"""
-    from app.blueprints.train import (
-        train_model,
-        train_status,
-        _build_train_hyperparameters,
-    )
+    """创建 TrainTask 并启动训练（集群模式下自动调度到 GPU 节点）。"""
+    from app.blueprints.train import _build_train_hyperparameters, _start_train_execution
     from app.blueprints.train_task import build_train_task_name
+    from app.services.train_launcher_service import resolve_schedule_policy
 
     epochs = int(strategy.get('train_epochs') or 50)
     batch_size = int(strategy.get('train_batch_size') or 16)
@@ -126,30 +123,28 @@ def start_yolo_train(
         status='preparing',
         train_log='',
         checkpoint_dir='',
+        schedule_policy=resolve_schedule_policy(strategy.get('schedule_policy')),
     )
     db.session.add(train_task)
     db.session.flush()
     train_task.name = build_train_task_name(task_base, train_task.dataset_name, train_task.dataset_version, train_task.id)
     db.session.commit()
 
-    task_id = train_task.id
-    train_status[task_id] = {
-        'status': 'preparing',
-        'message': '智能标注流水线自动训练…',
-        'progress': 0,
-        'log': '',
-        'stop_requested': False,
-    }
-
-    thread = threading.Thread(
-        target=train_model,
-        args=(
-            task_id, epochs, model_arch, img_size, batch_size,
-            use_gpu, dataset_zip_path, train_task.id, None, 'local', False,
-        ),
-        daemon=True,
+    ok, msg = _start_train_execution(
+        train_task,
+        task_id=train_task.id,
+        epochs=epochs,
+        model_arch=model_arch,
+        img_size=img_size,
+        batch_size=batch_size,
+        use_gpu=use_gpu,
+        dataset_zip_path=dataset_zip_path,
+        request_gpu_ids=None,
+        dataset_source='local',
+        is_resume=False,
     )
-    thread.start()
+    if not ok:
+        raise RuntimeError(msg)
     return train_task
 
 
@@ -234,6 +229,8 @@ def publish_train_to_model(
     name: str | None = None,
     published_model_id: int | None = None,
     class_names: list[str] | None = None,
+    model_origin: str | None = None,
+    origin_ref: str | None = None,
 ) -> int:
     """将训练权重发布到 Model 表，返回 model_id。"""
     from app.blueprints.train_task import publish_train_task_to_model
@@ -243,6 +240,8 @@ def publish_train_to_model(
         name=name,
         published_model_id=published_model_id,
         class_names=class_names,
+        model_origin=model_origin,
+        origin_ref=origin_ref,
     )
 
 
@@ -349,6 +348,8 @@ def run_auto_train_pipeline(
             name=model_name,
             published_model_id=published_id,
             class_names=prompts or None,
+            model_origin='smart_label',
+            origin_ref=f'dataset:{auto_task.dataset_id}/task:{auto_task.id}',
         )
         log_fn(f'模型已发布 model_id={model_id}')
 

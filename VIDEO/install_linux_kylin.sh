@@ -309,6 +309,10 @@ create_directories() {
 # 下载人脸特征提取模型（face_rec.onnx，约 167MB，不随仓库分发）
 download_face_rec_model() {
     local target="${SCRIPT_DIR}/face_rec.onnx"
+    if [ -d "$target" ]; then
+        print_warning "face_rec.onnx 误为目录（Docker 文件卷导致），正在清理..."
+        rm -rf "$target"
+    fi
     if [ -f "$target" ] && [ "$(stat -c%s "$target" 2>/dev/null || stat -f%z "$target" 2>/dev/null || echo 0)" -ge 10485760 ]; then
         print_success "人脸特征模型 face_rec.onnx 已存在"
         return 0

@@ -24,7 +24,11 @@ from app.utils.video_env import load_video_env
 
 from app.blueprints import camera, alert, snap, playback, record, algorithm_task, stream_forward, face
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+_lib_root = os.path.join(_repo_root, 'lib')
+for _p in (_repo_root, _lib_root, os.path.dirname(os.path.abspath(__file__))):
+    if _p not in sys.path:
+        sys.path.append(_p)
 
 # 解析命令行参数
 def parse_args():
@@ -183,6 +187,21 @@ def create_app():
     app.config['MEDIA_SNAP_DIR'] = os.environ.get('MEDIA_SNAP_DIR', '')
     app.config['MEDIA_SNAP_UPLOAD_MODE'] = os.environ.get('MEDIA_SNAP_UPLOAD_MODE', '')
     app.config['MEDIA_KAFKA_SNAP_TOPIC'] = os.environ.get('MEDIA_KAFKA_SNAP_TOPIC', 'media.snap.completed')
+
+    try:
+        from cluster_storage import apply_cluster_env_defaults, ensure_cluster_dirs, is_cluster_mode
+        applied = apply_cluster_env_defaults()
+        if applied:
+            print(f'✅ 集群存储环境已应用: {", ".join(applied.keys())}')
+        if is_cluster_mode():
+            ensure_cluster_dirs()
+            app.config['CLUSTER_MODE'] = True
+            app.config['MEDIA_HOST_DATA_ROOT'] = os.environ.get('MEDIA_HOST_DATA_ROOT', '/mnt/easyaiot-media')
+            app.config['MEDIA_RECORD_DIR'] = os.environ.get('MEDIA_RECORD_DIR', '')
+            app.config['MEDIA_SNAP_DIR'] = os.environ.get('MEDIA_SNAP_DIR', '')
+            app.config['MEDIA_UPLOAD_MODE'] = os.environ.get('MEDIA_UPLOAD_MODE', 'kafka')
+    except ImportError:
+        pass
 
     # 创建数据目录
     os.makedirs('data/uploads', exist_ok=True)
@@ -508,6 +527,7 @@ def create_app():
                         ('service_last_heartbeat', 'TIMESTAMP'),
                         ('service_log_path', 'VARCHAR(500)'),
                         ('schedule_policy', "VARCHAR(20) NOT NULL DEFAULT 'local'"),
+                        ('prefer_gpu', 'BOOLEAN NOT NULL DEFAULT TRUE'),
                         ('target_node_id', 'BIGINT'),
                         ('node_id', 'BIGINT'),
                     ]:
@@ -541,6 +561,7 @@ def create_app():
                 try:
                     for col_name, col_def in [
                         ('schedule_policy', "VARCHAR(20) NOT NULL DEFAULT 'local'"),
+                        ('prefer_gpu', 'BOOLEAN NOT NULL DEFAULT TRUE'),
                         ('target_node_id', 'BIGINT'),
                         ('node_id', 'BIGINT'),
                         ('device_deployments', 'TEXT'),

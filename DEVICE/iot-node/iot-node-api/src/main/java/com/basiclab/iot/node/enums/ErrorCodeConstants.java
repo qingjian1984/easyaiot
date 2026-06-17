@@ -25,4 +25,14 @@ public interface ErrorCodeConstants {
     ErrorCode AI_SOURCE_NOT_FOUND = new ErrorCode(1_005_004_004, "控制面未找到 AI 源码目录");
     ErrorCode AGENT_SOURCE_NOT_FOUND = new ErrorCode(1_005_005_000, "控制面未找到 Agent 源目录");
 
+    ErrorCode STORAGE_CLUSTER_SOURCE_NOT_FOUND = new ErrorCode(1_005_006_000, "控制面未找到 Ceph storage-cluster 源目录");
+    ErrorCode STORAGE_NODE_ROLE_INVALID = new ErrorCode(1_005_006_001, "当前节点角色不支持该 Ceph 存储操作");
+
+    ErrorCode CONTROL_PLANE_PEER_NOT_EXISTS = new ErrorCode(1_005_007_000, "对等中心节点不存在");
+    ErrorCode CONTROL_PLANE_PEER_LIMIT = new ErrorCode(1_005_007_001, "最多支持 3 个中心节点（含本机）");
+    ErrorCode CONTROL_PLANE_PEER_URL_EXISTS = new ErrorCode(1_005_007_002, "该中心节点地址已注册");
+    ErrorCode CONTROL_PLANE_PEER_SYNC_FAILED = new ErrorCode(1_005_007_003, "中心节点互联同步失败");
+    ErrorCode CONTROL_PLANE_PEER_TOKEN_INVALID = new ErrorCode(1_005_007_004, "中心节点互联令牌无效");
+    ErrorCode CONTROL_PLANE_PEER_SELF_REGISTER = new ErrorCode(1_005_007_005, "不能将本机注册为对等中心节点");
+
 }

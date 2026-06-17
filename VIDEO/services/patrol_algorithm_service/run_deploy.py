@@ -25,6 +25,11 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 
 video_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, video_root)
+_repo_root = os.path.abspath(os.path.join(video_root, '..'))
+_lib_root = os.path.join(_repo_root, 'lib')
+for _p in (_lib_root,):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from app.utils.video_env import load_video_env
 
@@ -276,6 +281,14 @@ def _load_models(model_ids: List[int]) -> Dict[int, Any]:
 
 
 def _ensure_local_model(model_id: int, model_path: str, ai_url: str, jwt: str) -> Optional[str]:
+    try:
+        from model_resolver import try_resolve_cluster_model_path
+        cluster_path = try_resolve_cluster_model_path(model_id)
+        if cluster_path:
+            logger.info('使用集群共享模型: model_id=%s path=%s', model_id, cluster_path)
+            return cluster_path
+    except ImportError:
+        pass
     if model_path.startswith('/') and not model_path.startswith('/api'):
         return model_path if os.path.exists(model_path) else None
     storage = os.path.join(video_root, 'data', 'models', str(model_id))

@@ -26,26 +26,31 @@ export const NODE_THEME = {
  *
  * 概念分层：
  * - 纳管：将节点纳入平台管理的过程（状态：待纳管 → 在线）
- * - 上线：节点变为「在线」，节点代理心跳正常
+ * - 上线：节点变为「在线」，监测代理心跳正常
  * - 接入：网络与配置连通（平台接入地址、SSH）
- * - 部署：远程安装或更新组件（节点代理、流媒体服务）
+ * - 部署：远程安装或更新组件（监测代理、流媒体引擎）
  * - 运维：对已部署服务的启停与卸载
  *
  * 固定用词：
- * - 节点代理（UI 不写 Agent / 代理服务）
+ * - 监测代理（UI 不写 Agent / 节点代理 / 代理服务）
  * - 代理令牌（UI 不写 Agent Token）
- * - 流媒体服务（UI 不写 流媒体引擎 / 媒体栈）
+ * - 流媒体引擎（UI 不写 流媒体服务 / 媒体栈）
  * - 平台接入地址（UI 不写 控制面 / 远程接入地址）
  * - 部署（UI 不写 安装）
  * - 纳管前检查（UI 不写 接入检查）
  * - 验证上线（纳管末步，不写 上线检查）
  * - 接入诊断（连通性排查，与纳管前检查区分）
+ *
+ * 页面 Tab 命名（按部署链路排序，不写 VIDEO / AI 等模块代号）：
+ * 集群概览 → 节点管理 → 监测代理 → 分布式存储 → 流媒体引擎
+ * → 音视频转码 → 视频分析运行时 → 模型推理与训练
  */
 export const NODE_TERM = {
-  agent: '节点代理',
+  agent: '监测代理',
   agentToken: '代理令牌',
-  agentPort: '节点代理端口',
-  mediaService: '流媒体服务',
+  agentPort: '监测代理端口',
+  mediaService: '流媒体引擎',
+  storageService: 'Ceph 存储',
   mediaPort: '流媒体端口',
   platformUrl: '平台接入地址',
   remotePlatformUrl: '目标机平台接入地址',
@@ -60,9 +65,15 @@ export const NODE_TERM = {
   resourceMonitor: '资源监控',
   nodeConfig: '节点配置',
   nodeDetail: '节点详情',
-  nodeManage: '节点管理',
+  nodeInventory: '节点管理',
   clusterOverview: '集群概览',
-  workloadBundleDistribute: '工作负载分发',
+  workloadBundleDistribute: '运行时分发',
+  clusterEnvAgent: '监测代理',
+  clusterEnvStorage: '分布式存储',
+  clusterEnvMedia: '流媒体引擎',
+  clusterEnvFfmpeg: '音视频转码',
+  clusterEnvVideo: '视频分析运行时',
+  clusterEnvAi: '模型推理与训练',
   pendingTitle: '节点待纳管',
   offlineTitle: '节点离线',
   maintenanceTitle: '维护模式',
@@ -80,6 +91,27 @@ export const NODE_TERM = {
   attentionNodes: '需关注节点',
   controlPlaneNode: '控制面节点',
   controlPlaneNodeReadonly: '控制面节点仅可查看，不可编辑',
+  centralNode: '中心节点',
+  workerNode: '工作节点',
+  swimlaneView: '泳道视图',
+  tableView: '表格视图',
+  cardView: '卡片视图',
+  addCentralNode: '添加中心节点',
+  syncCentralNode: '同步互联',
+  currentCentralNode: '当前中心节点',
+  laneWorkers: '工作节点',
+  laneBatchSelectAll: '全选本泳道',
+  laneBatchMaintenanceOn: '批量维护',
+  laneBatchMaintenanceOff: '退出维护',
+  laneBatchAgent: '批量部署监测代理',
+  laneBatchStorage: '批量部署分布式存储',
+  laneBatchMedia: '批量部署流媒体引擎',
+  laneBatchFfmpeg: '批量分发音视频转码',
+  laneBatchVideo: '批量分发视频分析',
+  laneBatchAi: '批量分发模型训练',
+  laneScrollLeft: '向左滚动',
+  laneScrollRight: '向右滚动',
+  laneRemoteHint: '远程中心节点（只读展示，操控请在对端操作）',
 } as const;
 
 export const NODE_STATUS_MAP: Record<string, { text: string; color: string }> = {
@@ -99,15 +131,27 @@ export const NODE_STATUS_BADGE: Record<string, { bg: string; color: string; bord
 
 export const NODE_ROLE_MAP: Record<string, string> = {
   compute: '计算节点',
+  gpu: 'GPU 节点',
   media: '媒体节点',
+  storage: '存储节点',
   hybrid: '混合节点',
 };
 
 export const NODE_ROLE_DESC: Record<string, string> = {
-  compute: '用于 AI 模型部署、算法任务远程运行',
+  compute: '无 GPU，用于 CPU 推理、轻量算法或推流转发',
+  gpu: '配备 GPU，用于模型推理、深度学习算法等算力密集型任务',
   media: '用于 SRS/ZLM 流媒体集群，设备拉流/推流',
+  storage: 'Ceph OSD 节点，承载录像/抓拍分布式存储',
   hybrid: '同时承担计算与媒体调度',
 };
+
+/** 可参与计算工作负载调度的节点角色 */
+export const SCHEDULABLE_COMPUTE_ROLES = ['compute', 'gpu', 'hybrid'] as const;
+
+export function isSchedulableComputeNode(node?: { nodeRole?: string | null } | null): boolean {
+  const role = node?.nodeRole;
+  return !!role && (SCHEDULABLE_COMPUTE_ROLES as readonly string[]).includes(role);
+}
 
 /**
  * 节点监控术语规范（全模块统一引用，避免歧义）
@@ -154,6 +198,9 @@ export const NODE_DASHBOARD = {
   statOnlineRate: '节点在线率',
   overviewNodeFocus: '查看节点',
   overviewNodeFocusAll: '全部节点（集群汇总）',
+  overviewCentralNode: '中心节点',
+  overviewCentralNodeLocal: '本机中心节点',
+  overviewCentralNodeAll: '全部中心节点',
   overviewBackToAll: '返回全部节点',
   overviewNodeFocusHint: '选择单个节点后，下方资源图表仅展示该节点数据',
   clusterLoad: '集群资源负载',
@@ -195,8 +242,8 @@ export const NODE_DASHBOARD = {
   diskColCapacity: '容量',
   vramColUsed: '已用',
   noComputeNodes: '暂无计算节点数据',
-  noVramData: '暂无在线节点的显存数据。请确认已安装 NVIDIA 驱动，且节点代理心跳正常上报。',
-  noDiskData: '暂无磁盘使用数据。请确认节点代理已上线并正常上报心跳。',
+  noVramData: '暂无在线节点的显存数据。请确认已安装 NVIDIA 驱动，且监测代理心跳正常上报。',
+  noDiskData: '暂无磁盘使用数据。请确认监测代理已上线并正常上报心跳。',
 } as const;
 
 /** 节点详情抽屉 */
@@ -206,7 +253,9 @@ export const NODE_DETAIL = {
   tabConfig: NODE_TERM.nodeConfig,
   tabAccess: NODE_TERM.preCheck,
   tabMediaDeploy: NODE_TERM.mediaService,
+  tabStorageDeploy: NODE_TERM.storageService,
   tabAgentDeploy: NODE_TERM.agent,
+  sectionStorage: 'Ceph 存储',
   sectionResource: '资源使用',
   sectionResourceHint: 'CPU、内存、显存、磁盘占用，与集群概览维度一致',
   sectionConfig: NODE_TERM.nodeConfig,
@@ -216,8 +265,8 @@ export const NODE_DETAIL = {
   sectionVerify: NODE_TERM.verifyOnline,
   gpuSection: 'GPU 算力与显存',
   gpuSectionHint: 'GPU 利用率与显存使用率分开展示',
-  noMetrics: '暂无资源数据。节点上线且节点代理心跳正常后将自动上报。',
-  pendingAlert: `节点待纳管，请完成${NODE_TERM.mediaService}（如适用）与${NODE_TERM.agent}部署。`,
+  noMetrics: '暂无资源数据。节点上线且监测代理心跳正常后将自动上报。',
+  pendingAlert: `节点待纳管，请前往「${NODE_TERM.clusterEnvMedia}」或「${NODE_TERM.clusterEnvAgent}」完成组件部署。`,
   offlineAlert: `节点离线，请检查${NODE_TERM.agent}、网络连通性或维护模式设置。`,
   maintenanceAlert: '节点处于维护模式，不会参与任务调度。',
   actionEdit: NODE_TERM.editNode,
@@ -231,12 +280,67 @@ export const NODE_DETAIL = {
   maintenanceMessage: NODE_TERM.maintenanceTitle,
 } as const;
 
-/** 页面级 Tab */
+/**
+ * 页面级 Tab（index.vue 顺序即推荐部署链路）
+ * 1 集群概览 → 2 节点管理 → 3 监测代理 → 4 分布式存储 → 5 流媒体引擎
+ * → 6 音视频转码 → 7 视频分析运行时 → 8 模型推理与训练
+ */
 export const NODE_PAGE = {
   clusterOverview: NODE_TERM.clusterOverview,
-  nodeManage: NODE_TERM.nodeManage,
+  nodeInventory: NODE_TERM.nodeInventory,
   workloadBundleDistribute: NODE_TERM.workloadBundleDistribute,
+  clusterEnvAgent: NODE_TERM.clusterEnvAgent,
+  clusterEnvStorage: NODE_TERM.clusterEnvStorage,
+  clusterEnvMedia: NODE_TERM.clusterEnvMedia,
+  clusterEnvFfmpeg: NODE_TERM.clusterEnvFfmpeg,
+  clusterEnvVideo: NODE_TERM.clusterEnvVideo,
+  clusterEnvAi: NODE_TERM.clusterEnvAi,
 } as const;
+
+/** 服务部署 Tab 键（与 index.vue TabPane key 一致） */
+export const NODE_SERVICE_TAB = {
+  agent: '3',
+  storage: '4',
+  media: '5',
+  ffmpeg: '6',
+  video: '7',
+  ai: '8',
+} as const;
+
+/** 泳道批量「组件分发」跳转（按部署链路排序） */
+export const LANE_BATCH_DEPLOY_ACTIONS = [
+  { tab: NODE_SERVICE_TAB.agent, label: NODE_TERM.laneBatchAgent, icon: 'ant-design:cloud-upload-outlined' },
+  { tab: NODE_SERVICE_TAB.storage, label: NODE_TERM.laneBatchStorage, icon: 'ant-design:database-outlined' },
+  { tab: NODE_SERVICE_TAB.media, label: NODE_TERM.laneBatchMedia, icon: 'ant-design:play-circle-outlined' },
+  { tab: NODE_SERVICE_TAB.ffmpeg, label: NODE_TERM.laneBatchFfmpeg, icon: 'ant-design:video-camera-outlined' },
+  { tab: NODE_SERVICE_TAB.video, label: NODE_TERM.laneBatchVideo, icon: 'ant-design:deployment-unit-outlined' },
+  { tab: NODE_SERVICE_TAB.ai, label: NODE_TERM.laneBatchAi, icon: 'ant-design:experiment-outlined' },
+] as const;
+
+export type NodeServiceTabKey = keyof typeof NODE_SERVICE_TAB;
+
+/** 待纳管节点应跳转的服务部署 Tab */
+export function resolveOnboardServiceTab(nodeRole?: string | null): string {
+  if (nodeRole === 'storage') return NODE_SERVICE_TAB.storage;
+  if (nodeRole === 'media' || nodeRole === 'hybrid') return NODE_SERVICE_TAB.media;
+  return NODE_SERVICE_TAB.agent;
+}
+
+/** 集群环境初始化 — 节点角色筛选 */
+export const CLUSTER_NODE_ROLE_FILTERS = {
+  /** 计算/推理工作负载节点 */
+  computeWorkload: ['compute', 'gpu', 'hybrid'] as const,
+  /** 需部署监测代理的全部角色（不含平台节点） */
+  allManaged: ['compute', 'gpu', 'hybrid', 'media', 'storage'] as const,
+  /** 流媒体引擎节点 */
+  media: ['media', 'hybrid'] as const,
+  /** Ceph 存储/MON 节点 */
+  storage: ['storage'] as const,
+  /** 需挂载 CephFS 的节点 */
+  cephClient: ['compute', 'gpu', 'hybrid', 'media'] as const,
+} as const;
+
+export type ClusterNodeRoleFilterKey = keyof typeof CLUSTER_NODE_ROLE_FILTERS;
 
 /** 工作负载 bundle 分发（目标机默认无外网，控制面离线打包 pip wheels） */
 export const WORKLOAD_BUNDLE_TYPES = [
@@ -251,21 +355,30 @@ export const WORKLOAD_BUNDLE_TYPES = [
   },
   {
     key: 'algorithm_realtime',
-    label: '实时算法',
+    label: '实时视频分析',
     module: 'VIDEO',
     remoteRoot: '/opt/easyaiot/VIDEO',
     pythonLauncher: '/opt/easyaiot/VIDEO/.bundles/algorithm_realtime/run-python.sh',
     scriptMarker: 'services/realtime_algorithm_service/run_deploy.py',
-    desc: '批量分发实时算法 run_deploy.py 及离线运行时（含 onnxruntime 等）',
+    desc: '批量分发实时视频分析运行时与部署脚本（含 onnxruntime 等）',
   },
   {
     key: 'algorithm_snap',
-    label: '抓拍算法',
+    label: '抓拍分析',
     module: 'VIDEO',
     remoteRoot: '/opt/easyaiot/VIDEO',
     pythonLauncher: '/opt/easyaiot/VIDEO/.bundles/algorithm_snap/run-python.sh',
     scriptMarker: 'services/snapshot_algorithm_service/run_deploy.py',
-    desc: '批量分发抓拍算法 run_deploy.py 及离线运行时',
+    desc: '批量分发抓拍分析运行时与部署脚本',
+  },
+  {
+    key: 'algorithm_patrol',
+    label: '轮巡分析',
+    module: 'VIDEO',
+    remoteRoot: '/opt/easyaiot/VIDEO',
+    pythonLauncher: '/opt/easyaiot/VIDEO/.bundles/algorithm_patrol/run-python.sh',
+    scriptMarker: 'services/patrol_algorithm_service/run_deploy.py',
+    desc: '批量分发轮巡分析运行时与部署脚本',
   },
   {
     key: 'ai_service',
@@ -278,21 +391,40 @@ export const WORKLOAD_BUNDLE_TYPES = [
   },
   {
     key: 'auto_label',
-    label: '自动标注 Worker',
+    label: '智能标注',
     module: 'AI',
     remoteRoot: '/opt/easyaiot/AI',
     pythonLauncher: '/opt/easyaiot/AI/.bundles/ai_service/run-python.sh',
     scriptMarker: 'services/auto_label_worker/run_worker.py',
-    desc: '分发自动标注 Worker（SAM 辅助 + YOLO 量产），集群智能标注流水线必需',
+    desc: '分发智能标注运行时（SAM 辅助 + YOLO 量产），集群标注流水线必需',
+  },
+  {
+    key: 'model_train',
+    label: '模型训练',
+    module: 'AI',
+    remoteRoot: '/opt/easyaiot/AI',
+    pythonLauncher: '/opt/easyaiot/AI/.bundles/model_train/run-python.sh',
+    scriptMarker: 'services/train_worker/run_worker.py',
+    desc: '分发模型训练运行时（YOLO 训练 + CephFS 共享数据集/输出目录）',
   },
 ] as const;
 
+export const VIDEO_WORKLOAD_BUNDLE_TYPES = WORKLOAD_BUNDLE_TYPES.filter((b) => b.module === 'VIDEO');
+export const AI_WORKLOAD_BUNDLE_TYPES = WORKLOAD_BUNDLE_TYPES.filter((b) => b.module === 'AI');
+
 export type WorkloadBundleType = (typeof WORKLOAD_BUNDLE_TYPES)[number]['key'];
+
+/** 旧版「运行时分发」Tab 跳转：按 bundle 类型映射到新 Tab key */
+export function resolveLegacyWorkloadTab(bundleKey?: string): '7' | '8' {
+  if (bundleKey && AI_WORKLOAD_BUNDLE_TYPES.some((b) => b.key === bundleKey)) return '8';
+  return '7';
+}
 
 export const WORKLOAD_BUNDLE_COPY = {
   offlineHint:
     '目标服务器默认无外网：控制面在有网环境自动下载 pip wheel 并 SSH 同步至节点离线安装，无需节点联网。',
-  selectNodes: '选择目标节点（需已配置 SSH 凭据，建议 compute / hybrid 角色）',
+  selectNodes: '选择目标节点（需已配置 SSH 凭据，建议 compute / gpu / hybrid 角色）',
+  targetNodes: '目标节点',
   deployEnv: '分发运行时',
   deployScripts: '分发脚本',
   deployFull: '全量分发',
@@ -300,9 +432,9 @@ export const WORKLOAD_BUNDLE_COPY = {
   removeEnv: '删除运行时',
   removeScripts: '删除脚本',
   remotePythonTip:
-    '分发完成后，请在 VIDEO/AI 控制面设置 NODE_REMOTE_PYTHON 为对应 run-python.sh 路径，或在节点 agent.env 中配置。',
+    '分发完成后，请在对应业务控制面设置 NODE_REMOTE_PYTHON 为 run-python.sh 路径，或在节点 agent.env 中配置。',
   ffmpegHint:
-    '推流/算法节点需 FFmpeg：控制面下载 BtbN 静态二进制包，SSH 同步至 /opt/easyaiot/tools/ffmpeg（无外网可离线安装）。全量分发 VIDEO bundle 时会自动安装 FFmpeg。',
+    '推流与分析节点需 FFmpeg：控制面下载 BtbN 静态二进制包，SSH 同步至 /opt/easyaiot/tools/ffmpeg（无外网可离线安装）。全量分发视频分析运行时时会自动安装 FFmpeg。',
   ffmpegPath: '/opt/easyaiot/tools/ffmpeg/bin/ffmpeg',
   ffmpegDeploy: '分发 FFmpeg',
   ffmpegCheck: '检测 FFmpeg',
@@ -313,7 +445,7 @@ export const WORKLOAD_BUNDLE_COPY = {
 export const NODE_INSIGHT = {
   noNodesTitle: '尚未接入计算节点',
   noNodesDesc: `添加节点并完成${NODE_TERM.agent}纳管后，可在此查看推理调度能力与资源余量。`,
-  noNodesAction: `切换到「${NODE_TERM.nodeManage}」添加节点`,
+  noNodesAction: `切换到「${NODE_TERM.nodeInventory}」添加节点`,
   clusterDownTitle: '集群当前不可用',
   clusterDownDesc: '全部节点离线，模型部署与算法任务将无法被调度到任何机器。',
   clusterDownAction: `请检查${NODE_TERM.agent}、网络连通性或维护模式设置`,
@@ -323,7 +455,7 @@ export const NODE_INSIGHT = {
   overloadedAction: '查看下方节点列表，考虑迁移任务或扩容',
   notReadyTitle: (n: number) => `${n} 台计算节点未就绪`,
   notReadyDesc: '离线或待纳管的节点不会参与调度，可用算力低于集群总量。',
-  notReadyAction: `在「${NODE_TERM.nodeManage}」中完成纳管或排查离线原因`,
+  notReadyAction: `在「${NODE_TERM.nodeInventory}」添加节点，并在对应部署页完成纳管`,
   healthyTitle: '集群运行正常',
   pendingReason: `待完成${NODE_TERM.agent}纳管`,
   nodeOffline: '节点离线',
@@ -504,6 +636,176 @@ function sanitizeNodeName(name?: string): string {
   const raw = (name || 'media-node').trim().toLowerCase();
   const slug = raw.replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
   return slug || 'media-node';
+}
+
+/** 存储节点 tags 默认值（与 Ceph 集群规范一致） */
+export const STORAGE_TAG_DEFAULTS = {
+  cephPool: 'easyaiot-playbacks',
+  cephOsdPath: '/var/lib/ceph/osd',
+  cephfsName: 'easyaiot',
+  cephMonHost: 'storage-ceph',
+  mediaMountPath: '/mnt/easyaiot-media',
+} as const;
+
+export const CEPH_POOL_OPTIONS = [
+  { label: 'easyaiot-playbacks（录像缓冲池）', value: 'easyaiot-playbacks' },
+  { label: 'easyaiot-snaps（抓拍池）', value: 'easyaiot-snaps' },
+] as const;
+
+export interface StorageTagFields {
+  cephPool: string;
+  cephOsdPath: string;
+  cephfsName: string;
+  cephMonHost: string;
+  mediaMountPath: string;
+}
+
+function tagString(tags: Record<string, string | undefined> | undefined, key: string, fallback: string): string {
+  const raw = tags?.[key];
+  return raw != null && raw !== '' ? raw : fallback;
+}
+
+/** 从节点 tags 解析存储配置（表单/详情共用；兼容旧 gluster_* 键） */
+export function readStorageTagsFromTags(tags?: Record<string, string | undefined>): StorageTagFields {
+  const legacyPool = tags?.gluster_volume;
+  const legacyPoolMap: Record<string, string> = {
+    'gv-playbacks': 'easyaiot-playbacks',
+    'gv-snaps': 'easyaiot-snaps',
+  };
+  const cephPool =
+    tagString(tags, 'ceph_pool', '') ||
+    (legacyPool ? legacyPoolMap[legacyPool] || legacyPool : STORAGE_TAG_DEFAULTS.cephPool);
+  return {
+    cephPool,
+    cephOsdPath: tagString(
+      tags,
+      'ceph_osd_path',
+      tagString(tags, 'gluster_brick_path', STORAGE_TAG_DEFAULTS.cephOsdPath),
+    ),
+    cephfsName: tagString(tags, 'cephfs_name', STORAGE_TAG_DEFAULTS.cephfsName),
+    cephMonHost: tagString(tags, 'ceph_mon_host', STORAGE_TAG_DEFAULTS.cephMonHost),
+    mediaMountPath: tagString(tags, 'media_mount_path', STORAGE_TAG_DEFAULTS.mediaMountPath),
+  };
+}
+
+/** CephFS 客户端挂载状态（Agent 心跳写入 tags.ceph_mount_ready） */
+export type CephMountStatus = 'ready' | 'not_ready' | 'unknown';
+
+export const CEPH_MOUNT_LABELS: Record<CephMountStatus, string> = {
+  ready: 'Ceph 已挂载',
+  not_ready: 'Ceph 未就绪',
+  unknown: 'Ceph 未上报',
+};
+
+export function isClusterComputeRole(role?: string): boolean {
+  return ['compute', 'gpu', 'hybrid'].includes(role || '');
+}
+
+export function readCephMountFromTags(tags?: Record<string, string | undefined>): {
+  status: CephMountStatus;
+  mountPath?: string;
+} {
+  const raw = tags?.ceph_mount_ready;
+  const mountPath = tags?.ceph_mount_path || tags?.media_mount_path || undefined;
+  if (raw == null || raw === '') {
+    return { status: 'unknown', mountPath };
+  }
+  const ok = ['true', '1', 'yes', 'on'].includes(String(raw).toLowerCase());
+  return { status: ok ? 'ready' : 'not_ready', mountPath };
+}
+
+/** 将表单存储配置写入节点 tags */
+export function buildStorageTags(values: Record<string, unknown>): Record<string, string> {
+  const d = STORAGE_TAG_DEFAULTS;
+  return {
+    ceph_pool: String(values.cephPool ?? d.cephPool),
+    ceph_osd_path: String(values.cephOsdPath ?? d.cephOsdPath),
+    cephfs_name: String(values.cephfsName ?? d.cephfsName),
+    ceph_mon_host: String(values.cephMonHost ?? d.cephMonHost),
+    media_mount_path: String(values.mediaMountPath ?? d.mediaMountPath),
+  };
+}
+
+export const STORAGE_CLUSTER_REMOTE_DIR = '/opt/easyaiot/storage-cluster';
+
+export const STORAGE_STACK_DEPLOY_PENDING_STEPS = [
+  '同步 storage-cluster',
+  'OSD 节点准备',
+  '创建 Ceph 存储池',
+  'CephFS 客户端挂载',
+  '健康验证',
+] as const;
+
+export interface StorageStackScriptParams {
+  host?: string;
+  name?: string;
+  nodeRole?: string;
+  cephPool?: string;
+  cephOsdPath?: string;
+  cephfsName?: string;
+  cephMonHost?: string;
+  mediaMountPath?: string;
+}
+
+export interface StorageStackGuideState {
+  isStorageRole: boolean;
+  isReady: boolean;
+  pendingItems: { key: string; label: string; done: boolean; hint?: string }[];
+  readySummary: string;
+}
+
+function isValidStorageHost(host?: string): boolean {
+  const h = host?.trim();
+  return !!h && !h.includes('<') && !h.includes('>');
+}
+
+/** 存储栈脚本是否可生成 */
+export function isStorageStackScriptReady(params?: StorageStackScriptParams): boolean {
+  if (!params || params.nodeRole !== 'storage') return false;
+  return isValidStorageHost(params.host) && !!params.cephMonHost?.trim() && !!params.mediaMountPath?.trim();
+}
+
+export function getStorageStackGuideState(params?: StorageStackScriptParams): StorageStackGuideState {
+  const isStorageRole = params?.nodeRole === 'storage';
+  const hostDone = isValidStorageHost(params?.host);
+  const configDone =
+    !!params?.cephMonHost?.trim() &&
+    !!params?.cephfsName?.trim() &&
+    !!params?.mediaMountPath?.trim() &&
+    !!params?.cephOsdPath?.trim();
+  const pendingItems = [
+    { key: 'host', label: '主机地址', done: hostDone, hint: '存储节点 IP 或主机名' },
+    { key: 'config', label: 'Ceph 配置', done: configDone, hint: 'MON 地址、CephFS 名称与挂载路径' },
+  ];
+  const isReady = isStorageStackScriptReady(params);
+  let readySummary = '';
+  if (isReady && params?.host) {
+    readySummary =
+      `目标机 ${params.host}：MON ${params.cephMonHost}，` +
+      `CephFS ${params.cephfsName} 挂载至 ${params.mediaMountPath}，` +
+      `OSD 路径 ${params.cephOsdPath}，存储池 ${params.cephPool || STORAGE_TAG_DEFAULTS.cephPool}`;
+  }
+  return { isStorageRole, isReady, pendingItems, readySummary };
+}
+
+export function buildStorageManualContent(params: StorageStackScriptParams = {}): string {
+  const host = params.host?.trim() || '<目标服务器>';
+  const mon = params.cephMonHost?.trim() || STORAGE_TAG_DEFAULTS.cephMonHost;
+  const fs = params.cephfsName?.trim() || STORAGE_TAG_DEFAULTS.cephfsName;
+  const mount = params.mediaMountPath?.trim() || STORAGE_TAG_DEFAULTS.mediaMountPath;
+  return `# ========== 步骤 1：在 Ceph MON 节点创建存储池与 CephFS ==========
+bash .scripts/media-cluster/ceph/pool-create.sh
+
+# ========== 步骤 2：在各 OSD 存储节点准备 ==========
+ssh root@${host} 'bash -s' < .scripts/media-cluster/ceph/install_ceph_osd.sh
+
+# ========== 步骤 3：在客户端节点挂载 CephFS ==========
+CEPH_MON=${mon} CEPHFS_NAME=${fs} MOUNT_ROOT=${mount} \\
+  bash .scripts/media-cluster/ceph/mount-all.sh
+
+# 健康检查
+CEPH_MON=${mon} CEPHFS_NAME=${fs} MOUNT_ROOT=${mount} \\
+  bash .scripts/media-cluster/ceph/check_ceph_health.sh`;
 }
 
 /** 媒体节点端口默认值（与 iot-node tags、install_media_stack.sh 一致） */
@@ -942,6 +1244,7 @@ export const SETUP_FORM_WRAPPER_COL = { span: 21 };
  */
 export const SETUP_STEP_LABELS = {
   overview: { title: '确认配置', description: '检查信息' },
+  storage: { title: NODE_TERM.storageService, description: 'Ceph OSD / CephFS' },
   media: { title: NODE_TERM.mediaService, description: 'SRS / ZLM' },
   agent: { title: NODE_TERM.agent, description: NODE_TERM.remoteDeploy },
   verify: { title: NODE_TERM.verifyOnline, description: '心跳确认' },
@@ -997,6 +1300,7 @@ export const SETUP_COPY = {
   redeployAgentBtn: `${NODE_TERM.redeploy}${NODE_TERM.agent}`,
   redeployAgentHint: `检测到目标机已有${NODE_TERM.agent}，将依次执行：停止 → 删除 → ${NODE_TERM.redeploy}`,
   flowMedia: `部署${NODE_TERM.mediaService} → 部署${NODE_TERM.agent} → ${NODE_TERM.verifyOnline}`,
+  flowStorage: `部署${NODE_TERM.storageService} → 部署${NODE_TERM.agent} → ${NODE_TERM.verifyOnline}`,
   flowCompute: `部署${NODE_TERM.agent} → ${NODE_TERM.verifyOnline}`,
   readinessReady: '可以开始部署',
   readinessPending: '请先完善配置',

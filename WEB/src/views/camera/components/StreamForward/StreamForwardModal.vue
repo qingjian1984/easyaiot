@@ -84,6 +84,7 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
       description: record.description,
       is_enabled: record.is_enabled !== undefined ? record.is_enabled : false,
       schedule_policy: record.schedule_policy || 'local',
+      prefer_gpu: record.prefer_gpu !== false,
       target_node_id: record.target_node_id ?? undefined,
     });
     
@@ -112,6 +113,7 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
       output_quality: 'high',
       is_enabled: false,
       schedule_policy: 'local',
+      prefer_gpu: true,
     });
     setDrawerProps({ showOkBtn: true });
   }
@@ -160,6 +162,18 @@ const [registerForm, { setFieldsValue, resetFields, validate, updateSchema }] = 
         options: schedulePolicyOptions,
       },
       helpMessage: '本机：在当前 VIDEO 服务部署；自动/指定节点：多路摄像头默认按设备分片分散到集群节点',
+    },
+    {
+      field: 'prefer_gpu',
+      label: '优先 GPU 节点',
+      component: 'Switch',
+      defaultValue: true,
+      componentProps: {
+        checkedChildren: '是',
+        unCheckedChildren: '否',
+      },
+      ifShow: ({ values }) => values.schedule_policy === 'auto',
+      helpMessage: '自动调度时优先选择 GPU 节点；关闭则优先 CPU 计算节点',
     },
     {
       field: 'target_node_id',
@@ -246,7 +260,7 @@ const loadNodes = async () => {
     const res = await getNodePage({ pageNo: 1, pageSize: 200, status: 'online' });
     const page = res?.data || res;
     const list = (page?.list || []).filter(
-      (node: any) => node.nodeRole === 'compute' || node.nodeRole === 'hybrid',
+      (node: any) => node.nodeRole === 'compute' || node.nodeRole === 'gpu' || node.nodeRole === 'hybrid',
     );
     nodeOptions.value = list.map((node: any) => ({
       label: `${node.name} (${node.host})`,
@@ -298,6 +312,7 @@ const handleReset = async () => {
       description: record.description,
       is_enabled: record.is_enabled !== undefined ? record.is_enabled : false,
       schedule_policy: record.schedule_policy || 'local',
+      prefer_gpu: record.prefer_gpu !== false,
       target_node_id: record.target_node_id ?? undefined,
     });
   } else {
@@ -306,6 +321,7 @@ const handleReset = async () => {
       output_quality: 'high',
       is_enabled: false,
       schedule_policy: 'local',
+      prefer_gpu: true,
     });
   }
 };
@@ -319,6 +335,9 @@ const handleSubmit = async () => {
     }
     if (values.schedule_policy !== 'node') {
       values.target_node_id = null;
+    }
+    if (values.schedule_policy !== 'auto') {
+      values.prefer_gpu = true;
     }
     confirmLoading.value = true;
     setDrawerProps({ confirmLoading: true });

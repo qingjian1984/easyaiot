@@ -104,6 +104,15 @@ public class ComputeNodeRespVO {
     @Schema(description = "是否为控制面宿主机节点（平台自动纳管，不可删除）")
     private Boolean isPlatform;
 
+    @Schema(description = "所属中心节点 ID")
+    private Long controlPlaneId;
+
+    @Schema(description = "是否为远程对等中心节点下的节点（联邦展示）")
+    private Boolean isRemote;
+
+    @Schema(description = "对等中心节点 ID（远程节点时有值）")
+    private Long peerId;
+
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
 

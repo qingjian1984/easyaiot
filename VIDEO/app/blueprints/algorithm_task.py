@@ -116,6 +116,7 @@ def create_task():
             defense_mode=data.get('defense_mode'),
             defense_schedule=data.get('defense_schedule'),
             schedule_policy=data.get('schedule_policy', 'local'),
+            prefer_gpu=data.get('prefer_gpu', True),
             target_node_id=data.get('target_node_id'),
             patrol_mode=data.get('patrol_mode', 'pool'),
             patrol_interval_sec=data.get('patrol_interval_sec', 10),

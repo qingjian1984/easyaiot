@@ -92,6 +92,7 @@ def dispatch_subtask_to_node(subtask: AutoLabelSubTask, exclude_node_ids: list[i
             workload_id,
             capabilities=['ai_inference'],
             gpu_count=1,
+            prefer_gpu=True,
             sticky=True,
             exclude_node_ids=exclude_node_ids or None,
         )

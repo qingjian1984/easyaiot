@@ -9,6 +9,10 @@ import {
   NODE_ROLE_MAP,
   NODE_STATUS_MAP,
   NODE_TERM,
+  CEPH_POOL_OPTIONS,
+  STORAGE_TAG_DEFAULTS,
+  readStorageTagsFromTags,
+  readCephMountFromTags,
   formatGpuSummary,
 } from './utils/constants';
 import {
@@ -16,6 +20,7 @@ import {
   renderNodeNameWithPlatformBadge,
   renderNodeRoleBadge,
   renderNodeStatusBadge,
+  renderCephMountBadge,
 } from './utils/nodeDisplay';
 
 export { NODE_ROLE_MAP, NODE_STATUS_MAP };
@@ -46,7 +51,18 @@ export const columns: BasicColumn[] = [
     title: '角色',
     dataIndex: 'nodeRole',
     width: 100,
-    customRender: ({ text }) => useRender.renderTag(NODE_ROLE_MAP[text] || text, 'processing'),
+    customRender: ({ text }) => renderNodeRoleBadge(text),
+  },
+  {
+    title: 'GPU',
+    dataIndex: 'maxGpuCount',
+    width: 70,
+    customRender: ({ text, record }) => {
+      if (record.nodeRole === 'gpu' || (text != null && text > 0)) {
+        return text ?? '-';
+      }
+      return '-';
+    },
   },
   {
     title: NODE_METRIC.cpu,
@@ -94,6 +110,16 @@ export const searchFormSchema: FormSchema[] = [
     componentProps: {
       placeholder: '全部状态',
       options: Object.entries(NODE_STATUS_MAP).map(([value, { text }]) => ({ label: text, value })),
+      allowClear: true,
+    },
+  },
+  {
+    label: '节点角色',
+    field: 'nodeRole',
+    component: 'Select',
+    componentProps: {
+      placeholder: '全部角色',
+      options: Object.entries(NODE_ROLE_MAP).map(([value, label]) => ({ label, value })),
       allowClear: true,
     },
   },
@@ -145,6 +171,16 @@ export const formSchema: FormSchema[] = [
     componentProps: {
       options: Object.entries(NODE_ROLE_MAP).map(([value, label]) => ({ label, value })),
     },
+  },
+  {
+    label: 'GPU 数量',
+    field: 'maxGpuCount',
+    component: 'InputNumber',
+    defaultValue: 1,
+    colProps: { span: 12 },
+    ifShow: ({ values }) => values.nodeRole === 'gpu',
+    componentProps: { min: 1, max: 16, placeholder: '节点 GPU 卡数' },
+    helpMessage: 'Agent 上线后会根据实际上报自动校正',
   },
   {
     label: '区域',
@@ -316,6 +352,111 @@ export const formSchema: FormSchema[] = [
     ifShow: ({ values }) => values.nodeRole === 'media' || values.nodeRole === 'hybrid',
     componentProps: { min: 1, max: 65535 },
   },
+  {
+    field: 'dividerStorage',
+    component: 'Divider',
+    label: 'Ceph 存储（storage 节点）',
+    colProps: { span: 24 },
+    ifShow: ({ values }) => values.nodeRole === 'storage',
+  },
+  {
+    label: 'Ceph 存储池',
+    field: 'cephPool',
+    component: 'Select',
+    defaultValue: STORAGE_TAG_DEFAULTS.cephPool,
+    colProps: { span: 12 },
+    ifShow: ({ values }) => values.nodeRole === 'storage',
+    componentProps: {
+      options: CEPH_POOL_OPTIONS.map(({ label, value }) => ({ label, value })),
+    },
+    helpMessage: '该 OSD 节点主要服务的 Ceph 存储池',
+  },
+  {
+    label: 'OSD 数据路径',
+    field: 'cephOsdPath',
+    component: 'Input',
+    defaultValue: STORAGE_TAG_DEFAULTS.cephOsdPath,
+    colProps: { span: 12 },
+    ifShow: ({ values }) => values.nodeRole === 'storage',
+    componentProps: { placeholder: '/var/lib/ceph/osd' },
+    helpMessage: 'Ceph OSD 数据目录',
+  },
+  {
+    label: 'CephFS 名称',
+    field: 'cephfsName',
+    component: 'Input',
+    defaultValue: STORAGE_TAG_DEFAULTS.cephfsName,
+    colProps: { span: 12 },
+    ifShow: ({ values }) => values.nodeRole === 'storage',
+    componentProps: { placeholder: 'easyaiot' },
+    helpMessage: '客户端挂载使用的 CephFS 文件系统名',
+  },
+  {
+    label: 'Ceph MON 地址',
+    field: 'cephMonHost',
+    component: 'Input',
+    defaultValue: STORAGE_TAG_DEFAULTS.cephMonHost,
+    colProps: { span: 12 },
+    ifShow: ({ values }) => values.nodeRole === 'storage',
+    componentProps: { placeholder: 'storage-ceph 或 10.0.0.21' },
+    helpMessage: 'Ceph Monitor 集群 VIP 或主机名',
+  },
+  {
+    label: 'CephFS 挂载根路径',
+    field: 'mediaMountPath',
+    component: 'Input',
+    defaultValue: STORAGE_TAG_DEFAULTS.mediaMountPath,
+    colProps: { span: 12 },
+    ifShow: ({ values }) => values.nodeRole === 'storage',
+    componentProps: { placeholder: '/mnt/easyaiot-media' },
+    helpMessage: 'CephFS 客户端挂载 easyaiot 媒体存储的根路径',
+  },
+];
+
+/** 添加中心节点抽屉 */
+export const controlPlanePeerFormSchema: FormSchema[] = [
+  {
+    field: 'dividerPeer',
+    component: 'Divider',
+    label: '互联信息',
+    colProps: { span: 24 },
+  },
+  {
+    label: '中心节点名称',
+    field: 'name',
+    required: true,
+    component: 'Input',
+    colProps: { span: 12 },
+    componentProps: { placeholder: '如：机房 B 控制面' },
+  },
+  {
+    label: 'API 根地址',
+    field: 'apiBaseUrl',
+    required: true,
+    component: 'Input',
+    colProps: { span: 12 },
+    componentProps: { placeholder: 'http://10.0.0.2:48080/admin-api' },
+    helpMessage: '对端中心节点的管理 API 根路径，需网络可达',
+  },
+  {
+    field: 'dividerAuth',
+    component: 'Divider',
+    label: '认证与备注',
+    colProps: { span: 24 },
+  },
+  {
+    label: '互联令牌',
+    field: 'peerToken',
+    component: 'Input',
+    colProps: { span: 12 },
+    componentProps: { placeholder: '双方协商一致；留空则自动生成' },
+  },
+  {
+    label: '备注',
+    field: 'remark',
+    component: 'Input',
+    colProps: { span: 12 },
+  },
 ];
 
 export const basicDetailSchema: DescItem[] = [
@@ -339,6 +480,14 @@ export const basicDetailSchema: DescItem[] = [
     field: 'gpuInfo',
     label: 'GPU 硬件',
     render: (_val, data) => formatGpuSummary(data?.gpuInfo),
+  },
+  {
+    field: 'maxGpuCount',
+    label: 'GPU 数量',
+    render: (val, data) => {
+      if (data?.nodeRole === 'gpu' || (val != null && val > 0)) return val ?? '-';
+      return '无';
+    },
   },
   { field: 'activeTasks', label: NODE_METRIC.runningTasks, render: (val) => val ?? 0 },
   {
@@ -456,6 +605,62 @@ export const mediaDetailSchema: DescItem[] = [
     span: 2,
     render: (_val, data) =>
       `${data?.tags?.zlm_rtp_port_min ?? 30000} - ${data?.tags?.zlm_rtp_port_max ?? 30500}`,
+  },
+];
+
+export const storageDetailSchema: DescItem[] = [
+  {
+    field: 'tags.ceph_pool',
+    label: 'Ceph 存储池',
+    render: (_val, data) => readStorageTagsFromTags(data?.tags).cephPool,
+  },
+  {
+    field: 'tags.ceph_osd_path',
+    label: 'OSD 数据路径',
+    render: (_val, data) => readStorageTagsFromTags(data?.tags).cephOsdPath,
+  },
+  {
+    field: 'tags.cephfs_name',
+    label: 'CephFS 名称',
+    render: (_val, data) => readStorageTagsFromTags(data?.tags).cephfsName,
+  },
+  {
+    field: 'tags.ceph_mon_host',
+    label: 'Ceph MON',
+    render: (_val, data) => readStorageTagsFromTags(data?.tags).cephMonHost,
+  },
+  {
+    field: 'tags.media_mount_path',
+    label: 'CephFS 挂载根路径',
+    span: 2,
+    render: (_val, data) => readStorageTagsFromTags(data?.tags).mediaMountPath,
+  },
+];
+
+export const cephMountDetailSchema: DescItem[] = [
+  {
+    field: 'tags.ceph_mount_ready',
+    label: '客户端挂载',
+    render: (_val, data) => renderCephMountBadge(data?.tags),
+  },
+  {
+    field: 'tags.ceph_mount_path',
+    label: '挂载路径',
+    render: (_val, data) => {
+      const { mountPath, status } = readCephMountFromTags(data?.tags);
+      if (mountPath) return mountPath;
+      return status === 'unknown' ? '等待 Agent 心跳上报' : '-';
+    },
+  },
+  {
+    field: 'tags.cluster_mode',
+    label: '集群模式',
+    span: 2,
+    render: (_val, data) => {
+      const raw = data?.tags?.cluster_mode;
+      if (raw == null || raw === '') return '未上报';
+      return ['true', '1', 'yes'].includes(String(raw).toLowerCase()) ? '已启用' : '未启用';
+    },
   },
 ];
 

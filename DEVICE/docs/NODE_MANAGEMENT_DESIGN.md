@@ -190,7 +190,7 @@ SRS/ZLM on_dvr Hook → VIDEO /video/media/hook/* （<50ms）
                               ↓
               media_upload_worker（独立进程）
                               ↓
-         MinIO 上传 + Playback + 删 GlusterFS 本地段
+         MinIO 上传 + Playback + 删 CephFS 本地段
 ```
 
 ### 环境变量（VIDEO）
@@ -200,7 +200,7 @@ SRS/ZLM on_dvr Hook → VIDEO /video/media/hook/* （<50ms）
 | `MEDIA_UPLOAD_MODE` | `sync` | `kafka` 时 Hook 仅入队 |
 | `MEDIA_KAFKA_DVR_TOPIC` | `media.dvr.completed` | DVR 完成 Topic |
 | `MEDIA_KAFKA_DVR_DLQ_TOPIC` | `media.dvr.dlq` | 死信 Topic |
-| `MEDIA_HOST_DATA_ROOT` | `/mnt/easyaiot-media` | GlusterFS 挂载根 |
+| `MEDIA_HOST_DATA_ROOT` | `/mnt/easyaiot-media` | CephFS 挂载根 |
 | `MEDIA_HOOK_HOST` | `localhost` | SRS/ZLM Hook 目标（Gateway IP） |
 | `MEDIA_HOOK_PORT` | `48080` | Gateway 端口 |
 

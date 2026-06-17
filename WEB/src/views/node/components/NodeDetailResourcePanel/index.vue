@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed } from 'vue';
-import { Progress } from 'ant-design-vue';
+import { Progress, Spin } from 'ant-design-vue';
 import type { ComputeNodeVO } from '@/api/device/node';
 import {
   aggregateGpuVram,
@@ -16,6 +16,7 @@ defineOptions({ name: 'NodeDetailResourcePanel' });
 
 const props = defineProps<{
   node?: ComputeNodeVO | null;
+  loading?: boolean;
 }>();
 
 const hasMetrics = computed(
@@ -71,12 +72,13 @@ const metricCards = computed(() => {
 </script>
 
 <template>
-  <div class="resource-panel">
-    <div v-if="!hasMetrics" class="resource-panel__empty">
-      {{ NODE_DETAIL.noMetrics }}
-    </div>
+  <Spin :spinning="!!loading">
+    <div class="resource-panel">
+      <div v-if="!loading && !hasMetrics" class="resource-panel__empty">
+        {{ NODE_DETAIL.noMetrics }}
+      </div>
 
-    <template v-else>
+      <template v-else-if="hasMetrics || !loading">
       <div class="metric-grid">
         <div
           v-for="item in metricCards"
@@ -137,11 +139,16 @@ const metricCards = computed(() => {
           </div>
         </div>
       </div>
-    </template>
-  </div>
+      </template>
+    </div>
+  </Spin>
 </template>
 
 <style lang="less" scoped>
+.resource-panel {
+  min-height: 200px;
+}
+
 .resource-panel__empty {
   padding: 28px 16px;
   text-align: center;

@@ -166,6 +166,7 @@ import { BasicDrawer, useDrawerInner } from '@/components/Drawer';
 import { BasicForm, useForm } from '@/components/Form';
 import { getDatasetPage } from '@/api/device/dataset';
 import { getModelPage } from '@/api/device/model';
+import { getNodePage } from '@/api/device/node';
 import { getTrainGpuStatus, uploadTrainDataset } from '@/api/device/train';
 import { useMessage } from '@/hooks/web/useMessage';
 import { Button } from '@/components/Button';
@@ -215,6 +216,14 @@ const presetModelOptions: CustomWeightOption[] = [
   { label: 'Yolo11 (yolo11n.pt)', value: 'yolo11n.pt' },
   { label: 'Yolo26 (yolo26n.pt)', value: 'yolo26n.pt' },
 ];
+
+const schedulePolicyOptions = [
+  { label: '本机训练', value: 'local' },
+  { label: '自动调度 GPU 节点', value: 'auto' },
+  { label: '指定节点', value: 'node' },
+];
+
+const nodeOptions = ref<Array<{ label: string; value: number }>>([]);
 
 const { createMessage } = useMessage();
 
@@ -306,6 +315,35 @@ const loadCustomModels = async () => {
     console.error('加载用户模型失败', e);
   } finally {
     customModelsLoading.value = false;
+  }
+};
+
+const loadNodes = async () => {
+  try {
+    const res = await getNodePage({ pageNo: 1, pageSize: 200, status: 'online' });
+    const page = (res as { data?: { list?: unknown[] }; list?: unknown[] })?.data || res;
+    const list = ((page as { list?: unknown[] })?.list || []).filter(
+      (node: { nodeRole?: string }) =>
+        node.nodeRole === 'compute' || node.nodeRole === 'gpu' || node.nodeRole === 'hybrid',
+    );
+    nodeOptions.value = list.map((node: { id: number; name?: string; host?: string }) => ({
+      label: `${node.name || '节点'} (${node.host || '-'})`,
+      value: node.id,
+    }));
+    updateSchema({
+      field: 'target_node_id',
+      componentProps: {
+        options: nodeOptions.value,
+        placeholder: '选择在线 GPU/计算节点',
+        showSearch: true,
+        allowClear: true,
+        filterOption: (input: string, option: { label?: string }) =>
+          (option?.label ?? '').toLowerCase().includes(input.toLowerCase()),
+      },
+    });
+  } catch (e) {
+    console.error('加载节点列表失败', e);
+    nodeOptions.value = [];
   }
 };
 
@@ -461,6 +499,30 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getF
       },
       helpMessage: '正在探测 GPU...',
     },
+    {
+      field: 'schedule_policy',
+      label: '调度策略',
+      component: 'Select',
+      defaultValue: 'auto',
+      componentProps: {
+        options: schedulePolicyOptions,
+      },
+      helpMessage:
+        '自动调度：通过 iot-node 将训练下发到 GPU 节点（需 CephFS 与 model_train Bundle）；本机：在当前 AI 控制面执行',
+    },
+    {
+      field: 'target_node_id',
+      label: '目标节点',
+      component: 'Select',
+      componentProps: {
+        options: [],
+        placeholder: '选择在线 GPU/计算节点',
+        showSearch: true,
+        allowClear: true,
+      },
+      ifShow: ({ values }) => values.schedule_policy === 'node',
+      required: ({ values }) => values.schedule_policy === 'node',
+    },
   ],
 });
 
@@ -504,7 +566,7 @@ const drawerOpenData = ref<Record<string, unknown>>({});
 
 async function initTrainDrawer(data: Record<string, unknown> = {}) {
   resetTrainForm();
-  await loadCustomModels();
+  await Promise.all([loadCustomModels(), loadNodes()]);
 
   const fillFromRecord = async (record: Record<string, unknown>) => {
     retrainTaskId.value = record.id as number;
@@ -517,6 +579,8 @@ async function initTrainDrawer(data: Record<string, unknown> = {}) {
       epochs: hp.epochs ?? 100,
       batch_size: hp.batch_size ?? 16,
       imgsz: hp.imgsz ?? 640,
+      schedule_policy: (record.schedule_policy as string) || 'auto',
+      target_node_id: record.target_node_id ?? undefined,
     });
     selectedModelPath.value = hp.modelPath || presetModels[0];
 
@@ -697,6 +761,11 @@ const startTrain = async () => {
     return;
   }
 
+  if (values.schedule_policy === 'node' && !values.target_node_id) {
+    createMessage.warn('请选择目标节点');
+    return;
+  }
+
   let datasetPath = '';
   let datasetName = '';
   let datasetVersion = '';
@@ -770,6 +839,8 @@ const startTrain = async () => {
     gpu_ids: values.use_gpu && gpuStatus.value.visible_gpu_ids.length
       ? gpuStatus.value.visible_gpu_ids
       : undefined,
+    schedulePolicy: values.schedule_policy,
+    targetNodeId: values.schedule_policy === 'node' ? values.target_node_id : null,
     ...(retrainTaskId.value ? { taskId: retrainTaskId.value } : {}),
     ...(isResumeMode.value ? { resume: true } : {}),
   });

@@ -96,6 +96,7 @@ def create_task():
             description=data.get('description'),
             is_enabled=is_enabled,
             schedule_policy=data.get('schedule_policy', 'local'),
+            prefer_gpu=data.get('prefer_gpu', True),
             target_node_id=data.get('target_node_id'),
         )
         

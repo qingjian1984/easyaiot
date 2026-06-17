@@ -161,7 +161,7 @@ function num(val?: number | null): number {
 }
 
 export function isComputeNode(node: ComputeNodeVO): boolean {
-  return node.nodeRole === 'compute' || node.nodeRole === 'hybrid';
+  return node.nodeRole === 'compute' || node.nodeRole === 'gpu' || node.nodeRole === 'hybrid';
 }
 
 export function isOnlineComputeNode(node: ComputeNodeVO): boolean {

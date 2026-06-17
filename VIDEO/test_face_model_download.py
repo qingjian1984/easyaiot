@@ -33,6 +33,25 @@ class TestFaceModelDownloadHelpers(unittest.TestCase):
             self.assertEqual(status['downloaded_bytes'], 50 * 1024 * 1024)
             self.assertGreater(status['progress'], 0)
 
+    def test_prepare_model_target_rejects_nonempty_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            model_path = os.path.join(tmp, 'face_rec.onnx')
+            os.makedirs(model_path)
+            with open(os.path.join(model_path, 'stale'), 'wb') as f:
+                f.write(b'x')
+            with mock.patch.object(fmd, 'FACE_MATCH_MODEL_PATH', model_path):
+                with self.assertRaises(RuntimeError) as ctx:
+                    fmd._prepare_model_target()
+            self.assertIn('目录而非文件', str(ctx.exception))
+
+    def test_prepare_model_target_clears_empty_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            model_path = os.path.join(tmp, 'face_rec.onnx')
+            os.makedirs(model_path)
+            with mock.patch.object(fmd, 'FACE_MATCH_MODEL_PATH', model_path):
+                fmd._prepare_model_target()
+            self.assertFalse(os.path.exists(model_path))
+
     def test_is_zip_complete(self):
         with tempfile.TemporaryDirectory() as tmp:
             zip_path = os.path.join(tmp, 'buffalo_l.zip')

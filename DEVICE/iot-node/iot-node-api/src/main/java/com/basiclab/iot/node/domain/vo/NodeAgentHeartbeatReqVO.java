@@ -54,4 +54,13 @@ public class NodeAgentHeartbeatReqVO {
     @Schema(description = "运行中的工作负载")
     private List<Map<String, Object>> workloads;
 
+    @Schema(description = "是否处于集群模式")
+    private Boolean clusterMode;
+
+    @Schema(description = "CephFS 挂载根路径")
+    private String cephMountRoot;
+
+    @Schema(description = "CephFS 挂载是否就绪")
+    private Boolean cephMountReady;
+
 }

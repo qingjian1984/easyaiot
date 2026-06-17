@@ -52,6 +52,40 @@ def _serialize_model_class_fields(model: Model) -> dict:
     }
 
 
+def _serialize_model_provenance(model: Model) -> dict:
+    return {
+        'model_origin': getattr(model, 'model_origin', None) or 'upload',
+        'origin_ref': getattr(model, 'origin_ref', None),
+    }
+
+
+def _serialize_model_item(model: Model) -> dict:
+    return {
+        'id': model.id,
+        'name': model.name,
+        'version': model.version,
+        'description': model.description,
+        'status': model.status if model.status is not None else 0,
+        'created_at': model.created_at.isoformat() if model.created_at else None,
+        'updated_at': model.updated_at.isoformat() if model.updated_at else None,
+        'imageUrl': model.image_url,
+        'model_path': model.model_path,
+        'onnx_model_path': model.onnx_model_path,
+        'torchscript_model_path': model.torchscript_model_path,
+        'tensorrt_model_path': model.tensorrt_model_path,
+        'openvino_model_path': model.openvino_model_path,
+        **_serialize_model_class_fields(model),
+        **_serialize_model_provenance(model),
+    }
+
+
+def _apply_model_provenance(model: Model, origin: str | None, origin_ref: str | None = None):
+    if origin:
+        model.model_origin = origin
+    if origin_ref:
+        model.origin_ref = origin_ref
+
+
 def _apply_model_class_fields(model: Model, data: dict):
     class_names = data.get('classNames')
     if class_names is None:
@@ -92,25 +126,25 @@ def models():
             except ValueError:
                 pass
 
+        has_weights = request.args.get('has_weights', '').strip().lower()
+        if has_weights in ('true', '1', 'yes', 'on'):
+            query = query.filter(
+                or_(
+                    Model.model_path.isnot(None),
+                    Model.onnx_model_path.isnot(None),
+                    Model.torchscript_model_path.isnot(None),
+                    Model.tensorrt_model_path.isnot(None),
+                    Model.openvino_model_path.isnot(None),
+                )
+            )
+
         pagination = query.paginate(
             page=page_no,
             per_page=page_size,
             error_out=False
         )
 
-        model_list = [{
-            'id': p.id,
-            'name': p.name,
-            'version': p.version,
-            'description': p.description,
-            'status': p.status if p.status is not None else 0,
-            'created_at': p.created_at.isoformat() if p.created_at else None,
-            'updated_at': p.updated_at.isoformat() if p.updated_at else None,
-            'imageUrl': p.image_url,
-            'model_path': p.model_path,
-            'onnx_model_path': p.onnx_model_path,
-            **_serialize_model_class_fields(p),
-        } for p in pagination.items]
+        model_list = [_serialize_model_item(p) for p in pagination.items]
 
         return jsonify({
             'code': 0,
@@ -422,6 +456,7 @@ def upload_custom_model():
                     class_names=dump_class_names_json(class_names),
                     selected_class_names=dump_class_names_json(selected_class_names_list),
                 )
+                _apply_model_provenance(model, 'upload')
                 db.session.add(model)
                 db.session.commit()
 
@@ -504,6 +539,9 @@ def create_model():
             status=status
         )
         _apply_model_class_fields(model, data)
+        origin = (data.get('model_origin') or data.get('modelOrigin') or 'upload').strip() or 'upload'
+        origin_ref = data.get('origin_ref') or data.get('originRef')
+        _apply_model_provenance(model, origin, origin_ref)
         db.session.add(model)
         db.session.commit()
 
@@ -900,7 +938,11 @@ def get_model(model_id):
                 'status': getattr(model, 'status', 0) or 0,
                 'model_path': model.model_path,
                 'onnx_model_path': model.onnx_model_path,
+                'torchscript_model_path': model.torchscript_model_path,
+                'tensorrt_model_path': model.tensorrt_model_path,
+                'openvino_model_path': model.openvino_model_path,
                 **_serialize_model_class_fields(model),
+                **_serialize_model_provenance(model),
             },
             'has_update': False
         })
@@ -910,6 +952,76 @@ def get_model(model_id):
             'code': 500,
             'msg': f'服务器内部错误: {str(e)}'
         }), 500
+
+
+@model_bp.route('/<int:model_id>/sync-to-cluster', methods=['POST'])
+def sync_model_to_cluster(model_id):
+    """将模型权重预同步至集群 CephFS（AI_MODELS_DIR/{model_id}/）。"""
+    try:
+        model = Model.query.get(model_id)
+        if not model:
+            return jsonify({'code': 404, 'msg': f'模型 {model_id} 不存在'}), 404
+
+        from model_resolver import (
+            is_cluster_synced,
+            model_record_from_orm,
+            resolve_cluster_model_path,
+            sync_model_weights_to_cluster,
+        )
+
+        def _minio_download(bucket: str, key: str, dest: str):
+            return ModelService.download_from_minio(bucket, key, dest)
+
+        record = model_record_from_orm(model)
+        if is_cluster_synced(model_id):
+            path = resolve_cluster_model_path(model_id)
+            return jsonify({
+                'code': 0,
+                'msg': '模型已在集群缓存',
+                'data': {'model_id': model_id, 'cluster_path': path, 'synced': True},
+            })
+
+        ok, msg, path = sync_model_weights_to_cluster(
+            model_id, record, download_fn=_minio_download,
+        )
+        if not ok:
+            return jsonify({'code': 500, 'msg': msg}), 500
+        return jsonify({
+            'code': 0,
+            'msg': msg,
+            'data': {'model_id': model_id, 'cluster_path': path, 'synced': True},
+        })
+    except Exception as e:
+        logger.error('集群模型同步失败 model_id=%s: %s', model_id, e, exc_info=True)
+        return jsonify({'code': 500, 'msg': f'同步失败: {e}'}), 500
+
+
+@model_bp.route('/sync-to-cluster/batch', methods=['POST'])
+def sync_models_to_cluster_batch():
+    """批量预同步模型至集群共享存储。"""
+    try:
+        data = request.get_json(silent=True) or {}
+        raw_ids = data.get('model_ids') or data.get('modelIds') or []
+        if not raw_ids:
+            return jsonify({'code': 400, 'msg': '请提供 model_ids'}), 400
+
+        from model_resolver import ensure_models_on_cluster, model_record_from_orm
+
+        def _fetch(mid: int):
+            m = Model.query.get(mid)
+            return model_record_from_orm(m) if m else None
+
+        def _minio_download(bucket: str, key: str, dest: str):
+            return ModelService.download_from_minio(bucket, key, dest)
+
+        ok, errors = ensure_models_on_cluster(raw_ids, _fetch, download_fn=_minio_download)
+        if not ok:
+            return jsonify({'code': 500, 'msg': '; '.join(errors), 'data': {'errors': errors}}), 500
+        return jsonify({'code': 0, 'msg': '全部模型已同步', 'data': {'model_ids': raw_ids}})
+    except Exception as e:
+        logger.error('批量集群模型同步失败: %s', e, exc_info=True)
+        return jsonify({'code': 500, 'msg': f'同步失败: {e}'}), 500
+
 
 # 在模型推理时进行模型下载
 @model_bp.route('/download_model_forVideo', methods=['POST'])

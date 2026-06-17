@@ -31,6 +31,14 @@
           />
         </a-form-item>
         <a-form-item
+          v-if="formState.deploy_target === 'auto'"
+          label="优先 GPU"
+          class="form-item-input"
+        >
+          <a-switch v-model:checked="formState.prefer_gpu" checked-children="是" un-checked-children="否" />
+          <span class="port-tip" style="margin-left: 8px">自动调度时优先选择 GPU 节点</span>
+        </a-form-item>
+        <a-form-item
           v-if="formState.deploy_target === 'node'"
           label="目标节点"
           :required="true"
@@ -64,7 +72,7 @@
 <script lang="ts" setup>
 import { computed, reactive, ref, watch, onMounted } from 'vue';
 import { BasicModal, useModalInner } from '@/components/Modal';
-import { Form, FormItem, Select, InputNumber } from 'ant-design-vue';
+import { Form, FormItem, Select, InputNumber, Switch } from 'ant-design-vue';
 import { useMessage } from '@/hooks/web/useMessage';
 import { deployModel, getModelPage } from '@/api/device/model';
 import { getNodePage } from '@/api/device/node';
@@ -73,6 +81,7 @@ const AForm = Form;
 const AFormItem = FormItem;
 const ASelect = Select;
 const AInputNumber = InputNumber;
+const ASwitch = Switch;
 
 const { createMessage } = useMessage();
 
@@ -89,6 +98,7 @@ const formState = reactive({
   model_id: null as number | null,
   start_port: 9999 as number,
   deploy_target: 'local' as string,
+  prefer_gpu: true,
   target_node_id: null as number | null,
 });
 
@@ -129,7 +139,7 @@ const loadNodeOptions = async () => {
     const res = await getNodePage({ pageNo: 1, pageSize: 200, status: 'online' });
     const page = res?.data || res;
     const list = (page?.list || []).filter(
-      (node: any) => node.nodeRole === 'compute' || node.nodeRole === 'hybrid',
+      (node: any) => node.nodeRole === 'compute' || node.nodeRole === 'gpu' || node.nodeRole === 'hybrid',
     );
     nodeOptions.value = list.map((node: any) => ({
       label: `${node.name} (${node.host})`,
@@ -150,6 +160,7 @@ const [register, { closeModal, setModalProps }] = useModalInner(async () => {
   formState.model_id = null;
   formState.start_port = 9999;
   formState.deploy_target = 'local';
+  formState.prefer_gpu = true;
   formState.target_node_id = null;
   state.deploying = false;
   setModalProps({ confirmLoading: false });
@@ -203,6 +214,9 @@ const handleSubmit = async () => {
       start_port: formState.start_port,
       auto_schedule: formState.deploy_target === 'auto',
     };
+    if (formState.deploy_target === 'auto') {
+      values.prefer_gpu = formState.prefer_gpu;
+    }
     if (formState.deploy_target === 'node' && formState.target_node_id) {
       values.target_node_id = formState.target_node_id;
     }

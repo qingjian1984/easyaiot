@@ -46,6 +46,57 @@ def _use_remote_deploy(task: AlgorithmTask) -> bool:
     return policy in ('auto', 'node')
 
 
+def _parse_task_model_ids(task: AlgorithmTask) -> list:
+    raw = getattr(task, 'model_ids', None)
+    if not raw:
+        return []
+    try:
+        ids = json.loads(raw) if isinstance(raw, str) else raw
+        return [int(x) for x in ids]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+
+def _is_cluster_mode_enabled() -> bool:
+    try:
+        from cluster_storage import is_cluster_mode
+        return is_cluster_mode()
+    except ImportError:
+        return os.getenv('CLUSTER_MODE', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _ensure_task_models_on_cluster(task: AlgorithmTask) -> Tuple[bool, str]:
+    """集群模式下将任务关联模型预同步至 CephFS 共享目录。"""
+    if not _is_cluster_mode_enabled():
+        return True, ''
+    model_ids = _parse_task_model_ids(task)
+    if not model_ids:
+        return True, ''
+    import requests
+    ai_url = os.getenv('AI_SERVICE_URL', 'http://localhost:5000').rstrip('/')
+    jwt = os.getenv('JWT_TOKEN', '')
+    headers = {'Content-Type': 'application/json'}
+    if jwt:
+        headers['X-Authorization'] = f'Bearer {jwt}'
+    try:
+        resp = requests.post(
+            f'{ai_url}/model/sync-to-cluster/batch',
+            headers=headers,
+            json={'model_ids': model_ids},
+            timeout=(5, 300),
+        )
+        body = resp.json() if resp.content else {}
+        if resp.status_code == 200 and body.get('code') == 0:
+            logger.info('任务模型已预同步至集群 task_id=%s model_ids=%s', task.id, model_ids)
+            return True, ''
+        msg = body.get('msg') or resp.text or f'HTTP {resp.status_code}'
+        logger.error('集群模型预同步失败 task_id=%s: %s', task.id, msg)
+        return False, msg
+    except Exception as e:
+        logger.error('集群模型预同步异常 task_id=%s: %s', task.id, e, exc_info=True)
+        return False, str(e)
+
+
 def _task_capabilities(task_type: str) -> list:
     if task_type == 'snap':
         return ['algorithm_snap']
@@ -96,6 +147,8 @@ def _build_task_deploy_env(task_id: int, task_type: str, log_path: str, server_h
         'CUDA_VISIBLE_DEVICES', 'NVIDIA_VISIBLE_DEVICES', 'ORT_EXECUTION_PROVIDERS',
         'KAFKA_BOOTSTRAP_SERVERS', 'MINIO_ENDPOINT', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY',
         'MINIO_SECURE', 'NACOS_SERVER', 'VIDEO_ENV',
+        'CLUSTER_MODE', 'MEDIA_HOST_DATA_ROOT', 'MEDIA_RECORD_DIR', 'MEDIA_SNAP_DIR',
+        'MEDIA_UPLOAD_MODE', 'MEDIA_SNAP_UPLOAD_MODE', 'ALERT_IMAGES_DIR',
     ):
         val = os.getenv(key)
         if val is not None and val != '':
@@ -130,6 +183,10 @@ def _build_task_deploy_env(task_id: int, task_type: str, log_path: str, server_h
 def _deploy_task_on_remote_node(task_id: int, task: AlgorithmTask) -> Tuple[bool, str, bool]:
     from app.utils import node_client
 
+    ok, sync_msg = _ensure_task_models_on_cluster(task)
+    if not ok:
+        return (False, f'集群模型预同步失败: {sync_msg}', False)
+
     policy = getattr(task, 'schedule_policy', None) or 'local'
     target_node_id = getattr(task, 'target_node_id', None)
     if policy == 'node' and not target_node_id:
@@ -140,6 +197,7 @@ def _deploy_task_on_remote_node(task_id: int, task: AlgorithmTask) -> Tuple[bool
         str(task_id),
         capabilities=_task_capabilities(task.task_type),
         target_node_id=target_node_id if policy == 'node' else None,
+        prefer_gpu=getattr(task, 'prefer_gpu', True),
         sticky=True,
     )
 
@@ -597,6 +655,10 @@ def start_task_services(task_id: int, task: AlgorithmTask) -> Tuple[bool, str, b
                     logger.info('任务 %s 已在远程节点 %s 运行，跳过重复部署', task_id, task.node_id)
                     return (True, '任务已在远程节点运行', True)
                 return _deploy_task_on_remote_node(task_id, task)
+
+            ok, sync_msg = _ensure_task_models_on_cluster(task)
+            if not ok:
+                return (False, f'集群模型预同步失败: {sync_msg}', False)
 
             # 检查是否已经有运行的守护进程（在清理之前检查，避免误杀正在运行的进程）
             should_cleanup = True

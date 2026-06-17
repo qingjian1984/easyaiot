@@ -7,6 +7,7 @@ import com.basiclab.iot.node.dal.pgsql.ComputeNodeMapper;
 import com.basiclab.iot.node.dal.pgsql.NodeMetricSnapshotMapper;
 import com.basiclab.iot.node.domain.vo.NodeAgentHeartbeatReqVO;
 import com.basiclab.iot.node.domain.vo.NodeAgentRegisterReqVO;
+import com.basiclab.iot.node.enums.NodeRoleEnum;
 import com.basiclab.iot.node.enums.NodeStatusEnum;
 import com.basiclab.iot.node.service.NodeAgentService;
 import com.basiclab.iot.node.service.NodeClusterMetricsBroadcaster;
@@ -65,6 +66,8 @@ public class NodeAgentServiceImpl implements NodeAgentService {
         ComputeNodeDO node = validateAgent(reqVO.getNodeId(), reqVO.getAgentToken());
         node.setStatus(NodeStatusEnum.ONLINE.getStatus());
         node.setLastHeartbeatAt(LocalDateTime.now());
+        syncGpuCountFromHeartbeat(node, reqVO.getGpuInfo());
+        syncCephMountFromHeartbeat(node, reqVO);
         computeNodeMapper.updateById(node);
 
         NodeMetricSnapshotDO snapshot = NodeMetricSnapshotDO.builder()
@@ -103,6 +106,36 @@ public class NodeAgentServiceImpl implements NodeAgentService {
                 String.valueOf(System.currentTimeMillis()),
                 HEARTBEAT_TTL_SECONDS,
                 TimeUnit.SECONDS);
+    }
+
+    /** GPU 节点：根据 Agent 上报的 gpu_info 同步 maxGpuCount */
+    private void syncGpuCountFromHeartbeat(ComputeNodeDO node, java.util.List<java.util.Map<String, Object>> gpuInfo) {
+        if (!NodeRoleEnum.GPU.getRole().equals(node.getNodeRole()) || gpuInfo == null || gpuInfo.isEmpty()) {
+            return;
+        }
+        int detected = gpuInfo.size();
+        if (node.getMaxGpuCount() == null || node.getMaxGpuCount() < detected) {
+            node.setMaxGpuCount(detected);
+        }
+    }
+
+    /** 将 Agent 上报的 Ceph 挂载状态写入节点 tags，供调度器过滤 */
+    private void syncCephMountFromHeartbeat(ComputeNodeDO node, NodeAgentHeartbeatReqVO reqVO) {
+        if (reqVO.getCephMountReady() == null && StrUtil.isBlank(reqVO.getCephMountRoot())) {
+            return;
+        }
+        java.util.Map<String, String> tags = node.getTags() != null
+                ? new java.util.HashMap<>(node.getTags()) : new java.util.HashMap<>();
+        if (reqVO.getCephMountReady() != null) {
+            tags.put("ceph_mount_ready", Boolean.TRUE.equals(reqVO.getCephMountReady()) ? "true" : "false");
+        }
+        if (StrUtil.isNotBlank(reqVO.getCephMountRoot())) {
+            tags.put("ceph_mount_path", reqVO.getCephMountRoot().trim());
+        }
+        if (reqVO.getClusterMode() != null) {
+            tags.put("cluster_mode", Boolean.TRUE.equals(reqVO.getClusterMode()) ? "true" : "false");
+        }
+        node.setTags(tags);
     }
 
 }

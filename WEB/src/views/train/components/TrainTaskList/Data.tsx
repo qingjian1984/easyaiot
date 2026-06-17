@@ -1,5 +1,6 @@
 import {BasicColumn, FormProps} from '@/components/Table';
 import {Progress, Tag} from 'ant-design-vue';
+import {formatClusterRuntime, formatSchedulePolicy} from '@/utils/clusterRuntime';
 
 const getProgressColor = (percent) => {
   const lightness = 45 + (percent / 100) * 30;
@@ -57,6 +58,20 @@ export function getBasicColumns(): BasicColumn[] {
           </div>
         );
       },
+    },
+    {
+      title: '调度策略',
+      dataIndex: 'schedule_policy',
+      width: 110,
+      responsive: ['lg'],
+      customRender: ({ text, record }) => formatSchedulePolicy(text, record),
+    },
+    {
+      title: '运行节点',
+      dataIndex: 'service_server_ip',
+      width: 180,
+      responsive: ['lg'],
+      customRender: ({ record }) => formatClusterRuntime(record),
     },
     {
       title: '当前状态',
