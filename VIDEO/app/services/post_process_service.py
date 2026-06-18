@@ -30,12 +30,11 @@ POST_PROCESS_TEMPLATE = '''"""
 - alerts: 可选，自定义告警列表，每项含 object/event/information 等字段
 - counts: 可选，统计结果（会写入 ctx["state"] 供下一帧使用）
 - events: 可选，业务事件列表
-- suppress_kafka: 可选，为 True 时不投递 Kafka
-- publish_kafka: 可选，为 True 时强制投递 Kafka（即使 counts/events/alerts 为空）
+- suppress_sink: 可选，为 True 时不投递结果（由 iot-sink 处理）
+- publish_sink: 可选，为 True 时强制投递结果
 
-后处理结果经 Kafka 双主题链路处理（见 README.md），不在算法进程内同步执行。
-- suppress_kafka: 可选，Worker 处理完成后不投递结果主题
-- publish_kafka: 可选，强制投递结果主题
+后处理经 iot-sink 异步处理：算法检测 HTTP 入队 → iot-sink 对接 Kafka → Worker 执行脚本 → 落库与告警。
+- suppress_kafka / publish_kafka 为兼容旧字段，同 suppress_sink / publish_sink
 """
 
 from typing import Any, Dict, List
@@ -98,15 +97,15 @@ README_TEMPLATE = '''# 算法任务后处理工作区
 
 在平台「算法任务」列表点击「AI后处理」保存并启用后，任务运行时会自动加载本目录脚本。
 
-## 结果持久化（Kafka 集群解耦）
+## 结果持久化（iot-sink 集群解耦）
 
-`process()` 返回的 `counts` / `events` / `alerts` 经 Kafka 双主题链路处理：
-1. 算法检测 → `iot-post-process-request`
-2. 后处理集群 Worker → `iot-post-process-result`
-3. Sink 集群异步入库 `algorithm_post_process_result` 并派发告警
+`process()` 返回的 `counts` / `events` / `alerts` 由 **iot-sink** 经 Kafka 异步入库并派发告警：
+1. 算法检测 → HTTP 入队 iot-sink
+2. iot-sink → 分发 Worker 执行脚本 → 结果落库
+3. 表 `algorithm_post_process_result` + 告警 Hook
 
 查询接口：`GET /video/algorithm/task/{taskId}/post-process/results`
-节点部署：在节点管理批量部署 bundle 类型 `post_process`
+节点部署：在节点管理批量部署 bundle 类型 `post_process`（Worker 为 HTTP 服务，不订阅 Kafka）
 '''
 
 

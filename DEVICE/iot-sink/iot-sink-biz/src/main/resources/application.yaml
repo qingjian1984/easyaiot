@@ -201,6 +201,11 @@ aj:
 --- #################### BasicLab相关配置 ####################
 
 basiclab:
+  video:
+    service-url: http://localhost:48080
+  post-process:
+    worker-http-port: 19680
+    local-worker-url: http://127.0.0.1:19680
   iot:
     message-bus:
       type: local # 消息总线类型：local、kafka（默认 local）
@@ -231,6 +236,8 @@ iot:
       - /rpc-api/system/tenant/valid # 防止递归。避免调用 /rpc-api/system/tenant/valid 接口时，又去触发 /rpc-api/system/tenant/valid 去校验
       - /rpc-api/system/tenant/id-list # 获得租户列表的时候，无需传递租户编号
       - /rpc-api/system/oauth2/token/check # 访问令牌校验时，无需传递租户编号；主要解决上传文件的场景，前端不会传递 tenant-id！
+      - /admin-api/sink/post-process/enqueue # VIDEO 算法侧后处理入队（内网服务调用）
+      - /post-process/enqueue
     ignore-tables:
       - system_tenant
       - system_tenant_package
@@ -247,7 +254,7 @@ iot:
       - system_mail_template
       - system_mail_log
       - system_notify_template
-      - alert # 告警表，屏蔽租户隔离
+      - algorithm_post_process_result # 后处理结果表（iot-sink 写入）
   sms-code: # 短信验证码相关的配置项
     expire-times: 10m
     send-frequency: 1m

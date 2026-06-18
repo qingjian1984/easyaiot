@@ -115,6 +115,11 @@ spring:
       topic: iot-plate-matching
       group-id: iot-sink-plate-matching-consumer
       result-topic: iot-plate-matching-result
+    post-process:
+      request-topic: iot-post-process-request
+      result-topic: iot-post-process-result
+      request-group-id: iot-sink-post-process-request
+      result-group-id: iot-sink-post-process-result
 
 --- #################### 定时任务相关配置 ####################
 

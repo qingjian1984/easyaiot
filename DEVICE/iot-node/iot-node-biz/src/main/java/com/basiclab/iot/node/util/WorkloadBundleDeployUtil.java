@@ -124,8 +124,7 @@ public final class WorkloadBundleDeployUtil {
                 return Arrays.asList(
                         "models.py",
                         "app",
-                        "services/post_process_worker",
-                        "services/post_process_sink_worker"
+                        "services/post_process_worker"
                 );
             default:
                 return Collections.emptyList();

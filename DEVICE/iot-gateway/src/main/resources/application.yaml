@@ -61,6 +61,13 @@ spring:
           filters:
             - StripPrefix=1
             - RewritePath=/admin-api/node/v3/api-docs, /v3/api-docs
+        # iot-sink 服务（算法后处理 Kafka 入队/消费/落库）
+        - id: sink-admin-api
+          uri: lb://sink-server
+          predicates:
+            - Path=/admin-api/sink/**
+          filters:
+            - RewritePath=/admin-api/sink/(?<segment>.*), /admin/$\{segment}
         # 文件服务
         - id: file-admin-api
           uri: lb://file-server

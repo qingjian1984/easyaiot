@@ -187,7 +187,7 @@ def enqueue_post_process_request(
     tracked_detections: Optional[List[Dict[str, Any]]] = None,
     alert_image_path: Optional[str] = None,
 ) -> None:
-    """将检测结果投递到 Kafka 请求主题，由后处理集群异步消费。"""
+    """将检测结果 HTTP 投递至 iot-sink 入队，由 iot-sink 对接 Kafka 并分发 Worker。"""
     if not task_config or not bool(getattr(task_config, 'post_process_enabled', False)):
         return
     regions = load_regions_for_device(device_id)
@@ -204,10 +204,10 @@ def enqueue_post_process_request(
     if alert_image_path:
         ctx['alert_image_path'] = alert_image_path
     try:
-        from app.services.post_process_kafka_service import publish_post_process_request_async
+        from app.services.post_process_sink_client import publish_post_process_request_async
         publish_post_process_request_async(ctx, alert_image_path=alert_image_path)
     except Exception as exc:
-        logger.warning('后处理请求投递 Kafka 失败: %s', exc)
+        logger.warning('后处理请求投递 iot-sink 失败: %s', exc)
 
 
 def apply_post_process(

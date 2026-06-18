@@ -1110,7 +1110,7 @@ class AlgorithmTask(db.Model):
 
 
 class AlgorithmPostProcessResult(db.Model):
-    """算法任务 AI 后处理结果（由 Kafka 消费者异步写入）"""
+    """算法任务 AI 后处理结果（由 iot-sink Kafka 消费者异步写入）"""
     __tablename__ = 'algorithm_post_process_result'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)

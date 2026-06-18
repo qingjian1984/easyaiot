@@ -1,24 +1,16 @@
 #!/usr/bin/env python3
 """
-AI 后处理 Worker：消费 iot-post-process-request，执行用户脚本，投递 iot-post-process-result。
-由 iot-node 按任务副本数部署到集群计算节点，同任务多副本共享 consumer group 水平扩展。
+AI 后处理 Worker：HTTP 服务执行用户脚本（不订阅 Kafka，由 iot-sink 分发请求）。
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sys
-import time
 
 VIDEO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if VIDEO_ROOT not in sys.path:
     sys.path.insert(0, VIDEO_ROOT)
-_repo_root = os.path.abspath(os.path.join(VIDEO_ROOT, '..'))
-_lib_root = os.path.join(_repo_root, '.scripts', 'lib')
-for _p in (_lib_root,):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 from app.utils.video_env import load_video_env
 
@@ -32,15 +24,8 @@ logger = logging.getLogger('post-process-worker')
 
 TASK_ID = os.getenv('POST_PROCESS_TASK_ID', '')
 REPLICA = os.getenv('POST_PROCESS_REPLICA', '0')
-REQUEST_TOPIC = os.getenv('KAFKA_POST_PROCESS_REQUEST_TOPIC', 'iot-post-process-request')
-RESULT_TOPIC = os.getenv('KAFKA_POST_PROCESS_RESULT_TOPIC', 'iot-post-process-result')
-GROUP = os.getenv(
-    'KAFKA_POST_PROCESS_CONSUMER_GROUP',
-    f'post-process-task-{TASK_ID}' if TASK_ID else 'post-process-worker',
-)
-BOOTSTRAP = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
-if 'Kafka' in BOOTSTRAP or 'kafka-server' in BOOTSTRAP:
-    BOOTSTRAP = 'localhost:9092'
+HTTP_HOST = os.getenv('POST_PROCESS_WORKER_HTTP_HOST', '0.0.0.0')
+HTTP_PORT = int(os.getenv('POST_PROCESS_WORKER_HTTP_PORT', '19680'))
 
 
 def _create_app():
@@ -75,8 +60,7 @@ def _load_task_config(task_id: int):
 
 
 def run():
-    from kafka import KafkaConsumer
-    from app.services.post_process_kafka_service import publish_post_process_result_message
+    from flask import Flask, jsonify, request
     from app.utils.post_process_runner import run_post_process
 
     if not TASK_ID:
@@ -84,61 +68,36 @@ def run():
         sys.exit(1)
 
     task_id = int(TASK_ID)
-    app = _create_app()
+    flask_app = _create_app()
+    worker_app = Flask(__name__)
+    task_holder = {'config': None}
 
-    consumer = KafkaConsumer(
-        REQUEST_TOPIC,
-        bootstrap_servers=BOOTSTRAP.split(','),
-        group_id=GROUP,
-        value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-        key_deserializer=lambda k: k.decode('utf-8') if k else None,
-        auto_offset_reset='latest',
-        enable_auto_commit=False,
-        max_poll_records=10,
-        session_timeout_ms=60000,
-        heartbeat_interval_ms=10000,
-    )
-    logger.info(
-        '后处理 Worker 启动 task=%s replica=%s topic=%s group=%s',
-        task_id, REPLICA, REQUEST_TOPIC, GROUP,
-    )
-
-    with app.app_context():
-        task_config = _load_task_config(task_id)
-        if not task_config:
+    with flask_app.app_context():
+        task_holder['config'] = _load_task_config(task_id)
+        if not task_holder['config']:
             logger.error('算法任务不存在: %s', task_id)
             sys.exit(1)
 
-        while True:
-            try:
-                records = consumer.poll(timeout_ms=1000, max_records=10)
-                if not records:
-                    continue
-                for _tp, messages in records.items():
-                    for msg in messages:
-                        request = msg.value or {}
-                        req_task_id = request.get('taskId') or request.get('task_id')
-                        if req_task_id is not None and int(req_task_id) != task_id:
-                            consumer.commit()
-                            continue
-                        ctx = _message_to_ctx(request)
-                        try:
-                            result = run_post_process(task_config, ctx)
-                            if result is not None:
-                                publish_post_process_result_message(request, result, ctx=ctx)
-                            consumer.commit()
-                        except Exception as exc:
-                            logger.error(
-                                '后处理失败 task=%s device=%s frame=%s: %s',
-                                task_id,
-                                ctx.get('device_id'),
-                                ctx.get('frame_number'),
-                                exc,
-                                exc_info=True,
-                            )
-            except Exception as exc:
-                logger.error('Consumer 轮询异常: %s', exc, exc_info=True)
-                time.sleep(5)
+    @worker_app.route('/health', methods=['GET'])
+    def health():
+        return jsonify({'ok': True, 'taskId': task_id, 'replica': REPLICA})
+
+    @worker_app.route('/execute', methods=['POST'])
+    def execute():
+        body = request.get_json(silent=True) or {}
+        req_task_id = body.get('taskId') or body.get('task_id')
+        if req_task_id is not None and int(req_task_id) != task_id:
+            return jsonify({'error': 'task mismatch'}), 400
+        ctx = _message_to_ctx(body)
+        with flask_app.app_context():
+            result = run_post_process(task_holder['config'], ctx)
+        return jsonify({'result': result, 'request': body})
+
+    logger.info(
+        '后处理 Worker HTTP 启动 task=%s replica=%s %s:%s',
+        task_id, REPLICA, HTTP_HOST, HTTP_PORT,
+    )
+    worker_app.run(host=HTTP_HOST, port=HTTP_PORT, threaded=True, use_reloader=False)
 
 
 if __name__ == '__main__':
