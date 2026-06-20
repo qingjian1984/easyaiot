@@ -625,6 +625,144 @@ def _should_suppress_alert_event_kafka(device_id: str, task_type: str, suppress_
     return False
 
 
+def _should_use_direct_alert_persist() -> bool:
+    """mini 形态或未部署 Kafka 消费链时，告警直接写入 VIDEO 库（不经 Kafka/iot-sink）。"""
+    import os
+    explicit = (os.getenv('ALERT_USE_DIRECT_PERSIST') or '').strip().lower()
+    if explicit in ('1', 'true', 'yes', 'on'):
+        return True
+    if explicit in ('0', 'false', 'no', 'off'):
+        return False
+    try:
+        from app.utils.service_urls import is_mini_deploy_profile
+        return is_mini_deploy_profile()
+    except Exception:
+        return False
+
+
+def _persist_alert_directly(
+    alert_data: Dict,
+    alert_event_task: Optional[Dict],
+    detection_switches: Optional[Dict] = None,
+) -> Dict:
+    """将告警直接写入 VIDEO 数据库。
+
+    - mini 形态：不依赖 MinIO，直接使用本地 image_path 作为 image_url。
+    - 非 mini 形态：异步上传图片到 MinIO，并回写 image_url。
+    """
+    from app.services.alert_service import create_alert
+    from app.services.alert_consumer_service import upload_image_to_minio
+    from models import Alert
+
+    device_id = alert_data.get('device_id')
+    task_id = alert_event_task.get('task_id') if alert_event_task else None
+    task_name = (alert_event_task.get('task_name') if alert_event_task else None) or alert_data.get('event')
+
+    persist_data = dict(alert_data)
+    persist_data['task_id'] = task_id
+    persist_data['task_name'] = task_name
+    if detection_switches:
+        persist_data.setdefault(
+            'face_detection_enabled',
+            bool(detection_switches.get('face_detection_enabled', False)),
+        )
+        persist_data.setdefault(
+            'plate_detection_enabled',
+            bool(detection_switches.get('plate_detection_enabled', False)),
+        )
+
+    row = create_alert(persist_data)
+    alert_id = row.get('id')
+    image_path = alert_data.get('image_path')
+
+    if alert_id and image_path:
+        # mini 形态：不启用 MinIO，直接使用本地路径
+        is_mini = False
+        try:
+            from app.utils.service_urls import is_mini_deploy_profile
+
+            is_mini = is_mini_deploy_profile()
+        except Exception:
+            is_mini = False
+
+        if is_mini:
+            try:
+                from app.utils.service_urls import build_alert_image_api_url
+
+                alert = Alert.query.get(alert_id)
+                if alert:
+                    alert.image_url = build_alert_image_api_url(image_path)
+                    db.session.commit()
+                    logger.info(
+                        'mini 形态告警图片使用本地路径: alertId=%s, deviceId=%s, image_url=%s',
+                        alert_id,
+                        device_id,
+                        alert.image_url,
+                    )
+            except Exception as exc:
+                logger.warning('mini 形态更新告警 %s image_url 失败: %s', alert_id, exc, exc_info=True)
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+        else:
+            # 非 mini：保持原有异步 MinIO 上传逻辑
+            app = current_app._get_current_object()
+
+            def _upload():
+                try:
+                    with app.app_context():
+                        minio_path = upload_image_to_minio(image_path, alert_id, device_id)
+                        if not minio_path:
+                            return
+                        alert = Alert.query.get(alert_id)
+                        if alert:
+                            alert.image_url = minio_path
+                            db.session.commit()
+                            logger.info('告警 %s 图片已上传 MinIO: %s', alert_id, minio_path)
+                except Exception as exc:
+                    logger.warning('告警 %s 图片上传失败: %s', alert_id, exc)
+                    try:
+                        with app.app_context():
+                            db.session.rollback()
+                    except Exception:
+                        pass
+
+            threading.Thread(target=_upload, daemon=True, name=f'alert-img-%s' % alert_id).start()
+
+    logger.info(
+        '✅ 告警已直接落库(mini): alertId=%s, deviceId=%s, object=%s',
+        alert_id,
+        device_id,
+        alert_data.get('object'),
+    )
+    return {'status': 'success', 'alert_id': alert_id, 'mode': 'direct_persist'}
+
+
+def _fallback_persist_on_kafka_failure(
+    alert_data: Dict,
+    alert_event_task: Optional[Dict],
+    detection_switches: Optional[Dict],
+    kafka_error: str,
+) -> Dict:
+    """Kafka 投递失败时尝试直连落库，避免告警丢失。"""
+    logger.warning(
+        'Kafka 投递失败，尝试告警直连落库: device_id=%s, error=%s',
+        alert_data.get('device_id'),
+        kafka_error,
+    )
+    try:
+        return _persist_alert_directly(alert_data, alert_event_task, detection_switches)
+    except Exception as persist_exc:
+        logger.error(
+            '告警直连落库失败: device_id=%s, error=%s',
+            alert_data.get('device_id'),
+            persist_exc,
+            exc_info=True,
+        )
+        return {'status': 'failed', 'error': kafka_error}
+
+
 def process_alert_hook(alert_data: Dict) -> Dict:
     """
     处理告警Hook请求：仅发送到Kafka（Java端统一处理消息，包括区域比对、布防时段判断、存储到数据库）
@@ -653,7 +791,10 @@ def process_alert_hook(alert_data: Dict) -> Dict:
         if task_type == 'snapshot':
             task_type = 'snap'
 
-        if device_id:
+        use_direct_persist = _should_use_direct_alert_persist()
+
+        # Kafka 抑制仅作用于投递 Kafka；mini 直连落库由算法侧抑制，hook 不再二次拦截
+        if device_id and not use_direct_persist:
             suppress_seconds = _resolve_alert_event_suppress_seconds(device_id, task_type)
             if _should_suppress_alert_event_kafka(device_id, task_type, suppress_seconds):
                 logger.debug(
@@ -689,6 +830,15 @@ def process_alert_hook(alert_data: Dict) -> Dict:
         detection_switches = _resolve_detection_switches_from_alert_data(
             alert_data, notification_config, alert_event_task
         )
+
+        # mini 形态：直连落库，避免 Kafka/iot-sink 未就绪导致告警丢失
+        if use_direct_persist:
+            logger.info(
+                'ℹ️  mini 形态告警直连落库: device_id=%s, task_type=%s',
+                device_id,
+                task_type,
+            )
+            return _persist_alert_directly(alert_data, alert_event_task, detection_switches)
         
         # 构建告警消息（直接发送原始告警数据，Java端会处理）
         # 如果开启了告警通知，发送到Kafka
@@ -772,7 +922,9 @@ def process_alert_hook(alert_data: Dict) -> Dict:
                                 pass
                             _producer = None
                             logger.info(f"已重置Kafka生产者，将在下次发送时重新初始化")
-                        return {'status': 'failed', 'error': str(e)}
+                        return _fallback_persist_on_kafka_failure(
+                            alert_data, alert_event_task, detection_switches, str(e)
+                        )
                 except Exception as e:
                     # 发送异常，但不影响主流程
                     logger.error(f"❌ 发送告警通知消息到Kafka异常: device_id={device_id}, error={str(e)}", exc_info=True)
@@ -784,7 +936,9 @@ def process_alert_hook(alert_data: Dict) -> Dict:
                             pass
                         _producer = None
                         logger.info(f"已重置Kafka生产者，将在下次发送时重新初始化")
-                        return {'status': 'failed', 'error': str(e)}
+                        return _fallback_persist_on_kafka_failure(
+                            alert_data, alert_event_task, detection_switches, str(e)
+                        )
             else:
                 # 警告抑制：避免日志刷屏，每5分钟最多输出一次警告
                 current_time = time.time()
@@ -793,7 +947,9 @@ def process_alert_hook(alert_data: Dict) -> Dict:
                     _last_kafka_unavailable_warning_time = current_time
                 else:
                     logger.debug(f"Kafka不可用，跳过告警消息发送: device_id={device_id}")
-                return {'status': 'failed', 'error': 'Kafka不可用'}
+                return _fallback_persist_on_kafka_failure(
+                    alert_data, alert_event_task, detection_switches, 'Kafka不可用'
+                )
         else:
             # 没有通知配置，也发送到Kafka（Java端可能需要处理），但标记为不需要通知
             logger.info(f"ℹ️  未找到通知配置，发送告警消息（不包含通知信息）: device_id={device_id}, task_type={task_type}")
@@ -839,7 +995,9 @@ def process_alert_hook(alert_data: Dict) -> Dict:
                                 pass
                             _producer = None
                             logger.info(f"已重置Kafka生产者，将在下次发送时重新初始化")
-                        return {'status': 'failed', 'error': str(e)}
+                        return _fallback_persist_on_kafka_failure(
+                            alert_data, alert_event_task, detection_switches, str(e)
+                        )
                 except Exception as e:
                     logger.error(f"❌ 发送告警消息到Kafka异常: device_id={device_id}, error={str(e)}", exc_info=True)
                     if isinstance(e, (KafkaError, ConnectionError, TimeoutError)) or 'socket disconnected' in str(e).lower():
@@ -849,7 +1007,9 @@ def process_alert_hook(alert_data: Dict) -> Dict:
                             pass
                         _producer = None
                         logger.info(f"已重置Kafka生产者，将在下次发送时重新初始化")
-                    return {'status': 'failed', 'error': str(e)}
+                        return _fallback_persist_on_kafka_failure(
+                            alert_data, alert_event_task, detection_switches, str(e)
+                        )
             else:
                 # 警告抑制：避免日志刷屏，每5分钟最多输出一次警告
                 current_time = time.time()
@@ -858,7 +1018,9 @@ def process_alert_hook(alert_data: Dict) -> Dict:
                     _last_kafka_unavailable_warning_time = current_time
                 else:
                     logger.debug(f"Kafka不可用，跳过告警消息发送: device_id={device_id}")
-                return {'status': 'failed', 'error': 'Kafka不可用'}
+                return _fallback_persist_on_kafka_failure(
+                    alert_data, alert_event_task, detection_switches, 'Kafka不可用'
+                )
         
     except Exception as e:
         logger.error(f"处理告警Hook失败: {str(e)}", exc_info=True)

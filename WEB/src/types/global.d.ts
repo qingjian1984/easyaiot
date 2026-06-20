@@ -87,6 +87,8 @@ declare global {
     VITE_GENERATE_UI: string
     /** 天地图 API Key */
     VITE_TIANDITU_KEY: string
+    /** 部署形态：mini | standard | full */
+    VITE_GLOB_DEPLOY_PROFILE?: string
   }
 
   declare function parseInt(s: string | number, radix?: number): number

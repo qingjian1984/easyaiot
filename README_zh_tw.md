@@ -33,6 +33,71 @@
 EasyAIoT是一個雲邊端一體化的智能物聯網平臺，專註於AI與IoT的深度融合。平臺通過算法任務管理、實時流分析、模型服務集群推理等核心能力，實現從設備接入到數據采集、AI分析、智能決策的全鏈路閉環，真正實現萬物互聯、萬物智控。
 </p>
 
+#### 🔄 邊緣盒子、AI 一體攝像頭、AIoT 智能全棧一體機——同一套平臺不必拆版本
+
+<p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
+很多智能物聯網項目走到落地時都會卡住：<strong>功能做全了，小機器裝不下；為了裝得下，又得砍能力、拆版本、維護多套部署包。</strong> EasyAIoT 用同一套平臺化解這一矛盾——<strong>邊緣盒子點上智能、AI 一體攝像頭上牆即分析、AIoT 智能全棧一體機一箱配齊全鏈路</strong>，三類最常見的現場硬件各選一檔即可，同一套軟件貫穿從單點試點到樓面覆蓋再到全棧交付，不必拆版本。
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 10px 0;">
+<strong>你能得到什麼：</strong>
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 8px 0 12px 0;">
+  <li><strong>盒子也能上智能</strong>：4 GB 邊緣盒子不必再當「只能轉發視頻」的啞終端，擺上就能接入、分析、告警</li>
+  <li><strong>攝像頭自帶大腦</strong>：AI 一體攝像頭上牆即可分析，多路攝像頭組網即可覆蓋樓面、園區，不必每個點位都拖一套盒子加攝像頭</li>
+  <li><strong>全棧一台配齊</strong>：AIoT 智能全棧一體機把設備接入、視頻監控、AI 分析、業務管控裝進一台機器，不必拼湊多套系統、多個廠商</li>
+  <li><strong>換硬件不換平臺</strong>：從盒子試點到攝像頭上牆到全棧一體機投產，升級只換硬件檔位，業務與數據可延續</li>
+</ul>
+
+| 選型 | 典型硬件（舉例） | 推薦內存 | 你能做到什麼 | 實測驗證* |
+| :-- | :-- | :--: | :-- | :--: |
+| **mini** 邊緣精簡版 | <strong>邊緣盒子</strong>（4 GB 工控機、門店安防一體機、工地現場網關） | ≥ 4 GB | <strong>一個點位裝上就有智能</strong>：攝像頭接入、實時分析、智能告警、模型推理，最低成本落地視覺能力 | 僅需約 2 GB，餘量充足 |
+| **standard** 標準版 | <strong>AI 一體攝像頭</strong>（智能攝像終端、帶算力 AI 監控攝像頭、多目 AI 分析一體機） | ≥ 16 GB | <strong>每路攝像頭即智能節點</strong>：多路攝像頭上牆即可樓面/園區級覆蓋，設備、規則、算力統一編排，多場景並行運營 | 約 10 GB，運行平穩有餘量 |
+| **full** 完整版（默認） | <strong>AIoT 智能全棧一體機</strong>（企業級全棧智控一體機、行業物聯網全棧主機、雲邊端一體智能平臺一體機） | ≥ 20 GB | <strong>一箱配齊 IoT + 視頻 + AI</strong>：設備納管、海量接入、智能分析、指揮研判一體化，全量能力長期穩跑 | 約 14 GB，全能力開啟仍留足餘量 |
+
+<p style="font-size: 13px; line-height: 1.6; color: #888; margin: 8px 0;">
+*實測為安裝收尾自動核算的參考值，隨業務負載浮動；圖中綠色「符合」表示當前硬件檔位下資源安全、可放心投產。
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0;">
+<strong>三類硬件，分別解決什麼問題：</strong>
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 8px 0 12px 0;">
+  <li><strong>邊緣盒子（mini）</strong>：崗亭桌下、門店弱電箱、工地配電間——只有一個點位、預算緊、沒人天天運維，但需要今天裝上今天就能「看得見異常、判得清事件、告警能推送」</li>
+  <li><strong>AI 一體攝像頭（standard）</strong>：樓道、出入口、停車場、園區道路——點位多、要鋪開，攝像頭上牆就能分析告警，多路攝像頭組成智能網絡，管的是一片樓面或一個園，而不是盯一個屏</li>
+  <li><strong>AIoT 智能全棧一體機（full）</strong>：企業機房、行業交付現場、大型項目一體機櫃——不想拼裝多套系統，需要一台機器就吃透「設備接入—視頻監控—算法推理—業務管控」全鏈路，路數多、併發高、能力要全，長期穩跑、持續擴展</li>
+</ul>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0;">
+<strong>怎麼選：</strong>不必研究架構，<strong>看你現場是什麼形態</strong>——單點用邊緣盒子選 mini，多路 AI 攝像頭上牆組網選 standard，需要全棧能力一箱配齊選 full。先拿盒子試點、再攝像頭上牆鋪開、最後用 AIoT 智能全棧一體機統一納管，換硬件只換檔位，平臺自動適配，日常啟停無需重複配置。
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 16px 0 8px 0;">
+<strong>安裝選型與資源符合性（實測）：</strong>
+</p>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-menu.png" alt="部署選型" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 16px 0;">邊緣盒子 / AI 一體攝像頭 / AIoT 智能全棧一體機——按現場硬件形態選一檔</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-mini.png" alt="mini 實測符合性" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 4px 0;"><strong>邊緣盒子（mini）</strong>：4 GB 盒子實測僅需約 2 GB，單點擺上就能安心跑智能</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-standard.png" alt="standard 實測符合性" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 4px 0;"><strong>AI 一體攝像頭（standard）</strong>：16 GB 主機實測約 10 GB，多路攝像頭組網覆蓋樓面/園區仍有餘量</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-full.png" alt="full 實測符合性" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 16px 0;"><strong>AIoT 智能全棧一體機（full）</strong>：20 GB 一體機實測約 14 GB，全棧能力一箱配齊仍留足餘量，可放心投產</p>
+</div>
+
 #### 🧠 AI能力
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">

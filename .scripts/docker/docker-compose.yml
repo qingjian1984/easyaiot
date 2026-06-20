@@ -372,30 +372,6 @@ services:
     networks:
       - easyaiot-network
 
-  # OpenVSCode Server（默认不启动；EASYAIOT_ENABLE_VSCODE=1 或 docker compose --profile vscode up）
-  VSCode:
-    profiles: ["vscode"]
-    image: linuxserver/openvscode-server:1.95.3
-    container_name: openvscode-server
-    restart: always
-    ports:
-      - "0.0.0.0:10192:3000"
-    environment:
-      - TZ=Asia/Shanghai
-      - PUID=1000
-      - PGID=1000
-    volumes:
-      - "./vscode_data/config:/config:rw"
-      - "./vscode_data/workspaces:/config/workspace:rw"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    networks:
-      - easyaiot-network
-
   # EMQX MQTT Broker（默认不启动；EASYAIOT_ENABLE_EMQX=1 或 docker compose --profile emqx up）
   EMQX:
     profiles: ["emqx"]
@@ -499,8 +475,6 @@ volumes:
   srs_data:
     driver: local
   nodered_data:
-    driver: local
-  vscode_data:
     driver: local
   emqx_data:
     driver: local

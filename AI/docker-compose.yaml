@@ -29,6 +29,8 @@ services:
       - ./:/app
       # 数据目录（包含数据集、模型、推理结果、上传文件）
       - ./data:/app/data
+      # mini 形态本地对象存储与 SRS 录像等同用宿主机 /data（network_mode: host 不共享 mount namespace）
+      - /data:/data:rw
       # 静态文件目录
       - ./static:/app/static
       # 临时上传目录
@@ -42,6 +44,8 @@ services:
       - ./yolo26n.pt:/app/yolo26n.pt
       # 环境变量配置文件（用于Docker部署，使用.env.docker）
       - ./.env.docker:/app/.env:ro
+      # mini 形态不启 MinIO 服务时，只读挂载 flat 种子数据供懒加载/启动同步
+      - ../.scripts/minio:/minio-seed-data:ro
 
     # 环境变量
     environment:

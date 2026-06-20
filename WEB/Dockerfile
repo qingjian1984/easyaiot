@@ -36,9 +36,13 @@ RUN --mount=type=cache,target=/pnpm/store,id=web-pnpm-store \
 
 # 源码变更或 install_linux.sh clean 后通过 CACHE_BUST 使后续层失效（避免命中 CACHED 跳过 pnpm build）
 ARG CACHE_BUST=0
+ARG VITE_GLOB_DEPLOY_PROFILE=full
 RUN echo "cache-bust=${CACHE_BUST}" > /tmp/.web-cache-bust
 
 COPY . .
+
+# 部署形态与上传前缀写入生产环境（与 nginx /dev-api 路由一致；mini 无 Gateway 48080）
+RUN printf '\nVITE_GLOB_DEPLOY_PROFILE = %s\nVITE_GLOB_UPLOAD_URL = /dev-api\n' "${VITE_GLOB_DEPLOY_PROFILE}" >> .env.production
 
 # vite 打包通常需数分钟；用 tee 同时写日志，避免终端长时间无输出像卡住
 RUN --mount=type=cache,target=/pnpm/store,id=web-pnpm-store \

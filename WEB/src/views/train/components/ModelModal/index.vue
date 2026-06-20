@@ -45,7 +45,7 @@
               </Button>
             </Upload>
             <div v-if="modelRef.imageUrl" class="preview-wrap">
-              <img :src="modelRef.imageUrl" alt="模型图片" class="preview-image" />
+              <img :src="resolveModelImageDisplayUrl(modelRef.imageUrl)" alt="模型图片" class="preview-image" />
             </div>
           </FormItem>
 
@@ -98,6 +98,7 @@ import { useUserStoreWithOut } from '@/store/modules/user';
 import { useGlobSetting } from '@/hooks/setting';
 import { createModel, updateModel, getModelClasses, parseModelClassPayload } from '@/api/device/model';
 import { normalizeModelVersion } from '../../utils/modelVersionUtils';
+import { resolveModelImageDisplayUrl } from '@/utils/alertMinioImage';
 import { Button } from '@/components/Button';
 
 defineOptions({ name: 'ModelDrawer' });

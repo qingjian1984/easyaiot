@@ -1,5 +1,6 @@
 import {defHttp} from '@/utils/http/axios';
 import { normalizeWvpChannelItem } from '@/views/camera/utils/gb28181Channel';
+import { isGb28181Enabled } from '@/utils/deployProfile';
 
 // GB28181 通过网关转发到 WVP：Path=/admin-api/gb28181/** -> RewritePath -> /api/${segment}
 // 前端请求路径为 gb28181/xxx（无 /api 前缀），网关会重写为 /api/xxx 转发到 iot-gb28181
@@ -16,7 +17,15 @@ const CLOUD_RECORD_PREFIX = '/gb28181/cloud/record';
  * 通用请求封装
  * delete 使用 query 传参以匹配 WVP 的 @RequestParam
  */
+const GB28181_DISABLED_PAGE_BODY = { data: { list: [], total: 0 } };
+
 const commonApi = (method: 'get' | 'post' | 'delete' | 'put', url: string, params: any = {}, isTransformResponse = true) => {
+  if (!isGb28181Enabled()) {
+    if (isTransformResponse) {
+      return Promise.resolve(null);
+    }
+    return Promise.resolve(GB28181_DISABLED_PAGE_BODY);
+  }
   const isGet = method === 'get';
   const isDelete = method === 'delete';
   return defHttp[method](
@@ -296,6 +305,9 @@ export const addChannel = (channel: any) => {
  * @param mark 标识（可选）
  */
 export const snapshot = (deviceId: string, channelId: string, mark?: string) => {
+  if (!isGb28181Enabled()) {
+    return Promise.resolve({ data: '' });
+  }
   let url = `${GB28181_PREFIX}/snap/${deviceId}/${channelId}`;
   if (mark) {
     url += `?mark=${mark}`;

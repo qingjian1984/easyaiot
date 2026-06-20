@@ -33,6 +33,71 @@
 EasyAIoT는 AI와 IoT의 심층적 융합에 초점을 맞춘 클라우드-엣지-디바이스 통합 지능형 사물인터넷 플랫폼입니다. 플랫폼은 알고리즘 태스크 관리, 실시간 스트림 분석, 모델 서비스 클러스터 추론 등의 핵심 기능을 통해, 디바이스 접속부터 데이터 수집, AI 분석, 지능형 의사결정에 이르는 전 과정의 폐쇄 루프를 실현하여 진정한 만물 인터넷화, 만물 지능화 제어를 실현합니다.
 </p>
 
+#### 🔄 엣지 박스, AI 일체형 카메라, AIoT 풀스택 일체기 — 하나의 플랫폼, 버전 분리 불필요
+
+<p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
+많은 지능형 IoT 프로젝트가 배포 단계에서 막힙니다. <strong>기능을 모두 넣으면 작은 기기에 안 들어가고, 들어가게 하려면 기능을 줄이고 버전을 나누고 여러 배포 패키지를 유지해야 합니다.</strong> EasyAIoT는 하나의 플랫폼으로 이 딜레마를 해결합니다 — <strong>엣지 박스로 점 단위 지능, AI 일체형 카메라로 벽면 즉시 분석, AIoT 풀스택 일체기로 한 박스에 전체 스택</strong>. 현장 하드웨어에 맞는 등급을 선택하면, 단일 지점 시범부터 층면 커버리지, 풀스택 납품까지 동일 소프트웨어로 진행 — 버전 분리 없음.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 10px 0;">
+<strong>얻을 수 있는 것:</strong>
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 8px 0 12px 0;">
+  <li><strong>박스에도 지능 탑재</strong>:4 GB 엣지 박스는 「영상만 중계하는」 무능력 단말이 아닙니다 — 설치 즉시 접속·분석·경보</li>
+  <li><strong>카메라에 뇌 내장</strong>:AI 일체형 카메라는 벽에 달면 분석 가능, 다수 카메라 네트워크로 층·단지 커버 — 매 지점에 박스+카메라 불필요</li>
+  <li><strong>풀스택 한 대에 완비</strong>:AIoT 풀스택 일체기에 장치 접속·영상 감시·AI 분석·업무 관제를 한 기기에 — 여러 시스템·벤더 조립 불필요</li>
+  <li><strong>하드웨어 교체, 플랫폼 유지</strong>:박스 시범 → 카메라 벽면 배치 → 풀스택 일체기 가동, 등급만 바꾸고 업무·데이터 연속</li>
+</ul>
+
+| 등급 | 대표 하드웨어 (예) | 권장 메모리 | 할 수 있는 것 | 실측 검증* |
+| :-- | :-- | :--: | :-- | :--: |
+| **mini** 엣지 경량판 | <strong>엣지 박스</strong>(4 GB 산업용 PC, 매장 보안 일체기, 현장 게이트웨이) | ≥ 4 GB | <strong>한 지점에 지능 설치</strong>:카메라 접속·실시간 분석·스마트 경보·모델 추론, 최저 비용 시각 AI | 약 2 GB만 사용, 여유 충분 |
+| **standard** 표준판 | <strong>AI 일체형 카메라</strong>(스마트 카메라 단말, 연산 내장 AI 감시 카메라, 다목 AI 분석 일체기) | ≥ 16 GB | <strong>각 카메라가 스마트 노드</strong>:다수 카메라 벽면 배치로 층/단지 커버, 장치·규칙·연산 통합 오케스트레이션 | 약 10 GB, 안정적 여유 |
+| **full** 완전판(기본) | <strong>AIoT 풀스택 일체기</strong>(엔터프라이즈 풀스택 지능관제 일체기, 산업 IoT 풀스택 호스트, 클라우드-엣지-디바이스 통합 플랫폼) | ≥ 20 GB | <strong>한 박스에 IoT + 영상 + AI</strong>:장치 통합관리·대량 접속·지능 분석·지휘 판단 일체화, 전량 역량 장기 안정 | 약 14 GB, 전 기능 여유 확보 |
+
+<p style="font-size: 13px; line-height: 1.6; color: #888; margin: 8px 0;">
+*실측은 설치 완료 시 자동 산출 참고값, 업무 부하에 따라 변동; 스크린샷의 녹색 「적합」은 해당 등급에서 안전하게 가동 가능함을 의미합니다.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0;">
+<strong>세 가지 하드웨어, 각각 해결하는 문제:</strong>
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 8px 0 12px 0;">
+  <li><strong>엣지 박스(mini)</strong>:경비실 아래, 매장 약전실, 공사 현장 배전실 — 한 지점, 예산 빠듯, 상시 운영 인력 없음 — 오늘 설치해 오늘 「이상 감지·명확한 판단·경보 전송」 필요</li>
+  <li><strong>AI 일체형 카메라(standard)</strong>:복도, 출입구, 주차장, 단지 도로 — 지점 많고 넓게 펼쳐야 함, 카메라 벽면 설치로 분석·경보, 다수 카메라 스마트 네트워크로 한 층·한 단지 관리</li>
+  <li><strong>AIoT 풀스택 일체기(full)</strong>:기업 서버실, 산업 납품 현장, 대형 프로젝트 일체 랙 — 여러 시스템 조립 원치 않음, 한 기기로 「장치 접속—영상 감시—알고리즘 추론—업무 관제」 전체 체인, 대량 스트림·고동시성·전 역량, 장기 안정·지속 확장</li>
+</ul>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0;">
+<strong>선택 방법:</strong> 아키텍처 공부 불필요 — <strong>현장 형태를 보면 됩니다</strong>:단일 지점은 엣지 박스(mini), 다수 AI 카메라 벽면 네트워크는 standard, 풀스택 한 박스는 full. 박스로 시범 → 카메라 확대 → AIoT 풀스택 일체기로 통합 관리, 등급만 교체하면 플랫폼 자동 적응, 일상 시작/중지 재설정 불필요.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 16px 0 8px 0;">
+<strong>설치 등급 선택 및 리소스 적합성(실측):</strong>
+</p>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-menu.png" alt="배포 등급 선택" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 16px 0;">엣지 박스 / AI 일체형 카메라 / AIoT 풀스택 일체기 — 현장 하드웨어 형태에 맞게 한 등급 선택</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-mini.png" alt="mini 실측 적합성" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 4px 0;"><strong>엣지 박스(mini)</strong>:4 GB 박스 실측 약 2 GB만 사용, 단일 지점에 안심하고 지능 가동</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-standard.png" alt="standard 실측 적합성" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 4px 0;"><strong>AI 일체형 카메라(standard)</strong>:16 GB 호스트 실측 약 10 GB, 다수 카메라 네트워크로 층/단지 커버 여유</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-full.png" alt="full 실측 적합성" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 16px 0;"><strong>AIoT 풀스택 일체기(full)</strong>:20 GB 일체기 실측 약 14 GB, 풀스택 한 박스 완비 여유 확보, 안심 가동</p>
+</div>
+
 #### 🧠 AI 기능
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">

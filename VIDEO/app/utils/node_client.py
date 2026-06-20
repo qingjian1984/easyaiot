@@ -9,9 +9,28 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-JAVA_BACKEND_URL = os.getenv('JAVA_BACKEND_URL', 'http://localhost:48080').rstrip('/')
-NODE_API_BASE = f'{JAVA_BACKEND_URL}/admin-api/node'
 REQUEST_TIMEOUT = 90
+
+
+def _is_mini_deploy_profile() -> bool:
+    profile = os.getenv('EASYAIOT_DEPLOY_PROFILE', '').strip().lower()
+    return profile in ('mini', '1', 'minimal', '4g')
+
+
+def resolve_java_backend_url() -> str:
+    explicit = (os.getenv('JAVA_BACKEND_URL') or '').strip()
+    if explicit:
+        return explicit.rstrip('/')
+    gateway = (os.getenv('GATEWAY_URL') or '').strip()
+    if gateway:
+        return gateway.rstrip('/')
+    if _is_mini_deploy_profile():
+        return 'http://localhost:48099'
+    return 'http://localhost:48080'
+
+
+JAVA_BACKEND_URL = resolve_java_backend_url()
+NODE_API_BASE = f'{JAVA_BACKEND_URL}/admin-api/node'
 
 
 def _headers() -> Dict[str, str]:
@@ -56,7 +75,13 @@ def _get(path: str, params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def is_remote_deploy_enabled() -> bool:
-    return os.getenv('NODE_REMOTE_DEPLOY', 'true').lower() in ('1', 'true', 'yes')
+    raw = (os.getenv('NODE_REMOTE_DEPLOY') or '').strip().lower()
+    if raw:
+        return raw in ('1', 'true', 'yes')
+    # mini 形态不部署 iot-node，默认本机运行工作负载
+    if _is_mini_deploy_profile():
+        return False
+    return True
 
 
 def _is_cluster_mode() -> bool:

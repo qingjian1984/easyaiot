@@ -7,7 +7,7 @@
 #   ./install_linux.sh [命令]
 #
 # 可用命令：
-#   install    - 安装并启动所有服务（首次运行）
+#   install    - 安装并启动所有服务（首次运行，交互选择部署形态）
 #   start      - 启动所有服务
 #   stop       - 停止所有服务
 #   restart    - 重启所有服务
@@ -18,6 +18,12 @@
 #   update     - 更新并重启所有服务
 #   verify     - 验证所有服务是否启动成功
 #   check      - 检查 Docker 和 Docker Compose 安装状态
+#   profile    - 显示当前部署形态与服务范围
+#
+# 部署形态（EASYAIOT_DEPLOY_PROFILE）：
+#   mini(1)     - 4G：iot-system + VIDEO/AI/WEB + 最小中间件（无 Kafka/iot-sink/Nacos/Gateway/Infra）
+#   standard(2) - 16G：不含 TDengine/EMQX/iot-device/iot-tdengine/NodeRED
+#   full(3)     - 全量（默认，约 20G）
 # ============================================
 
 set -e
@@ -36,6 +42,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 项目根目录（从.scripts/docker回到项目根目录）
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "$PROJECT_ROOT"
+
+# shellcheck source=deploy_profile.sh
+source "${SCRIPT_DIR}/deploy_profile.sh"
 
 # shellcheck source=node/ensure_platform_agent_invoke.sh
 source "${PROJECT_ROOT}/.scripts/node/ensure_platform_agent_invoke.sh"
@@ -592,6 +601,10 @@ execute_module_command() {
         export EASYAIOT_DEFER_PLATFORM_AGENT_SYNC=1
     fi
 
+    ensure_deploy_profile
+    export EASYAIOT_DEPLOY_PROFILE
+    export EASYAIOT_SKIP_PROFILE_PROMPT
+
     # ⚠️ 失败判定必须取 PIPESTATUS[0]（子脚本退出码）：
     # 脚本未开 pipefail（全局开会让 `docker ps | grep -q` 类管道误报），
     # `if 子脚本 | tee` 取到的是 tee 的退出码（恒 0），曾导致所有模块失败都被报成"成功"。
@@ -680,6 +693,7 @@ verify_service_health() {
 install_linux() {
     print_section "开始安装所有服务"
     
+    select_deploy_profile_for_install
     check_docker "$@"
     check_docker_compose
     prepare_runtime_environment
@@ -799,6 +813,8 @@ run_modules_parallel() {
 start_all() {
     print_section "启动所有服务"
     
+    ensure_deploy_profile
+    print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
     check_docker "$@"
     check_docker_compose
     prepare_runtime_environment
@@ -853,6 +869,8 @@ stop_all() {
 restart_all() {
     print_section "重启所有服务"
     
+    ensure_deploy_profile
+    print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
     check_docker "$@"
     check_docker_compose
     prepare_runtime_environment
@@ -972,6 +990,8 @@ clean_all() {
 update_all() {
     print_section "更新所有服务"
     
+    ensure_deploy_profile
+    print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
     check_docker "$@"
     check_docker_compose
     prepare_runtime_environment
@@ -1131,6 +1151,7 @@ show_help() {
     echo "  update          - 更新并重启所有服务"
     echo "  verify          - 验证所有服务是否启动成功"
     echo "  check           - 检查 Docker 和 Docker Compose 安装状态"
+    echo "  profile         - 显示当前部署形态与服务范围"
     echo "  help            - 显示此帮助信息"
     echo ""
     echo "模块列表:"
@@ -1139,6 +1160,7 @@ show_help() {
     done
     echo ""
     echo "可选环境变量:"
+    echo "  EASYAIOT_DEPLOY_PROFILE      - 部署形态: mini(1) | standard(2) | full(3，默认 full)"
     echo "  PARALLEL_MODULES=true|false  - 业务模块并行开关：start 默认并行；update 默认串行(可能含重建镜像)"
     echo "  PARALLEL_BUILD=true          - build 时并行构建各模块（默认串行，防小内存并行 OOM）"
     echo "  FORCE_NETWORK_RECREATE=true  - 启动时强制重建 easyaiot-network（宿主机 IP 变更后使用）"
@@ -1182,6 +1204,10 @@ main() {
             ;;
         check)
             check_environment
+            ;;
+        profile)
+            ensure_deploy_profile
+            print_deploy_profile_summary
             ;;
         help|--help|-h)
             show_help

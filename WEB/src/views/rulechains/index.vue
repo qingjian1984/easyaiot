@@ -120,7 +120,7 @@ import {getBasicColumns, getFormConfig} from './tableData';
 // import moment from 'moment';
 import {deleteflows, flowsList,} from '@/api/device/rule-chains';
 import {useGo} from '@/hooks/web/usePage';
-import {PopConfirmButton} from '@/components/Button';
+import {Button, PopConfirmButton} from '@/components/Button';
 import {useMessage} from '@/hooks/web/useMessage';
 import {useModal} from '@/components/Modal';
 import Modal from './model.vue';
@@ -136,6 +136,7 @@ export default defineComponent({
     RulechainCardList,
     BasicTable,
     TableAction,
+    Button,
     PopConfirmButton,
     Modal,
     Drawer,

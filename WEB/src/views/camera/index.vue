@@ -158,7 +158,7 @@
         <TabPane key="7" tab="算法任务">
           <AlgorithmTask ref="algorithmTaskRef"/>
         </TabPane>
-        <TabPane key="9" tab="节点管理">
+        <TabPane key="9" v-if="gb28181Enabled" tab="节点管理">
           <Gb28181Node ref="gb28181NodeRef"/>
         </TabPane>
         <TabPane key="10" tab="人脸库">
@@ -235,8 +235,11 @@ import {
   type CreateMethod,
   type DeviceKind,
 } from './utils/deviceCreateOptions';
+import { isGb28181Enabled } from '@/utils/deployProfile';
 
 defineOptions({name: 'CAMERA'})
+
+const gb28181Enabled = isGb28181Enabled();
 
 const route = useRoute();
 
@@ -333,6 +336,9 @@ const LEGACY_CAMERA_TAB_MAP: Record<string, string> = {
 
 /** 路由 ?tab=：优先匹配当前编号；旧编号通过 LEGACY_CAMERA_TAB_MAP 映射 */
 function normalizeCameraRouteTab(tab: string): string {
+  if (!gb28181Enabled && tab === CAMERA_TAB_KEYS.GB_NODE) {
+    return CAMERA_TAB_KEYS.CAMERA_MAP;
+  }
   if (CAMERA_TAB_ID_SET.has(tab)) return tab;
   if (LEGACY_CAMERA_TAB_MAP[tab]) return LEGACY_CAMERA_TAB_MAP[tab];
   return CAMERA_TAB_KEYS.CAMERA_MAP;
@@ -821,7 +827,9 @@ const openAddModal = (type, record = null) => {
 };
 
 function openDeviceCreate(query?: Partial<{ kind: DeviceKind; method: CreateMethod; brand: CameraBrand }>) {
-  if (query?.kind) deviceCreateInitial.kind = query.kind;
+  if (query?.kind) {
+    deviceCreateInitial.kind = !gb28181Enabled && query.kind === 'gb28181' ? 'camera' : query.kind;
+  }
   if (query?.method) deviceCreateInitial.method = query.method;
   if (query?.brand) deviceCreateInitial.brand = query.brand;
   deviceCreateVisible.value = true;

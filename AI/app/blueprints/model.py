@@ -293,7 +293,10 @@ def upload_custom_model():
         else:
             # 验证YOLO模型版本（必须是 yolov8、yolov11 或 yolov26）
             try:
-                yolo_version, detection_method = validate_yolo_model(temp_path)
+                yolo_version, detection_method = validate_yolo_model(
+                    temp_path,
+                    original_filename=file.filename,
+                )
                 if yolo_version is None:
                     return jsonify({
                         'code': 400,
@@ -317,7 +320,11 @@ def upload_custom_model():
                 logger.error(f"模型验证失败: {error_msg}")
                 
                 # 检查是否是YOLOv5或其他不兼容模型的明确错误
-                if '检测到YOLOv5模型' in error_msg or '检测到YOLOv' in error_msg:
+                if (
+                    '检测到YOLOv5' in error_msg
+                    or 'models.yolo' in error_msg
+                    or '检测到YOLOv' in error_msg
+                ):
                     # 直接返回明确的错误信息（已经包含了详细的说明）
                     return jsonify({
                         'code': 400,

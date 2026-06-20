@@ -44,6 +44,7 @@ from app.utils.onnx_inference import ONNXInference
 from app.utils.algo_model_detect import run_model_detection
 from app.utils.alert_images_paths import resolve_alert_images_root
 from app.utils.patrol_snap_upload import upload_patrol_frame_to_snap_space
+from app.utils.service_urls import resolve_alert_hook_url
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,18 +58,12 @@ TASK_ID = int(os.getenv('TASK_ID', '0'))
 PATROL_SAVE_SNAP = os.getenv('PATROL_SAVE_SNAP', '1').strip().lower() not in ('0', 'false', 'no', 'off')
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/iot_video')
 VIDEO_SERVICE_PORT = os.getenv('VIDEO_SERVICE_PORT', '6000')
-GATEWAY_URL = os.getenv('GATEWAY_URL', 'http://localhost:48080')
+ALERT_HOOK_URL = resolve_alert_hook_url()
 YOLO_IMG_SIZE = int(os.getenv('YOLO_IMG_SIZE', '416'))
 YOLO_WORKER_THREADS = int(os.getenv('YOLO_WORKER_THREADS', '2'))
 DETECTION_QUEUE_SIZE = int(os.getenv('DETECTION_QUEUE_SIZE', '50'))
 PATROL_CONNECT_TIMEOUT_SEC = float(os.getenv('PATROL_CONNECT_TIMEOUT_SEC', '8'))
 PATROL_READ_WARMUP_FRAMES = int(os.getenv('PATROL_READ_WARMUP_FRAMES', '3'))
-
-_gateway = (GATEWAY_URL or '').rstrip('/')
-if _gateway and _gateway not in ('http://localhost:48080', 'http://127.0.0.1:48080'):
-    ALERT_HOOK_URL = f'{_gateway}/admin-api/video/alert/hook'
-else:
-    ALERT_HOOK_URL = f'http://localhost:{VIDEO_SERVICE_PORT}/video/alert/hook'
 
 engine = create_engine(DATABASE_URL.replace('postgres://', 'postgresql://', 1))
 SessionLocal = sessionmaker(bind=engine)

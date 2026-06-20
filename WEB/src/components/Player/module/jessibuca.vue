@@ -91,6 +91,7 @@
 import {Icon} from "@/components/Icon";
 import {ref} from "vue";
 import {signStreamUrl, isProtectedStreamUrl, clearTicketForUrl} from "@/views/camera/utils/streamTicket";
+import {rewriteStreamHostToPageHost} from "@/views/camera/utils/devicePlay";
 
 export default {
   name: "Player",
@@ -104,7 +105,12 @@ export default {
     hasAudio: {
       type: Boolean,
       required: true,
-    }
+    },
+    /** 点播/录像文件（非实时流），需放宽超时并启用 isFlv */
+    vodMode: {
+      type: Boolean,
+      default: false,
+    },
   },
   data() {
     return {
@@ -152,6 +158,14 @@ export default {
         this.$nextTick(() => this.play());
       }
     },
+    vodMode() {
+      if (this.jessibuca) {
+        this.destroy().then(() => {
+          this.create();
+          if (this.playUrl) this.$nextTick(() => this.play());
+        });
+      }
+    },
   },
   async unmounted() {
     if(this.jessibuca){
@@ -164,36 +178,36 @@ export default {
       options = options || {};
       const pageHttps =
         typeof window !== 'undefined' && window.location.protocol === 'https:';
+      const vod = this.vodMode === true;
       this.jessibuca = new window.Jessibuca(
         Object.assign(
           {
             container: this.$refs.container,
             decoder: '/static/js/jessibuca/decoder.js',
-            videoBuffer: 0.2, // 缓存时长
-            isResize: true, // 等比缩放，避免子码流(4:3)在16:9格子里被拉伸放大
-            useWCS: pageHttps,
-            useMSE: this.useMSE,
+            videoBuffer: vod ? 0.5 : 0.2,
+            isResize: true,
+            isFlv: vod,
+            useWCS: pageHttps && !vod,
+            useMSE: vod ? false : this.useMSE,
             autoWasm: true,
             text: "",
-            loadingText: "疯狂加载中...",
+            loadingText: vod ? "录像加载中..." : "疯狂加载中...",
             debug: false,
             supportDblclickFullscreen: true,
-            showBandwidth: this.showBandwidth, // 显示网速
+            showBandwidth: this.showBandwidth,
             operateBtns: {
               fullscreen: this.showOperateBtns,
               screenshot: this.showOperateBtns,
               play: this.showOperateBtns,
               audio: this.showOperateBtns,
             },
-            vod: this.vod,
             forceNoOffscreen: !this.useOffscreen,
             isNotMute: true,
-            timeout: 10,
-            loadingTimeout: 10,
-            // 关闭 Jessibuca 自带的「同地址重放」：受保护流的票据会过期，重放旧地址会一直 403。
-            // 改由本组件在 error/timeout 时强制重新签发再重连（见 maybeRenewOnError）。
-            loadingTimeoutReplay: false,
-            heartTimeoutReplay: false,
+            timeout: vod ? 60 : 10,
+            loadingTimeout: vod ? 60 : 10,
+            heartTimeout: vod ? 120 : 10,
+            loadingTimeoutReplay: !vod,
+            heartTimeoutReplay: !vod,
             wasmDecodeErrorReplay: true,
           },
           options
@@ -291,21 +305,22 @@ export default {
       }
       if (!this.playUrl || !this.jessibuca) return;
 
-      let target = this.playUrl;
+      const originalPlayUrl = this.playUrl;
+      // mini 容器：后端常返回宿主机 IP:8080，须改为页面 host 经 nginx 代理 /live|/ai|/rtp
+      let target = rewriteStreamHostToPageHost(originalPlayUrl);
       // 受保护流(/ai /live /rtp)需带 secure_link 票据，未签名会被 nginx 403
-      if (isProtectedStreamUrl(this.playUrl)) {
-        const reqUrl = this.playUrl;
+      if (isProtectedStreamUrl(target)) {
         try {
-          target = await signStreamUrl(this.playUrl, { forceRefresh: force });
+          target = await signStreamUrl(target, { forceRefresh: force });
         } catch (e) {
           // 签发失败(mint 不可用/网络/会话过期)：降级用未签名地址尽力播放，
           // 不把整路播放卡死在签发服务上：强制校验关闭时仍可播；开启时会 403 ->
           // on('error') -> maybeRenewOnError 再续票自愈；若是 401，axios 已统一跳登录。
           console.warn("stream ticket sign failed, fallback to unsigned url", e);
-          target = this.playUrl;
+          target = rewriteStreamHostToPageHost(this.playUrl);
         }
         // 防竞态：等待签发期间地址已切换/组件已销毁则放弃
-        if (this.playUrl !== reqUrl || !this.jessibuca) return;
+        if (this.playUrl !== originalPlayUrl || !this.jessibuca) return;
       }
       this.jessibuca.play(target);
     },

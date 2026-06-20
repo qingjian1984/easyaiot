@@ -76,6 +76,11 @@ from app.utils.plate_capture_queue_service import (
     PLATE_CAPTURE_QUEUE_SIZE,
     PLATE_CAPTURE_WORKER_THREADS,
 )
+from app.utils.service_urls import (
+    resolve_alert_hook_url,
+    resolve_face_matching_publish_url,
+    resolve_plate_matching_publish_url,
+)
 from app.utils.rtsp_stream_utils import (
     build_opencv_ffmpeg_capture_options,
     effective_rtsp_transport,
@@ -290,22 +295,10 @@ else:
 TASK_ID = int(os.getenv('TASK_ID', '0'))
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/iot_video')
 VIDEO_SERVICE_PORT = os.getenv('VIDEO_SERVICE_PORT', '6000')
-# 网关地址（用于构建完整的告警hook URL）
-GATEWAY_URL = os.getenv('GATEWAY_URL', 'http://localhost:48080')
-# 告警 hook URL：经网关须带 /admin-api 前缀（见 iot-gateway application.yaml video-admin-api 路由）
-_GATEWAY_BASE = (GATEWAY_URL or '').rstrip('/')
-_USE_GATEWAY = bool(_GATEWAY_BASE) and _GATEWAY_BASE not in (
-    'http://localhost:48080',
-    'http://127.0.0.1:48080',
-)
-if _USE_GATEWAY:
-    ALERT_HOOK_URL = f"{_GATEWAY_BASE}/admin-api/video/alert/hook"
-    FACE_MATCHING_PUBLISH_URL = f"{_GATEWAY_BASE}/admin-api/video/face/matching/publish"
-    PLATE_MATCHING_PUBLISH_URL = f"{_GATEWAY_BASE}/admin-api/video/plate/matching/publish"
-else:
-    ALERT_HOOK_URL = f"http://localhost:{VIDEO_SERVICE_PORT}/video/alert/hook"
-    FACE_MATCHING_PUBLISH_URL = f"http://localhost:{VIDEO_SERVICE_PORT}/video/face/matching/publish"
-    PLATE_MATCHING_PUBLISH_URL = f"http://localhost:{VIDEO_SERVICE_PORT}/video/plate/matching/publish"
+# 告警/匹配回调：mini 形态直连 VIDEO；完整形态经 iot-gateway /admin-api/video
+ALERT_HOOK_URL = resolve_alert_hook_url()
+FACE_MATCHING_PUBLISH_URL = resolve_face_matching_publish_url()
+PLATE_MATCHING_PUBLISH_URL = resolve_plate_matching_publish_url()
 
 # 数据库会话
 engine = create_engine(DATABASE_URL)
@@ -1511,7 +1504,8 @@ def send_alert_event_async(alert_data: Dict):
                     return
 
             logger.info(
-                f"🚨 开始异步发送告警事件: device_id={device_id}, object={alert_data.get('object')}, event={alert_data.get('event')}")
+                f"🚨 开始异步发送告警事件: device_id={device_id}, object={alert_data.get('object')}, "
+                f"event={alert_data.get('event')}, URL={ALERT_HOOK_URL}")
 
             # 通过 HTTP 发送告警事件到 sink hook 接口
             # sink 会负责将告警投入 Kafka
@@ -1536,13 +1530,39 @@ def send_alert_event_async(alert_data: Dict):
                     timeout=5,
                     headers={'Content-Type': 'application/json'}
                 )
-                if response.status_code == 200:
-                    logger.debug(f"告警事件已发送到 sink hook: device_id={device_id}")
+                hook_result = {}
+                try:
+                    body = response.json()
+                    if isinstance(body, dict):
+                        hook_result = body.get('data') if isinstance(body.get('data'), dict) else body
+                except Exception:
+                    hook_result = {}
+
+                hook_status = hook_result.get('status')
+                if response.status_code == 200 and hook_status in (None, 'success'):
+                    mode = hook_result.get('mode', 'kafka')
+                    alert_id = hook_result.get('alert_id')
+                    logger.info(
+                        f"✅ 告警事件已成功处理: device_id={device_id}, "
+                        f"object={alert_data.get('object')}, mode={mode}"
+                        + (f", alert_id={alert_id}" if alert_id else "")
+                    )
+                elif response.status_code == 200 and hook_status in ('skipped', 'suppressed'):
+                    logger.warning(
+                        f"⚠️ 告警被 hook 跳过: device_id={device_id}, "
+                        f"status={hook_status}, reason={hook_result.get('reason')}"
+                    )
                 else:
                     logger.warning(
-                        f"发送告警事件到 sink hook 失败: status_code={response.status_code}, response={response.text}")
+                        f"❌ 发送告警事件到 hook 失败: status_code={response.status_code}, "
+                        f"hook_status={hook_status}, response={response.text}, "
+                        f"device_id={device_id}"
+                    )
             except requests.exceptions.RequestException as e:
-                logger.warning(f"发送告警事件到 sink hook 异常: {str(e)}")
+                logger.warning(
+                    f"❌ 发送告警事件到 hook 异常: {str(e)}, URL={ALERT_HOOK_URL}, "
+                    f"device_id={device_id}"
+                )
         except Exception as e:
             logger.error(f"❌ 发送告警事件失败: device_id={alert_data.get('device_id')}, error={str(e)}", exc_info=True)
 

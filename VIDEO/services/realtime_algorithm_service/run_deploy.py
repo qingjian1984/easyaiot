@@ -72,6 +72,12 @@ from app.utils.plate_capture_queue_service import (
     PLATE_CAPTURE_QUEUE_SIZE,
     PLATE_CAPTURE_WORKER_THREADS,
 )
+from app.utils.service_urls import (
+    is_mini_deploy_profile,
+    resolve_alert_hook_url,
+    resolve_face_matching_publish_url,
+    resolve_plate_matching_publish_url,
+)
 
 
 def _parse_gpu_id_list(value: str) -> List[int]:
@@ -294,23 +300,10 @@ BEIJING_TZ = pytz.timezone('Asia/Shanghai')
 TASK_ID = int(os.getenv('TASK_ID', '0'))
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/iot_video')
 VIDEO_SERVICE_PORT = os.getenv('VIDEO_SERVICE_PORT', '6000')
-# 网关地址（用于构建完整的告警hook URL）
-GATEWAY_URL = os.getenv('GATEWAY_URL', 'http://localhost:48080')
-# 告警 hook URL：经网关须带 /admin-api 前缀（见 iot-gateway application.yaml video-admin-api 路由）
-_GATEWAY_BASE = (GATEWAY_URL or '').rstrip('/')
-_USE_GATEWAY = bool(_GATEWAY_BASE) and _GATEWAY_BASE not in (
-    'http://localhost:48080',
-    'http://127.0.0.1:48080',
-)
-if _USE_GATEWAY:
-    ALERT_HOOK_URL = f"{_GATEWAY_BASE}/admin-api/video/alert/hook"
-    FACE_MATCHING_PUBLISH_URL = f"{_GATEWAY_BASE}/admin-api/video/face/matching/publish"
-    PLATE_MATCHING_PUBLISH_URL = f"{_GATEWAY_BASE}/admin-api/video/plate/matching/publish"
-else:
-    # 本机网关地址或未配置时，直连 VIDEO 服务端口
-    ALERT_HOOK_URL = f"http://localhost:{VIDEO_SERVICE_PORT}/video/alert/hook"
-    FACE_MATCHING_PUBLISH_URL = f"http://localhost:{VIDEO_SERVICE_PORT}/video/face/matching/publish"
-    PLATE_MATCHING_PUBLISH_URL = f"http://localhost:{VIDEO_SERVICE_PORT}/video/plate/matching/publish"
+# 告警/匹配回调：mini 形态直连 VIDEO；完整形态经 iot-gateway /admin-api/video
+ALERT_HOOK_URL = resolve_alert_hook_url()
+FACE_MATCHING_PUBLISH_URL = resolve_face_matching_publish_url()
+PLATE_MATCHING_PUBLISH_URL = resolve_plate_matching_publish_url()
 
 # 数据库会话
 engine = create_engine(DATABASE_URL)
@@ -539,8 +532,9 @@ INTERPOLATED_DETECTION_MAX_FRAME_GAP = int(
 # 主画面 overlay 队列：始终保留最新待检帧
 OVERLAY_KEEP_LATEST = os.getenv('OVERLAY_KEEP_LATEST', 'true').strip().lower() in ('1', 'true', 'yes', 'on')
 OVERLAY_KEEP_LATEST_THRESHOLD = int(os.getenv('OVERLAY_KEEP_LATEST_THRESHOLD', '2'))
-# 告警检测队列：积压时可丢弃旧帧（默认 false，允许告警链路适当滞后）
-ALERT_KEEP_LATEST = os.getenv('ALERT_KEEP_LATEST', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
+# 告警检测队列：积压时可丢弃旧帧；mini/多路摄像头默认保留最新待检帧，避免队列满丢帧
+_alert_keep_latest_default = 'true' if is_mini_deploy_profile() else 'false'
+ALERT_KEEP_LATEST = os.getenv('ALERT_KEEP_LATEST', _alert_keep_latest_default).strip().lower() in ('1', 'true', 'yes', 'on')
 ALERT_KEEP_LATEST_THRESHOLD = int(os.getenv('ALERT_KEEP_LATEST_THRESHOLD', str(max(2, ALERT_DETECTION_QUEUE_SIZE // 2))))
 # 兼容旧配置名
 DETECTION_KEEP_LATEST = OVERLAY_KEEP_LATEST
@@ -1457,11 +1451,34 @@ def send_alert_event_async(alert_data: Dict):
                     timeout=5,
                     headers={'Content-Type': 'application/json'}
                 )
-                if response.status_code == 200:
-                    logger.info(f"✅ 告警事件已成功发送到 sink hook: device_id={alert_data.get('device_id')}, object={alert_data.get('object')}, event={alert_data.get('event')}")
+                hook_result = {}
+                try:
+                    body = response.json()
+                    if isinstance(body, dict):
+                        hook_result = body.get('data') if isinstance(body.get('data'), dict) else body
+                except Exception:
+                    hook_result = {}
+
+                hook_status = hook_result.get('status')
+                if response.status_code == 200 and hook_status in (None, 'success'):
+                    mode = hook_result.get('mode', 'kafka')
+                    alert_id = hook_result.get('alert_id')
+                    logger.info(
+                        f"✅ 告警事件已成功处理: device_id={alert_data.get('device_id')}, "
+                        f"object={alert_data.get('object')}, mode={mode}"
+                        + (f", alert_id={alert_id}" if alert_id else "")
+                    )
+                elif response.status_code == 200 and hook_status in ('skipped', 'suppressed'):
+                    logger.warning(
+                        f"⚠️ 告警被 hook 跳过: device_id={alert_data.get('device_id')}, "
+                        f"status={hook_status}, reason={hook_result.get('reason')}"
+                    )
                 else:
                     logger.warning(
-                        f"❌ 发送告警事件到 sink hook 失败: status_code={response.status_code}, response={response.text}, device_id={alert_data.get('device_id')}")
+                        f"❌ 发送告警事件到 hook 失败: status_code={response.status_code}, "
+                        f"hook_status={hook_status}, response={response.text}, "
+                        f"device_id={alert_data.get('device_id')}"
+                    )
             except requests.exceptions.RequestException as e:
                 logger.warning(f"❌ 发送告警事件到 sink hook 异常: {str(e)}, URL={ALERT_HOOK_URL}, device_id={alert_data.get('device_id')}")
         except Exception as e:
@@ -3624,7 +3641,9 @@ def main():
     logger.info(f"   Overlay队列大小: {OVERLAY_DETECTION_QUEUE_SIZE}, Worker: {OVERLAY_WORKER_THREADS}, imgsz: {OVERLAY_YOLO_IMG_SIZE}")
     logger.info(f"   告警队列大小: {ALERT_DETECTION_QUEUE_SIZE}, Worker: {ALERT_WORKER_THREADS}, 抽帧间隔: {ALERT_EXTRACT_INTERVAL}")
     logger.info(f"   Overlay保留最新帧: {OVERLAY_KEEP_LATEST} (阈值: {OVERLAY_KEEP_LATEST_THRESHOLD})")
+    logger.info(f"   告警保留最新帧: {ALERT_KEEP_LATEST} (阈值: {ALERT_KEEP_LATEST_THRESHOLD})")
     logger.info(f"   主画面 overlay 最大复用: {LATEST_OVERLAY_MAX_AGE_SEC:.1f}s")
+    logger.info(f"   告警 Hook URL: {ALERT_HOOK_URL}")
     logger.info("=" * 60)
 
     # 注册信号处理器

@@ -28,10 +28,12 @@ services:
     image: iot-module-system-biz:latest
     container_name: iot-system
     user: root
+    ports:
+      - "0.0.0.0:48099:48099"
     environment:
       - TZ=Asia/Shanghai # 配置程序默认时区为上海（中国标准时间）
       - JAVA_OPTS=-Xms256m -Xmx320m
-      - SPRING_PROFILES_ACTIVE=local # 指定程序运行环境
+      - SPRING_PROFILES_ACTIVE=${IOT_SYSTEM_SPRING_PROFILES_ACTIVE:-local} # mini 形态由安装脚本设为 local,mini
       - SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR=Nacos:8848 # 配置中心地址（使用Docker服务名）
       - SPRING_CLOUD_NACOS_CONFIG_NAMESPACE= # 使用默认命名空间（public）
       - SPRING_CLOUD_NACOS_SERVER_ADDR=Nacos:8848 # 注册中心地址（使用Docker服务名）
@@ -54,7 +56,9 @@ services:
       start_period: 120s
     restart: always
     networks:
-      - easyaiot-network
+      easyaiot-network:
+        aliases:
+          - system-server
 
   iot-infra:
     image: iot-module-infra-biz:latest
@@ -326,10 +330,12 @@ services:
     image: iot-sink-biz:latest
     container_name: iot-sink
     user: root
+    ports:
+      - "0.0.0.0:48092:48092"
     environment:
       - TZ=Asia/Shanghai # 配置程序默认时区为上海（中国标准时间）
       - JAVA_OPTS=-Xms256m -Xmx320m
-      - SPRING_PROFILES_ACTIVE=local # 指定程序运行环境
+      - SPRING_PROFILES_ACTIVE=${IOT_SINK_SPRING_PROFILES_ACTIVE:-local} # mini 形态由安装脚本设为 local,mini
       - SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR=Nacos:8848 # 配置中心地址（使用Docker服务名）
       - SPRING_CLOUD_NACOS_CONFIG_NAMESPACE= # 使用默认命名空间（public）
       - SPRING_CLOUD_NACOS_SERVER_ADDR=Nacos:8848 # 注册中心地址（使用Docker服务名）
@@ -373,7 +379,7 @@ services:
     networks:
       - easyaiot-network
     depends_on:
-      iot-infra:
+      iot-system:
         condition: service_healthy
 
   iot-gb28181:

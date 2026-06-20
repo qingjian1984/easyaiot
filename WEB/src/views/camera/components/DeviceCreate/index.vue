@@ -68,7 +68,7 @@
         </Tabs>
       </TabPane>
 
-      <TabPane key="gb28181" tab="国标">
+      <TabPane v-if="gb28181Enabled" key="gb28181" tab="国标">
         <div class="dc-pane">
           <div class="dc-body">
             <Gb28181AccessPanel class="panel-host" />
@@ -94,8 +94,11 @@ import SegmentScanPanel from './panels/SegmentScanPanel.vue';
 import DirectRtspPanel from './panels/DirectRtspPanel.vue';
 import NvrManualPanel from './panels/NvrManualPanel.vue';
 import Gb28181AccessPanel from './panels/Gb28181AccessPanel.vue';
+import { isGb28181Enabled } from '@/utils/deployProfile';
 
 const TabPane = Tabs.TabPane;
+
+const gb28181Enabled = isGb28181Enabled();
 
 const props = defineProps<{
   initialKind?: DeviceKind;
@@ -141,7 +144,13 @@ function handlePanelSuccess() {
 watch(
   () => props.initialKind,
   (v) => {
-    if (v) syncSelectionFromPrefs(v);
+    if (v) {
+      if (!gb28181Enabled && v === 'gb28181') {
+        syncSelectionFromPrefs('camera');
+        return;
+      }
+      syncSelectionFromPrefs(v);
+    }
   },
 );
 </script>

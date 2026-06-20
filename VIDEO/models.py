@@ -411,6 +411,16 @@ class RecordFile(db.Model):
     )
 
     def to_list_item(self):
+        from app.utils.service_urls import (
+            is_local_filesystem_path,
+            minio_storage_enabled,
+            build_record_video_api_url,
+        )
+        display_url = self.url
+        if not minio_storage_enabled() and is_local_filesystem_path(display_url or ''):
+            display_url = build_record_video_api_url(self.space_id, self.object_name)
+        elif not minio_storage_enabled() and not (display_url or '').startswith(('/api/', '/video/')):
+            display_url = build_record_video_api_url(self.space_id, self.object_name)
         return {
             'id': self.id,
             'object_name': self.object_name,
@@ -419,7 +429,7 @@ class RecordFile(db.Model):
             'last_modified': self.event_time.isoformat() if self.event_time else None,
             'etag': self.etag or '',
             'content_type': self.content_type or 'video/mp4',
-            'url': self.url,
+            'url': display_url,
             'duration': self.duration,
             'thumbnail_url': self.thumbnail_url,
         }
@@ -450,6 +460,20 @@ class SnapImage(db.Model):
     )
 
     def to_list_item(self):
+        from app.utils.service_urls import (
+            is_local_filesystem_path,
+            minio_storage_enabled,
+            build_snap_image_api_url,
+        )
+        display_url = self.url
+        if minio_storage_enabled():
+            pass
+        elif is_local_filesystem_path(display_url or ''):
+            display_url = build_snap_image_api_url(self.space_id, self.object_name)
+        elif (display_url or '').startswith('/video/'):
+            pass
+        elif not (display_url or '').startswith('/api/'):
+            display_url = build_snap_image_api_url(self.space_id, self.object_name)
         return {
             'id': self.id,
             'object_name': self.object_name,
@@ -461,7 +485,7 @@ class SnapImage(db.Model):
             'task_id': self.task_id,
             'etag': self.etag or '',
             'content_type': self.content_type or 'image/jpeg',
-            'url': self.url,
+            'url': display_url,
         }
 
 

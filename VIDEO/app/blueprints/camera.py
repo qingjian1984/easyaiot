@@ -39,6 +39,7 @@ from app.utils.ffmpeg_compat import (
     ffmpeg_supports_rw_timeout as _ffmpeg_supports_rw_timeout,
 )
 from app.utils.gb28181_source import resolve_gb28181_source
+from app.utils.node_client import resolve_java_backend_url
 from models import Device, db, Image, DeviceDirectory, DetectionRegion, StreamForwardTask, AlgorithmTask
 from sqlalchemy import and_
 
@@ -47,10 +48,16 @@ logger = logging.getLogger(__name__)
 
 # 受保护的流路径前缀（SRS http-flv: /ai /live；ZLMediaKit ws-flv: /rtp）
 _STREAM_PATH_RE = re.compile(r'^/(ai|live|rtp)/')
-# 网关登录校验地址（host 网络下走宿主机网关 48080）；可用 AUTH_CHECK_URL 覆盖
-_AUTH_CHECK_URL = os.environ.get(
-    'AUTH_CHECK_URL', 'http://127.0.0.1:48080/admin-api/system/auth/get-permission-info'
-)
+_AUTH_CHECK_PATH = '/admin-api/system/auth/get-permission-info'
+
+
+def _resolve_auth_check_url() -> str:
+    """登录校验地址：优先 AUTH_CHECK_URL，否则跟随 JAVA_BACKEND_URL / GATEWAY_URL（mini 为 48099）。"""
+    explicit = (os.environ.get('AUTH_CHECK_URL') or '').strip()
+    if explicit:
+        return explicit
+    base = resolve_java_backend_url().rstrip('/')
+    return f'{base}{_AUTH_CHECK_PATH}'
 
 
 def _check_login(req) -> bool:
@@ -63,7 +70,7 @@ def _check_login(req) -> bool:
         return False
     try:
         r = requests.get(
-            _AUTH_CHECK_URL,
+            _resolve_auth_check_url(),
             headers={
                 'Authorization': auth,
                 'tenant-id': req.headers.get('tenant-id', '') or req.headers.get('Tenant-Id', ''),

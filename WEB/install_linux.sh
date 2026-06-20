@@ -34,6 +34,8 @@ cd "$SCRIPT_DIR"
 EASYAIOT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=../.scripts/docker/init-build-cache-dirs.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/init-build-cache-dirs.sh"
+# shellcheck source=../.scripts/docker/deploy_profile.sh
+source "${EASYAIOT_ROOT}/.scripts/docker/deploy_profile.sh"
 
 # 打印带颜色的消息
 print_info() {
@@ -130,12 +132,15 @@ docker_build_image() {
     log_new="${SCRIPT_DIR}/docker-build-logs/docker-build-${ts}.log"
     pnpm_log="${SCRIPT_DIR}/docker-build-logs/pnpm-build.log"
     cache_bust=$(get_web_build_cache_bust)
+    ensure_deploy_profile
+    local deploy_profile="${EASYAIOT_DEPLOY_PROFILE:-full}"
     {
         echo ""
-        echo "======== docker build 开始 ${ts} CACHE_BUST=${cache_bust} ========"
+        echo "======== docker build 开始 ${ts} CACHE_BUST=${cache_bust} DEPLOY_PROFILE=${deploy_profile} ========"
     } >> "$pnpm_log"
     print_info "本次构建独立日志: docker-build-logs/docker-build-${ts}.log；历史追加: docker-build-logs/pnpm-build.log"
     print_info "构建缓存标识 CACHE_BUST=${cache_bust}（clean 或代码变更后将重新 pnpm install/build）"
+    print_info "部署形态 VITE_GLOB_DEPLOY_PROFILE=${deploy_profile}"
     set -o pipefail
     local pnpm_store
     pnpm_store="$(pnpm_store_dir "$EASYAIOT_ROOT")"
@@ -158,6 +163,7 @@ docker_build_image() {
     docker build \
         "${cache_from_to[@]}" \
         --build-arg "CACHE_BUST=${cache_bust}" \
+        --build-arg "VITE_GLOB_DEPLOY_PROFILE=${deploy_profile}" \
         "$@" 2>&1 | tee "$log_new" | tee -a "$pnpm_log"
     ec=$?
     set +o pipefail
@@ -388,6 +394,24 @@ check_dist() {
     return 0
 }
 
+# 按部署形态写入 WEB compose 使用的 nginx 配置路径
+ensure_nginx_conf_for_profile() {
+    ensure_deploy_profile
+    local conf="./conf/nginx.conf"
+    if is_mini_deploy_profile; then
+        conf="./conf/nginx.mini.conf"
+    fi
+    export NGINX_CONF="$conf"
+    if [ -f .env ]; then
+        if grep -q '^NGINX_CONF=' .env 2>/dev/null; then
+            sed -i "s|^NGINX_CONF=.*|NGINX_CONF=${conf}|" .env
+        else
+            echo "NGINX_CONF=${conf}" >> .env
+        fi
+    fi
+    print_info "nginx 配置: ${conf} (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
+}
+
 # 创建 .env 文件
 create_env_file() {
     if [ ! -f .env ]; then
@@ -543,9 +567,9 @@ install_service() {
     check_docker_compose
     create_directories
     create_env_file
+    ensure_nginx_conf_for_profile
     
-    # 先清理本服务的残留容器（含改名孤儿）：运行中的旧容器/孤儿占着端口，必须在端口检查前清掉，
-    # 否则 check_port 会把"自己即将替换的容器"误判为端口冲突，卡在交互确认上
+    # 先清理本服务的残留容器
     print_info "检查并清理残留容器..."
     docker rm -f web-service 2>/dev/null || true
     $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
@@ -561,6 +585,7 @@ install_service() {
     
     print_info "构建 Docker 镜像（根据代码重新构建）..."
     docker_build_image -t web-service:latest .
+    record_web_deploy_profile_built "${EASYAIOT_ROOT}"
     
     print_info "启动服务..."
     $COMPOSE_CMD up -d
@@ -592,8 +617,9 @@ start_service() {
         print_warning ".env 文件不存在，正在创建..."
         create_env_file
     fi
+    ensure_nginx_conf_for_profile
     
-    # 先清改名孤儿：运行中的孤儿占着端口，必须在端口检查之前清掉
+    # 先清改名孤儿
     cleanup_renamed_containers
 
     # 检查端口占用
@@ -623,6 +649,7 @@ restart_service() {
     print_info "重启服务..."
     check_docker
     check_docker_compose
+    ensure_nginx_conf_for_profile
     
     $COMPOSE_CMD restart
     print_success "服务已重启"
@@ -676,6 +703,7 @@ build_image() {
     print_info "前端构建将在Docker容器内自动完成"
     
     docker_build_image -t web-service:latest --no-cache .
+    record_web_deploy_profile_built "${EASYAIOT_ROOT}"
     print_success "镜像构建完成"
 }
 
@@ -772,6 +800,7 @@ update_service() {
     # 注意：前端构建现在在Docker容器内完成，重新构建镜像时会自动完成
     print_info "重新构建镜像（前端构建将在容器内自动完成，复用 pnpm-store 依赖缓存）..."
     docker_build_image -t web-service:latest .
+    record_web_deploy_profile_built "${EASYAIOT_ROOT}"
 
     # 构建完成后才 up -d（旧容器在 build 全程持续运行），停机仅数秒
     print_info "应用新镜像..."

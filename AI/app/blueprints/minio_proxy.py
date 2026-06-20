@@ -34,6 +34,20 @@ def download_object(bucket_name: str):
     if object_key_from_url:
         object_key = object_key_from_url
 
+    from app.utils.service_urls import minio_storage_enabled
+    from app.services.local_storage_service import read_local_object
+
+    if not minio_storage_enabled():
+        content, content_type, err = read_local_object(bucket_name, object_key)
+        if err or content is None:
+            logger.warning('本地对象不存在: %s/%s', bucket_name, object_key)
+            return Response(err or '对象不存在', status=404, mimetype='text/plain')
+        filename = os.path.basename(object_key) or 'download'
+        response = Response(content, mimetype=content_type or 'application/octet-stream')
+        response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+        response.headers['Content-Length'] = str(len(content))
+        return response
+
     try:
         client = ModelService.get_minio_client()
         if not client.bucket_exists(bucket_name):

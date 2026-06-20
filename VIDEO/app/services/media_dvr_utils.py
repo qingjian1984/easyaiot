@@ -5,11 +5,13 @@ import logging
 import os
 import subprocess
 import time
-from datetime import datetime as dt
+from datetime import datetime as dt, timezone
 from typing import Optional, Tuple
 
 import cv2
 import numpy as np
+
+from app.utils.service_urls import SHANGHAI_TZ, epoch_to_shanghai_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +31,8 @@ def parse_srs_dvr_segment_start_from_filename(absolute_file_path: str):
     try:
         ts = int(stem)
         if ts > 10**12:
-            return dt.fromtimestamp(ts / 1000.0)
-        return dt.fromtimestamp(float(ts))
+            return epoch_to_shanghai_datetime(ts / 1000.0)
+        return epoch_to_shanghai_datetime(float(ts))
     except (ValueError, OSError):
         return None
 
@@ -51,9 +53,9 @@ def parse_srs_dvr_path_date(absolute_file_path: str) -> Tuple[Optional[str], Opt
         if segment_start is not None:
             return date_dir, segment_start
         try:
-            record_time = dt.fromtimestamp(os.path.getmtime(absolute_file_path))
+            record_time = epoch_to_shanghai_datetime(os.path.getmtime(absolute_file_path))
         except OSError:
-            record_time = dt(int(y), int(mo), int(d))
+            record_time = dt(int(y), int(mo), int(d), tzinfo=SHANGHAI_TZ)
         return date_dir, record_time
     except (ValueError, IndexError, OSError):
         return None, None

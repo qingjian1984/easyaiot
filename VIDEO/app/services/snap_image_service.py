@@ -6,6 +6,7 @@
 """
 import io
 import logging
+import os
 import zipfile
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -15,6 +16,8 @@ from minio.error import S3Error
 
 from models import db, SnapSpace, SnapImage
 from app.services.snap_space_service import get_minio_client
+from app.services.playback_disk_guard_service import get_snap_staging_dir
+from app.utils.service_urls import minio_storage_enabled
 from app.services.space_file_metadata_service import (
     delete_snap_images_metadata,
     sync_snap_images_from_minio,
@@ -69,28 +72,42 @@ def list_snap_images(
 
 
 def delete_snap_images(space_id: int, object_names: List[str]) -> Dict:
-    """批量删除抓拍图片（MinIO + 数据库）"""
+    """批量删除抓拍图片（MinIO/本地 + 数据库）"""
     try:
         snap_space = SnapSpace.query.get_or_404(space_id)
         bucket_name = snap_space.bucket_name
-
-        minio_client = get_minio_client()
-        if not minio_client.bucket_exists(bucket_name):
-            raise ValueError(f"抓拍空间的MinIO bucket不存在: {bucket_name}")
 
         deleted_count = 0
         failed_count = 0
         failed_objects = []
 
-        for object_name in object_names:
-            try:
-                minio_client.remove_object(bucket_name, object_name)
-                deleted_count += 1
-                logger.info(f"删除抓拍图片成功: {bucket_name}/{object_name}")
-            except Exception as e:
-                failed_count += 1
-                failed_objects.append(object_name)
-                logger.warning(f"删除抓拍图片失败: {bucket_name}/{object_name}, error={str(e)}")
+        if not minio_storage_enabled():
+            snap_root = get_snap_staging_dir()
+            for object_name in object_names:
+                local_path = os.path.join(snap_root, object_name.replace('/', os.sep))
+                try:
+                    if os.path.isfile(local_path):
+                        os.remove(local_path)
+                    deleted_count += 1
+                    logger.info('mini 形态删除抓拍图片: %s', local_path)
+                except OSError as e:
+                    failed_count += 1
+                    failed_objects.append(object_name)
+                    logger.warning('mini 形态删除抓拍图片失败: %s error=%s', local_path, e)
+        else:
+            minio_client = get_minio_client()
+            if not minio_client.bucket_exists(bucket_name):
+                raise ValueError(f"抓拍空间的MinIO bucket不存在: {bucket_name}")
+
+            for object_name in object_names:
+                try:
+                    minio_client.remove_object(bucket_name, object_name)
+                    deleted_count += 1
+                    logger.info(f"删除抓拍图片成功: {bucket_name}/{object_name}")
+                except Exception as e:
+                    failed_count += 1
+                    failed_objects.append(object_name)
+                    logger.warning(f"删除抓拍图片失败: {bucket_name}/{object_name}, error={str(e)}")
 
         success_objects = [n for n in object_names if n not in failed_objects]
         delete_snap_images_metadata(bucket_name, success_objects)
@@ -107,9 +124,30 @@ def delete_snap_images(space_id: int, object_names: List[str]) -> Dict:
 
 def get_snap_image(space_id: int, object_name: str):
     """获取抓拍图片内容"""
+    import mimetypes
+    import os
+
     try:
         snap_space = SnapSpace.query.get_or_404(space_id)
         bucket_name = snap_space.bucket_name
+
+        if not minio_storage_enabled():
+            record = SnapImage.query.filter_by(
+                space_id=space_id,
+                object_name=object_name,
+            ).first()
+            local_path = (record.url if record and record.url else '').strip()
+            if local_path.startswith('/video/'):
+                local_path = ''
+            if not local_path or not os.path.isfile(local_path):
+                local_path = os.path.join(get_snap_staging_dir(), object_name.replace('/', os.sep))
+            if not os.path.isfile(local_path):
+                raise ValueError(f"图片不存在: {object_name}")
+            with open(local_path, 'rb') as handle:
+                content = handle.read()
+            filename = object_name.split('/')[-1]
+            guessed, _ = mimetypes.guess_type(filename)
+            return content, guessed or 'image/jpeg', filename
 
         minio_client = get_minio_client()
         if not minio_client.bucket_exists(bucket_name):

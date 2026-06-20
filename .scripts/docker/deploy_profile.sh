@@ -1,0 +1,413 @@
+#!/bin/bash
+# EasyAIoT 部署形态配置
+#
+# EASYAIOT_DEPLOY_PROFILE 取值（默认 full）：
+#   mini     | 1  — 边缘精简版，推荐宿主机内存 ≥ 4 GB
+#   standard | 2  — 标准版，推荐宿主机内存 ≥ 16 GB
+#   full     | 3  — 完整版，推荐宿主机内存 ≥ 20 GB（默认）
+#
+# 各形态服务范围详见 print_deploy_profile_summary；内存占用分析见 analyze_deploy_memory.sh。
+
+_resolve_deploy_profile_raw() {
+    local p="${EASYAIOT_DEPLOY_PROFILE:-full}"
+    case "$p" in
+        1|mini|minimal|4g|4G) echo "mini" ;;
+        2|standard|std|16g|16G) echo "standard" ;;
+        3|full|complete|*) echo "full" ;;
+    esac
+}
+
+_deploy_profile_repo_root() {
+    local root="${1:-}"
+    if [ -n "$root" ]; then
+        echo "$root"
+        return
+    fi
+    echo "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+}
+
+apply_deploy_profile() {
+    EASYAIOT_DEPLOY_PROFILE="$(_resolve_deploy_profile_raw)"
+    export EASYAIOT_DEPLOY_PROFILE
+
+    case "$EASYAIOT_DEPLOY_PROFILE" in
+        mini|standard)
+            export EASYAIOT_ENABLE_TDENGINE=0
+            export EASYAIOT_ENABLE_EMQX=0
+            ;;
+        full)
+            export EASYAIOT_ENABLE_TDENGINE=1
+            export EASYAIOT_ENABLE_EMQX=1
+            ;;
+    esac
+
+    sync_deploy_profile_to_modules
+}
+
+# docker compose --profile 参数（全量形态启用 TDengine / EMQX profile）
+compose_profile_flags() {
+    case "${EASYAIOT_DEPLOY_PROFILE:-full}" in
+        full) echo "--profile tdengine --profile emqx" ;;
+        *) echo "" ;;
+    esac
+}
+
+# 返回空格分隔的中间件 compose 服务名（跳过列表，传给 compose_up_middleware）
+middleware_skipped_services() {
+    local -a skips=()
+    case "${EASYAIOT_DEPLOY_PROFILE:-full}" in
+        mini)
+            skips+=(Nacos MinIO Milvus ZLMediaKit NodeRED TDengine TDengine-init EMQX Kafka)
+            ;;
+        standard)
+            skips+=(NodeRED TDengine TDengine-init EMQX)
+            ;;
+        full)
+            ;;
+    esac
+    echo "${skips[*]}"
+}
+
+# DEVICE compose 服务：跳过列表
+device_skipped_services() {
+    local -a skips=()
+    case "${EASYAIOT_DEPLOY_PROFILE:-full}" in
+        mini)
+            skips+=(iot-gateway iot-infra iot-device iot-dataset iot-node iot-file iot-message iot-gb28181 iot-tdengine iot-sink)
+            ;;
+        standard)
+            skips+=(iot-device iot-tdengine)
+            ;;
+        full)
+            ;;
+    esac
+    echo "${skips[*]}"
+}
+
+# DEVICE compose 服务：仅启动白名单（空表示除跳过列表外全部启动）
+device_enabled_services() {
+    case "${EASYAIOT_DEPLOY_PROFILE:-full}" in
+        mini) echo "iot-system" ;;
+        *) echo "" ;;
+    esac
+}
+
+# mini 形态：不部署 Nacos / Gateway，前端经 nginx 直连 iot-system 宿主机端口
+is_mini_deploy_profile() {
+    [ "${EASYAIOT_DEPLOY_PROFILE:-full}" = "mini" ]
+}
+
+# DEVICE 是否需要 tdengine compose profile
+device_compose_profile_flags() {
+    case "${EASYAIOT_DEPLOY_PROFILE:-full}" in
+        full) echo "--profile tdengine" ;;
+        *) echo "" ;;
+    esac
+}
+
+# 各形态推荐内存上限（MiB，供 analyze_deploy_memory.sh 等脚本引用）
+deploy_profile_budget_mib() {
+    case "${1:-${EASYAIOT_DEPLOY_PROFILE:-full}}" in
+        mini|1) echo "4096" ;;
+        standard|2) echo "16384" ;;
+        full|3|*) echo "20480" ;;
+    esac
+}
+
+deploy_profile_budget_label() {
+    case "${1:-${EASYAIOT_DEPLOY_PROFILE:-full}}" in
+        mini|1) echo "4 GB" ;;
+        standard|2) echo "16 GB" ;;
+        full|3|*) echo "20 GB" ;;
+    esac
+}
+
+_deploy_profile_desc() {
+    case "${EASYAIOT_DEPLOY_PROFILE:-}" in
+        mini) echo "边缘精简版（推荐 ≥ 4 GB）" ;;
+        standard) echo "标准版（推荐 ≥ 16 GB）" ;;
+        full) echo "完整版（推荐 ≥ 20 GB）" ;;
+        *) echo "完整版（推荐 ≥ 20 GB）" ;;
+    esac
+}
+
+_print_deploy_profile_menu() {
+    echo ""
+    echo "请选择部署规格（按目标宿主机内存选型）："
+    echo "  1) mini     — 边缘精简版（推荐内存 ≥ 4 GB）"
+    echo "  2) standard — 标准版（推荐内存 ≥ 16 GB）"
+    echo "  3) full     — 完整版（推荐内存 ≥ 20 GB，默认）"
+    echo ""
+}
+
+# 持久化上次选择的部署形态（install 交互选择后写入，start 等命令自动读取）
+_deploy_profile_file() {
+    local base="${DEPLOY_PROFILE_FILE:-}"
+    if [ -n "$base" ]; then
+        echo "$base"
+        return
+    fi
+    # BASH_SOURCE[1] 为 source 方脚本目录；直接执行 deploy_profile.sh 时回退到自身目录
+    local src="${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}"
+    echo "$(cd "$(dirname "$src")" && pwd)/.deploy_profile"
+}
+
+load_saved_deploy_profile() {
+    if [ -n "${EASYAIOT_DEPLOY_PROFILE:-}" ]; then
+        return 0
+    fi
+    local f
+    f="$(_deploy_profile_file)"
+    if [ -f "$f" ]; then
+        local saved
+        saved=$(tr -d '[:space:]' < "$f")
+        if [ -n "$saved" ]; then
+            export EASYAIOT_DEPLOY_PROFILE="$saved"
+        fi
+    fi
+}
+
+save_deploy_profile() {
+    local f
+    f="$(_deploy_profile_file)"
+    echo "$EASYAIOT_DEPLOY_PROFILE" > "$f"
+}
+
+# 非 install 命令：读取已保存形态或默认 full，不弹交互
+ensure_deploy_profile() {
+    load_saved_deploy_profile
+    apply_deploy_profile
+}
+
+print_deploy_profile_summary() {
+  apply_deploy_profile
+  local desc
+  desc="$(_deploy_profile_desc)"
+  echo "当前部署形态: ${desc} (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
+  warn_web_rebuild_if_profile_changed
+  case "${EASYAIOT_DEPLOY_PROFILE}" in
+    mini)
+      echo "  业务: iot-system（48099）, VIDEO, AI, WEB（告警由 VIDEO 直连落库，无需 iot-sink/Kafka）"
+      echo "  中间件: PostgreSQL, Redis, SRS"
+      echo "  不启动: Kafka, iot-sink, Nacos, MinIO, iot-gateway, iot-infra, Milvus, ZLMediaKit, NodeRED, TDengine, EMQX 及多数 DEVICE 模块"
+      echo "  API 路由: nginx 将 /admin-api、/dev-api 直连宿主机 iot-system:48099（登录鉴权由 system 自身处理）"
+      ;;
+    standard)
+      echo "  不启动: TDengine, EMQX, NodeRED, iot-device, iot-tdengine"
+      echo "  其余模块与中间件全部启动"
+      ;;
+    full)
+      echo "  启动全部业务模块与中间件（推荐宿主机内存 ≥ 20 GB）"
+      ;;
+  esac
+}
+
+# 上级 orchestrator（install_linux / install_business 等）选定形态后调用，子模块 install 不再弹窗
+lock_deploy_profile_for_child_installs() {
+    export EASYAIOT_DEPLOY_PROFILE
+    export EASYAIOT_SKIP_PROFILE_PROMPT=1
+}
+
+# install 专用：交互终端下弹窗选择；上级已 lock 或 CI 非交互则直接沿用已选形态
+select_deploy_profile_for_install() {
+  if [ "${EASYAIOT_SKIP_PROFILE_PROMPT:-}" = "1" ]; then
+    ensure_deploy_profile
+    return 0
+  fi
+  if [ ! -t 0 ]; then
+    if [ -n "${EASYAIOT_DEPLOY_PROFILE:-}" ]; then
+      apply_deploy_profile
+      save_deploy_profile
+      lock_deploy_profile_for_child_installs
+      return 0
+    fi
+    load_saved_deploy_profile
+    [ -z "${EASYAIOT_DEPLOY_PROFILE:-}" ] && export EASYAIOT_DEPLOY_PROFILE=full
+    apply_deploy_profile
+    save_deploy_profile
+    lock_deploy_profile_for_child_installs
+    return 0
+  fi
+
+  _print_deploy_profile_menu
+  local choice=""
+  read -r -p "请输入选项 [1-3，默认 3]: " choice
+  case "${choice:-3}" in
+    1) export EASYAIOT_DEPLOY_PROFILE=mini ;;
+    2) export EASYAIOT_DEPLOY_PROFILE=standard ;;
+    *) export EASYAIOT_DEPLOY_PROFILE=full ;;
+  esac
+  apply_deploy_profile
+  save_deploy_profile
+  lock_deploy_profile_for_child_installs
+  echo ""
+  print_deploy_profile_summary
+  echo ""
+}
+
+# 交互式选择（通用；环境中已设置 EASYAIOT_DEPLOY_PROFILE 时不弹窗）
+select_deploy_profile_interactive() {
+    if [ -n "${EASYAIOT_DEPLOY_PROFILE:-}" ]; then
+        apply_deploy_profile
+        return 0
+    fi
+    if [ ! -t 0 ]; then
+        load_saved_deploy_profile
+        [ -z "${EASYAIOT_DEPLOY_PROFILE:-}" ] && export EASYAIOT_DEPLOY_PROFILE=full
+        apply_deploy_profile
+        return 0
+    fi
+
+    _print_deploy_profile_menu
+    local choice=""
+    read -r -p "请输入选项 [1-3，默认 3]: " choice
+    case "${choice:-3}" in
+        1) export EASYAIOT_DEPLOY_PROFILE=mini ;;
+        2) export EASYAIOT_DEPLOY_PROFILE=standard ;;
+        *) export EASYAIOT_DEPLOY_PROFILE=full ;;
+    esac
+    apply_deploy_profile
+    save_deploy_profile
+    echo ""
+    print_deploy_profile_summary
+    echo ""
+}
+
+# 写入或更新 .env.docker 中的键值
+_set_env_docker_kv() {
+    local file="$1" key="$2" value="$3"
+    [ -f "$file" ] || return 0
+    if grep -q "^${key}=" "$file" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+    else
+        # 确保追加前文件以换行结尾，避免与最后一行粘连
+        [ -n "$(tail -c1 "$file" 2>/dev/null || true)" ] && echo "" >> "$file"
+        echo "${key}=${value}" >> "$file"
+    fi
+}
+
+# WEB：按形态写入 nginx 配置路径（compose 读 WEB/.env 中的 NGINX_CONF）
+sync_web_deploy_profile_env() {
+    local root="${1:-$(_deploy_profile_repo_root)}"
+    local web_env="${root}/WEB/.env"
+    local conf="./conf/nginx.conf"
+    if is_mini_deploy_profile; then
+        conf="./conf/nginx.mini.conf"
+    fi
+    [ -f "$web_env" ] || return 0
+    if grep -q '^NGINX_CONF=' "$web_env" 2>/dev/null; then
+        sed -i "s|^NGINX_CONF=.*|NGINX_CONF=${conf}|" "$web_env"
+    else
+        [ -n "$(tail -c1 "$web_env" 2>/dev/null || true)" ] && echo "" >> "$web_env"
+        echo "NGINX_CONF=${conf}" >> "$web_env"
+    fi
+}
+
+# 将 .deploy_profile 同步到各业务模块持久化配置（install/start/restart 均应一致）
+sync_deploy_profile_to_modules() {
+    local root="${1:-$(_deploy_profile_repo_root)}"
+    apply_python_service_deploy_env "$root"
+    sync_web_deploy_profile_env "$root"
+}
+
+# 若 WEB 镜像构建时的形态与当前不一致，提示需 rebuild（前端 VITE_GLOB_DEPLOY_PROFILE 编译进镜像）
+warn_web_rebuild_if_profile_changed() {
+    local root="${1:-$(_deploy_profile_repo_root)}"
+    local stamp="${root}/.scripts/docker/.web_deploy_profile_built"
+    local current="${EASYAIOT_DEPLOY_PROFILE:-full}"
+    if [ -f "$stamp" ] && [ "$(tr -d '[:space:]' < "$stamp")" != "$current" ]; then
+        echo "⚠️  WEB 部署形态已从 $(tr -d '[:space:]' < "$stamp") 变为 ${current}，请执行 WEB/install_linux.sh build 或 install 重新构建前端镜像"
+    fi
+}
+
+record_web_deploy_profile_built() {
+    local root="${1:-$(_deploy_profile_repo_root)}"
+    local stamp="${root}/.scripts/docker/.web_deploy_profile_built"
+    echo "${EASYAIOT_DEPLOY_PROFILE:-full}" > "$stamp"
+}
+
+# 按部署形态同步 VIDEO/AI .env.docker（mini 直连 48099 + 本地存储；standard/full 走网关 + MinIO）
+apply_python_service_deploy_env() {
+    local root="${1:-$(_deploy_profile_repo_root)}"
+    if [ -z "$root" ]; then
+        root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    fi
+    local module env_file
+    for module in VIDEO AI; do
+        env_file="${root}/${module}/.env.docker"
+        [ -f "$env_file" ] || continue
+        if is_mini_deploy_profile; then
+            _set_env_docker_kv "$env_file" EASYAIOT_DEPLOY_PROFILE mini
+            _set_env_docker_kv "$env_file" JAVA_BACKEND_URL "http://localhost:48099"
+            _set_env_docker_kv "$env_file" GATEWAY_URL "http://localhost:48099"
+            _set_env_docker_kv "$env_file" AUTH_CHECK_URL "http://localhost:48099/admin-api/system/auth/get-permission-info"
+            _set_env_docker_kv "$env_file" NODE_REMOTE_DEPLOY false
+            if [ "$module" = "VIDEO" ]; then
+                _set_env_docker_kv "$env_file" ALERT_KEEP_LATEST true
+                _set_env_docker_kv "$env_file" ALERT_USE_DIRECT_PERSIST true
+            fi
+            if [ "$module" = "AI" ]; then
+                # compose 只读挂载 ../.scripts/minio -> /minio-seed-data（flat 种子数据）
+                _set_env_docker_kv "$env_file" MINIO_SEED_DATA_ROOT "/minio-seed-data"
+            fi
+        else
+            _set_env_docker_kv "$env_file" EASYAIOT_DEPLOY_PROFILE "${EASYAIOT_DEPLOY_PROFILE:-full}"
+            _set_env_docker_kv "$env_file" JAVA_BACKEND_URL "http://localhost:48080"
+            _set_env_docker_kv "$env_file" GATEWAY_URL "http://localhost:48080"
+            _set_env_docker_kv "$env_file" AUTH_CHECK_URL "http://localhost:48080/admin-api/system/auth/get-permission-info"
+            _set_env_docker_kv "$env_file" NODE_REMOTE_DEPLOY true
+            if [ "$module" = "VIDEO" ]; then
+                _set_env_docker_kv "$env_file" ALERT_KEEP_LATEST false
+                _set_env_docker_kv "$env_file" ALERT_USE_DIRECT_PERSIST false
+            fi
+        fi
+    done
+}
+
+# 兼容旧调用名
+apply_mini_python_service_env() {
+    apply_python_service_deploy_env "$@"
+}
+
+# mini 形态：安装阶段将 MinIO 磁盘历史对象同步到宿主机 /data/local-storage
+migrate_mini_minio_data_to_local_storage() {
+    is_mini_deploy_profile || return 0
+    local root="${1:-}"
+    if [ -z "$root" ]; then
+        root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    fi
+    local minio_seed="${root}/.scripts/minio"
+    if [ ! -d "$minio_seed" ]; then
+        return 0
+    fi
+    local ai_dir="${root}/AI"
+    if [ ! -d "$ai_dir" ]; then
+        return 0
+    fi
+    echo "mini 形态：同步 MinIO 种子数据到 /data/local-storage ..."
+    if (
+        cd "$ai_dir" && \
+        EASYAIOT_DEPLOY_PROFILE=mini \
+        MINIO_SEED_DATA_ROOT="$minio_seed" \
+        LOCAL_STORAGE_ROOT="/data/local-storage" \
+        python3 -c "
+from app.services.local_storage_service import migrate_seed_data_to_local_storage
+copied, skipped = migrate_seed_data_to_local_storage(buckets=['models'], skip_existing=True)
+print(f'copied={copied} skipped={skipped}')
+"
+    ); then
+        echo "mini 形态：MinIO 历史数据同步完成"
+    else
+        echo "警告: mini MinIO 历史数据同步失败，AI 启动时会再次尝试"
+    fi
+}
+
+# 根据跳过列表判断中间件是否属于当前形态
+middleware_service_enabled() {
+    local svc="$1"
+    local skip
+    for skip in $(middleware_skipped_services); do
+        [ "$svc" = "$skip" ] && return 1
+    done
+    return 0
+}

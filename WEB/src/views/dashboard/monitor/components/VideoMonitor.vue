@@ -166,7 +166,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Checkbox as ACheckbox } from 'ant-design-vue'
 import { Icon } from '@/components/Icon'
 import { queryAlarmList } from '@/api/device/calculate'
-import { resolveAlertRecordVideoUrl } from '@/utils/alertRecord'
+import { playAlertRecordInModal } from '@/utils/alertRecordPlayback'
 import { useMessage } from '@/hooks/web/useMessage'
 import Jessibuca from '@/components/Player/module/jessibuca.vue'
 import DialogPlayer from '@/components/VideoPlayer/DialogPlayer.vue'
@@ -210,7 +210,7 @@ const emit = defineEmits<{
 const { createMessage, createConfirm } = useMessage()
 
 // 播放器弹窗
-const [registerPlayerModal, { openModal: openPlayerModal }] = useModal()
+const [registerPlayerModal, { openModal: openPlayerModal, closeModal: closePlayerModal }] = useModal()
 
 const currentTime = ref('')
 const activeVideoIndex = ref(0)
@@ -1155,18 +1155,11 @@ const playAlertRecord = async (record: any) => {
   }
 
   try {
-    const videoUrl = await resolveAlertRecordVideoUrl({
-      id: record.id,
-      device_id: record.device_id,
-      time: record.time,
-      record_path: record.record_path,
-    })
-    if (videoUrl) {
-      await nextTick()
-      openPlayerModal(true, {
-        id: record.device_id,
-        http_stream: videoUrl,
-      })
+    const ok = await playAlertRecordInModal(
+      { openModal: openPlayerModal, closeModal: closePlayerModal },
+      record,
+    )
+    if (ok) {
       lastVideoErrorTime = 0
       lastVideoErrorMsg = ''
     } else {

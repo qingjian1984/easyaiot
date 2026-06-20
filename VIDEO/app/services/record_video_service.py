@@ -6,6 +6,7 @@
 """
 import io
 import logging
+import os
 import zipfile
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
@@ -17,6 +18,7 @@ from sqlalchemy import func
 from models import db, RecordSpace, RecordFile, Alert
 from app.services.alert_service import _alert_to_dict
 from app.services.record_space_service import get_minio_client
+from app.utils.service_urls import minio_storage_enabled
 from app.services.space_file_metadata_service import (
     delete_record_files_metadata,
     sync_record_files_from_minio,
@@ -66,33 +68,58 @@ def list_record_videos(
 
 
 def delete_record_videos(space_id: int, object_names: List[str]) -> Dict:
-    """批量删除监控录像（MinIO + 数据库）"""
+    """批量删除监控录像（MinIO/本地 + 数据库）"""
     try:
         record_space = RecordSpace.query.get_or_404(space_id)
         bucket_name = record_space.bucket_name
-
-        minio_client = get_minio_client()
-        if not minio_client.bucket_exists(bucket_name):
-            raise ValueError(f"监控录像空间的MinIO bucket不存在: {bucket_name}")
 
         deleted_count = 0
         failed_count = 0
         failed_objects = []
 
-        for object_name in object_names:
-            try:
-                minio_client.remove_object(bucket_name, object_name)
-                thumb_name = object_name.rsplit('.', 1)[0] + '.jpg'
+        if not minio_storage_enabled():
+            for object_name in object_names:
+                record = RecordFile.query.filter_by(
+                    space_id=space_id,
+                    object_name=object_name,
+                ).first()
+                local_path = (record.url if record and record.url else '').strip()
+                if local_path.startswith('/video/'):
+                    local_path = ''
+                if not local_path:
+                    from app.services.media_dvr_utils import resolve_playback_absolute_path
+                    from app.services.playback_disk_guard_service import get_srs_record_dir
+                    local_path = resolve_playback_absolute_path(
+                        os.path.join(get_srs_record_dir(), object_name.replace('/', os.sep)),
+                    )
                 try:
-                    minio_client.remove_object(bucket_name, thumb_name)
-                except Exception:
-                    pass
-                deleted_count += 1
-                logger.info(f"删除监控录像成功: {bucket_name}/{object_name}")
-            except Exception as e:
-                failed_count += 1
-                failed_objects.append(object_name)
-                logger.warning(f"删除监控录像失败: {bucket_name}/{object_name}, error={str(e)}")
+                    if local_path and os.path.isfile(local_path):
+                        os.remove(local_path)
+                    deleted_count += 1
+                    logger.info('mini 形态删除监控录像: %s', local_path)
+                except OSError as e:
+                    failed_count += 1
+                    failed_objects.append(object_name)
+                    logger.warning('mini 形态删除监控录像失败: %s error=%s', local_path, e)
+        else:
+            minio_client = get_minio_client()
+            if not minio_client.bucket_exists(bucket_name):
+                raise ValueError(f"监控录像空间的MinIO bucket不存在: {bucket_name}")
+
+            for object_name in object_names:
+                try:
+                    minio_client.remove_object(bucket_name, object_name)
+                    thumb_name = object_name.rsplit('.', 1)[0] + '.jpg'
+                    try:
+                        minio_client.remove_object(bucket_name, thumb_name)
+                    except Exception:
+                        pass
+                    deleted_count += 1
+                    logger.info(f"删除监控录像成功: {bucket_name}/{object_name}")
+                except Exception as e:
+                    failed_count += 1
+                    failed_objects.append(object_name)
+                    logger.warning(f"删除监控录像失败: {bucket_name}/{object_name}, error={str(e)}")
 
         success_objects = [n for n in object_names if n not in failed_objects]
         delete_record_files_metadata(bucket_name, success_objects)
@@ -109,9 +136,39 @@ def delete_record_videos(space_id: int, object_names: List[str]) -> Dict:
 
 def get_record_video(space_id: int, object_name: str):
     """获取监控录像内容"""
+    import mimetypes
+    import os
+
     try:
         record_space = RecordSpace.query.get_or_404(space_id)
         bucket_name = record_space.bucket_name
+
+        if not minio_storage_enabled():
+            record = RecordFile.query.filter_by(
+                space_id=space_id,
+                object_name=object_name,
+            ).first()
+            local_path = (record.url if record and record.url else '').strip()
+            if local_path.startswith('/video/'):
+                local_path = ''
+            if not local_path or not os.path.isfile(local_path):
+                from app.services.media_dvr_utils import resolve_playback_absolute_path
+                from app.services.playback_disk_guard_service import get_srs_record_dir
+                local_path = resolve_playback_absolute_path(
+                    os.path.join(get_srs_record_dir(), object_name.replace('/', os.sep)),
+                )
+            if not os.path.isfile(local_path):
+                raise ValueError(f"录像不存在: {object_name}")
+            with open(local_path, 'rb') as handle:
+                content = handle.read()
+            filename = object_name.split('/')[-1]
+            ext = os.path.splitext(filename)[1].lower()
+            content_type_map = {
+                '.mp4': 'video/mp4', '.flv': 'video/x-flv', '.avi': 'video/x-msvideo',
+                '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.ts': 'video/mp2t',
+            }
+            guessed, _ = mimetypes.guess_type(filename)
+            return content, content_type_map.get(ext) or guessed or 'video/mp4', filename
 
         minio_client = get_minio_client()
         if not minio_client.bucket_exists(bucket_name):

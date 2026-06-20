@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from models import db, RecordSpace
 from app.utils.minio_bucket_policy import ensure_bucket_public_read_write_policy
+from app.utils.service_urls import minio_storage_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,25 @@ def create_record_space(space_name, save_mode=0, save_time=7, description=None, 
         # 生成唯一编号
         space_code = f"RECORD_{uuid.uuid4().hex[:8].upper()}"
         bucket_name = RECORD_SPACE_BUCKET
+
+        if not minio_storage_enabled():
+            record_space = RecordSpace(
+                space_name=space_name,
+                space_code=space_code,
+                bucket_name=bucket_name,
+                save_mode=save_mode,
+                save_time=save_time,
+                save_time_custom=save_time_custom,
+                description=description,
+                device_id=device_id
+            )
+            db.session.add(record_space)
+            db.session.commit()
+            logger.info(
+                "mini 形态监控录像空间创建成功（仅数据库）: %s (%s)，设备ID: %s",
+                space_name, space_code, device_id,
+            )
+            return record_space
         
         # 确保 record-space bucket 存在且具备公开策略（否则 /api/v1/buckets/.../download 返回 500）
         minio_client = get_minio_client()
@@ -286,24 +306,25 @@ def delete_record_space(space_id):
         # 删除MinIO bucket中该空间文件夹下的所有对象
         # 注意：现在路径是 device_id/filename，不再使用 space_code 前缀
         # 如果空间关联了设备，只删除该设备的文件；否则删除所有文件
-        try:
-            minio_client = get_minio_client()
-            if minio_client.bucket_exists(bucket_name):
-                if record_space.device_id:
-                    # 只删除该设备的文件
-                    device_prefix = f"{record_space.device_id}/"
-                    objects = minio_client.list_objects(bucket_name, prefix=device_prefix, recursive=True)
-                    for obj in objects:
-                        minio_client.remove_object(bucket_name, obj.object_name)
-                    logger.info(f"删除MinIO设备文件夹: {bucket_name}/{device_prefix}")
-                else:
-                    # 空间没有关联设备，删除所有文件（这种情况应该很少见）
-                    objects = minio_client.list_objects(bucket_name, prefix="", recursive=True)
-                    for obj in objects:
-                        minio_client.remove_object(bucket_name, obj.object_name)
-                    logger.info(f"删除MinIO空间所有文件: {bucket_name}/")
-        except S3Error as e:
-            logger.warning(f"删除MinIO空间文件夹失败（可能不存在）: {str(e)}")
+        if minio_storage_enabled():
+            try:
+                minio_client = get_minio_client()
+                if minio_client.bucket_exists(bucket_name):
+                    if record_space.device_id:
+                        # 只删除该设备的文件
+                        device_prefix = f"{record_space.device_id}/"
+                        objects = minio_client.list_objects(bucket_name, prefix=device_prefix, recursive=True)
+                        for obj in objects:
+                            minio_client.remove_object(bucket_name, obj.object_name)
+                        logger.info(f"删除MinIO设备文件夹: {bucket_name}/{device_prefix}")
+                    else:
+                        # 空间没有关联设备，删除所有文件（这种情况应该很少见）
+                        objects = minio_client.list_objects(bucket_name, prefix="", recursive=True)
+                        for obj in objects:
+                            minio_client.remove_object(bucket_name, obj.object_name)
+                        logger.info(f"删除MinIO空间所有文件: {bucket_name}/")
+            except S3Error as e:
+                logger.warning(f"删除MinIO空间文件夹失败（可能不存在）: {str(e)}")
         
         # 删除数据库记录
         db.session.delete(record_space)
@@ -351,6 +372,11 @@ def create_camera_folder(space_id, device_id):
     """为摄像头创建独立的文件夹（在MinIO bucket中）"""
     try:
         record_space = RecordSpace.query.get_or_404(space_id)
+        folder_path = f"{device_id}/"
+        if not minio_storage_enabled():
+            logger.info(f"mini 形态跳过 MinIO 目录创建，返回逻辑路径: {folder_path}")
+            return folder_path
+
         bucket_name = record_space.bucket_name
         space_code = record_space.space_code
         
@@ -386,6 +412,17 @@ def create_camera_folder(space_id, device_id):
 def sync_spaces_to_minio():
     """同步所有监控录像空间到Minio，创建不存在的目录"""
     try:
+        spaces = RecordSpace.query.all()
+        total_spaces = len(spaces)
+        if not minio_storage_enabled():
+            logger.info('MinIO 未启用，跳过监控录像空间同步')
+            return {
+                'total_spaces': total_spaces,
+                'created_count': 0,
+                'skipped_count': total_spaces,
+                'error_count': 0,
+            }
+
         minio_client = get_minio_client()
         bucket_name = RECORD_SPACE_BUCKET
         
@@ -396,7 +433,6 @@ def sync_spaces_to_minio():
         ensure_bucket_public_read_write_policy(minio_client, bucket_name)
         
         # 获取所有监控录像空间
-        spaces = RecordSpace.query.all()
         total_spaces = len(spaces)
         created_count = 0
         skipped_count = 0

@@ -35,6 +35,8 @@ EASYAIOT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${EASYAIOT_ROOT}/.scripts/docker/init-build-cache-dirs.sh"
 # shellcheck source=../.scripts/docker/gpu_compose_helpers.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/gpu_compose_helpers.sh"
+# shellcheck source=../.scripts/docker/deploy_profile.sh
+source "${EASYAIOT_ROOT}/.scripts/docker/deploy_profile.sh"
 
 # 打印带颜色的消息
 print_info() {
@@ -408,6 +410,14 @@ create_env_file() {
             print_info "已更新TDengine连接为 localhost（host网络模式）"
         fi
     fi
+
+    ensure_deploy_profile
+    apply_python_service_deploy_env "${EASYAIOT_ROOT}"
+    if is_mini_deploy_profile; then
+        print_info "mini 形态：已配置本机部署（JAVA_BACKEND_URL=48099, NODE_REMOTE_DEPLOY=false）"
+    else
+        print_info "${EASYAIOT_DEPLOY_PROFILE:-full} 形态：已配置网关部署（JAVA_BACKEND_URL=48080, MinIO 启用）"
+    fi
 }
 
 # 安装服务
@@ -457,13 +467,15 @@ start_service() {
     if [ ! -f .env.docker ]; then
         print_warning ".env.docker 文件不存在，正在创建..."
         create_env_file
+    else
+        ensure_deploy_profile
     fi
 
     check_gpu
     configure_compose_gpu "docker-compose.yaml" ".env.docker"
     
     cleanup_renamed_containers
-    $COMPOSE_CMD up -d --remove-orphans
+    $COMPOSE_CMD up -d --force-recreate --remove-orphans
     print_success "服务已启动"
     check_status
 }
@@ -483,9 +495,18 @@ restart_service() {
     print_info "重启服务..."
     check_docker
     check_docker_compose
-    clean_compose_cache
-    
-    $COMPOSE_CMD restart
+
+    if [ ! -f .env.docker ]; then
+        print_warning ".env.docker 文件不存在，正在创建..."
+        create_env_file
+    else
+        ensure_deploy_profile
+    fi
+    check_gpu
+    configure_compose_gpu "docker-compose.yaml" ".env.docker"
+
+    cleanup_renamed_containers
+    $COMPOSE_CMD up -d --force-recreate --remove-orphans
     print_success "服务已重启"
     check_status
 }

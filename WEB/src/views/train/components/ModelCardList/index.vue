@@ -99,6 +99,7 @@ import {DeleteOutlined, DownloadOutlined, EditOutlined, EyeOutlined} from '@ant-
 import {getFormConfig} from './Data';
 import DEFAULT_MODEL_IMAGE from '@/assets/images/video/ai-task.png';
 import { formatModelVersionDisplay } from '../../utils/modelVersionUtils';
+import { resolveModelImageDisplayUrl } from '@/utils/alertMinioImage';
 
 defineOptions({name: 'ModelCardList'});
 
@@ -176,7 +177,8 @@ function pageSizeChange(_current: number, size: number) {
 }
 
 function getModelImage(item: any): string {
-  return item.imageUrl || DEFAULT_MODEL_IMAGE;
+  const url = item.imageUrl || item.image_url;
+  return url ? resolveModelImageDisplayUrl(url) : DEFAULT_MODEL_IMAGE;
 }
 
 function onImageError(e: Event) {

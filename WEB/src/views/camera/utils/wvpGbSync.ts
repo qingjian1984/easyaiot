@@ -1,5 +1,6 @@
 import { getDeviceChannels, queryAllVideoList } from '@/api/device/gb28181';
 import { resolveGbChannelPlayIds } from './gb28181Channel';
+import { isGb28181Enabled } from '@/utils/deployProfile';
 
 /** 提交给 VIDEO /directory/sync-gb28181 的国标通道项 */
 export interface Gb28181ChannelSyncItem {
@@ -23,6 +24,9 @@ export async function collectWvpGbChannelsForSync(): Promise<{
   channels: Gb28181ChannelSyncItem[];
   wvpDeviceCount: number;
 }> {
+  if (!isGb28181Enabled()) {
+    return { channels: [], wvpDeviceCount: 0 };
+  }
   const { data: devices } = await queryAllVideoList();
   const sipList = (devices || [])
     .map((d) => String(d.deviceIdentification || d.deviceId || '').trim())

@@ -36,6 +36,8 @@ EASYAIOT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${EASYAIOT_ROOT}/.scripts/docker/init-build-cache-dirs.sh"
 # shellcheck source=../.scripts/docker/gpu_compose_helpers.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/gpu_compose_helpers.sh"
+# shellcheck source=../.scripts/docker/deploy_profile.sh
+source "${EASYAIOT_ROOT}/.scripts/docker/deploy_profile.sh"
 
 # 打印带颜色的消息
 print_info() {
@@ -584,6 +586,15 @@ create_env_file() {
             print_info "已更新Nacos命名空间为空（使用默认命名空间）"
         fi
     fi
+
+    ensure_deploy_profile
+    apply_python_service_deploy_env "${EASYAIOT_ROOT}"
+    if is_mini_deploy_profile; then
+        print_info "mini 形态：已配置本机部署（JAVA_BACKEND_URL=48099, NODE_REMOTE_DEPLOY=false）"
+        migrate_mini_minio_data_to_local_storage "${EASYAIOT_ROOT}"
+    else
+        print_info "${EASYAIOT_DEPLOY_PROFILE:-full} 形态：已配置网关部署（JAVA_BACKEND_URL=48080, MinIO 启用）"
+    fi
 }
 
 # 安装服务
@@ -631,7 +642,7 @@ install_service() {
     print_info "查看日志: ./install_linux.sh logs"
 }
 
-# 启动服务
+# 启动服务（同步部署形态 env 后 force-recreate，使 compose env_file 注入生效）
 start_service() {
     print_info "启动服务..."
     check_docker
@@ -641,9 +652,11 @@ start_service() {
     if [ ! -f .env.docker ]; then
         print_warning ".env.docker 文件不存在，正在创建..."
         create_env_file
+    else
+        ensure_deploy_profile
     fi
     cleanup_renamed_containers
-    $COMPOSE_CMD up -d --remove-orphans --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
+    $COMPOSE_CMD up -d --force-recreate --remove-orphans --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
     print_success "服务已启动"
     check_status
 }
@@ -658,13 +671,14 @@ stop_service() {
     print_success "服务已停止"
 }
 
-# 重启服务
+# 重启服务（同步部署形态 env 后 force-recreate）
 restart_service() {
     print_info "重启服务..."
     check_docker
     check_docker_compose
-    
-    $COMPOSE_CMD restart 2>&1 | grep -v "^Restarting" || true
+
+    ensure_deploy_profile
+    $COMPOSE_CMD up -d --force-recreate --remove-orphans --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
     print_success "服务已重启"
     check_status
 }

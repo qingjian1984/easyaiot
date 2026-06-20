@@ -1,4 +1,5 @@
 import { queryAlertRecord } from '@/api/device/calculate';
+import { isHostLocalMediaPath, resolveAlertImageDisplayUrl } from '@/utils/alertMinioImage';
 
 /** 是否为 MinIO 录像下载地址（与后端 on_dvr 写入的 record_path / playback.file_path 一致） */
 export function isMinioRecordDownloadPath(path: string | null | undefined): boolean {
@@ -24,6 +25,26 @@ function isHostLocalRecordPath(path: string): boolean {
   );
 }
 
+/** 是否为点播/录像文件 URL（非实时流） */
+export function isVodPlaybackUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const u = String(url).trim();
+  return (
+    u.includes('/video/alert/record') ||
+    u.includes('/video/record/space/') ||
+    (u.includes('/api/v1/buckets/') && u.includes('/objects/download'))
+  );
+}
+
+function toAbsolutePlayUrl(url: string): string {
+  if (!url || url.startsWith('http://') || url.startsWith('https://')) {
+    return url || '';
+  }
+  if (typeof window === 'undefined') return url;
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${window.location.origin}${path}`;
+}
+
 /** 将 MinIO/相对路径转为可播放的完整 URL */
 export function resolveAlertVideoUrl(videoUrl: string): string {
   if (!videoUrl) return '';
@@ -31,10 +52,17 @@ export function resolveAlertVideoUrl(videoUrl: string): string {
     return videoUrl;
   }
   if (videoUrl.startsWith('/api/v1/buckets')) {
-    return `${window.location.origin}${videoUrl}`;
+    return toAbsolutePlayUrl(videoUrl);
+  }
+  if (videoUrl.startsWith('/video/')) {
+    return toAbsolutePlayUrl(resolveAlertImageDisplayUrl(videoUrl));
+  }
+  if (isHostLocalMediaPath(videoUrl)) {
+    const apiPrefix = (import.meta.env.VITE_GLOB_API_URL || '').replace(/\/$/, '');
+    return toAbsolutePlayUrl(`${apiPrefix}/video/alert/record?path=${encodeURIComponent(videoUrl)}`);
   }
   if (videoUrl.startsWith('/')) {
-    return `${import.meta.env.VITE_GLOB_API_URL || ''}${videoUrl}`;
+    return toAbsolutePlayUrl(`${import.meta.env.VITE_GLOB_API_URL || ''}${videoUrl}`);
   }
   return videoUrl;
 }
@@ -64,6 +92,12 @@ export async function resolveAlertRecordVideoUrl(
   const directPath = record.record_path?.trim();
   if (directPath) {
     if (isMinioRecordDownloadPath(directPath)) {
+      return resolveAlertVideoUrl(directPath);
+    }
+    if (isHostLocalMediaPath(directPath)) {
+      return resolveAlertVideoUrl(directPath);
+    }
+    if (directPath.startsWith('/video/')) {
       return resolveAlertVideoUrl(directPath);
     }
     if (isHostLocalRecordPath(directPath)) {

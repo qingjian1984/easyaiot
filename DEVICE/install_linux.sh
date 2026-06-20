@@ -18,6 +18,58 @@ EASYAIOT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=../.scripts/docker/init-build-cache-dirs.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/init-build-cache-dirs.sh"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
+# shellcheck source=../.scripts/docker/deploy_profile.sh
+source "${EASYAIOT_ROOT}/.scripts/docker/deploy_profile.sh"
+DEVICE_COMPOSE_PROFILE_ARGS=()
+
+refresh_device_compose_profile_args() {
+    apply_deploy_profile
+    DEVICE_COMPOSE_PROFILE_ARGS=()
+    local flags
+    flags=$(device_compose_profile_flags)
+    if [ -n "$flags" ]; then
+        # shellcheck disable=SC2206
+        DEVICE_COMPOSE_PROFILE_ARGS=($flags)
+    fi
+}
+
+device_compose() {
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" ${DEVICE_COMPOSE_PROFILE_ARGS[@]+"${DEVICE_COMPOSE_PROFILE_ARGS[@]}"} "$@"
+}
+
+# 按部署形态收集应启动的 DEVICE 服务名
+collect_device_up_services() {
+    local -a up_services=()
+    local -a skip_services=()
+    local whitelist enabled_whitelist svc should_skip
+
+    read -r -a skip_services <<< "$(device_skipped_services)"
+    enabled_whitelist=$(device_enabled_services)
+
+    while IFS= read -r svc; do
+        [ -z "$svc" ] && continue
+        if [ -n "$enabled_whitelist" ]; then
+            # 白名单形态（如 mini）：仅启动白名单内服务，跳过列表不再二次过滤
+            should_skip=1
+            for whitelist in $enabled_whitelist; do
+                [ "$svc" = "$whitelist" ] && should_skip=0 && break
+            done
+            [ "$should_skip" -eq 0 ] && up_services+=("$svc")
+            continue
+        fi
+        should_skip=0
+        for skip in "${skip_services[@]}"; do
+            [ -z "$skip" ] && continue
+            if [ "$svc" = "$skip" ]; then
+                should_skip=1
+                break
+            fi
+        done
+        [ "$should_skip" -eq 0 ] && up_services+=("$svc")
+    done < <(device_compose config --services 2>/dev/null)
+
+    echo "${up_services[@]}"
+}
 
 # 检查docker-compose是否存在
 if ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null; then
@@ -85,19 +137,51 @@ restart_unhealthy_containers() {
 }
 
 # 后台启动 compose 服务。
-# TTY 下 compose 会用 \r 刷新 [+] up x/y，分母残留时易显示成 9/100（实际共 10 个服务）。
+apply_device_profile_env() {
+    ensure_deploy_profile
+    if is_mini_deploy_profile; then
+        export IOT_SYSTEM_SPRING_PROFILES_ACTIVE=local,mini
+        export IOT_SINK_SPRING_PROFILES_ACTIVE=local,mini
+    else
+        export IOT_SYSTEM_SPRING_PROFILES_ACTIVE=local
+        export IOT_SINK_SPRING_PROFILES_ACTIVE=local
+    fi
+}
+
 compose_up_detached() {
     local count
-    count=$(compose_service_count)
+    refresh_device_compose_profile_args
+    apply_device_profile_env
+    count=$(device_compose config --services 2>/dev/null | wc -l | tr -d '[:space:]')
     if [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null; then
-        print_info "正在启动服务（共 ${count} 个）..."
+        print_info "正在启动服务（部署形态: ${EASYAIOT_DEPLOY_PROFILE:-full}，compose 共 ${count} 个）..."
     else
-        print_info "正在启动服务..."
+        print_info "正在启动服务（部署形态: ${EASYAIOT_DEPLOY_PROFILE:-full}）..."
     fi
     cleanup_renamed_containers
     restart_unhealthy_containers
+
+    local -a up_targets=()
+    if [ $# -gt 0 ]; then
+        up_targets=("$@")
+    else
+        read -r -a up_targets <<< "$(collect_device_up_services)"
+    fi
+
+    if [ ${#up_targets[@]} -eq 0 ]; then
+        print_error "当前部署形态没有可启动的 DEVICE 服务"
+        return 1
+    fi
+
+    local -a skip_services=()
+    read -r -a skip_services <<< "$(device_skipped_services)"
+    if [ ${#skip_services[@]} -gt 0 ] && [ $# -eq 0 ]; then
+        print_info "DEVICE 跳过: ${skip_services[*]}"
+    fi
+    print_info "DEVICE 启动: ${up_targets[*]}"
+
     # --remove-orphans：顺带清理「已从 compose 文件移除的服务」的残留容器
-    COMPOSE_ANSI=never $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d --no-color --remove-orphans "$@"
+    COMPOSE_ANSI=never device_compose up -d --no-color --remove-orphans "${up_targets[@]}"
 }
 
 # up 失败时自动展示 unhealthy 容器及其日志尾部，免去手动逐个排查
@@ -1132,6 +1216,7 @@ DEVICE模块 Docker Compose 管理脚本
     help                显示此帮助信息
 
 环境变量:
+    EASYAIOT_DEPLOY_PROFILE   部署形态: mini(1,仅 iot-system) | standard(2) | full(3，默认)
     USE_MVND=1          启用 C2 常驻 mvnd 容器编译（守护进程跨次复用，更快）；不可用时自动回退 C1。
                         默认 0 走 C1（一次性 docker run 卷挂载，无常驻进程）。
                         注意：C2 会常驻一个 mvnd 容器（约 1–2GB 内存），用 builder-stop / clean 回收。
@@ -1166,22 +1251,33 @@ EOF
 # 主函数
 main() {
     check_compose_file
-    
-    case "${1:-}" in
+    local cmd="${1:-}"
+
+    case "$cmd" in
+        install|build-and-start)
+            select_deploy_profile_for_install
+            refresh_device_compose_profile_args
+            print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
+            build_and_start
+            ;;
+        start|restart|update)
+            ensure_deploy_profile
+            refresh_device_compose_profile_args
+            print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
+            case "$cmd" in
+                start) start_services ;;
+                restart) restart_services ;;
+                update) update_services ;;
+            esac
+            ;;
         build-base)
             build_base_jars 1
             ;;
         build)
             build_images_incremental
             ;;
-        start)
-            start_services
-            ;;
         stop)
             stop_services
-            ;;
-        restart)
-            restart_services
             ;;
         status)
             show_status
@@ -1211,17 +1307,14 @@ main() {
             stop_mvnd_builder
             print_success "mvnd 常驻 builder 容器已停止（如存在）"
             ;;
-        update)
-            update_services
-            ;;
-        install|build-and-start)
-            build_and_start
+        profile)
+            ensure_deploy_profile
+            print_deploy_profile_summary
             ;;
         help|--help|-h)
             show_help
             ;;
         "")
-            # 如果没有参数，显示交互式菜单
             show_interactive_menu
             ;;
         *)
@@ -1261,6 +1354,8 @@ show_interactive_menu() {
         
         case $choice in
             1)
+                select_deploy_profile_for_install
+                refresh_device_compose_profile_args
                 build_and_start
                 ;;
             2)

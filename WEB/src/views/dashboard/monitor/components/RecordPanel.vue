@@ -79,20 +79,21 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 import { DatePicker as AntButton } from 'ant-design-vue'
 import { Icon } from '@/components/Icon'
 import dayjs, { Dayjs } from 'dayjs'
 import DialogPlayer from '@/components/VideoPlayer/DialogPlayer.vue'
 import { useModal } from '@/components/Modal'
 import { useMessage } from '@/hooks/web/useMessage'
-import { resolveAlertRecordVideoUrl, resolveAlertVideoUrl } from '@/utils/alertRecord'
+import { resolveAlertVideoUrl } from '@/utils/alertRecord'
+import { playAlertRecordInModal } from '@/utils/alertRecordPlayback'
 import { Button } from '@/components/Button'
 const { RangePicker } = DatePicker
 const { createMessage } = useMessage()
 
 // 播放器弹窗
-const [registerPlayerModal, { openModal: openPlayerModal }] = useModal()
+const [registerPlayerModal, { openModal: openPlayerModal, closeModal: closePlayerModal }] = useModal()
 
 // 防重复提示：记录最近提示的时间和内容
 let lastVideoErrorTime = 0
@@ -178,83 +179,53 @@ function showVideoErrorOnce(message: string) {
 
 // 播放录像
 const handlePlay = async (record: any) => {
-  console.log('handlePlay 被调用，record:', record)
-  
-  // 更新选中状态和时间
   selectedRecordId.value = record.id
   emit('time-change', record.time)
-  
-  // 检查 openPlayerModal 是否可用
+
   if (!openPlayerModal || typeof openPlayerModal !== 'function') {
-    console.error('openPlayerModal 不可用:', openPlayerModal)
     createMessage.error('播放器未初始化，请刷新页面重试')
     return
   }
-  
+
   try {
-    // 如果record直接有video_url，直接使用
     if (record.video_url || record.url) {
       const videoUrl = resolveAlertVideoUrl(record.video_url || record.url)
-      console.log('使用 record 中的 video_url:', videoUrl)
-      
-      try {
-        await nextTick()
-        openPlayerModal(true, {
-          id: record.device_id || props.deviceId || 0,
-          http_stream: videoUrl,
-        })
-        console.log('成功调用 openPlayerModal')
-      } catch (modalError: any) {
-        console.error('调用 openPlayerModal 失败:', modalError)
-        createMessage.error('打开播放器失败: ' + (modalError?.message || '未知错误'))
-      }
+      openPlayerModal(true, {
+        id: record.device_id || props.deviceId || 0,
+        http_stream: videoUrl,
+        _playbackSeq: Date.now(),
+      })
       return
     }
-  
-    // 如果没有video_url，需要根据device_id和time查询
+
     const deviceId = record.device_id || props.deviceId
     if (!deviceId || !record.time) {
-      console.warn('缺少必要信息:', { deviceId, time: record.time })
       createMessage.warn('缺少必要信息：设备ID或录像时间')
       return
     }
-    
-    console.log('开始查询录像，deviceId:', deviceId, 'time:', record.time)
 
-    const videoUrl = await resolveAlertRecordVideoUrl({
-      id: record.id,
-      device_id: String(deviceId),
-      time: record.time,
-      record_path: record.record_path,
-    })
-
-    if (videoUrl) {
-      try {
-        await nextTick()
-        openPlayerModal(true, {
-          id: deviceId,
-          http_stream: videoUrl,
-        })
-        lastVideoErrorTime = 0
-        lastVideoErrorMsg = ''
-      } catch (modalError: any) {
-        console.error('调用 openPlayerModal 失败:', modalError)
-        createMessage.error('打开播放器失败: ' + (modalError?.message || '未知错误'))
-      }
+    const ok = await playAlertRecordInModal(
+      { openModal: openPlayerModal, closeModal: closePlayerModal },
+      {
+        id: record.id,
+        device_id: String(deviceId),
+        time: record.time,
+        record_path: record.record_path,
+      },
+    )
+    if (ok) {
+      lastVideoErrorTime = 0
+      lastVideoErrorMsg = ''
     } else {
       showVideoErrorOnce('暂未找到该时间段的录像文件，请稍后再试')
     }
   } catch (error: any) {
     console.error('播放录像失败:', error)
-    // 处理业务错误（HTTP 200但code=400）
     const errorData = error?.response?.data || error?.data
     if (errorData && errorData.code === 400) {
-      const errorMsg = errorData.message || '暂未找到该时间段的录像文件'
-      showVideoErrorOnce(errorMsg)
+      showVideoErrorOnce(errorData.message || '暂未找到该时间段的录像文件')
     } else {
-      // 其他错误
-      const errorMsg = error?.response?.data?.message || error?.message || '播放录像失败，请稍后重试'
-      showVideoErrorOnce(errorMsg)
+      showVideoErrorOnce(error?.response?.data?.message || error?.message || '播放录像失败，请稍后重试')
     }
   }
 }

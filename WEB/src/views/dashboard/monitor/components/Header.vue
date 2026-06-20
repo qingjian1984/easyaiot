@@ -21,6 +21,7 @@
 <script lang="ts" setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { getAdminHomeRoute } from '@/utils/deployProfile'
 
 defineOptions({
   name: 'MonitorHeader'
@@ -33,7 +34,8 @@ const props = defineProps<{
 const router = useRouter()
 
 const handleGoToAdmin = () => {
-  router.push('/node/index')
+  const target = getAdminHomeRoute()
+  router.push(target.query ? { path: target.path, query: target.query } : target.path)
 }
 
 const currentDate = ref('')

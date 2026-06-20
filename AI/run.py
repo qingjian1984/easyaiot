@@ -388,6 +388,29 @@ def create_app():
         except Exception as e:
             print(f'⚠️  恢复中断训练任务失败: {str(e)}')
 
+        # mini 形态：将 MinIO 磁盘历史数据同步到 flat 本地存储（模型封面/权重等）
+        try:
+            from app.utils.service_urls import is_mini_deploy_profile
+            if is_mini_deploy_profile():
+                from app.services.local_storage_service import (
+                    get_minio_seed_data_root,
+                    migrate_seed_data_to_local_storage,
+                )
+                seed_root = get_minio_seed_data_root()
+                if seed_root:
+                    copied, skipped = migrate_seed_data_to_local_storage(
+                        buckets=['models'],
+                        skip_existing=True,
+                    )
+                    if copied:
+                        print(f'✅ mini 形态：已从种子目录同步 {copied} 个 models 对象到本地存储')
+                    elif skipped:
+                        print(f'✅ mini 形态：models 本地存储已就绪（{skipped} 个对象）')
+                else:
+                    print('ℹ️  mini 形态：未找到 MinIO 种子数据目录，跳过历史对象同步')
+        except Exception as e:
+            print(f'⚠️  mini MinIO 历史数据同步失败: {str(e)}')
+
         # 启动自动标注队列调度器
         try:
             from app.services.auto_label_cluster_service import start_auto_label_queue_coordinator

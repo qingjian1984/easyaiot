@@ -36,6 +36,9 @@ cd "$PROJECT_ROOT"
 # 脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=deploy_profile.sh
+source "${SCRIPT_DIR}/deploy_profile.sh"
+
 # 日志文件配置
 LOG_DIR="${SCRIPT_DIR}/logs"
 mkdir -p "$LOG_DIR"
@@ -801,6 +804,7 @@ verify_service_health() {
 install_linux() {
     print_section "开始安装所有服务 (ARM架构)"
     
+    select_deploy_profile_for_install
     detect_architecture
     check_docker "$@"
     check_docker_compose
@@ -894,6 +898,8 @@ wait_for_base_services() {
 start_all() {
     print_section "启动所有服务 (ARM架构)"
     
+    ensure_deploy_profile
+    print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
     detect_architecture
     check_docker "$@"
     check_docker_compose
@@ -941,6 +947,8 @@ stop_all() {
 restart_all() {
     print_section "重启所有服务 (ARM架构)"
     
+    ensure_deploy_profile
+    print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
     detect_architecture
     check_docker "$@"
     check_docker_compose
@@ -1034,7 +1042,9 @@ clean_all() {
 # 更新所有服务
 update_all() {
     print_section "更新所有服务 (ARM架构)"
-    
+
+    ensure_deploy_profile
+    print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
     detect_architecture
     check_docker "$@"
     check_docker_compose
@@ -1193,6 +1203,7 @@ show_help() {
     echo "  update          - 更新并重启所有服务"
     echo "  verify          - 验证所有服务是否启动成功"
     echo "  check           - 检查 Docker 和 Docker Compose 安装状态"
+    echo "  profile         - 显示当前部署形态与服务范围"
     echo "  help            - 显示此帮助信息"
     echo ""
     echo "模块列表:"
@@ -1205,6 +1216,9 @@ show_help() {
     echo "  - AI 和 VIDEO 模块将使用 install_linux_arm.sh 脚本"
     echo "  - 其他模块使用标准 install_linux.sh 脚本"
     echo "  - 如需在 x86_64 架构上部署，请使用 install_linux.sh"
+    echo ""
+    echo "可选环境变量:"
+    echo "  EASYAIOT_DEPLOY_PROFILE  - 部署形态: mini(1) | standard(2) | full(3，默认 full)"
     echo ""
 }
 
@@ -1244,6 +1258,10 @@ main() {
             ;;
         check)
             check_environment
+            ;;
+        profile)
+            ensure_deploy_profile
+            print_deploy_profile_summary
             ;;
         help|--help|-h)
             show_help

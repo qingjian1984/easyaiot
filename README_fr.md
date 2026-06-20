@@ -33,6 +33,71 @@ Mon souhait est que ce système soit utilisé dans le monde entier, rendant l'IA
 EasyAIoT est une plateforme intelligente d'Internet des Objets (IoT) à intégration cloud-bord-périphérique, se concentrant sur l'intégration profonde de l'IA et de l'IoT. Grâce à des capacités fondamentales telles que la gestion des tâches algorithmiques, l'analyse de flux en temps réel et le raisonnement en cluster de services de modèles, la plateforme réalise une boucle fermée complète allant de la connexion des appareils à la collecte de données, l'analyse par IA et la prise de décision intelligente, atteignant véritablement l'interconnexion et le contrôle intelligent de toutes choses.
 </p>
 
+#### 🔄 Boîtier edge, caméra tout-en-un IA, tout-en-un full-stack AIoT — une plateforme, sans versions séparées
+
+<p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
+Beaucoup de projets IoT intelligents butent au déploiement : <strong>les fonctionnalités complètes ne tiennent pas sur de petites machines ; pour les faire tenir, on réduit les capacités, on scinde les versions et on maintient plusieurs packages de déploiement.</strong> EasyAIoT résout ce dilemme avec une seule plateforme — <strong>boîtier edge pour l'intelligence ponctuelle, caméra tout-en-un IA pour l'analyse au mur, tout-en-un full-stack AIoT pour la chaîne complète en une seule boîte</strong>. Choisissez le niveau adapté à votre matériel terrain ; le même logiciel couvre le pilote mono-site, la couverture d'un bâtiment et la livraison full-stack — sans versions séparées.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 10px 0;">
+<strong>Ce que vous obtenez :</strong>
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 8px 0 12px 0;">
+  <li><strong>L'intelligence sur un boîtier</strong> : un boîtier edge 4 GB n'est plus un relais vidéo muet — déployez et obtenez connexion, analyse et alertes</li>
+  <li><strong>Des caméras avec cerveau intégré</strong> : les caméras tout-en-un IA analysent au mur ; plusieurs caméras en réseau couvrent un étage ou un campus — sans boîtier + caméra à chaque point</li>
+  <li><strong>Full-stack en une machine</strong> : le tout-en-un full-stack AIoT intègre accès aux appareils, vidéosurveillance, analyse IA et pilotage métier — sans assembler plusieurs systèmes ni plusieurs fournisseurs</li>
+  <li><strong>Changer le matériel, garder la plateforme</strong> : du pilote boîtier aux caméras murales puis au tout-en-un full-stack — changez de niveau, conservez activité et données</li>
+</ul>
+
+| Niveau | Matériel typique (exemples) | RAM recommandée | Ce que vous pouvez faire | Vérifié* |
+| :-- | :-- | :--: | :-- | :--: |
+| **mini** Edge Lite | <strong>Boîtier edge</strong> (PC industriel 4 GB, tout-en-un sécurité magasin, passerelle de site) | ≥ 4 GB | <strong>Intelligence à un point</strong> : accès caméras, analyse temps réel, alertes intelligentes, inférence de modèles — IA visuelle au coût minimal | ~2 GB utilisés, marge confortable |
+| **standard** Standard | <strong>Caméra tout-en-un IA</strong> (terminal caméra intelligent, caméra de surveillance IA avec calcul, analyseur IA multi-capteurs) | ≥ 16 GB | <strong>Chaque caméra est un nœud intelligent</strong> : plusieurs caméras au mur couvrent un étage/campus ; appareils, règles et calcul orchestrés ensemble | ~10 GB, stable avec marge |
+| **full** Complet (défaut) | <strong>Tout-en-un full-stack AIoT</strong> (tout-en-un pilotage full-stack entreprise, hôte IoT full-stack sectoriel, plateforme intelligente cloud-bord-périphérique) | ≥ 20 GB | <strong>IoT + vidéo + IA en une boîte</strong> : gestion des appareils, accès massif, analyse intelligente, commandement unifié — capacités complètes à long terme | ~14 GB, pleine capacité avec marge |
+
+<p style="font-size: 13px; line-height: 1.6; color: #888; margin: 8px 0;">
+*Valeurs vérifiées calculées automatiquement à la fin de l'installation ; le « conforme » vert indique que les ressources sont sûres pour la production sur ce niveau.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0;">
+<strong>Trois types de matériel, trois problèmes résolus :</strong>
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 8px 0 12px 0;">
+  <li><strong>Boîtier edge (mini)</strong> : sous le guérite, armoire faible courant du magasin, local électrique du chantier — un seul point, budget serré, peu d'exploitation — mais besoin d'« voir les anomalies, juger les événements, pousser les alertes » dès aujourd'hui</li>
+  <li><strong>Caméra tout-en-un IA (standard)</strong> : couloirs, entrées, parkings, routes du campus — beaucoup de points à couvrir ; caméras au mur qui analysent et alertent ; réseau intelligent couvrant un étage ou un campus, pas un seul écran</li>
+  <li><strong>Tout-en-un full-stack AIoT (full)</strong> : salle serveurs entreprise, site de livraison sectoriel, rack tout-en-un de grand projet — pas de collage de systèmes ; une machine doit couvrir la chaîne complète « accès appareils — vidéo — inférence — pilotage métier », flux élevés, forte concurrence, capacités complètes, croissance stable</li>
+</ul>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0;">
+<strong>Comment choisir :</strong> pas besoin d'étudier l'architecture — <strong>regardez votre terrain</strong> : point unique → boîtier edge (mini) ; plusieurs caméras IA au mur → standard ; full-stack en une boîte → full. Pilotez avec un boîtier, étendez avec des caméras, unifiez sur un tout-en-un full-stack AIoT ; changez de niveau, la plateforme s'adapte, pas de reconfiguration quotidienne.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 16px 0 8px 0;">
+<strong>Sélection du niveau et conformité des ressources (vérifié) :</strong>
+</p>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-menu.png" alt="Sélection du niveau de déploiement" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 16px 0;">Boîtier edge / caméra tout-en-un IA / tout-en-un full-stack AIoT — un niveau selon le matériel terrain</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-mini.png" alt="mini conformité vérifiée" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 4px 0;"><strong>Boîtier edge (mini)</strong> : boîtier 4 GB n'utilise que ~2 GB vérifiés — intelligence fiable sur un point</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-standard.png" alt="standard conformité vérifiée" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 4px 0;"><strong>Caméra tout-en-un IA (standard)</strong> : hôte 16 GB utilise ~10 GB vérifiés — réseau multi-caméras couvre étage/campus avec marge</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-full.png" alt="full conformité vérifiée" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 16px 0;"><strong>Tout-en-un full-stack AIoT (full)</strong> : tout-en-un 20 GB utilise ~14 GB vérifiés — full-stack en une boîte avec marge, prêt pour la production</p>
+</div>
+
 #### 🧠 Capacités d'IA
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">

@@ -108,7 +108,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@/components/Icon'
 import { queryAlarmList } from '@/api/device/calculate'
-import { resolveAlertRecordVideoUrl } from '@/utils/alertRecord'
+import { playAlertRecordInModal } from '@/utils/alertRecordPlayback'
 import { useMessage } from '@/hooks/web/useMessage'
 import { rewriteStreamHostToPageHost } from '@/views/camera/utils/devicePlay'
 import Jessibuca from '@/components/Player/module/jessibuca.vue'
@@ -132,7 +132,7 @@ const emit = defineEmits<{
 const { createMessage } = useMessage()
 
 // 播放器弹窗
-const [registerPlayerModal, { openModal: openPlayerModal }] = useModal()
+const [registerPlayerModal, { openModal: openPlayerModal, closeModal: closePlayerModal }] = useModal()
 
 const currentTime = ref('')
 const activeVideoIndex = ref(0)
@@ -633,17 +633,16 @@ const handleRecordClick = async (record: any) => {
   }
 
   try {
-    const videoUrl = await resolveAlertRecordVideoUrl({
-      id: record.id,
-      device_id: record.device_id,
-      time: record.time,
-      record_path: record.record_path,
-    })
-    if (videoUrl) {
-      openPlayerModal(true, {
-        id: record.device_id,
-        http_stream: videoUrl,
-      })
+    const ok = await playAlertRecordInModal(
+      { openModal: openPlayerModal, closeModal: closePlayerModal },
+      {
+        id: record.id,
+        device_id: record.device_id,
+        time: record.time,
+        record_path: record.record_path,
+      },
+    )
+    if (ok) {
       lastVideoErrorTime = 0
       lastVideoErrorMsg = ''
     } else {

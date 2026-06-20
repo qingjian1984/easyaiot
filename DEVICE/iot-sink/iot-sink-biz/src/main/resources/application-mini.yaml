@@ -1,0 +1,20 @@
+--- #################### mini 形态：无 TDengine 中间件，数据源延迟初始化 ####################
+
+spring:
+  datasource:
+    dynamic:
+      datasource:
+        tdengine:
+          lazy: true
+
+--- #################### mini 形态：无 Nacos，Feign 静态指向 iot-system 容器 ####################
+
+spring:
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            system-server:
+              - uri: http://iot-system:48099
+                instance-id: system-server-iot-system

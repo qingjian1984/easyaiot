@@ -1,0 +1,11 @@
+--- #################### mini 形态：无 Nacos，Feign 静态指向本机 system-server ####################
+
+spring:
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            system-server:
+              - uri: http://127.0.0.1:48099
+                instance-id: system-server-local

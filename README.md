@@ -33,6 +33,71 @@ My vision is for this system to be accessible worldwide, achieving truly zero ba
 EasyAIoT is a cloud-edge-device integrated intelligent IoT platform that focuses on the deep integration of AI and IoT. Through core capabilities such as algorithm task management, real-time stream analysis, and model service cluster inference, the platform achieves a complete closed-loop from device access to data collection, AI analysis, and intelligent decision-making, truly realizing interconnected everything and intelligent control of everything.
 </p>
 
+#### 🔄 Edge Box, AI All-in-One Camera, AIoT Full-Stack All-in-One — One Platform, No Split Versions
+
+<p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
+Many intelligent IoT projects stall at deployment: <strong>full features won't fit on small machines; to make them fit, you cut capabilities, split versions, and maintain multiple deployment packages.</strong> EasyAIoT resolves this with one platform—<strong>edge boxes for point intelligence, AI all-in-one cameras for on-wall analysis, AIoT full-stack all-in-ones for the complete stack in one box</strong>. Pick the tier that matches your field hardware; the same software runs from single-site pilots through floor coverage to full-stack delivery—no split versions.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 10px 0;">
+<strong>What you get:</strong>
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 8px 0 12px 0;">
+  <li><strong>Intelligence on a box</strong>: A 4 GB edge box is no longer a dumb video relay—deploy it and get connect, analyze, and alert</li>
+  <li><strong>Cameras with built-in brains</strong>: AI all-in-one cameras analyze on the wall; multiple cameras networked cover a floor or campus—no box-plus-camera at every point</li>
+  <li><strong>Full stack in one machine</strong>: The AIoT full-stack all-in-one packs device access, video surveillance, AI analysis, and business control into one unit—no stitching multiple systems or vendors</li>
+  <li><strong>Upgrade hardware, keep the platform</strong>: From box pilot to cameras on the wall to full-stack all-in-one production—swap tiers, keep business and data</li>
+</ul>
+
+| Tier | Typical hardware (examples) | Recommended RAM | What you can do | Verified* |
+| :-- | :-- | :--: | :-- | :--: |
+| **mini** Edge Lite | <strong>Edge box</strong> (4 GB industrial PC, store security all-in-one, site gateway) | ≥ 4 GB | <strong>Intelligence at one point</strong>: camera access, real-time analysis, smart alerts, model inference—visual AI at lowest cost | ~2 GB used, ample headroom |
+| **standard** Standard | <strong>AI all-in-one camera</strong> (smart camera terminal, AI surveillance camera with compute, multi-sensor AI analyzer) | ≥ 16 GB | <strong>Each camera is a smart node</strong>: multiple cameras on the wall cover a floor/campus; devices, rules, and compute orchestrated together | ~10 GB, stable with headroom |
+| **full** Full (default) | <strong>AIoT full-stack all-in-one</strong> (enterprise full-stack control all-in-one, industry IoT full-stack host, cloud-edge-device smart platform all-in-one) | ≥ 20 GB | <strong>IoT + video + AI in one box</strong>: device management, massive access, intelligent analysis, command and judgment unified—full capabilities long-term | ~14 GB, full features with headroom |
+
+<p style="font-size: 13px; line-height: 1.6; color: #888; margin: 8px 0;">
+*Verified figures are reference values auto-calculated at install completion; green "compliant" in screenshots means safe to go live on that tier.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0;">
+<strong>Three hardware types, three problems solved:</strong>
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 8px 0 12px 0;">
+  <li><strong>Edge box (mini)</strong>: Under a guard booth, in a store's low-voltage cabinet, at a construction power room—one point, tight budget, no daily ops—but you need "see anomalies today, judge events clearly, push alerts now"</li>
+  <li><strong>AI all-in-one camera (standard)</strong>: Corridors, entrances, parking lots, campus roads—many points to cover; cameras on the wall analyze and alert; multiple cameras form a smart network managing a floor or campus, not one screen</li>
+  <li><strong>AIoT full-stack all-in-one (full)</strong>: Enterprise server room, industry delivery site, large-project all-in-one rack—you don't want to assemble multiple systems; one machine must run the full chain from device access through video, algorithm inference, and business control—high streams, high concurrency, full capabilities, long-term stable growth</li>
+</ul>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0;">
+<strong>How to choose:</strong> No architecture study needed—<strong>match your field setup</strong>: single point → edge box (mini); multiple AI cameras on the wall → standard; need full stack in one box → full. Pilot with a box, expand with cameras, unify on an AIoT full-stack all-in-one; swap tiers, platform auto-adapts, no repeat config on daily start/stop.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 16px 0 8px 0;">
+<strong>Install tier selection and resource compliance (verified):</strong>
+</p>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-menu.png" alt="Deploy tier selection" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 16px 0;">Edge box / AI all-in-one camera / AIoT full-stack all-in-one — pick one tier for your field hardware</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-mini.png" alt="mini verified compliance" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 4px 0;"><strong>Edge box (mini)</strong>: 4 GB box uses only ~2 GB verified—deploy at one point and run intelligence confidently</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-standard.png" alt="standard verified compliance" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 4px 0;"><strong>AI all-in-one camera (standard)</strong>: 16 GB host uses ~10 GB verified—multi-camera network covers floor/campus with headroom</p>
+</div>
+
+<div align="center" style="margin: 12px 0;">
+  <img src=".image/deploy-profile-full.png" alt="full verified compliance" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+  <p style="font-size: 13px; color: #888; margin: 8px 0 16px 0;"><strong>AIoT full-stack all-in-one (full)</strong>: 20 GB all-in-one uses ~14 GB verified—full stack in one box with headroom, ready for production</p>
+</div>
+
 #### 🧠 AI Capabilities
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">

@@ -23,6 +23,7 @@ from app.services.media_dvr_utils import (
 )
 from app.services.media_kafka_service import publish_dvr_dlq
 from app.utils.minio_bucket_policy import ensure_bucket_public_read_write_policy
+from app.utils.service_urls import ensure_shanghai_aware, epoch_to_shanghai_datetime, minio_storage_enabled
 from models import Device, Playback, db
 
 logger = logging.getLogger(__name__)
@@ -94,11 +95,10 @@ def process_dvr_event(event: Dict[str, Any]) -> bool:
         record_time = parsed_record_time
     else:
         try:
-            file_mtime = os.path.getmtime(absolute_file_path)
-            record_time = datetime.fromtimestamp(file_mtime)
+            record_time = epoch_to_shanghai_datetime(os.path.getmtime(absolute_file_path))
             date_dir = record_time.strftime('%Y/%m/%d')
         except OSError:
-            record_time = datetime.utcnow()
+            record_time = datetime.now(timezone(timedelta(hours=8)))
             date_dir = record_time.strftime('%Y/%m/%d')
 
     filename = os.path.basename(absolute_file_path)
@@ -106,9 +106,30 @@ def process_dvr_event(event: Dict[str, Any]) -> bool:
     object_name = f'{device_id}/{date_dir}/{filename}'
 
     from models import RecordFile
-    if RecordFile.query.filter_by(device_id=device_id, object_name=object_name).first():
-        _cleanup_local_file(absolute_file_path, device_id)
-        logger.debug('DVR 已存在元数据，跳过上传 object=%s', object_name)
+    existing_rf = RecordFile.query.filter_by(device_id=device_id, object_name=object_name).first()
+    if existing_rf:
+        if minio_storage_enabled():
+            _cleanup_local_file(absolute_file_path, device_id)
+        duration = int(existing_rf.duration or 0) or int(ffprobe_video_duration_seconds(absolute_file_path))
+        file_path_url = (existing_rf.url or '').strip() or absolute_file_path
+        _patch_alert_record(device_id, record_time, duration, file_path_url)
+        logger.debug('DVR 已存在元数据，仍回写告警 record_path object=%s', object_name)
+        return True
+
+    if not minio_storage_enabled():
+        content_type_map = {
+            '.mp4': 'video/mp4', '.flv': 'video/x-flv', '.avi': 'video/x-msvideo',
+            '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.ts': 'video/mp2t',
+        }
+        local_content_type = content_type_map.get(file_ext, 'video/mp4')
+        local_bucket_name = record_space.bucket_name
+        file_path_url = absolute_file_path
+        duration = int(ffprobe_video_duration_seconds(absolute_file_path))
+        _upsert_playback(device, device_id, file_path_url, object_name, record_time, file_size, duration, None)
+        _upsert_record_metadata(record_space, device_id, object_name, local_bucket_name, filename,
+                                file_size, local_content_type, file_path_url, None, duration, record_time)
+        _patch_alert_record(device_id, record_time, duration, file_path_url)
+        logger.info('mini 形态 DVR 保留本地路径 device_id=%s path=%s size=%s', device_id, absolute_file_path, file_size)
         return True
 
     content_type_map = {
@@ -177,8 +198,7 @@ def _upload_thumbnail(minio_client, bucket_name, device_id, date_dir, filename, 
 def _upsert_playback(device, device_id, file_path_url, object_name, record_time, file_size, duration, thumbnail_path):
     try:
         shanghai_tz = timezone(timedelta(hours=8))
-        if getattr(record_time, 'tzinfo', None) is None:
-            record_time = record_time.replace(tzinfo=shanghai_tz)
+        record_time = ensure_shanghai_aware(record_time)
         existing = Playback.query.filter_by(file_path=file_path_url, device_id=device_id).first()
         if not existing:
             existing = Playback.query.filter_by(file_path=object_name, device_id=device_id).first()
@@ -237,6 +257,8 @@ def _upsert_record_metadata(record_space, device_id, object_name, bucket_name, f
 def _patch_alert_record(device_id, record_time, duration, file_path_url):
     try:
         from app.services.alert_service import patch_alerts_record
+
+        record_time = ensure_shanghai_aware(record_time)
         event_time_str = record_time.strftime('%Y-%m-%d %H:%M:%S')
         patch_alerts_record({
             'event_time': event_time_str,

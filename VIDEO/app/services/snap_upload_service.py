@@ -12,6 +12,7 @@ from app.services.media_dvr_utils import resolve_playback_absolute_path
 from app.services.media_kafka_service import publish_snap_dlq
 from app.services.playback_disk_guard_service import get_snap_staging_dir, remove_playback_file
 from app.utils.minio_bucket_policy import ensure_bucket_public_read_write_policy
+from app.utils.service_urls import minio_storage_enabled
 from models import SnapSpace, db
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,31 @@ def process_snap_event(event: Dict[str, Any]) -> bool:
 
     from models import SnapImage
     if SnapImage.query.filter_by(bucket_name=bucket_name, object_name=object_name).first():
-        remove_playback_file(absolute_path, reason='抓拍已上传')
+        if minio_storage_enabled():
+            remove_playback_file(absolute_path, reason='抓拍已上传')
+        return True
+
+    if not minio_storage_enabled():
+        file_url = absolute_path
+        try:
+            from app.services.space_file_metadata_service import upsert_snap_image
+            captured_at = datetime.utcnow()
+            upsert_snap_image(
+                space_id=snap_space.id,
+                device_id=device_id,
+                object_name=object_name,
+                bucket_name=bucket_name,
+                file_size=file_size,
+                url=file_url,
+                captured_at=captured_at,
+                task_id=event.get('task_id'),
+                source=event.get('source') or 'algorithm',
+            )
+        except Exception as e:
+            logger.error('mini 形态抓拍元数据写入失败 device=%s error=%s', device_id, e, exc_info=True)
+            db.session.rollback()
+            return False
+        logger.info('mini 形态抓拍保留本地路径 device=%s path=%s size=%s', device_id, absolute_path, file_size)
         return True
 
     from app.services.record_space_service import get_minio_client

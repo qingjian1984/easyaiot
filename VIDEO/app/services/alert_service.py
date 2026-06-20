@@ -15,7 +15,14 @@ logger = logging.getLogger('alert')
 LIBRARY_MATCH_EVENTS = frozenset({'face_library_match', 'plate_library_match'})
 
 # 与 iot-sink parseAlertEventTime、算法告警 time 字段一致：东八区墙钟
-SHANGHAI_TZ = timezone(timedelta(hours=8))
+from app.utils.service_urls import (
+    SHANGHAI_TZ,
+    LEGACY_PLAYBACK_TZ_OFFSET_SECONDS,
+    ensure_shanghai_aware,
+    normalize_to_shanghai_naive,
+    parse_alert_time_str,
+    score_playback_for_alert,
+)
 
 
 def is_minio_download_path(path: str) -> bool:
@@ -119,7 +126,29 @@ def _alert_to_dict(alert: Alert) -> dict:
 
     # MinIO 图片下载路径（列表与前端展示优先使用）
     image_url = alert.image_url if hasattr(alert, 'image_url') else ''
+    try:
+        from app.utils.service_urls import (
+            is_local_filesystem_path,
+            minio_storage_enabled,
+            build_alert_image_api_url,
+        )
+        if not minio_storage_enabled() and is_local_filesystem_path(image_url or ''):
+            image_url = build_alert_image_api_url(image_url)
+    except Exception:
+        pass
     result['image_url'] = image_url or ''
+
+    record_path = result.get('record_path') or ''
+    try:
+        from app.utils.service_urls import (
+            is_local_filesystem_path,
+            minio_storage_enabled,
+        )
+        if not minio_storage_enabled() and is_local_filesystem_path(record_path):
+            from urllib.parse import quote
+            result['record_path'] = f'/video/alert/record?path={quote(record_path, safe="")}'
+    except Exception:
+        pass
 
     business_tags = []
     if hasattr(alert, 'business_tags') and alert.business_tags:
@@ -153,12 +182,10 @@ def _alert_to_dict(alert: Alert) -> dict:
 
 def _get_alert_filter_query(args: dict) -> Query:
     """构建报警查询过滤器"""
-    # 仅返回已写入 MinIO 地址的记录（image_url 非空，record_path 非空）
+    # 仅返回告警图已上传 MinIO 的记录；抓拍任务无 DVR，不要求 record_path
     query: Query = Alert.query.filter(
         Alert.image_url.isnot(None),
         db.func.trim(Alert.image_url) != '',
-        Alert.record_path.isnot(None),
-        db.func.trim(Alert.record_path) != ''
     )
 
     if 'object' in args and args['object']:
@@ -258,7 +285,7 @@ def _get_alert_filter_query(args: dict) -> Query:
 
 
 def get_alert_list(args: dict) -> dict:
-    """获取报警列表（仅返回 image_url、record_path 均已写入 MinIO 的记录）
+    """获取报警列表（仅返回 image_url 已写入 MinIO 的记录；record_path 可选）
 
     Args:
         args: 查询参数字典，支持以下参数：
@@ -283,6 +310,7 @@ def get_alert_list(args: dict) -> dict:
             page_no = int(args.get('pageNo') or 1)
             page_size = int(args['pageSize'])
             paginate = query.paginate(page=page_no, per_page=page_size, error_out=False)
+            backfill_alert_records_for_list(paginate.items)
             return {
                 'alert_list': [_alert_to_dict(alert) for alert in paginate.items],
                 'total': paginate.total
@@ -292,6 +320,7 @@ def get_alert_list(args: dict) -> dict:
             return {'alert_list': [], 'total': 0}
     else:
         alerts = query.all()
+        backfill_alert_records_for_list(alerts)
         return {
             'alert_list': [_alert_to_dict(alert) for alert in alerts],
             'total': len(alerts)
@@ -326,7 +355,7 @@ def get_correlation_events(correlation_id: str) -> dict:
 
 
 def get_alert_count(args: dict) -> dict:
-    """获取报警统计（与列表一致：仅统计 image_url、record_path 均已写入 MinIO 的记录，筛选条件同 get_alert_list）"""
+    """获取报警统计（与列表一致：仅统计 image_url 已写入 MinIO 的记录，筛选条件同 get_alert_list）"""
     query = _get_alert_filter_query(args)
 
     if 'group' in args and args['group']:
@@ -396,14 +425,16 @@ def create_alert(alert_data: dict) -> dict:
             if field not in alert_data or not alert_data[field]:
                 raise ValueError(f'必填字段 {field} 不能为空')
         
-        # 处理时间字段
+        # 处理时间字段（东八区墙钟，与 patch_alerts_record / on_dvr 一致）
         if 'time' in alert_data and alert_data['time']:
             if isinstance(alert_data['time'], str):
-                alert_time = datetime.strptime(alert_data['time'], '%Y-%m-%d %H:%M:%S')
+                alert_time = datetime.strptime(alert_data['time'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=SHANGHAI_TZ)
+            elif getattr(alert_data['time'], 'tzinfo', None) is None:
+                alert_time = alert_data['time'].replace(tzinfo=SHANGHAI_TZ)
             else:
-                alert_time = alert_data['time']
+                alert_time = alert_data['time'].astimezone(SHANGHAI_TZ)
         else:
-            alert_time = datetime.now()
+            alert_time = datetime.now(SHANGHAI_TZ)
         
         # 处理 information 字段（如果是字典则转换为JSON字符串）
         information = alert_data.get('information')
@@ -506,7 +537,17 @@ def create_alert(alert_data: dict) -> dict:
         
         db.session.add(alert)
         db.session.commit()
-        
+
+        if not (alert.record_path or '').strip() and task_type != 'snap':
+            try:
+                try_backfill_alert_record_from_playback(alert)
+            except Exception as backfill_err:
+                logger.debug(
+                    'Playback 回填 record_path 跳过 alert_id=%s: %s',
+                    alert.id,
+                    backfill_err,
+                )
+
         return _alert_to_dict(alert)
     except ValueError as e:
         logger.error(f'创建报警记录参数错误: {str(e)}')
@@ -518,37 +559,128 @@ def create_alert(alert_data: dict) -> dict:
         raise
 
 
-def patch_alerts_record(dvr_info: dict):
-    """更新报警记录的录像路径（仅写入 MinIO 下载地址，禁止宿主机本地路径）。
+def _normalize_to_shanghai_naive(value):
+    return normalize_to_shanghai_naive(value)
 
-    与 door-god on_dvr 一致：file_path 为
-    ``/api/v1/buckets/{bucket}/objects/download?prefix=...``，非 ``/data/playbacks/...``。
+
+def find_playback_for_alert(device_id: str, alert_time, time_range: int = 300):
+    """查找与告警时间最匹配的 Playback 记录。"""
+    from models import Playback
+
+    alert_sh = ensure_shanghai_aware(alert_time)
+    extended_range = max(time_range + 120, 300) + LEGACY_PLAYBACK_TZ_OFFSET_SECONDS
+    start_time = alert_sh - timedelta(seconds=extended_range)
+    end_time = alert_sh + timedelta(seconds=extended_range)
+
+    candidates = Playback.query.filter(
+        Playback.device_id == device_id,
+        Playback.event_time >= start_time,
+        Playback.event_time <= end_time,
+    ).all()
+
+    matched = []
+    for playback in candidates:
+        score = score_playback_for_alert(playback, alert_time, time_range)
+        if score is not None:
+            matched.append((playback, score))
+
+    if matched:
+        matched.sort(key=lambda x: x[1])
+        return matched[0][0]
+    return None
+
+
+def _find_playback_for_alert(device_id: str, alert_time, time_range: int = 300):
+    return find_playback_for_alert(device_id, alert_time, time_range)
+
+
+def backfill_alert_records_for_list(alerts) -> None:
+    """列表展示前为缺失 record_path 的实时告警尝试回填。"""
+    for alert in alerts:
+        if (alert.record_path or '').strip() or alert.task_type == 'snap':
+            continue
+        try:
+            try_backfill_alert_record_from_playback(alert)
+        except Exception as exc:
+            logger.debug('列表回填 record_path 跳过 alert_id=%s: %s', alert.id, exc)
+
+
+def try_backfill_alert_record_from_playback(alert: Alert) -> bool:
+    """告警落库后从 Playback 回填 record_path（DVR 已落盘但 patch 尚未命中时使用）。"""
+    if (alert.record_path or '').strip():
+        return False
+    if alert.task_type == 'snap':
+        return False
+
+    playback = _find_playback_for_alert(alert.device_id, alert.time)
+    if not playback or not (playback.file_path or '').strip():
+        return False
+
+    file_path = playback.file_path.strip()
+    is_mini = False
+    try:
+        from app.utils.service_urls import is_mini_deploy_profile
+
+        is_mini = is_mini_deploy_profile()
+    except Exception:
+        is_mini = False
+
+    if not is_minio_download_path(file_path) and not is_mini:
+        return False
+
+    alert.record_path = file_path
+    db.session.commit()
+    logger.info('告警 %s 已从 Playback 回填 record_path: %s', alert.id, file_path[:120])
+    return True
+
+
+def patch_alerts_record(dvr_info: dict):
+    """更新报警记录的录像路径。
+
+    - 标准/完整形态：仅写入 MinIO 下载地址（禁止宿主机本地路径）。
+      与 door-god on_dvr 一致：file_path 为
+      ``/api/v1/buckets/{bucket}/objects/download?prefix=...``，非 ``/data/playbacks/...``。
+    - mini 形态：不部署 MinIO，允许将本地录像路径直接写入 record_path（如 ``/data/playbacks/...``）。
 
     Args:
         dvr_info: DVR信息字典，包含以下字段：
             - event_time: 事件时间，格式：'YYYY-MM-DD HH:MM:SS'
             - duration: 持续时间（秒）
             - device_id: 设备ID
-            - file_path: MinIO 录像下载 API 路径
+            - file_path: 录像路径（MinIO 下载 API 或本地路径，取决于部署形态）
     """
     try:
         file_path = (dvr_info.get('file_path') or '').strip()
-        if not is_minio_download_path(file_path):
+
+        # 非 mini 形态严格要求 MinIO 下载地址；mini 形态允许本地路径
+        is_mini = False
+        try:
+            from app.utils.service_urls import is_mini_deploy_profile
+
+            is_mini = is_mini_deploy_profile()
+        except Exception:
+            is_mini = False
+
+        if not is_minio_download_path(file_path) and not is_mini:
             logger.warning(
                 '跳过回写告警 record_path：非 MinIO 下载地址 file_path=%s device_id=%s',
-                file_path, dvr_info.get('device_id'),
+                file_path,
+                dvr_info.get('device_id'),
             )
             return
 
         begin_time = datetime.strptime(dvr_info['event_time'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=SHANGHAI_TZ)
-        end_time = begin_time + timedelta(seconds=int(dvr_info.get('duration') or 1))
+        duration = int(dvr_info.get('duration') or 1)
+        # 兼容 event_time 为片段结束时刻（mtime）的旧数据：向前扩展一个 duration
+        legacy_start = begin_time - timedelta(seconds=duration)
+        end_time = begin_time + timedelta(seconds=duration)
         device_id = dvr_info['device_id']
 
         alerts = Alert.query.filter(
-            Alert.time >= begin_time,
+            Alert.time >= legacy_start,
             Alert.time <= end_time,
             Alert.device_id == device_id,
-            Alert.record_path.is_(None)
+            db.or_(Alert.record_path.is_(None), db.func.trim(Alert.record_path) == ''),
         ).all()
 
         if alerts:

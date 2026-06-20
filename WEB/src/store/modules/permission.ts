@@ -17,6 +17,7 @@ import {filter} from '@/utils/helper/treeHelper'
 import projectSetting from '@/settings/projectSetting'
 import {PageEnum} from '@/enums/pageEnum'
 import {PermissionModeEnum} from '@/enums/appEnum'
+import {isMenuHiddenByDeployProfile} from '@/utils/deployProfile'
 
 interface PermissionState {
   // Permission code list
@@ -130,6 +131,20 @@ export const usePermissionStore = defineStore('app-permission', {
         return !ignoreRoute
       }
 
+      /** 按部署形态裁剪后端菜单/路由（mini、standard 隐藏 IoT 平台未部署模块） */
+      const filterRoutesByDeployProfile = (routes: AppRouteRecordRaw[]): AppRouteRecordRaw[] => {
+        return routes
+          .filter(route => !isMenuHiddenByDeployProfile(route.name))
+          .map((route) => {
+            if (!route.children?.length)
+              return route
+            return {
+              ...route,
+              children: filterRoutesByDeployProfile(route.children),
+            }
+          })
+      }
+
       /**
        * @description 根据设置的首页path，修正routes中的affix标记（固定首页）
        */
@@ -217,6 +232,7 @@ export const usePermissionStore = defineStore('app-permission', {
             console.error(error)
             console.error(error)
           }
+          routeList = filterRoutesByDeployProfile(routeList)
           // Dynamically introduce components
           // 动态引入组件
           routeList = transformObjToRoute(routeList)

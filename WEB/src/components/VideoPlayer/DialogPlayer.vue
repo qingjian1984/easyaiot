@@ -11,9 +11,25 @@
     <div class="ant-modal-content">
       <div class="ant-modal-body" style="padding: 0px;">
         <div style="min-height: 200px; max-height: 680px;">
-          <!-- 播放器 -->
-          <div style="height: 420px">
-            <Jessibuca ref="jessibuca" :playUrl="state.currentUrl" :hasAudio="false"/>
+          <!-- 播放器：有 URL 再挂载，避免 destroyOnClose + 快速二次 openModal 时 vodMode/playUrl 竞态 -->
+          <div class="player-stage">
+            <Jessibuca
+              v-if="state.currentUrl"
+              :key="`${playerKey}-${state.currentUrl}`"
+              ref="jessibuca"
+              :playUrl="state.currentUrl"
+              :hasAudio="false"
+              :vodMode="state.vodMode"
+            />
+            <div v-else-if="state.playLoading" class="player-stage__loading">
+              <div class="ant-spin ant-spin-lg">
+                <span class="ant-spin-dot ant-spin-dot-spin">
+                  <i class="ant-spin-dot-item"></i><i class="ant-spin-dot-item"></i>
+                  <i class="ant-spin-dot-item"></i><i class="ant-spin-dot-item"></i>
+                </span>
+              </div>
+              <div class="player-stage__loading-text">录像加载中...</div>
+            </div>
           </div>
           <!-- 控制台 -->
           <div class="tabs">
@@ -99,7 +115,7 @@
 import {useModalInner} from "@/components/Modal";
 import BasicModal from "@/components/Modal/src/BasicModal.vue";
 
-import {reactive, ref} from "vue";
+import {nextTick, reactive, ref} from "vue";
 import {Select, TabPane, Tabs} from 'ant-design-vue';
 import Jessibuca from "@/components/Player/module/jessibuca.vue";
 import Ptz from "@/components/Player/module/ptz.vue";
@@ -109,10 +125,12 @@ import {controlPTZ} from "@/api/device/camera";
 import {controlGbPtz, playByDeviceAndChannel} from "@/api/device/gb28181";
 import { getGb28181PlayIds, shouldPlayViaGb28181 } from '@/views/camera/utils/deviceLabel';
 import { pickWvpPlayUrl } from '@/views/camera/utils/devicePlay';
+import { isVodPlaybackUrl } from '@/utils/alertRecord';
 
 const {createMessage} = useMessage()
 
 let jessibuca = ref()
+const playerKey = ref(0)
 //state.videoUrl
 const state = reactive({
   video: 'http://lndxyj.iqilu.com/public/upload/2019/10/14/8c001ea0c09cdc59a57829dabc8010fa.mp4',
@@ -133,6 +151,7 @@ const state = reactive({
   deviceId: '',
   activeKey: 'info',
   playLoading: false,
+  vodMode: false,
   playerOptions: {
     aspectRatio: '16:5',
     controls: true,
@@ -143,10 +162,6 @@ const state = reactive({
 })
 
 const [register, {closeModal}] = useModalInner(async (record) => {
-  state.currentUrl = '';
-  state.iframeUrl = '';
-  state.playLoading = false;
-
   const gbIds = getGb28181PlayIds(record);
   const sipDeviceId = gbIds?.sipDeviceId ?? '';
   const channelId = gbIds?.channelId ?? '';
@@ -157,16 +172,21 @@ const [register, {closeModal}] = useModalInner(async (record) => {
 
   // 国标通道：一律走 WVP 点播（忽略同步到 device 表的占位 http_stream）
   if (gbRecord) {
+    state.currentUrl = '';
+    state.iframeUrl = '';
+    state.vodMode = false;
     state.playLoading = true;
     try {
       const res = await playByDeviceAndChannel(sipDeviceId, channelId);
       const streamContent = res?.data?.data ?? res?.data;
       const url = pickWvpPlayUrl(streamContent) || '';
       if (url) {
+        state.vodMode = false;
         state.currentUrl = url;
         state.iframeUrl = '<iframe src="' + url + '"></iframe>';
         state.videoUrlList = [{ label: 'flv', value: url }];
         state.mediaType = url;
+        playerKey.value += 1;
       } else {
         createMessage.error(streamContent?.msg || res?.data?.msg || '未获取到播放地址');
       }
@@ -180,13 +200,30 @@ const [register, {closeModal}] = useModalInner(async (record) => {
     return;
   }
 
-  // 已有播放地址（如摄像头等）
+  // 已有播放地址（如摄像头、告警录像等）
   state.deviceId = record['id'];
-  state.currentUrl = record['http_stream'] ?? '';
-  state.iframeUrl = record['http_stream'] ? '<iframe src="' + record['http_stream'] + '"></iframe>' : '';
-  state.videoUrlList = record['http_stream']
-    ? [{ label: 'http_stream', value: record['http_stream'] }]
+  const streamUrl = String(record['http_stream'] ?? '').trim();
+
+  // 告警录像解析中：仅展示加载占位，不挂载 Jessibuca
+  if (!streamUrl && record['_pendingRecord']) {
+    state.currentUrl = '';
+    state.iframeUrl = '';
+    state.vodMode = false;
+    state.playLoading = true;
+    return;
+  }
+
+  state.playLoading = false;
+  state.vodMode = isVodPlaybackUrl(streamUrl);
+  await nextTick();
+  state.currentUrl = streamUrl;
+  state.iframeUrl = streamUrl ? '<iframe src="' + streamUrl + '"></iframe>' : '';
+  state.videoUrlList = streamUrl
+    ? [{ label: state.vodMode ? 'record' : 'http_stream', value: streamUrl }]
     : [{ label: 'flv', value: '1' }];
+  if (streamUrl) {
+    playerKey.value += 1;
+  }
 });
 
 const handleChange = (value: string) => {
@@ -239,11 +276,33 @@ const handlePtzCamera = async (command: string, speed: number) => {
 
 function handleCancel() {
   state.currentUrl = '';
+  state.playLoading = false;
   closeModal();
 }
 </script>
 
 <style>
+.player-stage {
+  height: 420px;
+  position: relative;
+  background: #000c17;
+}
+
+.player-stage__loading {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #fff;
+}
+
+.player-stage__loading-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
 .ant-modal-content {
 
   .ant-modal-body {

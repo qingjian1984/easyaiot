@@ -169,7 +169,7 @@
                 <Jessibuca
                   :key="`player-${i - 1}-${state.playCells[i - 1]!.deviceId}`"
                   :ref="(el) => setPlayerRef(el, i - 1)"
-                  :play-url="state.playCells[i - 1]!.url"
+                  :playUrl="state.playCells[i - 1]!.url"
                   :hasAudio="false"
                   @stream-error="handleCellStreamError(i - 1)"
                 />

@@ -9,7 +9,8 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-JAVA_BACKEND_URL = os.getenv('JAVA_BACKEND_URL', 'http://localhost:48080').rstrip('/')
+from app.utils.node_client import JAVA_BACKEND_URL
+
 MEDIA_API_BASE = f'{JAVA_BACKEND_URL}/admin-api/node/media'
 REQUEST_TIMEOUT = 30
 

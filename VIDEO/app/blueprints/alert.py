@@ -19,6 +19,7 @@ from app.services.alert_service import (
     clear_alerts_by_task_name,
     get_correlation_events,
 )
+from app.utils.service_urls import parse_alert_time_str, normalize_to_shanghai_naive
 from app.services.alert_hook_service import process_alert_hook
 
 # 创建Alert蓝图
@@ -29,6 +30,14 @@ logger = logging.getLogger(__name__)
 _query_cache = {}
 _cache_lock = Lock()
 _cache_ttl = 5  # 缓存有效期5秒
+
+
+def _parse_alert_time_str(alert_time_str: str):
+    return parse_alert_time_str(alert_time_str)
+
+
+def _to_shanghai_naive(value):
+    return normalize_to_shanghai_naive(value)
 
 
 def api_response(code=200, message="success", data=None):
@@ -184,20 +193,38 @@ def get_alert_image():
 
 @alert_bp.route('/record')
 def get_alert_record():
-    """获取报警录像"""
+    """获取报警录像（支持本地文件 Range 请求）"""
     try:
-        path = request.args.get('path')
+        from urllib.parse import unquote
+
+        from app.services.media_dvr_utils import resolve_playback_absolute_path
+
+        path = unquote((request.args.get('path') or '').strip())
         if not path:
-            return api_response(400, '路径参数不能为空')
-        
-        file_path = Path(path)
-        if not file_path.exists():
-            return api_response(400, f'文件不存在: {path}')
-        
-        return send_file(str(file_path))
+            return jsonify({'code': 400, 'message': '路径参数不能为空', 'data': None}), 400
+
+        file_path = resolve_playback_absolute_path(path)
+        if not file_path or not Path(file_path).exists():
+            logger.warning('告警录像不存在 path=%s resolved=%s', path, file_path)
+            return jsonify({'code': 404, 'message': f'文件不存在: {path}', 'data': None}), 404
+
+        ext = Path(file_path).suffix.lower()
+        mimetype_map = {
+            '.flv': 'video/x-flv',
+            '.mp4': 'video/mp4',
+            '.ts': 'video/mp2t',
+            '.mkv': 'video/x-matroska',
+        }
+        mimetype = mimetype_map.get(ext, 'application/octet-stream')
+        return send_file(
+            str(file_path),
+            mimetype=mimetype,
+            conditional=True,
+            as_attachment=False,
+        )
     except Exception as e:
         logger.error(f'获取报警录像失败: {str(e)}')
-        return api_response(500, f'获取失败: {str(e)}')
+        return jsonify({'code': 500, 'message': f'获取失败: {str(e)}', 'data': None}), 500
 
 
 @alert_bp.route('/hook', methods=['POST'])
@@ -237,19 +264,33 @@ def query_alert_record():
         alert_id = request.args.get('alert_id')
         time_range = int(request.args.get('time_range', 300))  # 默认前后300秒（5分钟）
 
-        # 已回写 MinIO 路径时直接返回（on_dvr -> patch_alerts_record）
+        # 已回写 record_path 时直接返回（on_dvr -> patch_alerts_record）
         if alert_id:
             try:
+                from urllib.parse import quote
+
                 from models import Alert
-                alert_row = Alert.query.get(int(alert_id))
                 from app.services.alert_service import is_minio_download_path
-                if alert_row and alert_row.record_path and is_minio_download_path(alert_row.record_path):
-                    return api_response(200, 'success', {
-                        'video_url': alert_row.record_path,
-                        'file_path': alert_row.record_path,
-                        'device_id': alert_row.device_id,
-                        'source': 'alert_record_path',
-                    })
+                from app.utils.service_urls import is_local_filesystem_path, minio_storage_enabled
+
+                alert_row = Alert.query.get(int(alert_id))
+                record_path = (alert_row.record_path or '').strip() if alert_row else ''
+                if record_path:
+                    if is_minio_download_path(record_path):
+                        return api_response(200, 'success', {
+                            'video_url': record_path,
+                            'file_path': record_path,
+                            'device_id': alert_row.device_id,
+                            'source': 'alert_record_path',
+                        })
+                    if not minio_storage_enabled() and is_local_filesystem_path(record_path):
+                        api_path = f'/video/alert/record?path={quote(record_path, safe="")}'
+                        return api_response(200, 'success', {
+                            'video_url': api_path,
+                            'file_path': record_path,
+                            'device_id': alert_row.device_id,
+                            'source': 'alert_record_path',
+                        })
             except (TypeError, ValueError):
                 pass
         
@@ -296,94 +337,34 @@ def query_alert_record():
 
 def _do_query_alert_record(device_id, alert_time_str, time_range):
     """执行实际的查询逻辑"""
+    from app.services.alert_service import find_playback_for_alert
+
     alert_time_aware, err = _parse_alert_time_str(alert_time_str)
     if err:
         return api_response(400, err)
-    alert_time = _to_shanghai_naive(alert_time_aware)
 
-    # 扩大 SQL 检索范围（含 SRS 30s 分片落盘延迟）
-    extended_range = max(time_range + 120, 300)
-    start_time = alert_time_aware - timedelta(seconds=extended_range)
-    end_time = alert_time_aware + timedelta(seconds=extended_range)
+    playback = find_playback_for_alert(device_id, alert_time_aware, time_range)
+    if not playback:
+        logger.debug(
+            '未找到匹配的录像 device_id=%s, alert_time=%s, time_range=%s',
+            device_id, alert_time_str, time_range,
+        )
+        return jsonify({
+            "code": 400,
+            "message": f'该设备在告警时间前后{time_range}秒内暂无录像记录，请稍后再试',
+            "data": None
+        }), 200
 
-    from models import Playback
-    candidate_playbacks = Playback.query.filter(
-        Playback.device_id == device_id,
-        Playback.event_time >= start_time,
-        Playback.event_time <= end_time
-    ).all()
-
-    matched_playbacks = []
-    for playback in candidate_playbacks:
-        seg_start = _to_shanghai_naive(playback.event_time)
-        duration = int(playback.duration or 0) or 1
-        seg_end = seg_start + timedelta(seconds=duration)
-        # 兼容旧数据：event_time 曾为文件 mtime（片段结束时刻）
-        legacy_start = seg_start - timedelta(seconds=duration)
-
-        if legacy_start <= alert_time <= seg_end:
-            matched_playbacks.append((playback, 0))
-            continue
-
-        center = seg_start + timedelta(seconds=duration / 2)
-        time_diff = abs((center - alert_time).total_seconds())
-        if time_diff <= time_range:
-            matched_playbacks.append((playback, time_diff))
-
-    if matched_playbacks:
-        matched_playbacks.sort(key=lambda x: x[1])
-        playbacks = [p[0] for p in matched_playbacks]
-    elif candidate_playbacks:
-        # 有候选但未严格命中：取 event_time 最接近告警的一条（刚落盘/时区边界）
-        def _center_diff(pb):
-            s = _to_shanghai_naive(pb.event_time)
-            d = int(pb.duration or 0) or 1
-            c = s + timedelta(seconds=d / 2)
-            return abs((c - alert_time).total_seconds())
-
-        candidate_playbacks.sort(key=_center_diff)
-        playbacks = [candidate_playbacks[0]]
-    else:
-        playbacks = []
-
-    if not playbacks:
-        # 使用debug级别避免重复警告日志
-        logger.debug(f'未找到匹配的录像 device_id={device_id}, alert_time={alert_time_str}, time_range={time_range}, candidate_count={len(candidate_playbacks)}')
-        # 返回友好的提示信息，使用200状态码但code字段表示业务错误（400表示业务错误）
-        if len(candidate_playbacks) == 0:
-            return jsonify({
-                "code": 400,
-                "message": f'该设备在告警时间前后{time_range}秒内暂无录像记录，请稍后再试',
-                "data": None
-            }), 200
-        else:
-            return jsonify({
-                "code": 400,
-                "message": f'未找到告警时间点对应的录像，建议扩大时间范围查询',
-                "data": None
-            }), 200
-    
-    # 取最接近告警时间的录像
-    playback = playbacks[0]
-    
-    # 直接返回数据库中的录像地址，不检查文件是否存在
-    # 前台会自己去下载播放
     file_path = playback.file_path
-    video_url = file_path
-    
-    # 如果file_path是MinIO API路径格式（/api/v1/buckets/...），直接返回
-    # 如果file_path是完整URL（http://或https://），直接返回
-    # 如果file_path是本地路径，也直接返回，由前台处理
-    # 不再检查文件是否存在，直接返回数据库中的地址
-    
     return api_response(200, 'success', {
         'playback_id': playback.id,
-        'file_path': playback.file_path,
-        'video_url': video_url,
+        'file_path': file_path,
+        'video_url': file_path,
         'event_time': playback.event_time.isoformat() if playback.event_time else None,
         'duration': playback.duration,
         'device_id': playback.device_id,
-        'device_name': playback.device_name
+        'device_name': playback.device_name,
+        'source': 'playback_match',
     })
 
 

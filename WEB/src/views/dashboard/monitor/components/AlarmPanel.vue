@@ -57,6 +57,7 @@
 
 <script lang="ts" setup>
 import { Icon } from '@/components/Icon'
+import { resolveAlertImageDisplayUrl } from '@/utils/alertMinioImage'
 
 defineOptions({
   name: 'AlarmPanel'
@@ -146,30 +147,13 @@ const getTaskTypeClass = (alarm: any): string => {
   }
 }
 
-// 获取图片URL - 优先使用后台返回的 image_url (minio URL)
+// 获取图片展示 URL（与告警列表页一致，兼容 mini 本地路径 /video/alert/image）
 const getImageUrl = (alarm: any): string | null => {
-  // 优先使用 image_url（后台返回的 minio URL）
-  let imageUrl = alarm.image_url || alarm.image
-  
-  if (!imageUrl) return null
-  
-  // 如果是完整URL，直接返回
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-    return imageUrl
-  }
-  
-  // 如果是MinIO路径（以/api/v1/buckets开头），添加前端启动地址前缀
-  if (imageUrl.startsWith('/api/v1/buckets')) {
-    return `${window.location.origin}${imageUrl}`
-  }
-  
-  // 如果是相对路径（以/api开头），添加前端启动地址前缀
-  if (imageUrl.startsWith('/api/')) {
-    return `${window.location.origin}${imageUrl}`
-  }
-  
-  // 其他情况直接返回（后台已经返回完整的 minio URL）
-  return imageUrl
+  if (alarm.image) return alarm.image
+  const raw = alarm.image_url
+  if (!raw) return null
+  const resolved = resolveAlertImageDisplayUrl(raw)
+  return resolved || null
 }
 
 // 处理图片加载错误

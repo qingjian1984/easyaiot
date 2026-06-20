@@ -111,12 +111,12 @@ import DeviceLocationDrawer from '@/views/camera/components/DeviceLocationDrawer
 import { canSetDeviceLocation } from '@/views/camera/utils/deviceLocation';
 import { getDeviceInfo } from '@/api/device/camera';
 import { openDeviceInDialogPlayer } from '@/views/camera/utils/devicePlay';
-import { resolveAlertRecordVideoUrl } from '@/utils/alertRecord';
+import { playAlertRecordInModal } from '@/utils/alertRecordPlayback';
 import { isSnapAlertTask } from '@/views/alert/alertDisplay';
 
 const router = useRouter();
 const [registerImageModal, { openModal: openImageModal }] = useModal();
-const [registerVideoModal, { openModal: openVideoModal }] = useModal();
+const [registerVideoModal, { openModal: openVideoModal, closeModal: closeVideoModal }] = useModal();
 const [registerLocationDrawer, { openModal: openLocationModal }] = useModal();
 
 defineOptions({ name: 'Alarm' });
@@ -314,18 +314,16 @@ const handleViewVideo = async (record) => {
   }
 
   try {
-    const videoUrl = await resolveAlertRecordVideoUrl({
-      id: record['id'],
-      device_id: record['device_id'],
-      time: record['time'],
-      record_path: record['record_path'],
-    });
-    if (videoUrl) {
-      await nextTick();
-      openVideoModal(true, {
-        id: record['device_id'],
-        http_stream: videoUrl,
-      });
+    const ok = await playAlertRecordInModal(
+      { openModal: openVideoModal, closeModal: closeVideoModal },
+      {
+        id: record['id'],
+        device_id: record['device_id'],
+        time: record['time'],
+        record_path: record['record_path'],
+      },
+    );
+    if (ok) {
       lastVideoErrorTime = 0;
       lastVideoErrorMsg = '';
     } else {

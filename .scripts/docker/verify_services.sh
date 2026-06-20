@@ -22,6 +22,10 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# shellcheck source=deploy_profile.sh
+source "${SCRIPT_DIR}/deploy_profile.sh"
+ensure_deploy_profile
+
 # 统计变量
 TOTAL_SERVICES=0
 RUNNING_SERVICES=0
@@ -207,16 +211,28 @@ verify_service "Redis" "redis-server" "6379" \
     "docker exec redis-server redis-cli -a 'basiclab@iot975248395' ping | grep -q PONG"
 
 # Kafka
-verify_service "Kafka" "kafka-server" "9092,9093" \
-    "docker exec kafka-server /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"
+if middleware_service_enabled "Kafka"; then
+    verify_service "Kafka" "kafka-server" "9092,9093" \
+        "docker exec kafka-server /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"
+else
+    print_info "Kafka 未启用（当前部署形态），跳过验证"
+fi
 
 # MinIO
-verify_service "MinIO" "minio-server" "9000,9001" \
-    "curl -f http://127.0.0.1:9000/minio/health/live > /dev/null 2>&1"
+if middleware_service_enabled "MinIO"; then
+    verify_service "MinIO" "minio-server" "9000,9001" \
+        "curl -f http://127.0.0.1:9000/minio/health/live > /dev/null 2>&1"
+else
+    print_info "MinIO 未启用（当前部署形态），跳过验证"
+fi
 
 # Milvus
-verify_service "Milvus" "milvus-server" "9091,19530" \
-    "curl -f http://127.0.0.1:9091/healthz > /dev/null 2>&1"
+if middleware_service_enabled "Milvus"; then
+    verify_service "Milvus" "milvus-server" "9091,19530" \
+        "curl -f http://127.0.0.1:9091/healthz > /dev/null 2>&1"
+else
+    print_info "Milvus 未启用（当前部署形态），跳过验证"
+fi
 
 # SRS
 verify_service "SRS" "srs-server" "1935,1985,8080" \
@@ -225,14 +241,6 @@ verify_service "SRS" "srs-server" "1935,1985,8080" \
 # NodeRED
 verify_service "NodeRED" "nodered-server" "1880" \
     "curl -f http://127.0.0.1:1880/ > /dev/null 2>&1"
-
-# VSCode（默认不启用）
-if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx 'openvscode-server'; then
-    verify_service "VSCode" "openvscode-server" "10192" \
-        "curl -f http://127.0.0.1:10192/ > /dev/null 2>&1"
-else
-    print_info "VSCode 未启用，跳过验证"
-fi
 
 # EMQX（默认不启用）
 if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx 'emqx-server'; then

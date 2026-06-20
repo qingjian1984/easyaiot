@@ -439,8 +439,8 @@ def _task_has_active_remote_deployments(task: StreamForwardTask) -> bool:
 
 
 def _resolve_video_control_url() -> str:
-    gateway = os.getenv('JAVA_BACKEND_URL', os.getenv('GATEWAY_URL', 'http://localhost:48080')).rstrip('/')
-    return f'{gateway}/admin-api/video'
+    from app.utils.node_client import resolve_java_backend_url
+    return f'{resolve_java_backend_url()}/admin-api/video'
 
 
 def _build_stream_forward_deploy_env(

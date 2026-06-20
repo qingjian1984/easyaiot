@@ -33,7 +33,41 @@ cd "$SCRIPT_DIR"
 
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
+# shellcheck source=deploy_profile.sh
+source "${SCRIPT_DIR}/deploy_profile.sh"
+COMPOSE_PROFILE_ARGS=()
 
+refresh_compose_profile_args() {
+    apply_deploy_profile
+    COMPOSE_PROFILE_ARGS=()
+    local flags
+    flags=$(compose_profile_flags)
+    if [ -n "$flags" ]; then
+        # shellcheck disable=SC2206
+        COMPOSE_PROFILE_ARGS=($flags)
+    fi
+}
+
+prepare_kafka_if_enabled() {
+    if ! middleware_service_enabled "Kafka"; then
+        print_info "当前部署形态未启用 Kafka，跳过 Kafka 目录与 hosts 配置"
+        return 0
+    fi
+    create_kafka_directories
+    configure_kafka_hosts
+}
+
+init_kafka_topics_if_enabled() {
+    if ! middleware_service_enabled "Kafka"; then
+        print_info "当前部署形态未启用 Kafka，跳过 Kafka 主题初始化"
+        return 0
+    fi
+    init_kafka_iot_topics || print_warning "IoT Kafka 主题初始化未完成，可稍后手动执行: init_kafka_iot_topics"
+}
+
+mw_compose() {
+    $COMPOSE_CMD -f "$COMPOSE_FILE" ${COMPOSE_PROFILE_ARGS[@]+"${COMPOSE_PROFILE_ARGS[@]}"} "$@"
+}
 
 # 强制对所有已存在的存储目录做完整递归 chmod/chown（兜底用）。
 # 默认 false：已存在目录只设顶层权限，避免对海量数据文件递归导致卡顿（容器自身写的数据权限本就正确）。
@@ -69,12 +103,11 @@ MIDDLEWARE_SERVICES=(
     "ZLMediaKit"
 )
 
-# 默认不启动（省内存）；需要时设置 EASYAIOT_ENABLE_TDENGINE=1 / EASYAIOT_ENABLE_EMQX=1 / EASYAIOT_ENABLE_VSCODE=1
+# 默认不启动（省内存）；需要时设置 EASYAIOT_ENABLE_TDENGINE=1 / EASYAIOT_ENABLE_EMQX=1
 DISABLED_BY_DEFAULT_MIDDLEWARE_SERVICES=(
     "TDengine"
     "TDengine-init"
     "EMQX"
-    "VSCode"
 )
 
 # 可选中间件：镜像拉取失败时不阻塞其余核心服务启动
@@ -92,7 +125,6 @@ MIDDLEWARE_PORTS["MinIO"]="9000"
 MIDDLEWARE_PORTS["Milvus"]="9091"
 MIDDLEWARE_PORTS["SRS"]="1935"
 MIDDLEWARE_PORTS["NodeRED"]="1880"
-MIDDLEWARE_PORTS["VSCode"]="10192"
 MIDDLEWARE_PORTS["EMQX"]="1883"
 MIDDLEWARE_PORTS["ZLMediaKit"]="6080"
 
@@ -107,7 +139,6 @@ MIDDLEWARE_HEALTH_ENDPOINTS["MinIO"]="/minio/health/live"
 MIDDLEWARE_HEALTH_ENDPOINTS["Milvus"]="/healthz"
 MIDDLEWARE_HEALTH_ENDPOINTS["SRS"]="/api/v1/versions"
 MIDDLEWARE_HEALTH_ENDPOINTS["NodeRED"]="/"
-MIDDLEWARE_HEALTH_ENDPOINTS["VSCode"]="/"
 MIDDLEWARE_HEALTH_ENDPOINTS["EMQX"]="/api/v5/status"
 MIDDLEWARE_HEALTH_ENDPOINTS["ZLMediaKit"]="/index/api/getServerConfig"
 
@@ -1797,18 +1828,6 @@ create_nodered_directories() {
     fi
 }
 
-# 创建并设置 VSCode（OpenVSCode Server）工作区目录权限
-create_vscode_directories() {
-    local vscode_config_dir="${SCRIPT_DIR}/vscode_data/config"
-    local vscode_workspace_dir="${SCRIPT_DIR}/vscode_data/workspaces"
-    print_info "创建 VSCode 后处理工作区目录并设置权限..."
-    if set_data_dir_perms "1000:1000" "$vscode_config_dir" "$vscode_workspace_dir"; then
-        print_success "VSCode 工作区目录权限已设置 (UID 1000:1000, 777)"
-    else
-        print_warning "无法设置 VSCode 目录权限，请手动执行: sudo chmod -R 777 $vscode_config_dir $vscode_workspace_dir"
-    fi
-}
-
 # 创建并设置 PostgreSQL 数据目录权限
 create_postgresql_directories() {
     local postgresql_data_dir="${SCRIPT_DIR}/db_data/data"
@@ -1987,8 +2006,6 @@ create_all_storage_directories() {
         "${SCRIPT_DIR}/srs_data/data:::"              # SRS 数据（使用默认权限）
         "${SCRIPT_DIR}/srs_data/playbacks:::"          # SRS 回放（使用默认权限）
         "${SCRIPT_DIR}/nodered_data/data:1000:1000:777" # NodeRED 数据
-        "${SCRIPT_DIR}/vscode_data/config:1000:1000:777"    # VSCode 配置
-        "${SCRIPT_DIR}/vscode_data/workspaces:1000:1000:777" # VSCode 后处理工作区
         "${SCRIPT_DIR}/../zlmediakit/www:::"         # ZLMediaKit Web 目录（使用默认权限）
         "${SCRIPT_DIR}/../zlmediakit/log:::"         # ZLMediaKit 日志（使用默认权限）
         "${SCRIPT_DIR}/../zlmediakit/conf:::"        # ZLMediaKit 配置（使用默认权限）
@@ -2476,6 +2493,27 @@ ensure_host_data_directory_before_srs() {
     fi
 }
 
+# 按部署形态写入 SRS http_hooks（SRS 使用 host 网络）
+_apply_srs_http_hooks() {
+    local srs_config_file="$1"
+    local gateway_ip="$2"
+    local on_publish_url on_dvr_url
+
+    if is_mini_deploy_profile; then
+        local video_port="${FLASK_RUN_PORT:-6000}"
+        on_publish_url="http://localhost:${video_port}/video/camera/callback/on_publish"
+        on_dvr_url="http://localhost:${video_port}/video/camera/callback/on_dvr"
+        print_info "mini 形态：SRS Hook 直连 VIDEO 服务 ${on_publish_url}（无 Gateway）"
+    else
+        on_publish_url="http://${gateway_ip}:48080/admin-api/video/camera/callback/on_publish"
+        on_dvr_url="http://${gateway_ip}:48080/admin-api/video/camera/callback/on_dvr"
+        print_info "SRS Hook 经 Gateway: http://${gateway_ip}:48080/admin-api/video/camera/callback/*"
+    fi
+
+    sed -i -E "s|on_dvr[[:space:]]+http://[^;]+;|on_dvr              ${on_dvr_url};|g" "$srs_config_file"
+    sed -i -E "s|on_publish[[:space:]]+http://[^;]+;|on_publish          ${on_publish_url};|g" "$srs_config_file"
+}
+
 # 准备 SRS 配置文件
 # 强制更新模式：无论配置文件是否存在，都重新生成并自动替换 IP 地址
 prepare_srs_config() {
@@ -2515,12 +2553,7 @@ prepare_srs_config() {
     if [ -d "$srs_config_source" ] && [ -f "$srs_config_source/docker.conf" ]; then
         print_info "从源目录复制 SRS 配置文件..."
         if cp -f "$srs_config_source/docker.conf" "$srs_config_file" 2>/dev/null; then
-            # 替换配置文件中的 Gateway 地址（48080端口）- 用于访问宿主机上的Gateway服务
-            sed -i -E "s|http://([0-9]{1,3}\.){3}[0-9]{1,3}:48080|http://${gateway_ip}:48080|g" "$srs_config_file"
-            # 替换配置文件中的 VIDEO 地址（6000端口）- 用于访问宿主机上的VIDEO服务
-            sed -i -E "s|http://([0-9]{1,3}\.){3}[0-9]{1,3}:6000|http://${host_ip}:6000|g" "$srs_config_file"
-            print_info "已将配置文件中的 Gateway 地址更新为: $gateway_ip:48080"
-            print_info "已将配置文件中的 VIDEO 地址更新为: $host_ip:6000"
+            _apply_srs_http_hooks "$srs_config_file" "$gateway_ip"
             print_success "SRS 配置文件已复制并更新: $srs_config_source/docker.conf -> $srs_config_file"
             # 验证文件确实存在
             if [ -f "$srs_config_file" ]; then
@@ -2535,6 +2568,15 @@ prepare_srs_config() {
     
     # 如果复制失败或源文件不存在，创建默认配置文件
     print_info "创建默认 SRS 配置文件..."
+    local on_publish_url on_dvr_url
+    if is_mini_deploy_profile; then
+        local video_port="${FLASK_RUN_PORT:-6000}"
+        on_publish_url="http://localhost:${video_port}/video/camera/callback/on_publish"
+        on_dvr_url="http://localhost:${video_port}/video/camera/callback/on_dvr"
+    else
+        on_publish_url="http://${gateway_ip}:48080/admin-api/video/camera/callback/on_publish"
+        on_dvr_url="http://${gateway_ip}:48080/admin-api/video/camera/callback/on_dvr"
+    fi
     cat > "$srs_config_file" << EOF
 # SRS Docker 配置文件
 # 用于 Docker 容器部署的 SRS 配置
@@ -2587,8 +2629,8 @@ vhost __defaultVhost__ {
     }
     http_hooks {
         enabled             on;
-        on_dvr              http://${gateway_ip}:48080/admin-api/video/camera/callback/on_dvr;
-        on_publish          http://${gateway_ip}:48080/admin-api/video/camera/callback/on_publish;
+        on_dvr              ${on_dvr_url};
+        on_publish          ${on_publish_url};
     }
 }
 EOF
@@ -2596,7 +2638,11 @@ EOF
     # 验证文件是否创建成功
     if [ -f "$srs_config_file" ]; then
         print_success "默认 SRS 配置文件已创建: $srs_config_file"
-        print_info "  - Gateway 回调地址: http://${gateway_ip}:48080/admin-api/video/camera/callback/*"
+        if is_mini_deploy_profile; then
+            print_info "  - VIDEO 回调地址: ${on_publish_url}"
+        else
+            print_info "  - Gateway 回调地址: http://${gateway_ip}:48080/admin-api/video/camera/callback/*"
+        fi
         return 0
     else
         print_error "无法创建 SRS 配置文件: $srs_config_file"
@@ -3652,6 +3698,11 @@ execute_sql_script() {
 
 # 初始化 MinIO 存储桶和数据（统一走 Docker mc，不依赖宿主机 Python/minio 包）
 init_minio() {
+    if ! middleware_service_enabled "MinIO"; then
+        print_info "MinIO 未启用（当前部署形态: ${EASYAIOT_DEPLOY_PROFILE:-full}），跳过 MinIO 初始化"
+        return 0
+    fi
+
     print_section "初始化 MinIO 存储桶和数据"
 
     local init_result=0
@@ -3676,9 +3727,13 @@ init_databases() {
         return 1
     fi
     
-    # 等待 Nacos 就绪
-    if ! wait_for_nacos; then
-        print_warning "Nacos 未就绪，将跳过 Nacos 密码重置确认步骤"
+    # 等待 Nacos 就绪（mini 形态跳过 Nacos）
+    if middleware_service_enabled Nacos; then
+        if ! wait_for_nacos; then
+            print_warning "Nacos 未就绪，将跳过 Nacos 密码重置确认步骤"
+        fi
+    else
+        print_info "当前部署形态 (${EASYAIOT_DEPLOY_PROFILE}) 跳过 Nacos，不等待注册中心"
     fi
     
     # 数据库清单按命名规约自动发现：<名字>10.sql -> 库 <名字>20
@@ -3724,7 +3779,7 @@ init_databases() {
     # Nacos 账号配置：先自动初始化 admin（新库无内置账号），再用 API 实测登录验证；
     # 全部通过则零人工介入。仅当验证失败（已有 admin 但密码与预期不一致）才回退人工确认。
     echo ""
-    if wait_for_nacos; then
+    if middleware_service_enabled Nacos && wait_for_nacos; then
         ensure_nacos_admin_user
         if curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/auth/login" \
             --data-urlencode "username=nacos" --data-urlencode "password=${NACOS_INIT_PASSWORD}" 2>/dev/null \
@@ -3773,7 +3828,7 @@ init_databases() {
 # 从 docker-compose 配置中提取指定服务的镜像名
 _get_service_image_from_compose() {
     local service_name="$1"
-    $COMPOSE_CMD -f "$COMPOSE_FILE" config 2>/dev/null | awk -v svc="$service_name" '
+    mw_compose config 2>/dev/null | awk -v svc="$service_name" '
         $0 ~ "^  " svc ":" { found=1 }
         found && /^\s+image:/ {
             gsub(/^\s+image:\s*/, "")
@@ -3802,7 +3857,7 @@ compose_up_middleware() {
         if [ "$should_skip" -eq 0 ]; then
             up_services+=("$svc")
         fi
-    done < <($COMPOSE_CMD -f "$COMPOSE_FILE" config --services 2>/dev/null)
+    done < <(mw_compose config --services 2>/dev/null)
 
     if [ ${#up_services[@]} -eq 0 ]; then
         print_error "没有可启动的中间件服务"
@@ -3812,8 +3867,8 @@ compose_up_middleware() {
     if [ ${#skip_services[@]} -gt 0 ]; then
         print_warning "以下服务已跳过: ${skip_services[*]}"
     fi
-    print_info "启动服务: ${up_services[*]}"
-    $COMPOSE_CMD -f "$COMPOSE_FILE" up -d "${up_services[@]}" 2>&1 | tee -a "$LOG_FILE"
+    print_info "启动服务 (${EASYAIOT_DEPLOY_PROFILE:-full}): ${up_services[*]}"
+    mw_compose up -d "${up_services[@]}" 2>&1 | tee -a "$LOG_FILE"
     return "${PIPESTATUS[0]}"
 }
 
@@ -3829,9 +3884,6 @@ collect_skippable_optional_services() {
             EMQX)
                 [ "${EASYAIOT_ENABLE_EMQX:-0}" = "1" ] && continue
                 ;;
-            VSCode)
-                [ "${EASYAIOT_ENABLE_VSCODE:-0}" = "1" ] && continue
-                ;;
         esac
         skip_services+=("$svc")
     done
@@ -3842,6 +3894,10 @@ collect_skippable_optional_services() {
             skip_services+=("$svc")
         fi
     done
+    local profile_skip
+    for profile_skip in $(middleware_skipped_services); do
+        skip_services+=("$profile_skip")
+    done
     echo "${skip_services[@]}"
 }
 
@@ -3850,7 +3906,7 @@ check_and_pull_images() {
     print_info "检查所需镜像是否存在..."
     
     # 获取 docker-compose.yml 中定义的所有服务
-    local services=$($COMPOSE_CMD -f "$COMPOSE_FILE" config --services 2>/dev/null || echo "")
+    local services=$(mw_compose config --services 2>/dev/null || echo "")
     
     if [ -z "$services" ]; then
         print_warning "无法获取服务列表，将直接启动服务（会自动拉取缺失镜像）"
@@ -3862,7 +3918,7 @@ check_and_pull_images() {
     local images_to_check=()
     
     # 从 docker-compose 配置中提取所有镜像信息
-    local compose_config=$($COMPOSE_CMD -f "$COMPOSE_FILE" config 2>/dev/null || echo "")
+    local compose_config=$(mw_compose config 2>/dev/null || echo "")
     
     if [ -z "$compose_config" ]; then
         print_warning "无法读取 docker-compose 配置，将直接启动服务"
@@ -3901,17 +3957,6 @@ check_and_pull_images() {
             docker pull "$_pull_img" 2>&1 | tee -a "$LOG_FILE"
             if [ "${PIPESTATUS[0]}" -ne 0 ]; then
                 _pull_fail=1
-                # VSCode：DaoCloud 对 gitpod 镜像常 403，回退到 linuxserver 官方仓库
-                if [[ "$_pull_img" == linuxserver/openvscode-server:* ]]; then
-                    local _tag="${_pull_img#*:}"
-                    local _alt="lscr.io/linuxserver/openvscode-server:${_tag}"
-                    print_info "尝试备用镜像源: $_alt"
-                    if docker pull "$_alt" 2>&1 | tee -a "$LOG_FILE"; then
-                        docker tag "$_alt" "$_pull_img" 2>/dev/null || true
-                        _pull_fail=0
-                        print_success "已通过备用源拉取并标记: $_pull_img"
-                    fi
-                fi
             fi
         done
         if [ "$_pull_fail" -eq 0 ]; then
@@ -4011,7 +4056,6 @@ check_and_clean_ports() {
             "MinIO") container_name="minio-server" ;;
             "SRS") container_name="srs-server" ;;
             "NodeRED") container_name="nodered-server" ;;
-            "VSCode") container_name="openvscode-server" ;;
             "EMQX") container_name="emqx-server" ;;
             "ZLMediaKit") container_name="zlmediakit-server" ;;
             "Milvus") container_name="milvus-server" ;;
@@ -4599,7 +4643,6 @@ check_and_clean_ports() {
                                     "MinIO") container_name="minio-server" ;;
                                     "SRS") container_name="srs-server" ;;
                                     "NodeRED") container_name="nodered-server" ;;
-            "VSCode") container_name="openvscode-server" ;;
                                     "EMQX") container_name="emqx-server" ;;
                                     "ZLMediaKit") container_name="zlmediakit-server" ;;
                                     "Milvus") container_name="milvus-server" ;;
@@ -4722,7 +4765,6 @@ cleanup_stale_containers() {
                 "Milvus") container_names+=("milvus-server") ;;
                 "SRS") container_names+=("srs-server") ;;
                 "NodeRED") container_names+=("nodered-server") ;;
-                "VSCode") container_names+=("openvscode-server") ;;
                 "EMQX") container_names+=("emqx-server") ;;
                 "ZLMediaKit") container_names+=("zlmediakit-server") ;;
             esac
@@ -4730,7 +4772,7 @@ cleanup_stale_containers() {
     done
     
     # 检查是否有停止的容器需要清理
-    local stale_containers=$(docker ps -a --filter "status=exited" --format "{{.Names}}" 2>/dev/null | grep -E "(nacos-server|postgres-server|tdengine-server|redis-server|kafka-server|minio-server|milvus-server|srs-server|nodered-server|openvscode-server|emqx-server|zlmediakit-server)" || echo "")
+    local stale_containers=$(docker ps -a --filter "status=exited" --format "{{.Names}}" 2>/dev/null | grep -E "(nacos-server|postgres-server|tdengine-server|redis-server|kafka-server|minio-server|milvus-server|srs-server|nodered-server|emqx-server|zlmediakit-server)" || echo "")
     
     if [ -n "$stale_containers" ]; then
         print_info "发现残留的停止容器，正在清理..."
@@ -4845,9 +4887,7 @@ install_middleware() {
     create_postgresql_directories
     create_redis_directories
     create_nodered_directories
-    create_vscode_directories
-    create_kafka_directories
-    configure_kafka_hosts
+    prepare_kafka_if_enabled
     
     # 强制更新 SRS 配置文件（重新获取宿主机 IP）
     prepare_srs_config
@@ -4897,6 +4937,7 @@ install_middleware() {
     print_info "检查容器启动状态..."
     local failed_containers=()
     for service in "${MIDDLEWARE_SERVICES[@]}"; do
+        middleware_service_enabled "$service" || continue
         local container_name=""
         case "$service" in
             "Nacos") container_name="nacos-server" ;;
@@ -4907,7 +4948,6 @@ install_middleware() {
             "MinIO") container_name="minio-server" ;;
             "SRS") container_name="srs-server" ;;
             "NodeRED") container_name="nodered-server" ;;
-            "VSCode") container_name="openvscode-server" ;;
             "EMQX") container_name="emqx-server" ;;
             "ZLMediaKit") container_name="zlmediakit-server" ;;
             "Milvus") container_name="milvus-server" ;;
@@ -4941,16 +4981,17 @@ install_middleware() {
 
     # 等待 Milvus 就绪并输出部署日志
     echo ""
-    print_section "部署 Milvus 向量数据库"
-    wait_for_milvus || print_warning "Milvus 未就绪，人脸识别等向量检索功能可能不可用"
+    if middleware_service_enabled "Milvus"; then
+        print_section "部署 Milvus 向量数据库"
+        wait_for_milvus || print_warning "Milvus 未就绪，人脸识别等向量检索功能可能不可用"
+        print_info "Milvus 向量库: http://localhost:9091/healthz, gRPC localhost:19530"
+        print_info "  查看日志: ./install_middleware_linux.sh logs Milvus"
+    else
+        print_info "当前部署形态 (${EASYAIOT_DEPLOY_PROFILE}) 跳过 Milvus"
+    fi
 
     print_success "中间件安装完成"
     echo ""
-    print_info "Milvus 向量库: http://localhost:9091/healthz, gRPC localhost:19530"
-    print_info "  查看日志: ./install_middleware_linux.sh logs Milvus"
-    if [ "${EASYAIOT_ENABLE_VSCODE:-0}" = "1" ]; then
-        print_info "VSCode 后处理 IDE: http://localhost:10192"
-    fi
     echo ""
     # 不再固定 sleep 10：下方 ensure_postgresql_password 内部自带 wait_for_postgresql 精确等待
     # 确保 PostgreSQL 密码正确（确保重启后密码正确）
@@ -4983,7 +5024,7 @@ install_middleware() {
 
     # 初始化/扩容 IoT Kafka 主题（64 分区：告警、人脸匹配、车牌匹配）
     echo ""
-    init_kafka_iot_topics || print_warning "IoT Kafka 主题初始化未完成，可稍后手动执行: init_kafka_iot_topics"
+    init_kafka_topics_if_enabled
 
     
     sleep 5
@@ -5006,9 +5047,7 @@ start_middleware() {
     create_postgresql_directories
     create_redis_directories
     create_nodered_directories
-    create_vscode_directories
-    create_kafka_directories
-    configure_kafka_hosts
+    prepare_kafka_if_enabled
     
     prepare_srs_config
     prepare_emqx_volumes
@@ -5038,10 +5077,14 @@ start_middleware() {
         show_unhealthy_containers
     fi
     echo ""
-    init_kafka_iot_topics || print_warning "IoT Kafka 主题初始化未完成"
+    init_kafka_topics_if_enabled
     echo ""
-    print_section "检查 Milvus 向量数据库"
-    wait_for_milvus || print_warning "Milvus 未就绪"
+    if middleware_service_enabled "Milvus"; then
+        print_section "检查 Milvus 向量数据库"
+        wait_for_milvus || print_warning "Milvus 未就绪"
+    else
+        print_info "当前部署形态 (${EASYAIOT_DEPLOY_PROFILE}) 跳过 Milvus"
+    fi
     
     # 确保 PostgreSQL 密码正确（确保重启后密码正确）
     echo ""
@@ -5090,9 +5133,7 @@ restart_middleware() {
     create_postgresql_directories
     create_redis_directories
     create_nodered_directories
-    create_vscode_directories
-    create_kafka_directories
-    configure_kafka_hosts
+    prepare_kafka_if_enabled
     
     prepare_srs_config
     prepare_emqx_volumes
@@ -5108,7 +5149,7 @@ restart_middleware() {
     # 不再固定 sleep 15：下方 init_kafka_iot_topics / ensure_postgresql_password
     # 各自带就绪轮询（Kafka while 重试、PG wait_for_postgresql），按需精确等待
     echo ""
-    init_kafka_iot_topics || print_warning "IoT Kafka 主题初始化未完成"
+    init_kafka_topics_if_enabled
     
     # 确保 PostgreSQL 密码正确（确保重启后密码正确）
     echo ""
@@ -5418,9 +5459,7 @@ update_middleware() {
     create_postgresql_directories
     create_redis_directories
     create_nodered_directories
-    create_vscode_directories
-    create_kafka_directories
-    configure_kafka_hosts
+    prepare_kafka_if_enabled
     
     prepare_srs_config
     prepare_emqx_volumes
@@ -5450,8 +5489,12 @@ update_middleware() {
         show_unhealthy_containers
     fi
     echo ""
-    print_section "检查 Milvus 向量数据库"
-    wait_for_milvus || print_warning "Milvus 未就绪"
+    if middleware_service_enabled "Milvus"; then
+        print_section "检查 Milvus 向量数据库"
+        wait_for_milvus || print_warning "Milvus 未就绪"
+    else
+        print_info "当前部署形态 (${EASYAIOT_DEPLOY_PROFILE}) 跳过 Milvus"
+    fi
 
 
 }
@@ -5474,10 +5517,15 @@ show_help() {
     echo "  build           - 重新构建所有镜像"
     echo "  clean           - 清理所有容器和镜像"
     echo "  update          - 更新并重启所有中间件"
+    echo "  profile         - 显示当前部署规格与服务范围"
+    echo "  analyze-memory  - 分析运行中容器内存占用与规格符合性（见 analyze_deploy_memory.sh）"
     echo "  fix-postgresql  - 修复 PostgreSQL 密码问题"
     echo "  help            - 显示此帮助信息"
     echo ""
     echo "环境变量:"
+    echo "  EASYAIOT_DEPLOY_PROFILE   - 部署规格: mini(1,≥4GB) | standard(2,≥16GB) | full(3,≥20GB，默认)"
+    echo "  EASYAIOT_ENABLE_TDENGINE  - 完整版自动为 1；mini/standard 为 0"
+    echo "  EASYAIOT_ENABLE_EMQX      - 完整版自动为 1；mini/standard 为 0"
     echo "  FORCE_CHMOD=true    - 对已存在的数据目录强制完整递归 chmod 修复（默认只设顶层，数据量大时慢）"
     echo "                        仅在怀疑既有目录权限损坏、容器读写报错时使用一次"
     echo "                        示例: FORCE_CHMOD=true ./install_middleware_linux.sh update"
@@ -5497,25 +5545,38 @@ show_help() {
 
 # 主函数
 main() {
-    # 在执行任何命令之前（除了 help），先检查 Git
-    if [ "${1:-help}" != "help" ] && [ "${1:-help}" != "--help" ] && [ "${1:-help}" != "-h" ]; then
+    local cmd="${1:-help}"
+
+    # 在执行任何命令之前（除了 help/profile），先检查 Git
+    if [ "$cmd" != "help" ] && [ "$cmd" != "--help" ] && [ "$cmd" != "-h" ] && [ "$cmd" != "profile" ]; then
         check_and_require_git
     fi
-    
-    case "${1:-help}" in
+
+    case "$cmd" in
         install)
+            select_deploy_profile_for_install
+            refresh_compose_profile_args
+            print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
             install_middleware
             ;;
         start)
+            ensure_deploy_profile
+            refresh_compose_profile_args
+            print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
             start_middleware
             ;;
         stop)
             stop_middleware
             ;;
         restart)
+            ensure_deploy_profile
+            refresh_compose_profile_args
+            print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
             restart_middleware
             ;;
         status)
+            ensure_deploy_profile
+            refresh_compose_profile_args
             status_middleware
             ;;
         logs)
@@ -5528,12 +5589,23 @@ main() {
             clean_middleware
             ;;
         update)
+            ensure_deploy_profile
+            refresh_compose_profile_args
+            print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
             update_middleware
             ;;
         fix-postgresql)
             ensure_postgresql_password
             configure_postgresql_pg_hba
             configure_postgresql_max_connections
+            ;;
+        profile)
+            ensure_deploy_profile
+            print_deploy_profile_summary
+            ;;
+        analyze-memory)
+            shift
+            exec bash "${SCRIPT_DIR}/analyze_deploy_memory.sh" "$@"
             ;;
         help|--help|-h)
             show_help

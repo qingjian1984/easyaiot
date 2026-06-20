@@ -9,6 +9,11 @@
 # 用法:
 #   ./install_business_linux.sh <命令> [选项] [模块...]
 #
+# 部署形态（EASYAIOT_DEPLOY_PROFILE）：
+#   mini(1)     - 4G：iot-system + VIDEO/AI/WEB
+#   standard(2) - 16G：不含 TDengine/EMQX/iot-device/iot-tdengine 等
+#   full(3)     - 全量（默认，约 20G）
+#
 # 示例:
 #   ./install_business_linux.sh install              # 安装全部业务模块
 #   ./install_business_linux.sh update DEVICE WEB    # 仅更新 DEVICE 与 WEB
@@ -29,6 +34,9 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# shellcheck source=deploy_profile.sh
+source "${SCRIPT_DIR}/deploy_profile.sh"
 
 # shellcheck source=node/ensure_platform_agent_invoke.sh
 source "${PROJECT_ROOT}/.scripts/node/ensure_platform_agent_invoke.sh"
@@ -160,9 +168,12 @@ create_network() {
 
 warn_middleware() {
     local ok=true
-    if ! docker ps --format '{{.Names}}' | grep -q 'nacos-server'; then
-        print_warning "未检测到 nacos-server，业务服务可能依赖中间件，请先执行: .scripts/docker/install_linux.sh install"
-        ok=false
+    ensure_deploy_profile
+    if middleware_service_enabled Nacos; then
+        if ! docker ps --format '{{.Names}}' | grep -q 'nacos-server'; then
+            print_warning "未检测到 nacos-server，业务服务可能依赖中间件，请先执行: .scripts/docker/install_linux.sh install"
+            ok=false
+        fi
     fi
     if ! docker ps --format '{{.Names}}' | grep -q 'postgres-server'; then
         print_warning "未检测到 postgres-server"
@@ -202,6 +213,12 @@ verify_module_health() {
     local module_name="${MODULE_NAMES[$module]}"
     local port="${MODULE_PORTS[$module]}"
     local health_endpoint="${MODULE_HEALTH_ENDPOINTS[$module]}"
+
+    ensure_deploy_profile
+    if [ "$module" = "DEVICE" ] && is_mini_deploy_profile; then
+        port="48099"
+        health_endpoint=""
+    fi
 
     print_module_banner "$module" "verify"
     print_info "检查 http://localhost:$port${health_endpoint} ..."
@@ -374,6 +391,8 @@ execute_module() {
         cd "$module_dir"
         export EASYAIOT_AUTO_YES="${EASYAIOT_AUTO_YES:-0}"
         export EASYAIOT_DEFER_PLATFORM_AGENT_SYNC=1
+        export EASYAIOT_DEPLOY_PROFILE
+        export EASYAIOT_SKIP_PROFILE_PROMPT
         bash install_linux.sh "$mapped" "$@"
     ) 2>&1 | tee -a "$LOG_FILE"
 
@@ -453,6 +472,21 @@ is_no() {
     esac
 }
 
+init_deploy_profile_for_command() {
+    local cmd="$1"
+    case "$cmd" in
+        install)
+            select_deploy_profile_for_install
+            print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
+            ;;
+        start|restart|update|verify|status|build|build-base)
+            ensure_deploy_profile
+            warn_web_rebuild_if_profile_changed
+            print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
+            ;;
+    esac
+}
+
 confirm_once() {
     $AUTO_YES && return 0
     local response
@@ -491,6 +525,7 @@ EasyAIoT 业务系统统一管理脚本
   clean-all     完全清理（DEVICE 含镜像；其他模块等同 clean）
   update        重新构建并重启
   verify        验证服务健康（HTTP 健康检查 / 端口探测）
+  profile       显示当前部署形态与服务范围
   help          显示帮助
 
 选项:
@@ -513,6 +548,7 @@ EasyAIoT 业务系统统一管理脚本
 
 说明:
   中间件请使用 .scripts/docker/install_linux.sh 或 install_middleware_linux.sh
+  环境变量 EASYAIOT_DEPLOY_PROFILE: mini(1) | standard(2) | full(3，默认)
   日志: $LOG_DIR/
 EOF
 }
@@ -542,7 +578,7 @@ parse_args() {
                 positional+=("${_mods[@]}")
                 shift 2
                 ;;
-            install|start|stop|restart|status|logs|build|build-base|clean|clean-all|update|verify)
+            install|start|stop|restart|status|logs|build|build-base|clean|clean-all|update|verify|profile)
                 COMMAND="$arg"
                 shift
                 ;;
@@ -592,10 +628,16 @@ main() {
         help|"")
             usage
             ;;
+        profile)
+            ensure_deploy_profile
+            print_deploy_profile_summary
+            ;;
         verify)
+            init_deploy_profile_for_command verify
             verify_all || exit 1
             ;;
         install|start|restart|update|build|build-base|status)
+            init_deploy_profile_for_command "$COMMAND"
             run_on_modules "$COMMAND" "${EXTRA_ARGS[@]}" || exit 1
             ;;
         stop|clean|clean-all)

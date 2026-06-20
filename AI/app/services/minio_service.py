@@ -4,6 +4,7 @@
 @wechat EasyAIoT2025
 """
 import os
+import shutil
 import zipfile
 import tempfile
 import posixpath
@@ -111,11 +112,36 @@ class ModelService:
 
     @staticmethod
     def download_from_minio(bucket_name, object_name, destination_path):
-        """从Minio下载文件
+        """从 MinIO 下载文件；mini 形态从本地目录读取。
         
         Returns:
             tuple: (success: bool, error_message: str or None)
         """
+        from app.utils.service_urls import minio_storage_enabled
+        from app.services.local_storage_service import ensure_local_object
+
+        if not minio_storage_enabled():
+            from app.services.local_storage_service import ensure_local_object
+
+            src = ensure_local_object(bucket_name, object_name)
+            if not src:
+                error_msg = f'本地对象不存在: {bucket_name}/{object_name}'
+                current_app.logger.error(error_msg)
+                return False, error_msg
+            try:
+                os.makedirs(os.path.dirname(destination_path) or '.', exist_ok=True)
+                if os.path.abspath(src) != os.path.abspath(destination_path):
+                    shutil.copy2(src, destination_path)
+                current_app.logger.info(
+                    'mini 形态本地存储读取: %s/%s -> %s',
+                    bucket_name, object_name, destination_path,
+                )
+                return True, None
+            except OSError as exc:
+                error_msg = f'本地对象复制失败: {exc}'
+                current_app.logger.error(error_msg)
+                return False, error_msg
+
         try:
             minio_client = ModelService.get_minio_client()
 
@@ -225,11 +251,23 @@ class ModelService:
 
     @staticmethod
     def upload_to_minio(bucket_name, object_name, file_path):
-        """上传文件到Minio存储
+        """上传文件到 MinIO；mini 形态无 MinIO 时写入本地目录。
         
         Returns:
             tuple: (success: bool, error_message: str or None)
         """
+        from app.utils.service_urls import minio_storage_enabled
+        from app.services.local_storage_service import save_local_object
+
+        if not minio_storage_enabled():
+            ok, err = save_local_object(bucket_name, object_name, file_path)
+            if ok:
+                current_app.logger.info(
+                    'mini 形态本地存储写入: %s/%s -> %s',
+                    bucket_name, object_name, file_path,
+                )
+            return ok, err
+
         try:
             minio_client = ModelService.get_minio_client()
 
