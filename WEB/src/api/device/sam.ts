@@ -117,7 +117,14 @@ export interface SamPredictResult {
   engine?: string;
 }
 
-export const getSamHealth = () => commonApi('get', `${Api.Sam}/health`);
+export const getSamHealth = () =>
+  defHttp
+    .get(
+      { url: `${Api.Sam}/health`, headers: { ignoreCancelToken: true } },
+      // health 返回裸 JSON {status,enabled,engine,device,model_loaded}，HTTP 200/503，无 {code} 信封，不应走业务 transform
+      { isTransformResponse: false, errorMessageMode: 'none' },
+    )
+    .then((res) => ((res as { data?: unknown })?.data ?? res));
 
 export const samPredict = (data: SamPredictParams) =>
   commonApi('post', `${Api.Sam}/predict`, { data });
