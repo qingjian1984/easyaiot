@@ -58,7 +58,6 @@
 
         <div v-if="previewLabel" class="preview-text">
           将设为 <strong>{{ previewLabel }}</strong>
-          <span v-if="hasChanged">（原 {{ formatSaveTimeLabel(initialSaveTime) }}）</span>
         </div>
 
         <div class="section-actions">
