@@ -46,7 +46,7 @@
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'image_url'">
-          <a-avatar :size="48" :src="record.image_url" shape="square">
+          <a-avatar :size="48" :src="plateImageUrl(record.image_url)" shape="square">
             <template #icon><CarOutlined /></template>
           </a-avatar>
         </template>
@@ -121,7 +121,7 @@
                   <div class="plate-card-cover" @click="openEntryModal(item)">
                     <div class="plate-card-cover-inner">
                       <img
-                        :src="item.image_url || defaultPlateImg"
+                        :src="plateImageUrl(item.image_url) || defaultPlateImg"
                         alt="车牌"
                         class="plate-card-image"
                         @error="onImageError"
@@ -189,6 +189,7 @@ import {
   getPlateLibrary,
   listPlateEntries,
   parsePlateApiError,
+  resolvePlateImageDisplayUrl,
   type PlateEntry,
   type PlateLibrary,
 } from '@/api/device/plate_library';
@@ -216,6 +217,10 @@ const page = ref(1);
 const pageSize = ref(18);
 const searchText = ref('');
 const defaultPlateImg = DEFAULT_PLATE_IMAGE;
+
+function plateImageUrl(url?: string | null) {
+  return resolvePlateImageDisplayUrl(url);
+}
 
 const [registerEntryDrawer, { openDrawer: openEntryDrawer }] = useDrawer();
 const [registerNormalizeModal, { openModal: openNormalizeModal }] = useModal();

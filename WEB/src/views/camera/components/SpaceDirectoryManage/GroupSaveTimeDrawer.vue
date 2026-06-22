@@ -34,7 +34,7 @@
       <section class="policy-section">
         <div class="section-head">
           <h3 class="section-title">默认保存时长</h3>
-          <span class="section-desc">点击下方常用选项，或在下方输入自定义天数</span>
+          <span class="section-desc">点击下方常用选项，或自定义天与小时</span>
         </div>
 
         <div class="preset-grid">
@@ -52,16 +52,8 @@
         </div>
 
         <div class="custom-row">
-          <span class="custom-row__label">自定义天数</span>
-          <InputNumber
-            v-model:value="saveTime"
-            :min="0"
-            :max="3650"
-            class="custom-row__input"
-            placeholder="0 = 永久"
-          />
-          <span class="custom-row__unit">天</span>
-          <span class="custom-row__hint">0 表示永久保存；自定义天数须 ≥ 7</span>
+          <span class="custom-row__label">自定义时长</span>
+          <SaveTimeInput v-model:value="saveTime" class="custom-row__input-wrap" />
         </div>
 
         <div v-if="previewLabel" class="preview-text">
@@ -87,13 +79,14 @@
 
 <script lang="ts" setup>
 import { computed, ref } from 'vue';
-import { InputNumber, Tag } from 'ant-design-vue';
+import { Tag } from 'ant-design-vue';
 import { BasicDrawer, useDrawerInner } from '@/components/Drawer';
 import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
 import { useMessage } from '@/hooks/web/useMessage';
 import { updateSnapSpaceGroupPolicy } from '@/api/device/snap';
 import { updateRecordSpaceGroupPolicy } from '@/api/device/record';
+import SaveTimeInput from './SaveTimeInput.vue';
 import {
   DEFAULT_SAVE_TIME,
   formatSaveTimeLabel,
@@ -118,11 +111,11 @@ interface GroupPolicyDrawerData {
 }
 
 const SAVE_TIME_PRESETS = [
-  { key: '7d', label: '7 天', value: 7, hint: '推荐默认' },
-  { key: '30d', label: '30 天', value: 30, hint: '约 1 个月' },
-  { key: '90d', label: '90 天', value: 90, hint: '约 3 个月' },
-  { key: '180d', label: '180 天', value: 180, hint: '约半年' },
-  { key: '365d', label: '365 天', value: 365, hint: '约 1 年' },
+  { key: '1h', label: '1 小时', value: 1, hint: '最短保留' },
+  { key: '24h', label: '1 天', value: 24, hint: '' },
+  { key: '7d', label: '7 天', value: 168, hint: '推荐默认' },
+  { key: '30d', label: '30 天', value: 720, hint: '约 1 个月' },
+  { key: '90d', label: '90 天', value: 2160, hint: '约 3 个月' },
   { key: 'forever', label: '永久保存', value: 0, hint: '占用持续增长' },
 ] as const;
 
@@ -197,9 +190,9 @@ function selectPreset(value: number) {
 
 async function handleSubmit() {
   if (!groupKey.value) return;
-  const days = Number(saveTime.value);
-  if (!isValidSaveTime(days)) {
-    createMessage.warning('保存时间须为 0（永久）或不少于 7 天');
+  const hours = Number(saveTime.value);
+  if (!isValidSaveTime(hours)) {
+    createMessage.warning('保存时间须为永久，或不少于 1 小时');
     return;
   }
   if (!hasChanged.value) {
@@ -213,7 +206,7 @@ async function handleSubmit() {
     const payload = {
       group_type: groupType.value,
       group_key: groupKey.value,
-      save_time: days,
+      save_time: hours,
     };
     const api = spaceKind.value === 'snap' ? updateSnapSpaceGroupPolicy : updateRecordSpaceGroupPolicy;
     const res = await api(payload);
@@ -223,7 +216,7 @@ async function handleSubmit() {
     }
     const updated = res?.data?.updated_count ?? 0;
     createMessage.success(
-      `分组默认保存时间已设为 ${formatSaveTimeLabel(days)}${updated ? `，已同步 ${updated} 个设备空间` : ''}`,
+      `分组默认保存时间已设为 ${formatSaveTimeLabel(hours)}${updated ? `，已同步 ${updated} 个设备空间` : ''}`,
     );
     closeDrawer();
     emit('success');
@@ -416,25 +409,15 @@ async function handleSubmit() {
   border: 1px dashed #dde3ea;
 
   &__label {
+    flex: 0 0 100%;
     font-size: 14px;
     font-weight: 500;
     color: rgba(0, 0, 0, 0.75);
+    margin-bottom: 4px;
   }
 
-  &__input {
-    width: 120px;
-  }
-
-  &__unit {
-    font-size: 14px;
-    color: rgba(0, 0, 0, 0.55);
-  }
-
-  &__hint {
+  &__input-wrap {
     flex: 1 1 100%;
-    font-size: 12px;
-    color: rgba(0, 0, 0, 0.4);
-    line-height: 1.5;
   }
 }
 

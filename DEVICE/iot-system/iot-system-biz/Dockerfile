@@ -8,7 +8,7 @@ FROM bellsoft/liberica-openjdk-debian:21.0.8
 RUN groupadd -r appuser -g 1001 && useradd -r -u 1001 -g appuser appuser
 
 # 创建标准化的应用目录结构
-RUN mkdir -p /app/{logs,config,data,temp} && chown -R appuser:appuser /app
+RUN mkdir -p /app/logs /app/config /app/data /app/temp && chown -R appuser:appuser /app
 WORKDIR /app
 
 # 从宿主机挂载的 Jar 包目录复制构建产物
@@ -24,7 +24,7 @@ ENV TZ=Asia/Shanghai \
     JAVA_OPTS="-Xms512m -Xmx1024m -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:MaxGCPauseMillis=150 -Djava.security.egd=file:/dev/./urandom -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8"
 
 # 创建运行时必要的目录结构
-RUN mkdir -p /app/{logs,config,data,temp,backup} && chown -R appuser:appuser /app
+RUN mkdir -p /app/logs /app/config /app/data /app/temp /app/backup && chown -R appuser:appuser /app
 
 # 暴露系统服务端口
 EXPOSE 48099

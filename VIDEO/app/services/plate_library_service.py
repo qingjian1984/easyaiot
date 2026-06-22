@@ -8,6 +8,7 @@ import uuid
 from difflib import SequenceMatcher
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.parse import parse_qs, quote, urlparse
 
 import cv2
 import numpy as np
@@ -96,10 +97,7 @@ def _union_find_groups(entry_ids: List[int], pairs: List[tuple]) -> Dict[int, Se
 
 
 def _public_image_url(object_name: str) -> str:
-    endpoint = os.getenv('MINIO_PUBLIC_ENDPOINT') or os.getenv('MINIO_ENDPOINT', 'localhost:9000')
-    secure = os.getenv('MINIO_SECURE', 'false').lower() == 'true'
-    scheme = 'https' if secure else 'http'
-    return f'{scheme}://{endpoint}/{PLATE_BUCKET}/{object_name}'
+    return f'/api/v1/buckets/{PLATE_BUCKET}/objects/download?prefix={quote(object_name, safe="")}'
 
 
 def _upload_plate_image(library_id: int, image_bytes: bytes, suffix: str = 'jpg') -> Tuple[str, str]:
@@ -125,6 +123,14 @@ def _delete_minio_object(object_name: Optional[str]) -> None:
 def _object_name_from_url(image_url: Optional[str]) -> Optional[str]:
     if not image_url:
         return None
+    if image_url.startswith('/api/v1/buckets/'):
+        try:
+            parsed = urlparse(image_url)
+            prefix = parse_qs(parsed.query).get('prefix', [None])[0]
+            if prefix:
+                return prefix
+        except Exception:
+            pass
     marker = f'/{PLATE_BUCKET}/'
     idx = image_url.find(marker)
     if idx >= 0:

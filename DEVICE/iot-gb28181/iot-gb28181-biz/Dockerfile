@@ -2,7 +2,7 @@
 FROM bellsoft/liberica-openjdk-debian:21.0.8
 
 RUN groupadd -r appuser -g 1001 && useradd -r -u 1001 -g appuser appuser
-RUN mkdir -p /app/{logs,config,data,temp} && chown -R appuser:appuser /app
+RUN mkdir -p /app/logs /app/config /app/data /app/temp && chown -R appuser:appuser /app
 WORKDIR /app
 
 COPY target/jars/iot-gb28181-biz.jar app.jar

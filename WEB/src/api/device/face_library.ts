@@ -2,6 +2,9 @@
  * 人脸库管理接口
  */
 import { defHttp } from '@/utils/http/axios';
+import { resolveLibraryImageDisplayUrl } from '@/utils/alertMinioImage';
+
+export { resolveLibraryImageDisplayUrl as resolveFaceImageDisplayUrl };
 
 const FACE_PREFIX = '/video/face';
 

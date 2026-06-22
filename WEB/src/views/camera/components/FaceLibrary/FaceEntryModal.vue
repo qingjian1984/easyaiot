@@ -180,6 +180,7 @@ import {
   addFaceEntry,
   isFaceLibraryApiOk,
   parseFaceApiError,
+  resolveFaceImageDisplayUrl,
   updateFaceEntry,
   type FaceEntry,
   type FaceLibrary,
@@ -317,8 +318,9 @@ function onFileInputChange(e: Event) {
 
 function setExistingImage(url?: string) {
   resetUpload();
-  if (url) {
-    previewItems.value = [{ key: `existing-${url}`, url }];
+  const resolved = resolveFaceImageDisplayUrl(url);
+  if (resolved) {
+    previewItems.value = [{ key: `existing-${resolved}`, url: resolved }];
   }
 }
 

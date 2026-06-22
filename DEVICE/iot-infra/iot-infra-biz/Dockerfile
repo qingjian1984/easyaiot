@@ -27,7 +27,7 @@ ENV TZ=Asia/Shanghai \
     DB_CONNECTION_POOL_SIZE="20"
 
 # 创建必要的运行时目录
-RUN mkdir -p /app/{logs,config,cache} && chown -R appuser:appuser /app
+RUN mkdir -p /app/logs /app/config /app/cache && chown -R appuser:appuser /app
 
 # 暴露服务端口
 EXPOSE 48082

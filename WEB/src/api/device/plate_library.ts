@@ -2,6 +2,9 @@
  * 车牌库管理接口
  */
 import { defHttp } from '@/utils/http/axios';
+import { resolveLibraryImageDisplayUrl } from '@/utils/alertMinioImage';
+
+export { resolveLibraryImageDisplayUrl as resolvePlateImageDisplayUrl };
 
 const PLATE_PREFIX = '/video/plate';
 

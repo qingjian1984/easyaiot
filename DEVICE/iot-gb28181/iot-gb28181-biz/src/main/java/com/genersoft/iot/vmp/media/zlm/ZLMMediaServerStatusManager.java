@@ -23,7 +23,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ObjectUtils;
 
-import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -267,8 +266,11 @@ public class ZLMMediaServerStatusManager {
         param.put("hook.on_server_keepalive",String.format("%s/on_server_keepalive", hookPrefix));
         param.put("hook.on_send_rtp_stopped",String.format("%s/on_send_rtp_stopped", hookPrefix));
         param.put("hook.on_rtp_server_timeout",String.format("%s/on_rtp_server_timeout", hookPrefix));
-        param.put("hook.on_record_mp4",String.format("%s/on_record_mp4", hookPrefix));
+        param.put("hook.on_record_mp4","");
         param.put("hook.timeoutSec","30");
+        // 录像由 SRS 负责，ZLM 仅做流媒体转发
+        param.put("protocol.enable_mp4", "0");
+        param.put("record.enableFmp4", "0");
         // 推流断开后可以在超时时间内重新连接上继续推流，这样播放器会接着播放。
         // 置0关闭此特性(推流断开会导致立即断开播放器)
         // 此参数不应大于播放器超时时间
@@ -278,13 +280,6 @@ public class ZLMMediaServerStatusManager {
         // 等zlm支持给每个rtpServer设置关闭音频的时候可以不设置此选项
         if (mediaServerItem.isRtpEnable() && !ObjectUtils.isEmpty(mediaServerItem.getRtpPortRange())) {
             param.put("rtp_proxy.port_range", mediaServerItem.getRtpPortRange().replace(",", "-"));
-        }
-
-        if (!ObjectUtils.isEmpty(mediaServerItem.getRecordPath())) {
-            File recordPathFile = new File(mediaServerItem.getRecordPath());
-            param.put("protocol.mp4_save_path", recordPathFile.getParentFile().getPath());
-            param.put("protocol.downloadRoot", recordPathFile.getParentFile().getPath());
-            param.put("record.appName", recordPathFile.getName());
         }
 
         ZLMResult<?> zlmResult = zlmresTfulUtils.setServerConfig(mediaServerItem, param);

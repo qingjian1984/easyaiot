@@ -24,7 +24,7 @@ ENV TZ=Asia/Shanghai \
     JAVA_OPTS="-Xms512m -Xmx1024m -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Djava.security.egd=file:/dev/./urandom -Duser.timezone=Asia/Shanghai"
 
 # 创建消息服务专用目录
-RUN mkdir -p /app/{logs,config,message-queue} && chown -R appuser:appuser /app
+RUN mkdir -p /app/logs /app/config /app/message-queue && chown -R appuser:appuser /app
 
 # 暴露消息服务端口
 EXPOSE 48093

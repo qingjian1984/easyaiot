@@ -2,31 +2,42 @@
 空间保存时间：目录默认值继承、设备自定义、批量联动更新
 """
 import logging
+from datetime import timedelta
 
 from models import db, Device, DeviceDirectory, SnapSpace, RecordSpace
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SAVE_TIME = 7
+# 单位：小时。168 = 7 天
+DEFAULT_SAVE_TIME = 168
+MIN_SAVE_TIME_HOURS = 1
 SPACE_KIND_SNAP = 'snap'
 SPACE_KIND_RECORD = 'record'
 
 
 def validate_save_time(save_time):
-    """校验保存天数：0=永久，或 >=7 天。"""
+    """校验保存时长：0=永久，或 >=1 小时。"""
     if save_time is None:
         raise ValueError('保存时间不能为空')
     try:
         save_time = int(save_time)
     except (TypeError, ValueError) as exc:
         raise ValueError('保存时间必须为整数') from exc
-    if save_time == 0 or save_time >= 7:
+    if save_time == 0 or save_time >= MIN_SAVE_TIME_HOURS:
         return save_time
-    raise ValueError('保存时间须为 0（永久）或不少于 7 天')
+    raise ValueError('保存时间须为 0（永久）或不少于 1 小时')
+
+
+def save_time_to_timedelta(save_time):
+    """将保存时长（小时）转为 timedelta；0 表示永久（调用方需自行跳过清理）。"""
+    save_time = int(save_time)
+    if save_time <= 0:
+        return None
+    return timedelta(hours=save_time)
 
 
 def get_directory_save_time(directory, space_kind):
-    """获取目录级默认保存天数。"""
+    """获取目录级默认保存时长（小时）。"""
     if not directory:
         return DEFAULT_SAVE_TIME
     if space_kind == SPACE_KIND_SNAP:
@@ -43,7 +54,7 @@ def get_device_directory(device_id):
 
 
 def resolve_save_time_for_device(device_id, space_kind):
-    """创建设备空间时解析应写入的保存天数（跟随目录，非自定义）。"""
+    """创建设备空间时解析应写入的保存时长（小时，跟随目录，非自定义）。"""
     directory = get_device_directory(device_id)
     return get_directory_save_time(directory, space_kind)
 

@@ -58,14 +58,14 @@ public class UserSetting {
     private List<String> interfaceAuthenticationExcludes = new ArrayList<>();
 
     /**
-     * 推流直播是否录制
+     * 推流直播是否录制（默认关闭，录像由 SRS 负责）
      */
-    private Boolean recordPushLive = Boolean.TRUE;
+    private Boolean recordPushLive = Boolean.FALSE;
 
     /**
-     * 国标是否录制
+     * 国标是否录制（默认关闭，录像由 SRS 负责）
      */
-    private Boolean recordSip = Boolean.TRUE;
+    private Boolean recordSip = Boolean.FALSE;
 
     /**
      * 使用推流状态作为推流通道状态

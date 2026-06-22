@@ -8,7 +8,7 @@ FROM bellsoft/liberica-openjdk-debian:21.0.8
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # 创建标准化目录结构
-RUN mkdir -p /app/{logs,config,cache} && chown -R appuser:appuser /app
+RUN mkdir -p /app/logs /app/config /app/cache && chown -R appuser:appuser /app
 WORKDIR /app
 
 # 从宿主机挂载的 Jar 包目录复制构建产物
@@ -33,7 +33,7 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     (test -f /proc/1/cmdline && grep -q gateway /proc/1/cmdline) || exit 1
 
 # 创建必要的运行时目录
-RUN mkdir -p /app/{logs,config,cache} && chown -R appuser:appuser /app
+RUN mkdir -p /app/logs /app/config /app/cache && chown -R appuser:appuser /app
 
 # 切换到非root用户
 USER appuser

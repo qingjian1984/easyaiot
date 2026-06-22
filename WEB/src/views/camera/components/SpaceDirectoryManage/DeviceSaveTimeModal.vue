@@ -7,6 +7,10 @@
     @ok="handleSubmit"
   >
     <BasicForm @register="registerForm" />
+    <div v-if="saveTimeCustom" class="save-time-field">
+      <div class="save-time-field__label">保存时间</div>
+      <SaveTimeInput v-model:value="saveTime" />
+    </div>
   </BasicModal>
 </template>
 
@@ -17,6 +21,7 @@ import { BasicForm, useForm } from '@/components/Form';
 import { useMessage } from '@/hooks/web/useMessage';
 import { updateSnapSpace } from '@/api/device/snap';
 import { updateRecordSpace } from '@/api/device/record';
+import SaveTimeInput from './SaveTimeInput.vue';
 import {
   DEFAULT_SAVE_TIME,
   formatSaveTimeLabel,
@@ -33,6 +38,8 @@ const directorySaveTime = ref(DEFAULT_SAVE_TIME);
 const groupSaveTime = ref<number | null>(null);
 const hasGroupPolicy = ref(false);
 const initialSaveMode = ref(0);
+const saveTimeCustom = ref(false);
+const saveTime = ref(DEFAULT_SAVE_TIME);
 
 const [registerForm, { setFieldsValue, validate, resetFields, updateSchema }] = useForm({
   labelWidth: 110,
@@ -67,19 +74,6 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema }] = 
       },
       helpMessage: '',
     },
-    {
-      field: 'save_time',
-      label: '保存时间',
-      component: 'InputNumber',
-      ifShow: ({ values }) => !!values.save_time_custom,
-      componentProps: {
-        min: 0,
-        max: 3650,
-        style: { width: '100%' },
-        placeholder: '0=永久，或不少于 7 天',
-      },
-      helpMessage: '单位：天。0 表示永久保存，自定义天数须 ≥7。',
-    },
   ],
   showActionButtonGroup: false,
 });
@@ -96,11 +90,12 @@ const [register, { setModalProps, closeModal }] = useModalInner(async (data) => 
     ? (groupSaveTime.value ?? data?.directorySaveTime ?? DEFAULT_SAVE_TIME)
     : directorySaveTime.value;
   const custom = !!data?.saveTimeCustom;
+  saveTimeCustom.value = custom;
+  saveTime.value = custom ? (data?.saveTime ?? DEFAULT_SAVE_TIME) : inheritedSaveTime;
   await setFieldsValue({
     device_name: data?.deviceName ?? '',
     save_mode: data?.saveMode ?? 0,
     save_time_custom: custom,
-    save_time: custom ? (data?.saveTime ?? DEFAULT_SAVE_TIME) : inheritedSaveTime,
   });
   const followLabel = hasGroupPolicy.value ? '跟随分组' : '跟随目录';
   updateSchema({
@@ -108,6 +103,9 @@ const [register, { setModalProps, closeModal }] = useModalInner(async (data) => 
     componentProps: {
       checkedChildren: '自定义',
       unCheckedChildren: followLabel,
+      onChange: (checked: boolean) => {
+        saveTimeCustom.value = checked;
+      },
     },
     helpMessage: `关闭时${followLabel}（${formatSaveTimeLabel(inheritedSaveTime)}）`,
   });
@@ -117,8 +115,9 @@ async function handleSubmit() {
   if (spaceId.value == null) return;
   const values = await validate();
   const custom = !!values.save_time_custom;
-  if (custom && !isValidSaveTime(Number(values.save_time))) {
-    createMessage.warning('自定义保存时间须为 0（永久）或不少于 7 天');
+  saveTimeCustom.value = custom;
+  if (custom && !isValidSaveTime(saveTime.value)) {
+    createMessage.warning('自定义保存时间须为永久，或不少于 1 小时');
     return;
   }
   setModalProps({ confirmLoading: true });
@@ -126,7 +125,7 @@ async function handleSubmit() {
     const payload = {
       save_mode: Number(values.save_mode ?? initialSaveMode.value),
       ...(custom
-        ? { save_time: Number(values.save_time), save_time_custom: true }
+        ? { save_time: saveTime.value, save_time_custom: true }
         : { save_time_custom: false }),
     };
     const api = spaceKind.value === 'snap' ? updateSnapSpace : updateRecordSpace;
@@ -146,3 +145,16 @@ async function handleSubmit() {
   }
 }
 </script>
+
+<style lang="less" scoped>
+.save-time-field {
+  margin-top: 8px;
+  padding-left: 110px;
+
+  &__label {
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.88);
+  }
+}
+</style>

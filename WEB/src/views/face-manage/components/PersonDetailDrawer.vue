@@ -47,7 +47,7 @@
                 :class="{ 'is-cover': entry.id === person.cover_entry_id }"
               >
                 <div class="photo-thumb" @click="previewImage(entry.image_url)">
-                  <img :src="entry.image_url || fallbackImg" alt="" @error="onThumbError" />
+                  <img :src="faceImageUrl(entry.image_url) || fallbackImg" alt="" @error="onThumbError" />
                   <a-tag v-if="entry.id === person.cover_entry_id" color="blue" class="cover-tag">封面</a-tag>
                 </div>
                 <div class="photo-info">
@@ -91,6 +91,7 @@ import {
   getFacePerson,
   setFacePersonCover,
   unwrapFaceApiEntity,
+  resolveFaceImageDisplayUrl,
   type FaceEntry,
   type FaceLibrary,
   type FacePerson,
@@ -118,8 +119,16 @@ const [registerEntryModal, { openDrawer: openEntryModal }] = useDrawer();
 const coverUrl = computed(() => {
   const coverId = person.value?.cover_entry_id;
   const cover = entries.value.find((e) => e.id === coverId);
-  return cover?.image_url || person.value?.cover_image_url || DEFAULT_FACE_IMAGE;
+  return (
+    faceImageUrl(cover?.image_url)
+    || faceImageUrl(person.value?.cover_image_url)
+    || DEFAULT_FACE_IMAGE
+  );
 });
+
+function faceImageUrl(url?: string | null) {
+  return resolveFaceImageDisplayUrl(url);
+}
 
 const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) => {
   library.value = data?.library || null;
@@ -155,7 +164,8 @@ function onThumbError(e: Event) {
 }
 
 function previewImage(url?: string) {
-  if (url) window.open(url, '_blank');
+  const resolved = faceImageUrl(url);
+  if (resolved) window.open(resolved, '_blank');
 }
 
 async function handleSetCover(entryId: number) {

@@ -212,9 +212,9 @@ user-settings:
   # [可选] 自动点播， 使用固定流地址进行播放时，如果未点播则自动进行点播, 需要rtp.enable=true
   auto-apply-play: true
   # 推流直播是否录制
-  record-push-live: true
-  # 国标是否录制
-  record-sip: true
+  record-push-live: false
+  # 国标是否录制（录像由 SRS 负责，ZLM 不再生成 mp4）
+  record-sip: false
   # 国标点播 按需拉流, true：有人观看拉流，无人观看释放， false：拉起后不自动释放
   stream-on-demand: true
   # 是否返回Date属性，true：不返回，避免摄像头通过该参数自动校时，false：返回，摄像头可能会根据该时间校时

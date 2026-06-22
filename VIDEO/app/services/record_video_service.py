@@ -190,14 +190,19 @@ def get_record_video(space_id: int, object_name: str):
         raise RuntimeError(f"获取监控录像失败: {str(e)}")
 
 
-def cleanup_old_videos_by_days(space_id: int, days: int) -> Dict:
-    """根据天数清理旧的监控录像"""
+def cleanup_old_videos_by_save_time(space_id: int, save_time_hours: int) -> Dict:
+    """根据保存时长（小时）清理旧的监控录像"""
     try:
+        from app.services.space_save_time_service import save_time_to_timedelta
+
         record_space = RecordSpace.query.get_or_404(space_id)
         bucket_name = record_space.bucket_name
         save_mode = record_space.save_mode
 
-        cutoff_time = datetime.utcnow() - timedelta(days=days)
+        delta = save_time_to_timedelta(save_time_hours)
+        if delta is None:
+            return {'processed_count': 0, 'deleted_count': 0, 'archived_count': 0, 'error_count': 0}
+        cutoff_time = datetime.utcnow() - delta
         query = RecordFile.query.filter(
             RecordFile.space_id == space_id,
             RecordFile.event_time < cutoff_time,

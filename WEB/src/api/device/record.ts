@@ -26,7 +26,7 @@ export interface RecordSpace {
   space_code: string;
   bucket_name: string;
   save_mode: number; // 0:标准存储, 1:归档存储
-  save_time: number; // 0:永久保存, >=7(单位:天)
+  save_time: number; // 0:永久保存, >=1(单位:小时)
   save_time_custom?: boolean;
   directory_save_time?: number;
   directory_id?: number;
@@ -177,9 +177,10 @@ export const deleteRecordVideos = (space_id: number, object_names: string[]) => 
 
 /**
  * 清理过期的监控录像
+ * @param save_time_hours 保留时长（小时）
  */
-export const cleanupRecordVideos = (space_id: number, days: number) => {
-  return commonApi('post', `${RECORD_PREFIX}/space/${space_id}/videos/cleanup`, { days });
+export const cleanupRecordVideos = (space_id: number, save_time_hours: number) => {
+  return commonApi('post', `${RECORD_PREFIX}/space/${space_id}/videos/cleanup`, { save_time_hours });
 };
 
 // ====================== 按日录像回放接口 ======================

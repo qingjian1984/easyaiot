@@ -71,16 +71,43 @@ export function buildSpaceTableColumns(kind: SpaceKind) {
   ];
 }
 
-export const DEFAULT_SAVE_TIME = 7;
+/** 默认 7 天，单位：小时 */
+export const DEFAULT_SAVE_TIME = 168;
+export const MIN_SAVE_TIME_HOURS = 1;
+export const MAX_SAVE_TIME_DAYS = 3650;
+export const MAX_SAVE_TIME_HOURS = MAX_SAVE_TIME_DAYS * 24;
 
-export function formatSaveTimeLabel(days?: number | null): string {
-  if (days == null) return '-';
-  if (days === 0) return '永久';
-  return `${days} 天`;
+export interface SaveTimeParts {
+  days: number;
+  hours: number;
 }
 
-export function isValidSaveTime(days: number): boolean {
-  return days === 0 || days >= 7;
+/** 将总小时数拆分为天 + 小时 */
+export function hoursToSaveTimeParts(totalHours: number): SaveTimeParts {
+  if (totalHours <= 0) return { days: 0, hours: 0 };
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return { days, hours };
+}
+
+/** 将天 + 小时合并为总小时数 */
+export function saveTimePartsToHours(parts: SaveTimeParts): number {
+  return parts.days * 24 + parts.hours;
+}
+
+/** 格式化保存时长（小时）为展示文案 */
+export function formatSaveTimeLabel(totalHours?: number | null): string {
+  if (totalHours == null) return '-';
+  if (totalHours === 0) return '永久';
+  const { days, hours } = hoursToSaveTimeParts(totalHours);
+  if (days === 0) return `${hours} 小时`;
+  if (hours === 0) return `${days} 天`;
+  return `${days} 天 ${hours} 小时`;
+}
+
+/** 校验保存时长：0=永久，或总时长 >= 1 小时 */
+export function isValidSaveTime(totalHours: number): boolean {
+  return totalHours === 0 || totalHours >= MIN_SAVE_TIME_HOURS;
 }
 
 export function isSpaceGroupRow(record: DeviceInfo & { _isNvrGroup?: boolean }): boolean {

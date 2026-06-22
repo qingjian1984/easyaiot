@@ -57,3 +57,45 @@ export function resolveTrainResultsDisplayUrl(imageUrl: string | null | undefine
 export function resolveModelImageDisplayUrl(imageUrl: string | null | undefined): string {
   return resolveAlertImageDisplayUrl(imageUrl);
 }
+
+function isLocalMinioHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0';
+}
+
+/** 将 MinIO 直链 http(s)://host/bucket/key 转为 nginx 同源代理路径 */
+function convertDirectMinioUrlToDownloadPath(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace(/^\/+/, '');
+    const slashIdx = path.indexOf('/');
+    if (slashIdx <= 0) return url;
+    const bucket = path.slice(0, slashIdx);
+    const objectName = path.slice(slashIdx + 1);
+    if (!objectName) return url;
+    return `/api/v1/buckets/${bucket}/objects/download?prefix=${encodeURIComponent(objectName)}`;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * 人脸库 / 车牌库图片展示地址。
+ * 兼容历史数据中的 http://localhost:9000/{bucket}/{key} 直链。
+ */
+export function resolveLibraryImageDisplayUrl(imageUrl: string | null | undefined): string {
+  if (imageUrl == null || String(imageUrl).trim() === '') return '';
+  const u = String(imageUrl).trim();
+  if (u.startsWith('http://') || u.startsWith('https://')) {
+    try {
+      const parsed = new URL(u);
+      if (isLocalMinioHost(parsed.hostname)) {
+        return resolveAlertImageDisplayUrl(convertDirectMinioUrlToDownloadPath(u));
+      }
+    } catch {
+      return u;
+    }
+    return u;
+  }
+  return resolveAlertImageDisplayUrl(u);
+}

@@ -49,7 +49,7 @@
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'cover_image_url'">
-          <a-avatar :size="48" :src="record.cover_image_url" shape="square">
+          <a-avatar :size="48" :src="faceImageUrl(record.cover_image_url)" shape="square">
             <template #icon><UserOutlined /></template>
           </a-avatar>
         </template>
@@ -124,7 +124,7 @@
                   <div class="person-card-cover" @click="openPersonDetail(item)">
                     <div class="person-card-cover-inner">
                       <img
-                        :src="item.cover_image_url || defaultFaceImg"
+                        :src="faceImageUrl(item.cover_image_url) || defaultFaceImg"
                         alt="封面"
                         class="person-card-image"
                         @error="onImageError"
@@ -202,6 +202,7 @@ import {
   getFaceLibrary,
   listFacePersons,
   unwrapFaceApiEntity,
+  resolveFaceImageDisplayUrl,
   type FaceLibrary,
   type FacePerson,
 } from '@/api/device/face_library';
@@ -231,6 +232,10 @@ const pageSize = ref(18);
 const searchText = ref('');
 
 const defaultFaceImg = DEFAULT_FACE_IMAGE;
+
+function faceImageUrl(url?: string | null) {
+  return resolveFaceImageDisplayUrl(url);
+}
 
 const [registerEntryModal, { openDrawer: openEntryModal }] = useDrawer();
 const [registerPersonDrawer, { openDrawer: openPersonDrawer }] = useDrawer();

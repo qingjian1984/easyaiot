@@ -26,7 +26,7 @@ from app.services.storage_service import (
     get_device_storage_info, check_and_cleanup_storage
 )
 from app.services.snap_image_service import (
-    list_snap_images, delete_snap_images, get_snap_image, cleanup_old_images_by_days,
+    list_snap_images, delete_snap_images, get_snap_image, cleanup_old_images_by_save_time,
     sync_snap_images_metadata,
 )
 
@@ -1003,12 +1003,14 @@ def cleanup_space_images(space_id):
     """清理过期的抓拍图片"""
     try:
         data = request.get_json() or {}
-        days = int(data.get('days', 0))
-        
-        if days <= 0:
-            return jsonify({'code': 400, 'msg': 'days必须大于0'}), 400
-        
-        result = cleanup_old_images_by_days(space_id, days)
+        if 'save_time_hours' not in data:
+            return jsonify({'code': 400, 'msg': '需要提供 save_time_hours 参数'}), 400
+        save_time_hours = int(data.get('save_time_hours', 0))
+
+        if save_time_hours <= 0:
+            return jsonify({'code': 400, 'msg': 'save_time_hours 必须大于 0'}), 400
+
+        result = cleanup_old_images_by_save_time(space_id, save_time_hours)
         return jsonify({
             'code': 0,
             'msg': '清理完成',

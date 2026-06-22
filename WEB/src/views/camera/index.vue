@@ -161,10 +161,10 @@
         <TabPane key="9" v-if="gb28181Enabled" tab="节点管理">
           <Gb28181Node ref="gb28181NodeRef"/>
         </TabPane>
-        <TabPane key="10" tab="人脸库">
+        <TabPane key="10" v-if="facePlateLibraryEnabled" tab="人脸库">
           <FaceLibrary ref="faceLibraryRef"/>
         </TabPane>
-        <TabPane key="11" tab="车牌库">
+        <TabPane key="11" v-if="facePlateLibraryEnabled" tab="车牌库">
           <PlateLibrary ref="plateLibraryRef"/>
         </TabPane>
       </Tabs>
@@ -235,11 +235,12 @@ import {
   type CreateMethod,
   type DeviceKind,
 } from './utils/deviceCreateOptions';
-import { isGb28181Enabled } from '@/utils/deployProfile';
+import { isFacePlateLibraryEnabled, isGb28181Enabled } from '@/utils/deployProfile';
 
 defineOptions({name: 'CAMERA'})
 
 const gb28181Enabled = isGb28181Enabled();
+const facePlateLibraryEnabled = isFacePlateLibraryEnabled();
 
 const route = useRoute();
 
@@ -337,6 +338,12 @@ const LEGACY_CAMERA_TAB_MAP: Record<string, string> = {
 /** 路由 ?tab=：优先匹配当前编号；旧编号通过 LEGACY_CAMERA_TAB_MAP 映射 */
 function normalizeCameraRouteTab(tab: string): string {
   if (!gb28181Enabled && tab === CAMERA_TAB_KEYS.GB_NODE) {
+    return CAMERA_TAB_KEYS.CAMERA_MAP;
+  }
+  if (
+    !facePlateLibraryEnabled
+    && (tab === CAMERA_TAB_KEYS.FACE_LIBRARY || tab === CAMERA_TAB_KEYS.PLATE_LIBRARY)
+  ) {
     return CAMERA_TAB_KEYS.CAMERA_MAP;
   }
   if (CAMERA_TAB_ID_SET.has(tab)) return tab;

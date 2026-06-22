@@ -6,6 +6,7 @@ import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
+from urllib.parse import quote
 
 import cv2
 import numpy as np
@@ -55,10 +56,7 @@ def _normalize_business_tags(tags) -> List[str]:
 
 
 def _public_image_url(object_name: str) -> str:
-    endpoint = os.getenv('MINIO_PUBLIC_ENDPOINT') or os.getenv('MINIO_ENDPOINT', 'localhost:9000')
-    secure = os.getenv('MINIO_SECURE', 'false').lower() == 'true'
-    scheme = 'https' if secure else 'http'
-    return f'{scheme}://{endpoint}/{FACE_BUCKET}/{object_name}'
+    return f'/api/v1/buckets/{FACE_BUCKET}/objects/download?prefix={quote(object_name, safe="")}'
 
 
 def _upload_face_image(library_id: int, image_bytes: bytes, suffix: str = 'jpg') -> Tuple[str, str]:

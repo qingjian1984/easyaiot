@@ -62,7 +62,7 @@
     <BasicTable v-if="viewMode === 'table'" @register="registerTable">
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'image_url'">
-          <a-avatar :size="48" :src="record.image_url" shape="square">
+          <a-avatar :size="48" :src="faceImageUrl(record.image_url)" shape="square">
             <template #icon><UserOutlined /></template>
           </a-avatar>
         </template>
@@ -86,7 +86,7 @@
               <div class="entry-avatar" @click="handleView(item)">
                 <a-image
                   v-if="item.image_url"
-                  :src="item.image_url"
+                  :src="faceImageUrl(item.image_url)"
                   :width="100"
                   :height="100"
                   style="object-fit: cover; border-radius: 8px; cursor: pointer"
@@ -150,6 +150,7 @@ import { useMessage } from '@/hooks/web/useMessage';
 import {
   deleteFaceEntry,
   listFaceEntries,
+  resolveFaceImageDisplayUrl,
   type FaceEntry,
   type FaceLibrary,
 } from '@/api/device/face_library';
@@ -173,6 +174,10 @@ const [registerNormalizeModal, { openModal: openNormalizeModal }] = useModal();
 const fallbackImg =
   'data:image/svg+xml,' +
   encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="#f0f0f0" width="100" height="100"/></svg>');
+
+function faceImageUrl(url?: string | null) {
+  return resolveFaceImageDisplayUrl(url);
+}
 
 const DRAWER_WIDTH = 1400;
 

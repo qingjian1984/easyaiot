@@ -114,6 +114,7 @@ addPlateEntry,
   isPlateLibraryApiOk,
   parsePlateApiError,
   recognizePlateImage,
+  resolvePlateImageDisplayUrl,
   updatePlateEntry,
   type PlateEntry,
   type PlateLibrary,
@@ -226,7 +227,8 @@ function revokePreview() {
 
 function setExistingImage(url?: string) {
   revokePreview();
-  if (url) previewUrl.value = url;
+  const resolved = resolvePlateImageDisplayUrl(url);
+  if (resolved) previewUrl.value = resolved;
 }
 
 async function tryRecognizePlate(file: File) {

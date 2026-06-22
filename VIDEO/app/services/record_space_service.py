@@ -43,13 +43,13 @@ def _find_record_space_by_device_id(device_id):
     return RecordSpace.query.filter_by(device_id=device_id).first()
 
 
-def create_record_space(space_name, save_mode=0, save_time=7, description=None, device_id=None, save_time_custom=False):
+def create_record_space(space_name, save_mode=0, save_time=168, description=None, device_id=None, save_time_custom=False):
     """创建监控录像空间
     
     Args:
         space_name: 空间名称
         save_mode: 存储模式 0:标准存储, 1:归档存储
-        save_time: 保存时间 0:永久保存, >=7:保存天数
+        save_time: 保存时长 0:永久保存, >=1:小时
         description: 描述
         device_id: 设备ID（可选，如果提供则检查该设备文件夹是否已存在）
     """
@@ -500,7 +500,7 @@ def auto_cleanup_all_record_spaces(app=None):
 
     with app.app_context():
         try:
-            from app.services.record_video_service import cleanup_old_videos_by_days
+            from app.services.record_video_service import cleanup_old_videos_by_save_time
             from app.services.space_save_time_service import enrich_record_space_dict
 
             spaces = RecordSpace.query.all()
@@ -511,11 +511,11 @@ def auto_cleanup_all_record_spaces(app=None):
 
             for space in spaces:
                 info = enrich_record_space_dict({'save_time': space.save_time}, space)
-                days = info.get('effective_save_time') or 0
-                if days <= 0:
+                save_time_hours = info.get('effective_save_time') or 0
+                if save_time_hours <= 0:
                     continue
                 try:
-                    result = cleanup_old_videos_by_days(space.id, days)
+                    result = cleanup_old_videos_by_save_time(space.id, save_time_hours)
                     total_processed += result['processed_count']
                     total_deleted += result['deleted_count']
                     total_archived += result['archived_count']

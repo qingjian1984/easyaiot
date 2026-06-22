@@ -103,7 +103,7 @@ public class MediaServiceImpl implements IMediaService {
             if (streamProxyItem != null) {
                 ResultForOnPublish result = new ResultForOnPublish();
                 result.setEnable_audio(streamProxyItem.isEnableAudio());
-                result.setEnable_mp4(streamProxyItem.isEnableMp4());
+                result.setEnable_mp4(false);
                 return result;
             }
             if (userSetting.getPushAuthority()) {
@@ -139,6 +139,7 @@ public class MediaServiceImpl implements IMediaService {
 
         ResultForOnPublish result = new ResultForOnPublish();
         result.setEnable_audio(true);
+        boolean gbDownloadRecord = false;
 
         // 国标流
         if ("rtp".equals(app)) {
@@ -190,6 +191,7 @@ public class MediaServiceImpl implements IMediaService {
                         long difference = DateUtil.getDifference(startTime, endTime) / 1000;
                         result.setMp4_max_second((int) difference);
                         result.setEnable_mp4(true);
+                        gbDownloadRecord = true;
                         // 设置为2保证得到的mp4的时长是正常的
                         result.setModify_stamp(2);
                     }
@@ -217,6 +219,10 @@ public class MediaServiceImpl implements IMediaService {
             if (otherRtpSendInfo != null || otherPsSendInfo != null) {
                 result.setEnable_mp4(true);
             }
+        }
+        // 录像由 SRS 负责；仅国标录像下载需 ZLM 临时生成 mp4
+        if (!gbDownloadRecord) {
+            result.setEnable_mp4(false);
         }
         return result;
     }

@@ -37,6 +37,11 @@ export function isTrainAdvancedEnabled(): boolean {
   return !isMiniDeployProfile();
 }
 
+/** mini 形态不展示人脸库 / 车牌库 Tab */
+export function isFacePlateLibraryEnabled(): boolean {
+  return !isMiniDeployProfile();
+}
+
 /** mini 形态隐藏的顶级菜单（与后端 system_menu.name 一致） */
 const MINI_HIDDEN_MENU_NAMES = new Set([
   '集群管理',

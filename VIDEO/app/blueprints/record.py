@@ -14,7 +14,7 @@ from app.services.record_space_service import (
     get_record_space, list_record_spaces, get_record_space_by_device_id, sync_spaces_to_minio
 )
 from app.services.record_video_service import (
-    list_record_videos, delete_record_videos, get_record_video, cleanup_old_videos_by_days,
+    list_record_videos, delete_record_videos, get_record_video, cleanup_old_videos_by_save_time,
     sync_record_videos_metadata, list_record_video_dates, list_record_videos_day_detail,
     find_segment_for_alert,
 )
@@ -357,14 +357,14 @@ def cleanup_videos(space_id):
     """清理过期的监控录像"""
     try:
         data = request.get_json()
-        if not data or 'days' not in data:
-            return jsonify({'code': 400, 'msg': '请求数据不能为空，需要提供 days 参数'}), 400
-        
-        days = int(data.get('days', 0))
-        if days < 0:
-            return jsonify({'code': 400, 'msg': 'days 必须大于等于0'}), 400
-        
-        result = cleanup_old_videos_by_days(space_id, days)
+        if not data or 'save_time_hours' not in data:
+            return jsonify({'code': 400, 'msg': '请求数据不能为空，需要提供 save_time_hours 参数'}), 400
+
+        save_time_hours = int(data.get('save_time_hours', 0))
+        if save_time_hours <= 0:
+            return jsonify({'code': 400, 'msg': 'save_time_hours 必须大于 0'}), 400
+
+        result = cleanup_old_videos_by_save_time(space_id, save_time_hours)
         return jsonify({
             'code': 0,
             'msg': '清理完成',

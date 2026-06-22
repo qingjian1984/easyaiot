@@ -2226,6 +2226,15 @@ prepare_zlmediakit_config() {
     # 检查配置文件是否已存在
     if [ -f "$zlm_config_file" ]; then
         print_success "ZLMediaKit 配置文件已存在: $zlm_config_file"
+        # 确保关闭 ZLM 录像（录像由 SRS 负责）
+        if grep -q '^enableFmp4=1' "$zlm_config_file" 2>/dev/null; then
+            sed -i 's/^enableFmp4=1/enableFmp4=0/' "$zlm_config_file"
+            print_info "已关闭 ZLMediaKit fmp4 录像: enableFmp4=0"
+        fi
+        if grep -q '^enable_mp4=1' "$zlm_config_file" 2>/dev/null; then
+            sed -i 's/^enable_mp4=1/enable_mp4=0/' "$zlm_config_file"
+            print_info "已关闭 ZLMediaKit mp4 录像: enable_mp4=0"
+        fi
         return 0
     else
         print_warning "ZLMediaKit 配置文件不存在，将创建默认配置"
@@ -2352,7 +2361,7 @@ ts_demand=0
 
 [record]
 appName=record
-enableFmp4=1
+enableFmp4=0
 fastStart=0
 fileBufSize=65536
 fileRepeat=0

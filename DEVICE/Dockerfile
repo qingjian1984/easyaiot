@@ -53,7 +53,7 @@ RUN --mount=type=bind,source=../.build-cache/device/m2/repository,target=/m2/rep
 FROM bellsoft/liberica-openjdk-rocky:21.0.8-cds AS runtime-base
 RUN groupadd -r appgroup -g 1001 && useradd -r -u 1001 -g appgroup appuser
 
-RUN mkdir -p /app/{logs,config,data,cache,temp,backup,message-queue} && chown -R appuser:appgroup /app
+RUN mkdir -p /app/logs /app/config /app/data /app/cache /app/temp /app/backup /app/message-queue && chown -R appuser:appgroup /app
 WORKDIR /app
 
 ENV TZ=Asia/Shanghai

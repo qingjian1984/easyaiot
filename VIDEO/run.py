@@ -431,8 +431,8 @@ def create_app(start_background_tasks=None):
 
                 # 目录/空间保存时间字段
                 for table_name, col_name, col_def in (
-                    ('device_directory', 'snap_save_time', 'INTEGER NOT NULL DEFAULT 7'),
-                    ('device_directory', 'record_save_time', 'INTEGER NOT NULL DEFAULT 7'),
+                    ('device_directory', 'snap_save_time', 'INTEGER NOT NULL DEFAULT 168'),
+                    ('device_directory', 'record_save_time', 'INTEGER NOT NULL DEFAULT 168'),
                     ('snap_space', 'save_time_custom', 'BOOLEAN NOT NULL DEFAULT FALSE'),
                     ('record_space', 'save_time_custom', 'BOOLEAN NOT NULL DEFAULT FALSE'),
                 ):
@@ -448,29 +448,6 @@ def create_app(start_background_tasks=None):
                         db.session.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def};'))
                         db.session.commit()
                         print(f"✅ {table_name}.{col_name} 列添加成功")
-
-                # 将历史非自定义空间的永久保存(0)迁移为目录默认 7 天
-                try:
-                    db.session.execute(text("""
-                        UPDATE snap_space SET save_time = 7
-                        WHERE save_time = 0 AND (save_time_custom IS NULL OR save_time_custom = FALSE);
-                    """))
-                    db.session.execute(text("""
-                        UPDATE record_space SET save_time = 7
-                        WHERE save_time = 0 AND (save_time_custom IS NULL OR save_time_custom = FALSE);
-                    """))
-                    db.session.execute(text("""
-                        UPDATE device_directory SET snap_save_time = 7
-                        WHERE snap_save_time IS NULL OR snap_save_time = 0;
-                    """))
-                    db.session.execute(text("""
-                        UPDATE device_directory SET record_save_time = 7
-                        WHERE record_save_time IS NULL OR record_save_time = 0;
-                    """))
-                    db.session.commit()
-                except Exception as migrate_save_err:
-                    db.session.rollback()
-                    print(f"⚠️  空间保存时间数据迁移跳过: {migrate_save_err}")
 
                 if directory_id_exists and auto_snap_enabled_exists and cover_image_path_exists and device_detection_region_exists:
                     print("✅ 数据库迁移检查完成，所有列和表已存在")

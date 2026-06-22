@@ -8,7 +8,7 @@ FROM bellsoft/liberica-openjdk-debian:21.0.8
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # 创建统一的应用目录结构
-RUN mkdir -p /app/{data,logs,temp} && chown -R appuser:appuser /app
+RUN mkdir -p /app/data /app/logs /app/temp && chown -R appuser:appuser /app
 WORKDIR /app
 
 # 从宿主机挂载的 Jar 包目录复制构建产物
