@@ -113,6 +113,8 @@ build_with_cache() {
         -t ai-service:latest \
         --pull=false \
         --build-arg OFFLINE_MODE=${OFFLINE_MODE:-0} \
+        --build-arg APT_MIRROR_URL="${APT_MIRROR_URL:-https://mirrors.cloud.tencent.com}" \
+        --build-arg PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}" \
         $no_cache_flag \
         . 2>&1 | tee "$build_log"
     build_status=${PIPESTATUS[0]}
@@ -187,10 +189,26 @@ DOCKER_PLATFORM=""
 BASE_IMAGE=""
 
 # 检测服务器架构并验证是否支持
+# ★ 如果 DOCKER_PLATFORM 已由上层（runtime_image.sh 跨架构构建）导出，则信任外部设置
 detect_architecture() {
     print_info "检测服务器架构..."
     ARCH=$(uname -m)
-    
+
+    # ★ 跨架构构建：DOCKER_PLATFORM 已由 runtime_image.sh 预设，直接信任
+    if [ -n "${DOCKER_PLATFORM:-}" ]; then
+        case "$ARCH" in
+            x86_64|amd64) ARCH="x86_64" ;;
+            aarch64|arm64) ARCH="aarch64" ;;
+            *) ARCH="x86_64" ;;
+        esac
+        BASE_IMAGE="${BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime}"
+        print_success "检测到宿主机架构: ${ARCH}，使用外部指定平台: ${DOCKER_PLATFORM}"
+        print_info "使用 PyTorch CUDA 镜像: $BASE_IMAGE"
+        export DOCKER_PLATFORM
+        export BASE_IMAGE
+        return 0
+    fi
+
     case "$ARCH" in
         x86_64|amd64)
             ARCH="x86_64"
@@ -619,7 +637,9 @@ install_service() {
     print_info "构建进度将实时显示，请勿中断..."
     echo ""
     
-    if ! build_with_cache ""; then
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect ai-service:latest >/dev/null 2>&1; then
+        print_success "镜像已从远程拉取 (ai-service:latest)，跳过构建"
+    elif ! build_with_cache ""; then
         exit 1
     fi
     echo ""

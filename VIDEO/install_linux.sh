@@ -89,9 +89,14 @@ build_with_cache() {
     local no_cache_flag="$1"
     local build_log="/tmp/docker_build_$$.log"
     local build_status=0
+    local platform_opts=""
 
     init_easyaiot_build_cache_dirs "$EASYAIOT_ROOT"
     enable_docker_buildkit
+    if [ -n "${DOCKER_PLATFORM:-}" ]; then
+        platform_opts="--platform $DOCKER_PLATFORM"
+        print_info "构建目标平台: ${DOCKER_PLATFORM}"
+    fi
 
     print_info "docker build（.build-cache/video pip-cache/pip-wheels）..."
     set +e
@@ -100,8 +105,11 @@ build_with_cache() {
         --build-context "pip-wheels=$(pip_wheels_build_context_dir_for "$EASYAIOT_ROOT" video)" \
         --target runtime \
         -t video-service:latest \
+        $platform_opts \
         --pull=false \
         --build-arg OFFLINE_MODE=${OFFLINE_MODE:-0} \
+        --build-arg APT_MIRROR_URL="${APT_MIRROR_URL:-https://mirrors.cloud.tencent.com}" \
+        --build-arg PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}" \
         $no_cache_flag \
         . 2>&1 | tee "$build_log"
     build_status=${PIPESTATUS[0]}
@@ -436,7 +444,9 @@ install_service() {
     prepare_cached_resources
     
     print_info "构建 Docker 镜像（优先复用离线 pip 缓存）..."
-    if ! build_with_cache ""; then
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect video-service:latest >/dev/null 2>&1; then
+        print_success "镜像已从远程拉取 (video-service:latest)，跳过构建"
+    elif ! build_with_cache ""; then
         exit 1
     fi
     

@@ -464,8 +464,12 @@ install_service() {
     docker rm -f web-service 2>/dev/null || true
     $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
     
-    print_info "构建 Docker 镜像..."
-    $COMPOSE_CMD build
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect web-service:latest >/dev/null 2>&1; then
+        print_success "镜像已从远程拉取 (web-service:latest)，跳过构建"
+    else
+        print_info "构建 Docker 镜像..."
+        $COMPOSE_CMD build
+    fi
     
     print_info "启动服务..."
     $COMPOSE_CMD up -d

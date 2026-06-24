@@ -281,16 +281,20 @@ install_service() {
     create_directories
     create_env_file
     
-    print_info "构建 Docker 镜像..."
-    print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $BASE_IMAGE"
-    # 使用环境变量传递架构配置给docker-compose
-    BUILD_OUTPUT=$(BASE_IMAGE=$BASE_IMAGE $COMPOSE_CMD build 2>&1)
-    BUILD_STATUS=$?
-    # 只显示错误和警告信息
-    echo "$BUILD_OUTPUT" | grep -iE "(error|warning|failed|失败|警告)" || true
-    if [ $BUILD_STATUS -ne 0 ]; then
-        print_error "镜像构建失败"
-        exit 1
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect ai-service:latest >/dev/null 2>&1; then
+        print_success "镜像已从远程拉取 (ai-service:latest)，跳过构建"
+    else
+        print_info "构建 Docker 镜像..."
+        print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $BASE_IMAGE"
+        # 使用环境变量传递架构配置给docker-compose
+        BUILD_OUTPUT=$(BASE_IMAGE=$BASE_IMAGE $COMPOSE_CMD build 2>&1)
+        BUILD_STATUS=$?
+        # 只显示错误和警告信息
+        echo "$BUILD_OUTPUT" | grep -iE "(error|warning|failed|失败|警告)" || true
+        if [ $BUILD_STATUS -ne 0 ]; then
+            print_error "镜像构建失败"
+            exit 1
+        fi
     fi
     
     print_info "启动服务..."

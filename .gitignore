@@ -136,3 +136,9 @@ venv
 *.pyc
 DEVICE/iot-gb28181/iot-gb28181-biz/snap
 VIDEO/data/models
+VIDEO/ffmpeg-master-*.tar.xz
+
+.scripts/docker/.deploy_profile
+.scripts/docker/.web_deploy_profile_built
+.scripts/docker/.runtime_images_pulled
+AI/.env.arch

@@ -293,11 +293,13 @@ select_deploy_profile_interactive() {
 }
 
 # 写入或更新 .env.docker 中的键值
+# 使用临时文件方式（而非 sed -i），兼容 GNU sed 与 BSD sed（macOS）
 _set_env_docker_kv() {
     local file="$1" key="$2" value="$3"
     [ -f "$file" ] || return 0
     if grep -q "^${key}=" "$file" 2>/dev/null; then
-        sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+        local tmp="${file}.tmp.$$"
+        sed "s|^${key}=.*|${key}=${value}|" "$file" > "$tmp" && mv "$tmp" "$file"
     else
         # 确保追加前文件以换行结尾，避免与最后一行粘连
         [ -n "$(tail -c1 "$file" 2>/dev/null || true)" ] && echo "" >> "$file"
@@ -315,7 +317,8 @@ sync_web_deploy_profile_env() {
     fi
     [ -f "$web_env" ] || return 0
     if grep -q '^NGINX_CONF=' "$web_env" 2>/dev/null; then
-        sed -i "s|^NGINX_CONF=.*|NGINX_CONF=${conf}|" "$web_env"
+        local tmp="${web_env}.tmp.$$"
+        sed "s|^NGINX_CONF=.*|NGINX_CONF=${conf}|" "$web_env" > "$tmp" && mv "$tmp" "$web_env"
     else
         [ -n "$(tail -c1 "$web_env" 2>/dev/null || true)" ] && echo "" >> "$web_env"
         echo "NGINX_CONF=${conf}" >> "$web_env"

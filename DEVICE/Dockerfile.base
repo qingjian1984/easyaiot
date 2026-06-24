@@ -9,18 +9,21 @@
 
 FROM maven:3.9.11-eclipse-temurin-21-alpine AS builder
 
+# 镜像源配置（通过 --build-arg 传入，默认腾讯云）
+ARG MAVEN_MIRROR_URL=https://mirrors.cloud.tencent.com/nexus/repository/maven-public/
+
 RUN mkdir -p /m2/host-cache /m2/repository && \
-    cat > /m2/settings.xml <<'EOF'
+    cat > /m2/settings.xml <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
   <mirrors>
     <mirror>
-      <id>aliyun-all</id>
+      <id>tencent-maven</id>
       <mirrorOf>central,huaweicloud,aliyunmaven,aliyun-plugin</mirrorOf>
-      <name>Aliyun Maven</name>
-      <url>https://maven.aliyun.com/repository/public</url>
+      <name>Tencent Cloud Maven</name>
+      <url>${MAVEN_MIRROR_URL}</url>
     </mirror>
   </mirrors>
   <localRepository>/m2/host-cache</localRepository>

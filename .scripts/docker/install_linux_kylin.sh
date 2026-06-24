@@ -728,6 +728,66 @@ verify_service_health() {
     fi
 }
 
+# 检查 runtime_image.sh pull 是否已拉取过镜像，若已拉取则跳过构建直接启动
+# 返回 0 表示镜像已就绪可跳过构建，返回 1 表示需要本地构建
+_check_pulled_images_ready() {
+    local _marker="${SCRIPT_DIR}/.runtime_images_pulled"
+    if [ ! -f "$_marker" ]; then
+        return 1
+    fi
+
+    # 用 sed 安全提取字段值，避免 source 标记文件因意外含 `;;` 等特殊字符而引发语法错误
+    local _pull_arch="" _pull_profile="" _pull_tag=""
+    _pull_arch=$(sed -n 's/^PULL_ARCH=//p' "$_marker" 2>/dev/null || true)
+    _pull_profile=$(sed -n 's/^PULL_PROFILE=//p' "$_marker" 2>/dev/null || true)
+    _pull_tag=$(sed -n 's/^PULL_TAG=//p' "$_marker" 2>/dev/null || true)
+    _pull_arch="${_pull_arch:-}"
+    _pull_profile="${_pull_profile:-}"
+    _pull_tag="${_pull_tag:-}"
+    local _current_arch; _current_arch=$(uname -m)
+    case "$_current_arch" in
+        x86_64|amd64) _current_arch="amd64" ;;
+        aarch64|arm64) _current_arch="arm64" ;;
+        armv7l) _current_arch="arm32" ;;
+        *) _current_arch="amd64" ;;
+    esac
+
+    # 架构不匹配：标记是给别的架构拉取的，不能复用
+    if [ "${_pull_arch:-}" != "${_current_arch}" ]; then
+        print_info "拉取标记架构 (${_pull_arch:-?}) 与当前架构 (${_current_arch}) 不匹配，将重新构建"
+        return 1
+    fi
+
+    # 检查关键镜像是否在本地存在（用 docker image inspect 验证）
+    local _missing=0
+    local _check_images=(
+        "ai-service:${_pull_tag:-latest}"
+        "video-service:${_pull_tag:-latest}"
+        "iot-gateway:${_pull_tag:-latest}"
+    )
+    # 根据形态检查 WEB 镜像
+    case "${_pull_profile:-full}" in
+        mini)     _check_images+=("web-service:${_pull_tag:-latest}-mini") ;;
+        standard) _check_images+=("web-service:${_pull_tag:-latest}-standard") ;;
+        *)        _check_images+=("web-service:${_pull_tag:-latest}") ;;
+    esac
+
+    for _img in "${_check_images[@]}"; do
+        if ! docker image inspect "$_img" >/dev/null 2>&1; then
+            print_warning "拉取的镜像 ${_img} 不在本地，将重新构建"
+            _missing=1
+            break
+        fi
+    done
+
+    if [ "$_missing" -eq 1 ]; then
+        return 1
+    fi
+
+    print_success "检测到 runtime_image.sh pull 已拉取镜像 (${_pull_arch}, ${_pull_profile:-full})，跳过构建直接启动"
+    return 0
+}
+
 # 安装所有服务
 install_linux() {
     print_section "开始安装所有服务 (麒麟系统)"
@@ -740,11 +800,22 @@ install_linux() {
     configure_docker_mirror
     create_network
     
+    # ★ 检测 runtime_image.sh pull 是否已拉取过镜像
+    #   若已拉取，业务模块（DEVICE/AI/VIDEO/WEB）跳过 docker build，直接用 start
+    local _skip_build=0
+    if _check_pulled_images_ready; then
+        _skip_build=1
+        export EASYAIOT_SKIP_BUILD=1
+    fi
+    
     local success_count=0
     local total_count=${#MODULES[@]}
     
     for module in "${MODULES[@]}"; do
         print_section "安装 ${MODULE_NAMES[$module]}"
+        if [ "$_skip_build" -eq 1 ] && [ "$module" != ".scripts/docker" ]; then
+            print_info "镜像已从远程拉取，跳过 docker build，直接启动 ${MODULE_NAMES[$module]}"
+        fi
         if execute_module_command "$module" "install"; then
             success_count=$((success_count + 1))
             # 基础服务装完后精确等待 PostgreSQL/Nacos/Redis 就绪（取代原固定 sleep 5）

@@ -1,8 +1,15 @@
 services:
   # 中间件端口统一 0.0.0.0:宿主机:容器，避免部分环境仅绑定 [::] 导致本机走 127.0.0.1 连接失败。
   # Nacos Server
+  # ★ 显式声明 platform 避免 ARM/AMD64 跨架构问题：
+  #   - nacos/nacos-server:v2.5.1-slim 为官方多架构镜像（linux/amd64 + linux/arm64），
+  #     不声明 platform 时 Docker 优先使用本地缓存架构 → 若本地仅有 amd64 镜像则 QEMU 模拟运行，
+  #     ARM 主机上性能极差且可能因 JVM 参数不兼容而启动失败
+  #   - slim 版本仅移除了 Derby 外的多余依赖，核心功能与普通版完全一致
+  #   - 声明 ${NACOS_PLATFORM:-linux/amd64} 允许通过环境变量覆盖架构
   Nacos:
-    image: nacos/nacos-server:v2.5.1
+    image: nacos/nacos-server:v2.5.1-slim
+    platform: ${NACOS_PLATFORM:-linux/amd64}
     container_name: nacos-server
     restart: always
     environment:
@@ -405,10 +412,16 @@ services:
       - easyaiot-network
 
   # ZLMediaKit Media Server
+  # 注意：ZLMediaKit 启动时会 setrlimit(RLIMIT_NPROC)，需要 CAP_SYS_RESOURCE
+  # 不设置 privileged=true（权限过大），仅授予必要的 capability
   ZLMediaKit:
     image: zlmediakit/zlmediakit:master
     container_name: zlmediakit-server
     restart: always
+    cap_add:
+      - SYS_RESOURCE
+    ulimits:
+      nproc: 65536
     ports:
       - "0.0.0.0:6080:80/tcp"     # HTTP 播流端口
       - "0.0.0.0:4443:443/tcp"    # HTTPS 播流端口

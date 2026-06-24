@@ -1,14 +1,20 @@
 # BuildKit 内置前端，支持 RUN --mount
 # 构建阶段：pnpm store 使用 BuildKit cache mount（id=web-pnpm-store），
 # 由 install_linux.sh 通过 --cache-from/--cache-to type=local 持久化到 .build-cache/web/pnpm-store
+#
+# 多架构支持：由 .scripts/docker/runtime_image.sh 的 docker wrapper 注入 --platform 实现，
+# Docker BuildKit 会根据 --platform 自动拉取对应架构的基础镜像
 FROM node:22-alpine3.21 AS builder
+
+# 镜像源配置（通过 --build-arg 传入，默认腾讯云）
+ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
 
 ENV CI=true
 
-RUN npm config set registry https://registry.npmmirror.com/
+RUN npm config set registry ${NPM_REGISTRY}
 
 RUN npm install -g pnpm@11.3.0 && \
-    pnpm config set registry https://registry.npmmirror.com/ && \
+    pnpm config set registry ${NPM_REGISTRY} && \
     pnpm config set fetch-timeout 600000 && \
     pnpm config set fetch-retries 5 && \
     pnpm config set fetch-retry-mintimeout 20000 && \
@@ -41,22 +47,40 @@ RUN echo "cache-bust=${CACHE_BUST}" > /tmp/.web-cache-bust
 
 COPY . .
 
+# 跨架构构建时，runtime_image.sh 会先在本机架构下执行 docker build --target builder，
+# 提取 dist/ 放回 build context（dist-prebuilt/），再设 SKIP_VITE_BUILD=1 跳过 QEMU 模拟 vite build。
+ARG SKIP_VITE_BUILD=0
+
 # 部署形态与上传前缀写入生产环境（与 nginx /dev-api 路由一致；mini 无 Gateway 48080）
 RUN printf '\nVITE_GLOB_DEPLOY_PROFILE = %s\nVITE_GLOB_UPLOAD_URL = /dev-api\n' "${VITE_GLOB_DEPLOY_PROFILE}" >> .env.production
 
-# vite 打包通常需数分钟；用 tee 同时写日志，避免终端长时间无输出像卡住
+# vite 前端构建（约 2–10 分钟）；跨架构时通过 SKIP_VITE_BUILD=1 跳过，直接用预构建 dist-prebuilt
 RUN --mount=type=cache,target=/pnpm/store,id=web-pnpm-store \
     pnpm config set store-dir /pnpm/store && \
     set -e && \
-    echo "=== pnpm run build 开始（Vite 打包，约 2–10 分钟，请耐心等待）===" && \
-    pnpm run build 2>&1 | tee /tmp/web-build-logs/pnpm-build.log || \
-    (echo "=== pnpm build failed, log: ===" && cat /tmp/web-build-logs/pnpm-build.log && exit 1)
+    if [ "${SKIP_VITE_BUILD}" = "1" ]; then \
+        echo "=== SKIP_VITE_BUILD=1：使用预构建 dist-prebuilt（规避 QEMU 模拟 vite build）==="; \
+        test -d dist-prebuilt || (echo "=== SKIP_VITE_BUILD=1 但 dist-prebuilt/ 不存在！ ===" && exit 1); \
+        mv dist-prebuilt dist; \
+    else \
+        echo "=== vite build 开始（约 2–10 分钟）===" && \
+        npx cross-env NODE_ENV=production vite build 2>&1 | tee /tmp/web-build-logs/pnpm-build.log || \
+        (echo "=== vite build failed, log: ===" && cat /tmp/web-build-logs/pnpm-build.log && exit 1) && \
+        echo "=== postBuild 开始 ===" && \
+        npx esno ./build/script/postBuild.ts 2>&1 | tee -a /tmp/web-build-logs/pnpm-build.log || \
+        (echo "=== postBuild failed, log: ===" && cat /tmp/web-build-logs/pnpm-build.log && exit 1); \
+    fi
 
 RUN test -d dist || (echo "=== dist missing after build ===" && cat /tmp/web-build-logs/pnpm-build.log && exit 1)
 
 FROM nginx:1.29.2-alpine
 
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+# 镜像源配置（通过 --build-arg 传入，默认腾讯云）
+ARG APK_MIRROR=mirrors.cloud.tencent.com
+
+RUN if [ -n "${APK_MIRROR}" ]; then \
+        sed -i "s/dl-cdn.alpinelinux.org/${APK_MIRROR}/g" /etc/apk/repositories; \
+    fi
 
 LABEL org.opencontainers.image.authors="basiclab"
 

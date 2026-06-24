@@ -89,9 +89,10 @@ build_with_cache() {
     init_easyaiot_build_cache_dirs "$EASYAIOT_ROOT"
     enable_docker_buildkit
 
-    print_info "docker build（麒麟 ARM，项目根 .build-cache bind mount）..."
+    print_info "docker build（麒麟 ARM，Dockerfile.arm，项目根 .build-cache bind mount）..."
     set +e
     docker build \
+        -f Dockerfile.arm \
         --build-context "pip-cache=$(pip_cache_build_context_dir_for "$EASYAIOT_ROOT" ai)" \
         --build-context "pip-wheels=$(arm_pip_wheels_build_context_dir_for "$EASYAIOT_ROOT" ai)" \
         --build-arg BASE_IMAGE="$ARM_BASE_IMAGE" \
@@ -203,45 +204,27 @@ detect_architecture() {
     export BASE_IMAGE="$ARM_BASE_IMAGE"
 }
 
-# 配置ARM架构的Dockerfile（针对麒麟系统）
+# 确保 ARM 架构 Dockerfile（Dockerfile.arm）存在，不覆写 x86 Dockerfile
 configure_kylin_dockerfile() {
-    print_info "配置麒麟系统 ARM 架构 Dockerfile..."
+    print_info "配置麒麟系统 ARM 架构 Dockerfile（Dockerfile.arm）..."
     
-    # 备份原始 Dockerfile
-    if [ ! -f Dockerfile.orig ]; then
-        cp Dockerfile Dockerfile.orig
-        print_info "已备份原始 Dockerfile 为 Dockerfile.orig"
-    fi
-    
-    # 优先使用 Dockerfile.arm（如果存在）
     if [ -f Dockerfile.arm ]; then
         print_info "使用现有的 Dockerfile.arm（ARM架构专用）"
-        cp Dockerfile.arm Dockerfile
-        print_success "已切换到 Dockerfile.arm"
     else
-        print_warning "Dockerfile.arm 不存在，将修改 Dockerfile 以支持 ARM 架构"
-        print_info "创建 ARM 版本的 Dockerfile..."
+        print_warning "Dockerfile.arm 不存在，将创建以支持 ARM 架构"
+        print_info "创建 ARM 版本的 Dockerfile.arm..."
         
         # 创建临时 Dockerfile，替换基础镜像
-        sed "1s|^FROM.*|FROM ${ARM_BASE_IMAGE} AS base|" Dockerfile.orig > Dockerfile.kylin.tmp
+        sed "1s|^FROM.*|FROM ${ARM_BASE_IMAGE} AS base|" Dockerfile > Dockerfile.kylin.tmp
         
-        # 检查是否需要修改 apt 源（麒麟系统可能需要特殊配置）
-        # 如果基础镜像是基于 Ubuntu/Debian，保持原有配置
-        # 如果基础镜像是基于 CentOS/RHEL，需要修改为 yum
-        
-        mv Dockerfile.kylin.tmp Dockerfile.kylin
-        cp Dockerfile.kylin Dockerfile
-        print_success "已创建麒麟系统 ARM 版本的 Dockerfile"
+        mv Dockerfile.kylin.tmp Dockerfile.arm
+        print_success "已创建 ARM 版本的 Dockerfile.arm"
     fi
 }
 
 # 恢复原始 Dockerfile（可选）
 restore_dockerfile() {
-    if [ -f Dockerfile.orig ]; then
-        print_info "恢复原始 Dockerfile..."
-        cp Dockerfile.orig Dockerfile
-        print_success "已恢复原始 Dockerfile"
-    fi
+    print_info "无需恢复，Dockerfile 不再被覆写"
 }
 
 # 配置架构相关的docker-compose设置
@@ -686,18 +669,22 @@ install_service() {
     configure_gpu
     prepare_cached_resources
     
-    print_info "构建 Docker 镜像（麒麟 ARM，优先复用离线 pip 缓存）..."
-    print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
-    print_warning "首次构建可能需要较长时间（20-40分钟），请耐心等待..."
-    print_info "正在下载基础镜像和安装依赖..."
-    print_info "构建进度将实时显示，请勿中断..."
-    echo ""
-    
-    if ! build_with_cache ""; then
-        exit 1
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect ai-service:latest >/dev/null 2>&1; then
+        print_success "镜像已从远程拉取 (ai-service:latest)，跳过构建"
+    else
+        print_info "构建 Docker 镜像（麒麟 ARM，优先复用离线 pip 缓存）..."
+        print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
+        print_warning "首次构建可能需要较长时间（20-40分钟），请耐心等待..."
+        print_info "正在下载基础镜像和安装依赖..."
+        print_info "构建进度将实时显示，请勿中断..."
+        echo ""
+        
+        if ! build_with_cache ""; then
+            exit 1
+        fi
+        echo ""
+        print_success "镜像构建完成！"
     fi
-    echo ""
-    print_success "镜像构建完成！"
     
     print_info "启动服务..."
     set +e  # 暂时关闭错误退出，以便捕获启动状态

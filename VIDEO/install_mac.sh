@@ -341,12 +341,16 @@ install_service() {
     download_face_rec_model
     create_env_file
     
-    print_info "构建 Docker 镜像（减少输出）..."
-    # 使用 --progress=plain 减少构建输出
-    if echo "$COMPOSE_CMD" | grep -q "docker compose"; then
-        $COMPOSE_CMD build --progress=plain 2>&1 | grep -E "(Step|Successfully|ERROR|WARNING|built)" || true
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect video-service:latest >/dev/null 2>&1; then
+        print_success "镜像已从远程拉取 (video-service:latest)，跳过构建"
     else
-        $COMPOSE_CMD build --progress=plain 2>&1 | grep -E "(Step|Successfully|ERROR|WARNING|built)" || true
+        print_info "构建 Docker 镜像（减少输出）..."
+        # 使用 --progress=plain 减少构建输出
+        if echo "$COMPOSE_CMD" | grep -q "docker compose"; then
+            $COMPOSE_CMD build --progress=plain 2>&1 | grep -E "(Step|Successfully|ERROR|WARNING|built)" || true
+        else
+            $COMPOSE_CMD build --progress=plain 2>&1 | grep -E "(Step|Successfully|ERROR|WARNING|built)" || true
+        fi
     fi
     
     print_info "启动服务..."

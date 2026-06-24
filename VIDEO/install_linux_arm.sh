@@ -37,6 +37,8 @@ DOCKER_PLATFORM="linux/arm64"
 EASYAIOT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=../.scripts/docker/init-build-cache-dirs.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/init-build-cache-dirs.sh"
+# shellcheck source=../.scripts/docker/deploy_profile.sh
+source "${EASYAIOT_ROOT}/.scripts/docker/deploy_profile.sh"
 BUILD_CACHE_DIR="$(easyaiot_build_cache_base "$EASYAIOT_ROOT")"
 DOCKER_IMAGES_DIR="$(arm_docker_images_dir "$EASYAIOT_ROOT")"
 
@@ -55,6 +57,18 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# 清理 compose recreate 被中断后遗留的「改名孤儿容器」（形如 <12位hex>_video-service）。
+# recreate 时 compose 先把旧容器改名让出 container_name，中途被打断旧容器就残留；
+# 它若仍在运行会占住宿主机端口，新容器起不来。--remove-orphans 清不掉它
+# （只清「服务已从 compose 文件移除」的孤儿），须在 up 前按名主动删除。
+cleanup_renamed_containers() {
+    local names
+    names=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^[0-9a-f]{12}_video-service$' || true)
+    [ -z "$names" ] && return 0
+    print_warning "清理上次中断遗留的改名孤儿容器: $(echo "$names" | tr '\n' ' ')"
+    echo "$names" | xargs -r docker rm -f >/dev/null 2>&1 || true
 }
 
 init_build_cache_dirs() {
@@ -174,15 +188,32 @@ build_with_cache() {
 
     init_build_cache_dirs
     enable_docker_buildkit
-    optimize_dockerfile_pip_cache Dockerfile
     optimize_dockerfile_pip_cache Dockerfile.arm
 
+    # ★ 确保 ARM 基础镜像在构建前已拉取（尤其是交叉构建场景）
+    # --pull=false 仅在镜像已存在时有效，交叉构建时必须先拉取
+    if ! docker image inspect "$ARM_BASE_IMAGE" >/dev/null 2>&1; then
+        print_info "拉取 ARM 基础镜像: ${ARM_BASE_IMAGE}（平台: ${DOCKER_PLATFORM}）..."
+        print_info "基础镜像约 10GB+，拉取可能需要较长时间，请耐心等待..."
+        if ! docker pull --platform "$DOCKER_PLATFORM" "$ARM_BASE_IMAGE"; then
+            print_error "无法拉取 ARM 基础镜像: ${ARM_BASE_IMAGE}"
+            print_info "提示：可手动执行 docker pull --platform ${DOCKER_PLATFORM} ${ARM_BASE_IMAGE} 后重试"
+            return 1
+        fi
+        print_success "ARM 基础镜像已就绪"
+    else
+        print_info "ARM 基础镜像已存在，跳过拉取: ${ARM_BASE_IMAGE}"
+    fi
+
     cache_opts="--build-arg OFFLINE_MODE=${OFFLINE_MODE:-0}"
-    print_info "docker build（ARM，.build-cache bind mount）..."
+    cache_opts="$cache_opts --build-arg YUM_MIRROR_URL=${YUM_MIRROR_URL:-https://mirrors.cloud.tencent.com}"
+    cache_opts="$cache_opts --build-arg PIP_INDEX_URL=${PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}"
+    print_info "docker build（ARM，Dockerfile.arm，.build-cache bind mount）..."
     while [ $attempt -le $max_retries ]; do
         print_info "执行构建（第 ${attempt}/${max_retries} 次）..."
         set +e
         docker build \
+            -f Dockerfile.arm \
             --build-context "pip-cache=$(pip_cache_build_context_dir_for "$EASYAIOT_ROOT" video)" \
             --build-context "pip-wheels=$(arm_pip_wheels_build_context_dir_for "$EASYAIOT_ROOT" video)" \
             --target runtime \
@@ -240,6 +271,10 @@ check_docker() {
 
 # 检查 Docker Compose 是否安装
 check_docker_compose() {
+    # 已检测过（COMPOSE_CMD 已确定）则直接复用
+    if [ -n "$COMPOSE_CMD" ]; then
+        return 0
+    fi
     # 先检查 docker-compose 命令
     if check_command docker-compose; then
         COMPOSE_CMD="docker-compose"
@@ -280,10 +315,17 @@ detect_architecture() {
             print_info "使用 ARM 基础镜像: $ARM_BASE_IMAGE"
             ;;
         x86_64|amd64)
-            print_error "检测到 x86_64 架构"
-            print_error "本脚本专用于 ARM 架构部署"
-            print_info "如需在 x86_64 架构上部署，请使用 install_linux.sh"
-            exit 1
+            if [ "${EASYAIOT_CROSS_BUILD:-0}" = "1" ]; then
+                ARCH="aarch64"
+                DOCKER_PLATFORM="linux/arm64"
+                print_info "跨架构构建模式: 在 x86_64 上构建 ARM64 镜像"
+                print_info "基础镜像: $ARM_BASE_IMAGE"
+            else
+                print_error "检测到 x86_64 架构"
+                print_error "本脚本专用于 ARM 架构部署"
+                print_info "如需在 x86_64 架构上部署，请使用 install_linux.sh"
+                exit 1
+            fi
             ;;
         *)
             print_error "未识别的架构: $ARCH"
@@ -308,66 +350,43 @@ check_local_ffmpeg() {
             print_info "将优先使用本地文件，不从 GitHub 下载"
             return 0
         else
-            print_warning "本地 ffmpeg 文件存在但大小异常，将从 GitHub 下载"
-            # 删除异常文件，避免 Dockerfile COPY 失败
-            rm -f "$ffmpeg_file"
+            # ★ 占位符文件需要保留，否则 Dockerfile.arm 中的 COPY ...* 通配符无法匹配
+            # Dockerfile.arm 内会检查文件大小并跳过使用
+            print_info "本地 ffmpeg 文件为占位符（${file_size} bytes），构建时将从 GitHub 下载"
             return 1
         fi
     else
         print_info "未找到本地 ffmpeg 文件: $ffmpeg_file"
         print_info "构建时将从 GitHub 下载"
-        # 创建一个空占位符文件，避免 Dockerfile COPY 命令失败
-        # Dockerfile 会检查文件大小，如果文件为空或很小则跳过使用
+        # ★ 创建占位符文件，确保 Dockerfile.arm 中的 COPY ffmpeg-*.tar.xz* 通配符能匹配
         touch "$ffmpeg_file" 2>/dev/null || true
         return 1
     fi
 }
 
-# 配置ARM架构的Dockerfile
+# 确保 ARM 架构 Dockerfile（Dockerfile.arm）存在，不覆写 x86 Dockerfile
 configure_arm_dockerfile() {
-    print_info "配置 ARM 架构 Dockerfile..."
+    print_info "配置 ARM 架构 Dockerfile（Dockerfile.arm）..."
     
-    # 备份原始 Dockerfile
-    if [ ! -f Dockerfile.orig ]; then
-        cp Dockerfile Dockerfile.orig
-        print_info "已备份原始 Dockerfile 为 Dockerfile.orig"
-    fi
-    
-    # 创建 ARM 版本的 Dockerfile
     if [ -f Dockerfile.arm ]; then
         print_info "使用现有的 Dockerfile.arm"
-        cp Dockerfile.arm Dockerfile
     else
-        print_info "创建 ARM 版本的 Dockerfile..."
-        # 替换第一行的 FROM 语句
-        sed "1s|^FROM.*|FROM ${ARM_BASE_IMAGE} AS base|" Dockerfile.orig > Dockerfile.arm.tmp
+        print_info "创建 ARM 版本的 Dockerfile.arm..."
+        sed "1s|^FROM.*|FROM ${ARM_BASE_IMAGE} AS base|" Dockerfile > Dockerfile.arm.tmp
         
-        # 检查 manylinuxaarch64-builder 镜像是否需要特殊处理
-        # 如果是构建器镜像，可能需要额外的运行时镜像
         if echo "$ARM_BASE_IMAGE" | grep -q "manylinuxaarch64-builder"; then
             print_warning "检测到构建器镜像，可能需要额外的运行时配置"
             print_info "如果构建失败，请考虑使用运行时镜像，如：pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime"
         fi
         
         mv Dockerfile.arm.tmp Dockerfile.arm
-        cp Dockerfile.arm Dockerfile
-        print_success "已创建 ARM 版本的 Dockerfile"
+        print_success "已创建 ARM 版本的 Dockerfile.arm"
     fi
     
-    # 检查本地是否有 ffmpeg 文件
-    check_local_ffmpeg
+    # 检查本地是否有 ffmpeg 文件（找不到不影响构建，Dockerfile 内会从 GitHub 下载）
+    check_local_ffmpeg || true
 
-    optimize_dockerfile_pip_cache Dockerfile
     optimize_dockerfile_pip_cache Dockerfile.arm
-}
-
-# 恢复原始 Dockerfile（可选）
-restore_dockerfile() {
-    if [ -f Dockerfile.orig ]; then
-        print_info "恢复原始 Dockerfile..."
-        cp Dockerfile.orig Dockerfile
-        print_success "已恢复原始 Dockerfile"
-    fi
 }
 
 # 检查并创建 Docker 网络（注意：使用host网络模式后，此函数不再需要，但保留以兼容其他服务）
@@ -376,13 +395,11 @@ check_network() {
     print_info "注意：VIDEO服务使用host网络模式，不需要加入easyaiot-network网络"
     print_info "但中间件服务仍需要此网络，检查网络是否存在..."
     
-    # 检查网络是否已存在（使用网络名称）
     if docker network ls --format "{{.Name}}" 2>/dev/null | grep -q "^easyaiot-network$"; then
         print_info "网络 easyaiot-network 已存在"
         return 0
     fi
     
-    # 网络不存在，尝试创建
     print_info "网络 easyaiot-network 不存在，正在创建..."
     local create_output=$(docker network create easyaiot-network 2>&1)
     local create_exit_code=$?
@@ -391,14 +408,12 @@ check_network() {
         print_success "网络 easyaiot-network 已创建"
         return 0
     else
-        # 检查错误原因
         if echo "$create_output" | grep -qi "already exists"; then
             print_info "网络 easyaiot-network 已存在（可能在检查后创建）"
             return 0
         elif echo "$create_output" | grep -qi "permission denied"; then
             print_error "没有权限创建 Docker 网络"
             print_info "请确保当前用户在 docker 组中，或使用 sudo 运行脚本"
-            print_info "解决方案："
             echo "  1. 将当前用户添加到 docker 组："
             echo "     sudo usermod -aG docker $USER"
             echo "     然后重新登录或运行: newgrp docker"
@@ -462,7 +477,6 @@ download_face_rec_model() {
 clean_compose_cache() {
     print_info "清理 VIDEO 服务的 compose 容器网络缓存..."
     
-    # 确保 COMPOSE_CMD 已设置
     if [ -z "$COMPOSE_CMD" ]; then
         if check_command docker-compose; then
             COMPOSE_CMD="docker-compose"
@@ -476,7 +490,6 @@ clean_compose_cache() {
     
     local compose_file=""
     
-    # 查找 compose 文件
     if [ -f "${SCRIPT_DIR}/docker-compose.yml" ]; then
         compose_file="${SCRIPT_DIR}/docker-compose.yml"
     elif [ -f "${SCRIPT_DIR}/docker-compose.yaml" ]; then
@@ -488,9 +501,7 @@ clean_compose_cache() {
     
     cd "$SCRIPT_DIR"
     
-    # 1. 停止并清理容器和网络连接
     print_info "执行 docker-compose down 清理容器和网络连接..."
-    # 使用 eval 来正确处理包含空格的 COMPOSE_CMD
     if eval "$COMPOSE_CMD down" 2>/dev/null; then
         print_success "容器和网络连接已清理"
     else
@@ -498,7 +509,6 @@ clean_compose_cache() {
     fi
     sleep 1
     
-    # 2. 强制重新读取配置（这会清除 docker-compose 的配置缓存）
     print_info "强制重新读取配置以清除缓存..."
     if eval "$COMPOSE_CMD config" > /dev/null 2>&1; then
         print_success "配置已重新验证"
@@ -506,14 +516,11 @@ clean_compose_cache() {
         print_warning "配置验证失败，但继续执行"
     fi
     
-    # 3. 清理可能的网络残留连接
     print_info "检查并清理网络残留连接..."
     local network_name="easyaiot-network"
     if docker network inspect "$network_name" &> /dev/null; then
-        # 获取连接到该网络的所有容器
         local containers=$(docker network inspect "$network_name" --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null || echo "")
         
-        # 检查是否有VIDEO相关的容器残留
         if echo "$containers" | grep -q "video"; then
             print_info "发现残留的网络连接，正在清理..."
             echo "$containers" | tr ' ' '\n' | grep -v '^$' | grep -i "video" | while read -r container; do
@@ -525,7 +532,6 @@ clean_compose_cache() {
         fi
     fi
     
-    # 4. 清理 docker-compose 的临时文件（如果存在）
     print_info "清理 docker-compose 临时文件..."
     find . -maxdepth 1 -name ".docker-compose.*" -type f -delete 2>/dev/null || true
     find . -maxdepth 1 -name "docker-compose.override.yml" -type f -delete 2>/dev/null || true
@@ -542,29 +548,21 @@ create_env_file() {
             cp env.example .env.docker
             print_success ".env.docker 文件已从 env.example 创建"
             
-            # 自动配置中间件连接信息（使用localhost，因为使用host网络模式）
             print_info "自动配置中间件连接信息（使用host网络模式，通过localhost访问中间件）..."
             
-            # 更新数据库连接（使用localhost，因为使用host网络模式）
             sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:iot45722414822@localhost:5432/iot-video20|' .env.docker
             
-            # 更新Nacos配置（使用localhost，因为使用host网络模式）
             sed -i 's|^NACOS_SERVER=.*|NACOS_SERVER=localhost:8848|' .env.docker
             
-            # 更新MinIO配置（使用localhost，因为使用host网络模式）
             sed -i 's|^MINIO_ENDPOINT=.*|MINIO_ENDPOINT=localhost:9000|' .env.docker
             sed -i 's|^MINIO_SECRET_KEY=.*|MINIO_SECRET_KEY=basiclab@iot975248395|' .env.docker
             
-            # 更新Redis配置（使用localhost，因为使用host网络模式）
             sed -i 's|^REDIS_HOST=.*|REDIS_HOST=localhost|' .env.docker
             
-            # 更新Kafka配置（使用localhost，因为使用host网络模式）
             sed -i 's|^KAFKA_BOOTSTRAP_SERVERS=.*|KAFKA_BOOTSTRAP_SERVERS=localhost:9092|' .env.docker
             
-            # 更新TDengine配置（使用localhost，因为使用host网络模式）
             sed -i 's|^TDENGINE_HOST=.*|TDENGINE_HOST=localhost|' .env.docker
             
-            # 更新Nacos密码
             sed -i 's|^NACOS_PASSWORD=.*|NACOS_PASSWORD=basiclab@iot78475418754|' .env.docker
             
             print_success "中间件连接信息已自动配置（使用host网络模式）"
@@ -578,41 +576,44 @@ create_env_file() {
         print_info ".env.docker 文件已存在"
         print_info "检查并更新中间件连接信息（使用host网络模式）..."
         
-        # 检查并更新数据库连接（如果还是旧的服务名，改为localhost）
         if grep -q "DATABASE_URL=.*PostgresSQL" .env.docker || grep -q "DATABASE_URL=.*postgres-server" .env.docker; then
             sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:iot45722414822@localhost:5432/iot-video20|' .env.docker
             print_info "已更新数据库连接为 localhost:5432（host网络模式）"
         fi
         
-        # 检查并更新Nacos配置（如果还是IP地址或旧的服务名，改为localhost）
         if grep -q "NACOS_SERVER=.*14\.18\.122\.2" .env.docker || grep -q "NACOS_SERVER=.*Nacos" .env.docker || grep -q "NACOS_SERVER=.*nacos-server" .env.docker; then
             sed -i 's|^NACOS_SERVER=.*|NACOS_SERVER=localhost:8848|' .env.docker
             print_info "已更新Nacos连接为 localhost:8848（host网络模式）"
         fi
         
-        # 检查并更新MinIO配置（如果还是旧的服务名，改为localhost）
         if grep -q "MINIO_ENDPOINT=.*MinIO" .env.docker || grep -q "MINIO_ENDPOINT=.*minio-server" .env.docker; then
             sed -i 's|^MINIO_ENDPOINT=.*|MINIO_ENDPOINT=localhost:9000|' .env.docker
             print_info "已更新MinIO连接为 localhost:9000（host网络模式）"
         fi
         
-        # 检查并更新Redis配置（如果还是旧的服务名，改为localhost）
         if grep -q "REDIS_HOST=.*Redis" .env.docker || grep -q "REDIS_HOST=.*redis-server" .env.docker; then
             sed -i 's|^REDIS_HOST=.*|REDIS_HOST=localhost|' .env.docker
             print_info "已更新Redis连接为 localhost（host网络模式）"
         fi
         
-        # 检查并更新Kafka配置（如果还是旧的服务名，改为localhost）
         if grep -q "KAFKA_BOOTSTRAP_SERVERS=.*Kafka" .env.docker || grep -q "KAFKA_BOOTSTRAP_SERVERS=.*kafka-server" .env.docker; then
             sed -i 's|^KAFKA_BOOTSTRAP_SERVERS=.*|KAFKA_BOOTSTRAP_SERVERS=localhost:9092|' .env.docker
             print_info "已更新Kafka连接为 localhost:9092（host网络模式）"
         fi
         
-        # 检查并更新TDengine配置（如果还是旧的服务名，改为localhost）
         if grep -q "TDENGINE_HOST=.*TDengine" .env.docker || grep -q "TDENGINE_HOST=.*tdengine-server" .env.docker; then
             sed -i 's|^TDENGINE_HOST=.*|TDENGINE_HOST=localhost|' .env.docker
             print_info "已更新TDengine连接为 localhost（host网络模式）"
         fi
+    fi
+
+    # 部署形态集成：与 x86 install_linux.sh 保持一致，确保同形态部署相同服务
+    ensure_deploy_profile
+    apply_python_service_deploy_env "${EASYAIOT_ROOT}"
+    if is_mini_deploy_profile; then
+        print_info "mini 形态：已配置本机部署（JAVA_BACKEND_URL=48099, NODE_REMOTE_DEPLOY=false）"
+    else
+        print_info "${EASYAIOT_DEPLOY_PROFILE:-full} 形态：已配置网关部署（JAVA_BACKEND_URL=48080, MinIO 启用）"
     fi
 }
 
@@ -631,32 +632,37 @@ install_service() {
     create_env_file
     prepare_cached_resources
     
-    # 检查本地 ffmpeg 文件
-    check_local_ffmpeg
+    # 检查本地 ffmpeg 文件（找不到不影响构建，Dockerfile 内会从 GitHub 下载）
+    check_local_ffmpeg || true
     
-    print_info "构建 Docker 镜像（ARM架构，优先复用离线 pip 缓存）..."
-    print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
-    print_warning "首次构建可能需要较长时间（20-40分钟），请耐心等待..."
-    print_info "构建进度将实时显示，请勿中断..."
-    echo ""
-    
-    if ! build_with_cache ""; then
-        exit 1
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect video-service:latest >/dev/null 2>&1; then
+        print_success "镜像已从远程拉取 (video-service:latest)，跳过构建"
+    else
+        print_info "构建 Docker 镜像（ARM架构，优先复用离线 pip 缓存）..."
+        print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
+        print_warning "首次构建可能需要较长时间（20-40分钟），请耐心等待..."
+        print_info "构建进度将实时显示，请勿中断..."
+        echo ""
+        
+        if ! build_with_cache ""; then
+            exit 1
+        fi
+        echo ""
+        print_success "镜像构建完成！"
     fi
-    echo ""
-    print_success "镜像构建完成！"
     
     # 清理占位符文件（如果存在）
     if [ -f "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" ]; then
         local file_size=$(stat -f%z "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" 2>/dev/null || stat -c%s "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" 2>/dev/null || echo 0)
-        if [ "$file_size" -le 1048576 ]; then  # 小于等于 1MB，可能是占位符文件
+        if [ "$file_size" -le 1048576 ]; then
             rm -f "ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
             print_info "已清理占位符文件"
         fi
     fi
     
     print_info "启动服务..."
-    $COMPOSE_CMD up -d
+    cleanup_renamed_containers
+    $COMPOSE_CMD up -d --remove-orphans
     
     print_success "服务安装完成！"
     print_info "等待服务启动..."
@@ -683,9 +689,12 @@ start_service() {
     if [ ! -f .env.docker ]; then
         print_warning ".env.docker 文件不存在，正在创建..."
         create_env_file
+    else
+        ensure_deploy_profile
     fi
     
-    $COMPOSE_CMD up -d
+    cleanup_renamed_containers
+    $COMPOSE_CMD up -d --force-recreate --remove-orphans
     print_success "服务已启动"
     check_status
 }
@@ -708,8 +717,16 @@ restart_service() {
     detect_architecture
     configure_arm_dockerfile
     clean_compose_cache
-    
-    $COMPOSE_CMD restart
+
+    if [ ! -f .env.docker ]; then
+        print_warning ".env.docker 文件不存在，正在创建..."
+        create_env_file
+    else
+        ensure_deploy_profile
+    fi
+
+    cleanup_renamed_containers
+    $COMPOSE_CMD up -d --force-recreate --remove-orphans
     print_success "服务已重启"
     check_status
 }
@@ -727,7 +744,6 @@ check_status() {
     if docker ps --filter "name=video-service" --format "table {{.Names}}\t{{.Status}}" | grep -q video-service; then
         docker ps --filter "name=video-service" --format "table {{.Names}}\t{{.Status}}"
         
-        # 检查健康检查
         HEALTH=$(docker inspect --format='{{.State.Health.Status}}' video-service 2>/dev/null || echo "N/A")
         if [ "$HEALTH" != "N/A" ]; then
             echo "健康状态: $HEALTH"
@@ -759,8 +775,8 @@ build_image() {
     detect_architecture
     configure_arm_dockerfile
     
-    # 检查本地 ffmpeg 文件
-    check_local_ffmpeg
+    # 检查本地 ffmpeg 文件（找不到不影响构建，Dockerfile 内会从 GitHub 下载）
+    check_local_ffmpeg || true
     
     print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
     print_warning "重新构建可能需要较长时间（20-40分钟），请耐心等待..."
@@ -776,7 +792,7 @@ build_image() {
     # 清理占位符文件（如果存在）
     if [ -f "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" ]; then
         local file_size=$(stat -f%z "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" 2>/dev/null || stat -c%s "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" 2>/dev/null || echo 0)
-        if [ "$file_size" -le 1048576 ]; then  # 小于等于 1MB，可能是占位符文件
+        if [ "$file_size" -le 1048576 ]; then
             rm -f "ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
             print_info "已清理占位符文件"
         fi
@@ -785,67 +801,131 @@ build_image() {
 
 # 清理服务
 clean_service() {
-    print_warning "这将删除容器、镜像和数据卷，确定要继续吗？(y/N)"
-    read -r response
-    
-    if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-        check_docker
-        check_docker_compose
-        print_info "停止并删除容器..."
-        $COMPOSE_CMD down -v
-        
-        print_info "删除镜像..."
-        docker rmi video-service:latest 2>/dev/null || true
-        
-        # 可选：恢复原始 Dockerfile
-        # restore_dockerfile
-        
-        print_success "清理完成"
-    else
-        print_info "已取消清理操作"
+    if [ "${EASYAIOT_AUTO_YES:-}" != "1" ]; then
+        print_warning "这将删除容器、镜像和数据卷，确定要继续吗？"
+        local response
+        while true; do
+            read -r -p "确认继续? [y/n] " response
+            case "$(echo "$response" | tr '[:upper:]' '[:lower:]')" in
+                y|yes) break ;;
+                n|no|'')
+                    print_info "已取消清理操作"
+                    return
+                    ;;
+                *) echo "请输入 y/yes 或 n/no" ;;
+            esac
+        done
     fi
+
+    check_docker
+    check_docker_compose
+    print_info "停止并删除容器..."
+    $COMPOSE_CMD down -v
+    
+    print_info "删除镜像..."
+    docker rmi video-service:latest 2>/dev/null || true
+    
+    print_success "清理完成"
 }
 
 # 更新服务
+# 性能优化（与 x86 install_linux.sh 保持一致）：
+#   1. 业务源码经 docker-compose 卷挂载（./:/app）进容器。「仅改业务代码、依赖不变」时，
+#      update 完全跳过 docker build：git pull 后只重启容器进程即可加载新代码（秒级）。
+#   2. 仅当以下任一成立时才重建镜像：镜像不存在 / FORCE_REBUILD=1 /
+#      本次 git pull 改动了依赖或构建输入（requirements*.txt、Dockerfile、docker-entrypoint.sh）。
+#   3. 需要构建时复用 BuildKit 层缓存 + 离线 pip 缓存。
+#   注：VIDEO 用 host 网络模式，从不加入 easyaiot-network，更新流程无需 clean_compose_cache。
 update_service() {
     print_info "更新服务..."
     check_docker
     check_docker_compose
     detect_architecture
     configure_arm_dockerfile
-    clean_compose_cache
     check_network
-    prepare_cached_resources
-    
-    # 检查本地 ffmpeg 文件
-    check_local_ffmpeg
-    
+
+    # 记录更新前代码版本，用于判断依赖/构建文件是否变化
+    local rev_before=""
+    rev_before="$(git rev-parse HEAD 2>/dev/null || echo "")"
+
     print_info "拉取最新代码..."
-    git pull || print_warning "Git pull 失败，继续使用当前代码"
-    
-    print_info "重新构建镜像（优先复用离线 pip 缓存）..."
-    print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
-    print_warning "构建可能需要较长时间（20-40分钟），请耐心等待..."
-    echo ""
-    
-    if ! build_with_cache ""; then
-        exit 1
-    fi
-    echo ""
-    print_success "镜像构建完成！"
-    
-    # 清理占位符文件（如果存在）
-    if [ -f "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" ]; then
-        local file_size=$(stat -f%z "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" 2>/dev/null || stat -c%s "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" 2>/dev/null || echo 0)
-        if [ "$file_size" -le 1048576 ]; then  # 小于等于 1MB，可能是占位符文件
-            rm -f "ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
-            print_info "已清理占位符文件"
+    # --ff-only：快进失败立即返回，不产生意外合并提交，比默认 pull 更快更安全
+    git pull --ff-only || print_warning "Git pull 失败，继续使用当前代码"
+
+    local rev_after=""
+    rev_after="$(git rev-parse HEAD 2>/dev/null || echo "")"
+
+    # ---- 判断是否需要重建镜像 ----
+    local needs_build=0
+    if ! docker image inspect video-service:latest >/dev/null 2>&1; then
+        needs_build=1
+        print_info "镜像不存在，需要构建"
+    elif [ "${FORCE_REBUILD:-0}" = "1" ]; then
+        needs_build=1
+        print_info "FORCE_REBUILD=1，强制重建镜像"
+    elif [ -z "$rev_before" ]; then
+        needs_build=1
+        print_warning "无法获取 git 版本信息，保守起见重建镜像"
+    elif [ "$rev_before" != "$rev_after" ]; then
+        local dep_changes dep_diff_rc=0
+        dep_changes="$(git diff --name-only "$rev_before" "$rev_after" -- \
+            requirements.txt requirements-base.txt requirements-docker.txt \
+            Dockerfile Dockerfile.arm docker-entrypoint.sh 2>/dev/null)" || dep_diff_rc=$?
+        if [ "$dep_diff_rc" -ne 0 ]; then
+            needs_build=1
+            print_warning "无法比较依赖变化（git diff 失败），保守起见重建镜像"
+        elif [ -n "$dep_changes" ]; then
+            needs_build=1
+            print_info "检测到依赖/构建文件变化，需要重建镜像："
+            echo "$dep_changes" | sed 's/^/    /'
         fi
     fi
-    
-    print_info "重启服务..."
-    $COMPOSE_CMD up -d
-    
+
+    if [ "$needs_build" = "1" ]; then
+        prepare_cached_resources
+        check_local_ffmpeg || true
+        print_info "重新构建镜像（复用 BuildKit 层缓存 + 离线 pip 缓存）..."
+        print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
+        print_warning "构建可能需要较长时间（20-40分钟），请耐心等待..."
+        echo ""
+        if ! build_with_cache ""; then
+            exit 1
+        fi
+        echo ""
+        print_success "镜像构建完成！"
+        
+        # 清理占位符文件
+        if [ -f "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" ]; then
+            local file_size=$(stat -f%z "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" 2>/dev/null || stat -c%s "ffmpeg-master-latest-linuxarm64-gpl.tar.xz" 2>/dev/null || echo 0)
+            if [ "$file_size" -le 1048576 ]; then
+                rm -f "ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
+                print_info "已清理占位符文件"
+            fi
+        fi
+        
+        print_info "应用新镜像（仅重建变更服务，最小化停机）..."
+        cleanup_renamed_containers
+        $COMPOSE_CMD up -d --remove-orphans --no-deps video-service
+    else
+        print_success "依赖未变，跳过镜像构建（业务代码经卷挂载，重启进程即可生效）"
+        cleanup_renamed_containers
+        $COMPOSE_CMD up -d --remove-orphans --no-deps video-service
+
+        local code_changed=0
+        if [ -n "$rev_before" ] && [ "$rev_before" != "$rev_after" ]; then
+            code_changed=1
+        elif ! git diff --quiet HEAD -- . 2>/dev/null; then
+            code_changed=1
+        fi
+
+        if [ "$code_changed" = "1" ]; then
+            print_info "重启容器进程以加载最新源码（秒级）..."
+            $COMPOSE_CMD restart video-service
+        else
+            print_info "代码无变更，无需重启"
+        fi
+    fi
+
     print_success "服务更新完成"
     check_status
 }
@@ -873,6 +953,8 @@ show_help() {
     echo "注意："
     echo "  - 本脚本专用于 ARM 架构（aarch64/arm64）"
     echo "  - 使用基础镜像: $ARM_BASE_IMAGE"
+    echo "  - 支持与 x86 版本相同的部署形态: mini(1) / standard(2) / full(3)"
+    echo "    通过环境变量 EASYAIOT_DEPLOY_PROFILE 控制"
     echo "  - 如需在 x86_64 架构上部署，请使用 install_linux.sh"
     echo ""
 }
@@ -921,4 +1003,3 @@ main() {
 
 # 运行主函数
 main "$@"
-

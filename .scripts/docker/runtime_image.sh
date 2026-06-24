@@ -1,0 +1,1266 @@
+#!/bin/bash
+# ============================================================================
+# EasyAIoT 运行时镜像构建/推送与拉取脚本
+#
+# 构建流程：
+#   1. 先在宿主机原生架构执行 install_linux.sh build，完成所有本机编译
+#      （Maven、Vite、pip install 等耗时操作），产出 JAR / dist 等编译产物。
+#   2. 针对不同目标架构（amd64 arm64），循环执行 docker build --platform，
+#      仅 COPY 本机编译产物 + 拉取目标架构的 base image 完成镜像包装。
+#      ★ 不依赖 QEMU 模拟：纯 Java (JAR)、纯前端 (Vite dist)、纯 Python
+#        脚本可跨架构 COPY 运行；C/C++ 原生库需宿主机交叉编译工具链支持。
+#   3. 打标签并推送到远程仓库。
+#
+# 用法:
+#   bash .scripts/docker/runtime_image.sh build [--push] [--tag <tag>] [--profile <profile>] [--registry <url>] [--native-source] [--force-rebuild]
+#   bash .scripts/docker/runtime_image.sh pull [--tag <tag>] [--profile <profile>] [--registry <url>]
+#
+# 选项:
+#   --push           构建后推送到远程仓库（仅 build）
+#   --tag <tag>      指定镜像标签（默认 latest）
+#   --registry <url> 指定推送/拉取仓库地址（默认 docker.cnb.cool/holmesian/easyaiot/）
+#   --force-rebuild  强制重新构建，忽略已存在的镜像（默认跳过已有镜像）
+#   --profile <name> 指定部署形态：mini | standard | full
+#                    - build: 不指定则构建全部 3 种形态；指定则只构建该形态
+#                    - pull:  不指定则交互选择（默认 full）；指定则直接拉取该形态
+#   --native-source  使用原始源（非国内镜像源），默认使用腾讯云镜像源加速
+#
+# 架构自动检测（uname -m）:
+#   x86_64 / amd64  → amd64
+#   aarch64 / arm64 → arm64
+#
+# 远程镜像命名规则（v3）:
+#   形态放在镜像名称中，架构作为标签：
+#     <registry>/<name>-<profile>:<arch>
+#     <registry>/<name>:<arch>                              (full 形态省略 -full)
+#     例: docker.cnb.cool/holmesian/easyaiot/aiot-ai:amd64
+#         docker.cnb.cool/holmesian/easyaiot/aiot-web-mini:arm64
+#         docker.cnb.cool/holmesian/easyaiot/aiot-web-standard:amd64
+#         docker.cnb.cool/holmesian/easyaiot/aiot-web:arm64              (full)
+#   多架构 manifest（使用版本标签，docker pull 自动匹配架构）:
+#     <registry>/<name>-<profile>:<tag>
+#     <registry>/<name>:<tag>                              (full 形态)
+#     例: docker.cnb.cool/holmesian/easyaiot/aiot-ai:latest
+#         docker.cnb.cool/holmesian/easyaiot/aiot-web-mini:v1.0.0
+#
+# 镜像映射（远程 → 本地）:
+#   共享镜像（全形态通用）:
+#     docker.cnb.cool/holmesian/easyaiot/aiot-ai:amd64       → ai-service:latest
+#     docker.cnb.cool/holmesian/easyaiot/aiot-video:amd64    → video-service:latest
+#     docker.cnb.cool/holmesian/easyaiot/aiot-gateway:amd64  → iot-gateway:latest
+#     ... （所有 DEVICE 模块）
+#   形态相关镜像（WEB，全量形态均构建/推送）:
+#     docker.cnb.cool/holmesian/easyaiot/aiot-web:amd64          → web-service:latest          (full)
+#     docker.cnb.cool/holmesian/easyaiot/aiot-web-mini:amd64     → web-service:latest-mini     (mini)
+#     docker.cnb.cool/holmesian/easyaiot/aiot-web-standard:amd64 → web-service:latest-standard (standard)
+#
+# 示例:
+#   bash .scripts/docker/runtime_image.sh build --push
+#   bash .scripts/docker/runtime_image.sh build --profile standard
+#   bash .scripts/docker/runtime_image.sh build --push --profile mini --registry my-registry.com/easyaiot/
+#   bash .scripts/docker/runtime_image.sh pull
+#   bash .scripts/docker/runtime_image.sh pull --profile mini --registry my-registry.com/easyaiot/
+#   bash .scripts/docker/runtime_image.sh pull --tag v1.2.0 --profile full
+# ============================================================================
+
+set -o pipefail
+
+# ============================================================================
+# 颜色定义
+# ============================================================================
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+
+# ============================================================================
+# 路径初始化
+# ============================================================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "$PROJECT_ROOT"
+
+# ============================================================================
+# 日志配置
+# ============================================================================
+LOG_DIR="${SCRIPT_DIR}/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/runtime_image_$(date +%Y%m%d_%H%M%S).log"
+: > "$LOG_FILE"
+
+_log() {
+    local label="$1" msg="$2"
+    echo -e "${label}${msg}${NC}"
+    # msg 来自 print_* 调用，均为纯文本（颜色仅在 label 中），无需 sed 剥离 ANSI
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${msg}" >> "$LOG_FILE"
+}
+print_info()    { _log "$BLUE" "[INFO] $1"; }
+print_success() { _log "$GREEN" "[OK] $1"; }
+print_warning() { _log "$YELLOW" "[WARN] $1"; }
+print_error()   { _log "$RED" "[ERROR] $1"; }
+print_step()    { _log "$CYAN" "[STEP] $1"; }
+print_header()  {
+    echo ""
+    echo "============================================================"
+    echo -e "${GREEN} $1${NC}"
+    echo "============================================================"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# ============================================================================
+# 默认值与参数解析
+# ============================================================================
+TAG="latest"
+DO_PUSH=false
+REGISTRY="docker.cnb.cool/holmesian/easyaiot/"
+COMMAND=""
+NATIVE_SOURCE="${NATIVE_SOURCE:-false}"
+FORCE_REBUILD=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        build|pull)
+            COMMAND="$1"; shift ;;
+        --push)
+            DO_PUSH=true; shift ;;
+        --tag)
+            TAG="$2"; shift 2 ;;
+        --native-source)
+            NATIVE_SOURCE=true; shift ;;
+        --force-rebuild)
+            FORCE_REBUILD=true; shift ;;
+        --profile)
+            _EXPLICIT_PROFILE="$2"; shift 2 ;;
+        --registry)
+            REGISTRY="$2"
+            [[ "$REGISTRY" != */ ]] && REGISTRY="${REGISTRY}/"
+            shift 2 ;;
+        --help|-h)
+            awk '/^# =+$/{if(f)exit;f=1;next}f' "$SCRIPT_PATH" | grep '^#' | sed 's/^# \?//'
+            exit 0 ;;
+        *)
+            print_error "未知参数: $1"
+            echo "使用 --help 查看帮助"
+            exit 1 ;;
+    esac
+done
+
+if [ -z "$COMMAND" ]; then
+    print_error "请指定命令: build 或 pull"
+    echo "使用 --help 查看帮助"
+    exit 1
+fi
+
+# ============================================================================
+# 部署形态配置
+# ============================================================================
+source "${SCRIPT_DIR}/deploy_profile.sh"
+
+if [ -n "${_EXPLICIT_PROFILE:-}" ]; then
+    case "$(_resolve_deploy_profile_raw)" in
+        mini|standard|full) ;;
+        *)
+            print_error "无效的部署形态: ${_EXPLICIT_PROFILE}，可选: mini | standard | full"
+            exit 1 ;;
+    esac
+    _EXPLICIT_PROFILE="$(_resolve_deploy_profile_raw)"
+fi
+
+# ============================================================================
+# 国内镜像源配置（默认开启，腾讯云优先）
+# ============================================================================
+APT_MIRROR_URL="${APT_MIRROR_URL:-https://mirrors.cloud.tencent.com}"
+PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}"
+NPM_REGISTRY="${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}"
+APK_MIRROR="${APK_MIRROR:-mirrors.cloud.tencent.com}"
+YUM_MIRROR_URL="${YUM_MIRROR_URL:-https://mirrors.cloud.tencent.com}"
+MAVEN_MIRROR_URL="${MAVEN_MIRROR_URL:-https://mirrors.cloud.tencent.com/nexus/repository/maven-public/}"
+
+if $NATIVE_SOURCE; then
+    APT_MIRROR_URL=""
+    PIP_INDEX_URL="https://pypi.org/simple"
+    NPM_REGISTRY="https://registry.npmjs.org/"
+    APK_MIRROR=""
+    YUM_MIRROR_URL=""
+    MAVEN_MIRROR_URL=""
+    print_warning "使用默认原始源（非国内镜像源）"
+else
+    print_info "使用国内镜像源加速（APT=${APT_MIRROR_URL:-无}, PIP=${PIP_INDEX_URL}, NPM=${NPM_REGISTRY}）"
+fi
+export APT_MIRROR_URL PIP_INDEX_URL NPM_REGISTRY APK_MIRROR YUM_MIRROR_URL MAVEN_MIRROR_URL
+
+# ============================================================================
+# 多架构支持
+# ============================================================================
+ALL_ARCHS=(amd64 arm64)
+
+detect_arch() {
+    case "$(uname -m)" in
+        x86_64|amd64)   echo "amd64" ;;
+        aarch64|arm64)  echo "arm64" ;;
+        armv7l|armv6l)  echo "arm32" ;;
+        *)              echo "amd64" ;;
+    esac
+}
+
+CURRENT_ARCH=$(detect_arch)
+
+is_native_arch()  { [ "$1" = "$CURRENT_ARCH" ]; }
+arch_to_platform() {
+    case "$1" in
+        amd64) echo "linux/amd64" ;;
+        arm64) echo "linux/arm64" ;;
+        arm32) echo "linux/arm/v7" ;;
+        *)     echo "linux/amd64" ;;
+    esac
+}
+
+# 检测镜像实际架构
+image_actual_arch() {
+    docker image inspect "$1" --format '{{.Architecture}}' 2>/dev/null || echo ""
+}
+
+# ★ 验证镜像架构与目标架构一致，不一致则报错
+verify_image_arch() {
+    local ref="$1" expected="${2:-$CURRENT_ARCH}"
+    local actual; actual=$(image_actual_arch "$ref")
+    if [ -z "$actual" ]; then
+        print_error "无法检测镜像架构: ${ref}"
+        return 1
+    fi
+    if [ "$actual" != "$expected" ]; then
+        print_error "镜像架构不匹配! ${ref} 实际=${actual} 期望=${expected}"
+        return 1
+    fi
+    return 0
+}
+
+# ============================================================================
+# 镜像映射表
+# ============================================================================
+# DEVICE 模块列表（统一由 build_device_all 构建）
+DEVICE_REMOTE_NAMES=(
+    aiot-gateway aiot-system aiot-infra aiot-device aiot-dataset
+    aiot-node aiot-tdengine aiot-file aiot-message aiot-sink aiot-gb28181
+)
+
+DEVICE_LOCAL_NAMES=(
+    iot-gateway iot-module-system-biz iot-module-infra-biz iot-module-device-biz
+    iot-module-dataset-biz iot-module-node-biz iot-module-tdengine-biz
+    iot-module-file-biz iot-module-message-biz iot-sink-biz iot-gb28181-biz
+)
+
+# 独立模块：remote_name|local_name|module_dir
+# DEVICE 模块不在此列表，统一由 build_device_all 处理
+INDEPENDENT_MODULES=(
+    "aiot-ai|ai-service|AI"
+    "aiot-video|video-service|VIDEO"
+    "aiot-web|web-service|WEB"
+)
+
+# 形态相关模块（WEB: VITE_GLOB_DEPLOY_PROFILE 编译进前端）
+PROFILE_DEPENDENT_REMOTES=(aiot-web)
+
+ALL_DEPLOY_PROFILES=(mini standard full)
+
+# 构建远程引用: <registry>/<name>[-<profile>]:<arch>
+# v3 命名规范：形态放在镜像名称中，架构作为标签
+#   full:    <registry>/<name>:<arch>
+#   mini:    <registry>/<name>-mini:<arch>
+#   standard:<registry>/<name>-standard:<arch>
+remote_ref() {
+    local name="$1" profile="${2:-}" arch="${3:-$CURRENT_ARCH}"
+    local image_name="${name}"
+    [ -n "$profile" ] && [ "$profile" != "full" ] && image_name="${name}-${profile}"
+    echo "${REGISTRY}${image_name}:${arch}"
+}
+
+# 多架构 manifest 引用（不含架构后缀，使用版本标签供 docker pull 自动匹配）
+# v3 命名规范：形态放在镜像名称中，标签使用 --tag 参数（默认 latest）
+manifest_ref() {
+    local name="$1" profile="${2:-}"
+    local image_name="${name}"
+    [ -n "$profile" ] && [ "$profile" != "full" ] && image_name="${name}-${profile}"
+    echo "${REGISTRY}${image_name}:${TAG}"
+}
+
+# 本地引用: local_name:tag[-profile]
+# 不再区分架构后缀：本机构建产物统一标签，跨架构通过远程标签区分
+local_ref() {
+    local name="$1" profile="${2:-}" arch="${3:-}"
+    local ref="${name}:${TAG}"
+    [ -n "$profile" ] && ref="${ref}-${profile}"
+    echo "$ref"
+}
+
+is_profile_dependent() {
+    for r in "${PROFILE_DEPENDENT_REMOTES[@]}"; do
+        [ "$r" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# 形态中文标签
+_profile_label() {
+    case "$1" in
+        mini) echo "边缘精简版" ;;
+        standard) echo "标准版" ;;
+        full) echo "完整版" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+# ============================================================================
+# 跨架构构建支持（无 QEMU 依赖）
+# ============================================================================
+# 策略：
+#   1. 先在宿主机原生架构执行 install_linux.sh build，完成所有编译
+#      （Maven、Vite、pip install 等），产出 JAR / dist 等产物。
+#   2. 针对目标架构，docker build --platform <target> 仅拉取目标架构的
+#      base image，然后 COPY 本机编译产物完成镜像包装。
+#   3. 不再依赖 QEMU 模拟 —— 纯 Java JAR、纯前端 dist、纯 Python 脚本
+#      可跨架构运行；C/C++ 原生库需宿主机交叉编译工具链。
+# ============================================================================
+
+# 执行宿主机原生架构的完整编译（install_linux.sh build）
+# 这一步完成所有 Maven、Vite、pip install 等耗时操作
+ensure_native_build() {
+    if [ "${_NATIVE_BUILT:-0}" = "1" ]; then
+        return 0
+    fi
+    print_header "阶段 0：宿主机本机编译（架构: ${CURRENT_ARCH}）"
+    echo ""
+    print_info "执行 install_linux.sh build 完成所有本机编译 ..."
+    local install_script="${SCRIPT_DIR}/install_linux.sh"
+    if [ ! -f "$install_script" ]; then
+        print_error "install_linux.sh 不存在: ${install_script}"
+        return 1
+    fi
+    local rc=0
+    (
+        cd "$PROJECT_ROOT"
+        bash "$install_script" build 2>&1 | tee "${LOG_DIR}/native_build_${CURRENT_ARCH}.log"
+    ) || rc=$?
+    if [ $rc -ne 0 ]; then
+        print_error "本机编译失败 (exit=${rc})，请检查日志"
+        return 1
+    fi
+    print_success "本机编译完成 (${CURRENT_ARCH})"
+    _NATIVE_BUILT=1
+    return 0
+}
+
+# ============================================================================
+# 多架构 Manifest 管理
+# ============================================================================
+create_and_push_manifest() {
+    local manifest_ref="$1"; shift
+    local -a arch_refs=("$@")
+    if [ ${#arch_refs[@]} -eq 0 ]; then
+        print_warning "没有架构引用，跳过 manifest: ${manifest_ref}"
+        return 1
+    fi
+    print_info "创建多架构 manifest: ${manifest_ref}（$(printf '%s ' "${arch_refs[@]}")）"
+
+    # ★ 校验所有 arch_ref 已存在于远程（tag_and_push 应已推送 :arch 镜像）
+    local missing=0
+    for aref in "${arch_refs[@]}"; do
+        if ! docker manifest inspect "$aref" >/dev/null 2>&1; then
+            print_error "远程不存在架构镜像: ${aref}（manifest create 将失败）"
+            missing=$((missing + 1))
+        fi
+    done
+    if [ $missing -gt 0 ]; then
+        print_error "有 ${missing} 个架构镜像缺失，跳过 manifest: ${manifest_ref}"
+        return 1
+    fi
+
+    # ★ 若远程已有旧 manifest list，先删除（方便下次干净重建）
+    docker manifest rm "$manifest_ref" 2>/dev/null || true
+
+    # ★ 确认 manifest 是否真正已删除（rm 可能因权限/网络问题静默失败）
+    local manifest_exists=false
+    if docker manifest inspect "$manifest_ref" >/dev/null 2>&1; then
+        manifest_exists=true
+    fi
+
+    # ★ 解析 arch 引用：若远程 arch 标签是 manifest list（上次构建遗留），
+    #   提取对应架构的单镜像 digest 并用 @sha256:... 引用。
+    #   修复 grep 大小写：Docker JSON 使用 "mediaType"（小写 m），非 "MediaType"
+    #   同时兼容两种大小写格式。
+    local -a resolved_refs=()
+    for aref in "${arch_refs[@]}"; do
+        if ! docker manifest inspect "$aref" >/dev/null 2>&1; then
+            print_error "远程不存在架构镜像: ${aref}"
+            return 1
+        fi
+
+        local ml_json; ml_json=$(docker manifest inspect "$aref" 2>/dev/null)
+        local is_ml=false
+        # OCI 格式: application/vnd.oci.image.index.v1+json  → 含 "image.index"
+        # Docker 格式: application/vnd.docker.distribution.manifest.list.v2+json → 含 "manifest.list"
+        if echo "$ml_json" | grep -qiE '"mediaType".*(manifest\.list|image\.index)'; then
+            is_ml=true
+        fi
+
+        if ! $is_ml; then
+            # 正常单架构镜像，直接使用
+            resolved_refs+=("$aref")
+            continue
+        fi
+
+        # ★ arch_ref 是 manifest list → 提取目标架构的单镜像 digest
+        print_info "远程 ${aref} 是 manifest list，提取单架构 manifest digest..."
+        local arch_label="${aref##*:}"
+        # arm32 → OCI architecture "arm"；其余保持原样
+        local oci_arch="$arch_label"
+        [ "$arch_label" = "arm32" ] && oci_arch="arm"
+
+        local digest; digest=$(echo "$ml_json" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data.get('manifests', []):
+    if m.get('platform', {}).get('architecture') == '${oci_arch}':
+        print(m['digest'])
+        break
+" 2>/dev/null)
+
+        if [ -z "$digest" ]; then
+            print_warning "无法从 manifest list 提取 ${arch_label} 单架构 digest: ${aref}"
+            print_info "提示：用 --force-rebuild 重新构建后可恢复"
+            return 1
+        fi
+
+        # 构造 digest 引用：registry/repo@sha256:...
+        local repo_part="${aref%:*}"
+        resolved_refs+=("${repo_part}@${digest}")
+        print_info "  → ${digest:0:19}..."
+    done
+
+    # ★ 创建 manifest list
+    # --amend 用于修改已存在的 manifest list；若不存在则直接创建
+    local all_refs="${resolved_refs[*]}"
+    local create_cmd
+    if $manifest_exists; then
+        create_cmd="--amend ${manifest_ref} ${all_refs}"
+    else
+        create_cmd="${manifest_ref} ${all_refs}"
+    fi
+
+    if ! docker manifest create ${create_cmd} 2>&1; then
+        print_warning "manifest create 失败: ${manifest_ref}"
+        return 1
+    fi
+    # ★ 注解各架构的 OS/Arch（resolved_refs 与 arch_refs 索引一一对应）
+    for idx in "${!resolved_refs[@]}"; do
+        local arch_part="${arch_refs[$idx]##*:}"
+        docker manifest annotate "$manifest_ref" "${resolved_refs[$idx]}" --os linux --arch "${arch_part}" 2>/dev/null || true
+    done
+    if $DO_PUSH; then
+        print_info "推送 manifest: ${manifest_ref}"
+        if docker manifest push "$manifest_ref" --purge 2>&1; then
+            print_success "manifest 推送成功: ${manifest_ref}"
+        else
+            print_warning "manifest 推送失败: ${manifest_ref}"
+            return 1
+        fi
+    else
+        print_info "manifest 已创建（未推送）: ${manifest_ref}"
+    fi
+    return 0
+}
+
+# ============================================================================
+# Docker 环境检查
+# ============================================================================
+check_docker() {
+    print_info "检查 Docker 安装状态..."
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker 未安装"; exit 1
+    fi
+    print_success "Docker 已安装: $(docker --version 2>/dev/null || echo '未知版本')"
+    if docker info &> /dev/null; then return 0; fi
+    local err; err=$(docker info 2>&1)
+    if echo "$err" | grep -qi "permission denied"; then
+        print_error "没有权限访问 Docker daemon"
+        echo "  解决方案: sudo usermod -aG docker \$USER 然后重新登录"
+        exit 1
+    elif echo "$err" | grep -qi "Is the docker daemon running"; then
+        print_error "Docker daemon 未运行"
+        echo "  解决方案: sudo systemctl start docker"
+        exit 1
+    else
+        print_error "无法连接到 Docker daemon: $err"
+        exit 1
+    fi
+}
+
+# ★ 跨架构构建前检查磁盘空间并清理 Docker
+# PyTorch devel 基础镜像约 10GB+，多架构拉取极易打满磁盘
+ensure_docker_disk_space() {
+    local target_arch="${1:-}"
+    local df_path="${DOCKER_DATA_ROOT:-/var/lib/docker}"
+    # 尝试从 docker info 推断 data root
+    local inferred; inferred=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || echo "")
+    [ -n "$inferred" ] && df_path="$inferred"
+
+    local avail_kb; avail_kb=$(df -k "$df_path" 2>/dev/null | awk 'NR==2{print $4}' || echo "0")
+    local avail_gb=$((avail_kb / 1024 / 1024))
+    local min_gb=20  # 跨架构构建建议至少 20GB
+
+    print_info "Docker 数据目录: ${df_path}, 可用空间: ${avail_gb} GB"
+
+    if [ "$avail_gb" -lt "$min_gb" ]; then
+        print_warning "可用磁盘空间不足 (${avail_gb} GB < ${min_gb} GB)，尝试清理 Docker 缓存..."
+        docker system prune -af 2>/dev/null || true
+        avail_kb=$(df -k "$df_path" 2>/dev/null | awk 'NR==2{print $4}' || echo "0")
+        avail_gb=$((avail_kb / 1024 / 1024))
+        print_info "清理后可用空间: ${avail_gb} GB"
+        if [ "$avail_gb" -lt "$min_gb" ]; then
+            print_warning "清理后仍不足 ${min_gb} GB，[${target_arch}] 跨架构构建可能因磁盘满而失败"
+            print_info "建议手动清理: docker system prune -af"
+        fi
+    fi
+}
+
+# ============================================================================
+# 镜像 tag & push 公共函数
+# ============================================================================
+tag_and_push() {
+    local local_ref="$1" remote_ref="$2"
+    print_info "打标签: ${local_ref} → ${remote_ref}"
+    docker tag "$local_ref" "$remote_ref" || { print_error "打标签失败"; return 1; }
+
+    local arch_suffix="${remote_ref##*:}"
+
+    # ★ 推送策略：
+    #   - 带架构后缀（:amd64/:arm64/:arm32）：始终推送，manifest create 需从远程读取
+    #   - manifest 标签（:latest/:tag）：由 DO_PUSH 控制（在 create_and_push_manifest 中处理）
+    case "$arch_suffix" in
+        amd64|arm64|arm32)
+            # ★ 推送前校验镜像架构与标签一致
+            if ! verify_image_arch "$remote_ref" "$arch_suffix"; then
+                print_error "远程标签镜像架构校验失败，拒绝推送: ${remote_ref}"
+                docker rmi "$remote_ref" 2>/dev/null || true
+                return 1
+            fi
+            print_info "推送架构镜像: ${remote_ref}"
+            if ! docker push "$remote_ref"; then
+                print_error "推送失败: ${remote_ref}"
+                return 1
+            fi
+            print_success "推送成功: ${remote_ref}"
+            ;;
+        *)
+            if $DO_PUSH; then
+                print_info "推送: ${remote_ref}"
+                docker push "$remote_ref" || { print_error "推送失败: ${remote_ref}"; return 1; }
+                print_success "推送成功: ${remote_ref}"
+            fi
+            ;;
+    esac
+    return 0
+}
+
+# ============================================================================
+# 功能 1：构建与推送
+# ============================================================================
+
+# 使用模块 install 脚本构建单个模块的镜像
+# 参数: module_dir local_name local_ref target_arch
+# 本机架构：直接执行 install 脚本 build（复用 ensure_native_build 产物）
+# 跨架构：docker build --platform <target> 仅 COPY 产物 + 拉取目标架构 base image
+build_module_with_install_script() {
+    local module_dir="$1" local_name="$2" local_ref="$3" target_arch="${4:-$CURRENT_ARCH}"
+    local module_path="${PROJECT_ROOT}/${module_dir}"
+    [ -d "$module_path" ] || { print_error "模块目录不存在: ${module_path}"; return 1; }
+
+    local native_ref
+    native_ref=$(local_ref "$local_name")
+
+    # --force-rebuild：强制重建，跳过"已存在"检查
+    if ! $FORCE_REBUILD; then
+        if is_native_arch "$target_arch"; then
+            # 本机架构：检查现有镜像
+            if docker image inspect "$native_ref" >/dev/null 2>&1; then
+                local existing; existing=$(image_actual_arch "$native_ref")
+                if [ "$existing" = "$target_arch" ]; then
+                    print_info "${native_ref} 已存在（${existing}），跳过构建"
+                    # ★ 如果 native_ref != local_ref（带 profile 后缀），创建额外标签
+                    if [ "$native_ref" != "$local_ref" ]; then
+                        docker tag "$native_ref" "$local_ref" 2>/dev/null || true
+                    fi
+                    return 0
+                fi
+                print_info "${native_ref} 架构不匹配 (现有=${existing}, 期望=${target_arch})，重新构建"
+            fi
+        else
+            # 跨架构：检查是否已有目标架构镜像（通过 local_ref 检查）
+            if docker image inspect "$local_ref" >/dev/null 2>&1; then
+                local existing; existing=$(image_actual_arch "$local_ref")
+                if [ "$existing" = "$target_arch" ]; then
+                    print_info "${local_ref} (跨架构) 已存在 (${existing})，跳过构建"
+                    return 0
+                fi
+            fi
+        fi
+    else
+        print_info "强制重建模式：忽略已存在的镜像缓存"
+    fi
+
+    # 选择 install 脚本
+    # ★ 优先使用架构专属脚本（如 install_linux_arm.sh），它内置正确的 Dockerfile 和基础镜像
+    local install_script=""
+    case "$target_arch" in
+        arm64|arm32)
+            install_script="install_linux_arm.sh"
+            [ -f "${module_path}/${install_script}" ] || install_script="" ;;
+    esac
+    # 回退到通用脚本（WEB/DEVICE 等无 arm 脚本的模块，跨架构靠 --platform）
+    if [ -z "$install_script" ]; then
+        install_script="install_linux.sh"
+    fi
+    [ -f "${module_path}/${install_script}" ] || { print_error "安装脚本不存在: ${module_path}/${install_script}"; return 1; }
+
+    # 修复换行符
+    grep -q $'\r' "${module_path}/${install_script}" 2>/dev/null && sed -i 's/\r$//' "${module_path}/${install_script}" 2>/dev/null || true
+
+    local arch_note=""; ! is_native_arch "$target_arch" && arch_note=" [跨架构: ${target_arch}]"
+    print_info "执行 ${module_dir}/${install_script} build${arch_note} ..."
+
+    local build_log="${LOG_DIR}/build_${local_name}_${target_arch}_$(date +%Y%m%d_%H%M%S).log"
+    local rc=0
+
+    # ★ 跨架构平台导出策略：
+    #   - 架构专属脚本（install_linux_arm.sh）自带 DOCKER_PLATFORM 和基础镜像，不导出避免覆盖；
+    #     但需设置 EASYAIOT_CROSS_BUILD=1 告诉脚本允许在 x86 宿主机上交叉构建 arm64 镜像。
+    #   - 通用脚本（install_linux.sh）跨架构时需导出 DOCKER_PLATFORM 供 --platform 使用
+    if ! is_native_arch "$target_arch"; then
+        if [ "$install_script" = "install_linux.sh" ]; then
+            export DOCKER_PLATFORM="$(arch_to_platform "$target_arch")"
+        else
+            export EASYAIOT_CROSS_BUILD=1
+        fi
+    fi
+
+    ( cd "$module_path"; bash "$install_script" build 2>&1 | tee "$build_log" ) || rc=$?
+
+    if [ $rc -ne 0 ]; then
+        print_error "构建失败 (exit=${rc})，日志: ${build_log}"
+        tail -40 "$build_log" | while IFS= read -r line; do echo "  $line"; done
+        return 1
+    fi
+
+    # 跨架构：install 脚本产出 native_ref，需重打标签为目标架构标签
+    if ! is_native_arch "$target_arch"; then
+        if docker image inspect "$native_ref" >/dev/null 2>&1; then
+            # ★ native_ref 与 local_ref 可能相同（无 profile 后缀时），避免 self-tag + self-rmi
+            if [ "$native_ref" != "$local_ref" ]; then
+                print_info "跨架构镜像已生成，重打标签: ${native_ref} → ${local_ref}"
+                docker tag "$native_ref" "$local_ref" 2>/dev/null || {
+                    print_error "重打标签失败: ${native_ref} → ${local_ref}"; return 1
+                }
+                # 清理 native 标签，防止污染
+                docker rmi "$native_ref" 2>/dev/null || true
+            fi
+            # 校验跨架构构建产物的架构是否正确
+            if ! verify_image_arch "$local_ref" "$target_arch"; then
+                print_error "跨架构构建产物架构校验失败，镜像已删除"
+                docker rmi "$local_ref" 2>/dev/null || true
+                rm -f "$build_log"
+                return 1
+            fi
+            rm -f "$build_log"
+            return 0
+        fi
+    fi
+
+    # 本机构建也校验架构一致性
+    if is_native_arch "$target_arch" && ! verify_image_arch "$native_ref" "$target_arch"; then
+        print_error "本机构建产物架构校验失败，镜像已删除"
+        docker rmi "$native_ref" 2>/dev/null || true
+        rm -f "$build_log"
+        return 1
+    fi
+    rm -f "$build_log"
+    return 0
+}
+
+# 构建 DEVICE 模块的所有镜像
+# 参数: target_arch
+# 跨架构时：Maven 编译产物（JAR）架构无关可复用，仅 Docker 镜像通过 --platform 重建
+build_device_all() {
+    local target_arch="${1:-$CURRENT_ARCH}"
+    local device_path="${PROJECT_ROOT}/DEVICE"
+    local install_script="${device_path}/install_linux.sh"
+
+    [ -f "$install_script" ] || { print_error "DEVICE 安装脚本不存在: ${install_script}"; return 1; }
+    grep -q $'\r' "$install_script" 2>/dev/null && sed -i 's/\r$//' "$install_script" 2>/dev/null || true
+
+    local arch_note=""; ! is_native_arch "$target_arch" && arch_note=" [跨架构: ${target_arch}]"
+    print_info "执行 DEVICE/install_linux.sh build${arch_note}（Maven 编译 + 镜像构建）..."
+
+    local build_log="${LOG_DIR}/build_device_${target_arch}_$(date +%Y%m%d_%H%M%S).log"
+    local rc=0
+
+    # ★ 清除架构不匹配的 DEVICE 镜像（本机/跨架构通用）
+    # DEVICE/install_linux.sh 的增量检测只按 content-hash 判断是否重编，不校验架构。
+    # 若上一次跨架构构建残留了 arm64 镜像，本机 amd64 构建会直接跳过，导致推送时
+    # 架构校验失败。必须先清除架构不匹配的镜像，再让脚本重新构建。
+    local need_clean=false
+    for i in "${!DEVICE_LOCAL_NAMES[@]}"; do
+        local dlref; dlref=$(local_ref "${DEVICE_LOCAL_NAMES[$i]}")
+        if docker image inspect "$dlref" >/dev/null 2>&1; then
+            local actual; actual=$(image_actual_arch "$dlref")
+            if [ -n "$actual" ] && [ "$actual" != "$target_arch" ]; then
+                print_info "DEVICE 镜像架构不匹配: ${dlref} (现有=${actual}, 期望=${target_arch})，将清理并重建"
+                need_clean=true
+                break
+            fi
+        fi
+    done
+    if $need_clean; then
+        print_info "删除架构不匹配的 DEVICE 镜像，强制为 ${target_arch} 重建..."
+        for i in "${!DEVICE_LOCAL_NAMES[@]}"; do
+            docker rmi "$(local_ref "${DEVICE_LOCAL_NAMES[$i]}")" 2>/dev/null || true
+        done
+    fi
+
+    # 跨架构：显式导出目标平台
+    if ! is_native_arch "$target_arch"; then
+        export DOCKER_PLATFORM="$(arch_to_platform "$target_arch")"
+    fi
+
+    ( cd "$device_path"; bash "$install_script" build 2>&1 | tee "$build_log" ) || rc=$?
+
+    # 跨架构：重打 DEVICE 镜像标签并清理 native 标签
+    if ! is_native_arch "$target_arch"; then
+        for i in "${!DEVICE_REMOTE_NAMES[@]}"; do
+            local lname="${DEVICE_LOCAL_NAMES[$i]}"
+            local nref; nref=$(local_ref "$lname")
+            local aref; aref=$(local_ref "$lname" "" "$target_arch")
+            if docker image inspect "$nref" >/dev/null 2>&1; then
+                # ★ nref 与 aref 相同时（无 profile 后缀），跳过 self-tag + self-rmi
+                if [ "$nref" != "$aref" ]; then
+                    docker tag "$nref" "$aref" 2>/dev/null || true
+                    docker rmi "$nref" 2>/dev/null || true
+                fi
+            fi
+        done
+    fi
+
+    if [ $rc -ne 0 ]; then
+        # 检查是否至少部分镜像成功
+        local any_exist=false
+        for lname in "${DEVICE_LOCAL_NAMES[@]}"; do
+            docker image inspect "$(local_ref "$lname")" >/dev/null 2>&1 && { any_exist=true; break; }
+        done
+        if ! $any_exist; then
+            print_error "DEVICE 构建失败，日志: ${build_log}"
+            tail -40 "$build_log" | while IFS= read -r line; do echo "  $line"; done
+            return 1
+        fi
+        print_warning "DEVICE 部分镜像构建失败，继续处理已成功的镜像"
+    fi
+    rm -f "$build_log"
+    return 0
+}
+
+# 构建单个模块（按 remote_name 分发到对应的安装脚本）
+build_single_module() {
+    local remote_name="$1" local_ref="$2" target_arch="${3:-$CURRENT_ARCH}"
+
+    case "$remote_name" in
+        aiot-ai)    build_module_with_install_script "AI" "ai-service" "$local_ref" "$target_arch" ;;
+        aiot-video) build_module_with_install_script "VIDEO" "video-service" "$local_ref" "$target_arch" ;;
+        aiot-web)   build_module_with_install_script "WEB" "web-service" "$local_ref" "$target_arch" ;;
+        *)
+            # DEVICE 模块：统一由 build_device_all 处理
+            build_device_all "$target_arch" || return 1
+            ;;
+    esac
+}
+
+# 构建单个模块、打标签推送并登记 manifest 引用（build_all_modules 内部复用，消除重复逻辑）
+# 参数: rname lname profile target_arch  （profile 为空串表示共享镜像）
+# 依赖外层动态作用域变量: success_all / failed_all / _MANIFEST_ARCH_REFS
+_build_push_track() {
+    local rname="$1" lname="$2" profile="$3" target_arch="$4"
+    local lref rref mref step_label fail_label
+    lref=$(local_ref "$lname" "$profile" "$target_arch")
+    rref=$(remote_ref "$rname" "$profile" "$target_arch")
+    mref=$(manifest_ref "$rname" "$profile")
+    if [ -n "$profile" ]; then
+        step_label="构建: ${rname} (${profile}, ${target_arch}) → ${lref}"
+        fail_label="构建/推送失败: ${rname} (${profile}, ${target_arch})"
+    else
+        step_label="构建: ${rname} [${target_arch}] → ${lref}"
+        fail_label="构建/推送失败: ${rname} [${target_arch}]"
+    fi
+    print_step "$step_label"
+    if build_single_module "$rname" "$lref" "$target_arch" && tag_and_push "$lref" "$rref"; then
+        print_success "本地镜像已就绪: ${lref}"
+        _MANIFEST_ARCH_REFS["$mref"]="${_MANIFEST_ARCH_REFS["$mref"]:+${_MANIFEST_ARCH_REFS["$mref"]} }${rref}"
+        success_all=$((success_all + 1))
+        return 0
+    fi
+    print_error "$fail_label"
+    failed_all=$((failed_all + 1))
+    return 1
+}
+
+build_all_modules() {
+    local -a build_profiles=()
+    if [ -n "${_EXPLICIT_PROFILE:-}" ]; then
+        build_profiles=("$_EXPLICIT_PROFILE")
+    else
+        build_profiles=("${ALL_DEPLOY_PROFILES[@]}")
+    fi
+
+    local -a build_archs=()
+    build_archs+=("$CURRENT_ARCH")
+    for a in "${ALL_ARCHS[@]}"; do
+        is_native_arch "$a" || build_archs+=("$a")
+    done
+
+    local total_archs=${#build_archs[@]}
+    local total_profiles=${#build_profiles[@]}
+
+    print_header "运行时镜像构建与推送"
+    echo "  当前架构: ${CURRENT_ARCH}"; printf '  构建架构: %s\n' "${build_archs[*]}"
+    echo "  Registry: ${REGISTRY}"; echo "  Tag: ${TAG}"
+    echo "  Push: ${DO_PUSH}"; echo "  强制重建: ${FORCE_REBUILD}"
+    printf '  构建形态: %s\n' "${build_profiles[*]}"
+    echo ""
+
+    check_docker
+
+    # ========================================================================
+    # 阶段 0：宿主机本机编译（install_linux.sh build）
+    # ========================================================================
+    if ! ensure_native_build; then
+        print_error "本机编译失败，无法继续构建镜像"
+        exit 1
+    fi
+    echo ""
+
+    local success_all=0 failed_all=0
+    declare -A _MANIFEST_ARCH_REFS
+
+    local native_arch="${build_archs[0]}"
+    local -a cross_archs=()
+    for a in "${build_archs[@]:1}"; do
+        cross_archs+=("$a")
+    done
+
+    echo ""
+
+    # ========================================================================
+    # 逐架构 × 逐形态串行构建
+    # 本机架构：复用阶段 0 产物，直接执行 install 脚本 build
+    # 跨架构：docker build --platform <target> 拉取目标架构 base image + COPY 产物
+    # ========================================================================
+    for target_arch in "${build_archs[@]}"; do
+        local arch_label; is_native_arch "$target_arch" && arch_label="本机原生" || arch_label="跨架构 (无 QEMU)"
+        print_header "${target_arch} (${arch_label}) 构建"
+        echo ""
+
+        # ★ 每次循环重置 DOCKER_PLATFORM，避免上一轮跨架构值泄漏到本机架构构建
+        unset DOCKER_PLATFORM
+        # 跨架构：检查磁盘空间并导出目标平台（供 DEVICE/WEB 等无 arm 脚本的模块使用 --platform）
+        if ! is_native_arch "$target_arch"; then
+            ensure_docker_disk_space "$target_arch"
+            export DOCKER_PLATFORM="$(arch_to_platform "$target_arch")"
+
+            # ★ 跨架构构建前预拉取 ARM 基础镜像（避免 install 脚本中 --pull=false 导致失败）
+            # pytorch/manylinuxaarch64-builder 约 10GB+，需预留足够时间和磁盘空间
+            local arm_base_images=(
+                "pytorch/manylinuxaarch64-builder:cuda12.9"
+            )
+            for base_img in "${arm_base_images[@]}"; do
+                if ! docker image inspect "$base_img" >/dev/null 2>&1; then
+                    print_info "预拉取 ARM 基础镜像: ${base_img}（约 10GB+，请耐心等待）..."
+                    if ! docker pull --platform "$DOCKER_PLATFORM" "$base_img"; then
+                        print_warning "预拉取失败: ${base_img}，构建时将由 install 脚本自动拉取"
+                    else
+                        print_success "ARM 基础镜像已就绪: ${base_img}"
+                    fi
+                else
+                    print_info "ARM 基础镜像已存在: ${base_img}"
+                fi
+            done
+        fi
+
+        # ── 共享模块（AI + VIDEO）──
+        for mapping in "${INDEPENDENT_MODULES[@]}"; do
+            local rname="${mapping%%|*}"; local tmp="${mapping#*|}"; local lname="${tmp%%|*}"
+            is_profile_dependent "$rname" && continue
+            _build_push_track "$rname" "$lname" "" "$target_arch"
+        done
+
+        # ── DEVICE ──
+        build_device_all "$target_arch"
+        for i in "${!DEVICE_REMOTE_NAMES[@]}"; do
+            local drname="${DEVICE_REMOTE_NAMES[$i]}"; local dlname="${DEVICE_LOCAL_NAMES[$i]}"
+            local dlref; dlref=$(local_ref "$dlname" "" "$target_arch")
+            local drref; drref=$(remote_ref "$drname" "" "$target_arch")
+            local dmref; dmref=$(manifest_ref "$drname" "")
+            if docker image inspect "$dlref" >/dev/null 2>&1; then
+                print_step "推送: ${drname} [${target_arch}]"
+                if tag_and_push "$dlref" "$drref"; then
+                    _MANIFEST_ARCH_REFS["$dmref"]="${_MANIFEST_ARCH_REFS["$dmref"]:+${_MANIFEST_ARCH_REFS["$dmref"]} }${drref}"
+                    success_all=$((success_all + 1))
+                else
+                    failed_all=$((failed_all + 1))
+                fi
+            else
+                print_warning "DEVICE 镜像未找到: ${dlref}"
+                failed_all=$((failed_all + 1))
+            fi
+        done
+
+        # ── WEB 各形态 ──
+        for profile in "${build_profiles[@]}"; do
+            export EASYAIOT_DEPLOY_PROFILE="$profile"
+            apply_deploy_profile
+            save_deploy_profile
+            sync_deploy_profile_to_modules
+
+            # 跨架构 WEB：复用本机构建的 dist
+            if ! is_native_arch "$target_arch"; then
+                local prebuilt_src="${PROJECT_ROOT}/WEB/dist-prebuilt-${profile}"
+                if [ -d "$prebuilt_src" ]; then
+                    print_info "跨架构 WEB: 复用本机预构建 dist/ → ${prebuilt_src}"
+                    rm -rf "${PROJECT_ROOT}/WEB/dist-prebuilt" 2>/dev/null || true
+                    mkdir -p "${PROJECT_ROOT}/WEB/dist-prebuilt"
+                    cp -a "${prebuilt_src}/." "${PROJECT_ROOT}/WEB/dist-prebuilt/"
+                    export SKIP_VITE_BUILD=1
+                else
+                    print_warning "跨架构 WEB: 预构建 dist 不存在 ${prebuilt_src}，将回退到容器内 vite build"
+                    unset SKIP_VITE_BUILD
+                fi
+            fi
+
+            _build_push_track "aiot-web" "web-service" "$profile" "$target_arch"
+
+            # 清理跨架构 WEB 临时 dist
+            if ! is_native_arch "$target_arch"; then
+                rm -rf "${PROJECT_ROOT}/WEB/dist-prebuilt" 2>/dev/null || true
+                unset SKIP_VITE_BUILD
+            fi
+        done
+
+        # 提取 WEB dist 供后续跨架构复用
+        if is_native_arch "$target_arch" && [ ${#cross_archs[@]} -gt 0 ]; then
+            echo ""
+            print_info "提取 ${target_arch} WEB dist 供跨架构复用 ..."
+            for profile in "${build_profiles[@]}"; do
+                local img_ref; img_ref=$(local_ref "web-service" "$profile")
+                if docker image inspect "$img_ref" >/dev/null 2>&1; then
+                    local dst="${PROJECT_ROOT}/WEB/dist-prebuilt-${profile}"
+                    print_info "  → ${img_ref} → ${dst}/"
+                    rm -rf "$dst" 2>/dev/null || true
+                    local cid; cid=$(docker create "$img_ref" 2>/dev/null)
+                    if [ -n "$cid" ]; then
+                        docker cp "${cid}:/usr/share/nginx/html/." "$dst/" 2>/dev/null || \
+                            print_warning "提取 dist 失败（非致命），跨架构 WEB 将回退到完整 vite build"
+                        docker rm "$cid" >/dev/null 2>&1
+                    fi
+                fi
+            done
+        fi
+
+        echo ""
+    done
+
+    # 清理 WEB 所有预构建 dist 临时目录
+    rm -rf "${PROJECT_ROOT}/WEB/dist-prebuilt" "${PROJECT_ROOT}/WEB/dist-prebuilt-mini" \
+           "${PROJECT_ROOT}/WEB/dist-prebuilt-standard" "${PROJECT_ROOT}/WEB/dist-prebuilt-full" 2>/dev/null || true
+
+    # 恢复默认形态
+    export EASYAIOT_DEPLOY_PROFILE=full
+    apply_deploy_profile
+    sync_deploy_profile_to_modules
+
+    # ---- 创建多架构 Manifest ----
+    if [ ${#_MANIFEST_ARCH_REFS[@]} -gt 0 ]; then
+        print_header "创建多架构 Manifest 列表"
+        echo ""
+        local manifest_ok=0 manifest_fail=0
+        for mref in "${!_MANIFEST_ARCH_REFS[@]}"; do
+            local -a arefs=()
+            read -ra arefs <<< "${_MANIFEST_ARCH_REFS["$mref"]}"
+            print_step "Manifest: ${mref}"
+            for a in "${arefs[@]}"; do echo "  ← ${a}"; done
+            if create_and_push_manifest "$mref" "${arefs[@]}"; then
+                manifest_ok=$((manifest_ok + 1))
+            else
+                manifest_fail=$((manifest_fail + 1))
+            fi
+            echo ""
+        done
+        print_info "Manifest: 成功 ${manifest_ok}, 失败 ${manifest_fail}"
+    fi
+
+    # ---- 汇总 ----
+    echo ""
+    print_header "构建汇总"
+    echo "  构建架构: ${total_archs} 个（${build_archs[*]}）"
+    echo "  构建形态: ${total_profiles} 种"
+    echo "  总计镜像: ${success_all} 个成功, ${failed_all} 个失败"
+    echo ""
+    if [ "$failed_all" -eq 0 ]; then
+        print_success "所有运行时镜像构建成功！"
+    else
+        print_error "有 ${failed_all} 个镜像构建失败"
+        return 1
+    fi
+
+    # 列出本地镜像
+    echo ""
+    print_info "本地运行时镜像列表 (${CURRENT_ARCH}):"
+    for mapping in "${INDEPENDENT_MODULES[@]}"; do
+        local rname="${mapping%%|*}"; local tmp="${mapping#*|}"; local lname="${tmp%%|*}"
+        for lref in "$(local_ref "$lname")" "$(for p in "${build_profiles[@]}"; do is_profile_dependent "$rname" && local_ref "$lname" "$p" || true; done)"; do
+            [ -z "$lref" ] && continue
+            if docker image inspect "$lref" >/dev/null 2>&1; then
+                local size; size=$(docker image inspect "$lref" --format '{{.Size}}' 2>/dev/null | awk '{printf "%.1f MB", $1/1024/1024}')
+                echo "  ${lref}  (${size:-N/A})"
+            fi
+        done
+    done
+    for lname in "${DEVICE_LOCAL_NAMES[@]}"; do
+        local lref; lref=$(local_ref "$lname")
+        if docker image inspect "$lref" >/dev/null 2>&1; then
+            local size; size=$(docker image inspect "$lref" --format '{{.Size}}' 2>/dev/null | awk '{printf "%.1f MB", $1/1024/1024}')
+            echo "  ${lref}  (${size:-N/A})"
+        fi
+    done
+    return 0
+}
+
+# ============================================================================
+# 功能 2：拉取镜像
+# ============================================================================
+
+pull_and_tag_image() {
+    local remote_ref="$1" local_ref="$2"
+    print_info "docker pull ${remote_ref}"
+    docker pull "$remote_ref" || { print_warning "拉取失败: ${remote_ref}"; return 1; }
+    print_info "打本地标签: ${remote_ref} → ${local_ref}"
+    docker tag "$remote_ref" "$local_ref" || { print_error "打标签失败"; return 1; }
+    print_success "${local_ref} 已就绪"
+    return 0
+}
+
+select_pull_profile() {
+    if [ -n "${_EXPLICIT_PROFILE:-}" ]; then
+        export EASYAIOT_DEPLOY_PROFILE="$(_resolve_deploy_profile_raw)"
+        apply_deploy_profile
+        save_deploy_profile
+        sync_deploy_profile_to_modules
+        print_info "部署形态: $(_deploy_profile_desc)（由 --profile 指定）"
+        return 0
+    fi
+    if [ -n "${EASYAIOT_DEPLOY_PROFILE:-}" ]; then
+        apply_deploy_profile
+        sync_deploy_profile_to_modules
+        print_info "部署形态: $(_deploy_profile_desc)（由环境变量指定）"
+        return 0
+    fi
+    if [ ! -t 0 ]; then
+        export EASYAIOT_DEPLOY_PROFILE=full
+        apply_deploy_profile
+        sync_deploy_profile_to_modules
+        print_info "部署形态: $(_deploy_profile_desc)（默认）"
+        return 0
+    fi
+    echo ""
+    echo "请选择要拉取的部署形态镜像："
+    echo "  1) mini     — 边缘精简版"
+    echo "  2) standard — 标准版"
+    echo "  3) full     — 完整版（默认）"
+    echo ""
+    local choice=""
+    read -r -p "请输入选项 [1-3，默认 3]: " choice
+    case "${choice:-3}" in
+        1) export EASYAIOT_DEPLOY_PROFILE=mini ;;
+        2) export EASYAIOT_DEPLOY_PROFILE=standard ;;
+        *) export EASYAIOT_DEPLOY_PROFILE=full ;;
+    esac
+    apply_deploy_profile
+    save_deploy_profile
+    sync_deploy_profile_to_modules
+    echo ""
+    print_info "已选择: $(_deploy_profile_desc)"
+    echo ""
+}
+
+pull_all_images() {
+    print_header "从仓库拉取运行时镜像"
+    echo "  当前架构: ${CURRENT_ARCH}"; echo "  Registry: ${REGISTRY}"; echo "  Tag: ${TAG}"; echo ""
+    check_docker
+    select_pull_profile
+    local pull_profile="${EASYAIOT_DEPLOY_PROFILE}"
+
+    local shared_ok=0 shared_fail=0
+
+    # ---- 共享模块 ----
+    print_header "阶段 1/2：拉取共享镜像（架构: ${CURRENT_ARCH}）"
+    echo ""
+    for mapping in "${INDEPENDENT_MODULES[@]}"; do
+        local rname="${mapping%%|*}"; local tmp="${mapping#*|}"; local lname="${tmp%%|*}"
+        is_profile_dependent "$rname" && continue
+
+        local rref; rref=$(remote_ref "$rname" "" "$CURRENT_ARCH")
+        local lref; lref=$(local_ref "$lname")
+
+        print_step "拉取: ${rref}"
+        if docker image inspect "$lref" >/dev/null 2>&1; then
+            print_info "${lref} 已存在，跳过"; shared_ok=$((shared_ok + 1)); continue
+        fi
+        pull_and_tag_image "$rref" "$lref" && shared_ok=$((shared_ok + 1)) || shared_fail=$((shared_fail + 1))
+    done
+    # DEVICE 模块
+    for i in "${!DEVICE_REMOTE_NAMES[@]}"; do
+        local rname="${DEVICE_REMOTE_NAMES[$i]}"; local lname="${DEVICE_LOCAL_NAMES[$i]}"
+        local rref; rref=$(remote_ref "$rname" "" "$CURRENT_ARCH")
+        local lref; lref=$(local_ref "$lname")
+
+        print_step "拉取: ${rref}"
+        if docker image inspect "$lref" >/dev/null 2>&1; then
+            print_info "${lref} 已存在，跳过"; shared_ok=$((shared_ok + 1)); continue
+        fi
+        pull_and_tag_image "$rref" "$lref" && shared_ok=$((shared_ok + 1)) || shared_fail=$((shared_fail + 1))
+    done
+
+    # 共享镜像总数 = 非形态相关的独立模块 + DEVICE 模块
+    local shared_total=0
+    for mapping in "${INDEPENDENT_MODULES[@]}"; do
+        local rname="${mapping%%|*}"
+        is_profile_dependent "$rname" || shared_total=$((shared_total + 1))
+    done
+    shared_total=$((shared_total + ${#DEVICE_REMOTE_NAMES[@]}))
+    echo ""
+    print_info "共享镜像: 成功 ${shared_ok}/${shared_total}, 失败 ${shared_fail}/${shared_total}"
+
+    # ---- WEB 形态镜像 ----
+    print_header "阶段 2/2：拉取 WEB 镜像（形态: $(_profile_label "$pull_profile"), 架构: ${CURRENT_ARCH}）"
+    echo ""
+    local web_ok=0 web_fail=0
+    for mapping in "${INDEPENDENT_MODULES[@]}"; do
+        local rname="${mapping%%|*}"; local tmp="${mapping#*|}"; local lname="${tmp%%|*}"
+        is_profile_dependent "$rname" || continue
+
+        local rref; rref=$(remote_ref "$rname" "$pull_profile" "$CURRENT_ARCH")
+        local lref; lref=$(local_ref "$lname" "$pull_profile")
+
+        print_step "拉取: ${rref}"
+        if docker image inspect "$lref" >/dev/null 2>&1; then
+            print_info "${lref} 已存在，跳过"; web_ok=$((web_ok + 1)); continue
+        fi
+        pull_and_tag_image "$rref" "$lref" && web_ok=$((web_ok + 1)) || web_fail=$((web_fail + 1))
+    done
+
+    # ---- 汇总 ----
+    local total_all=$((shared_total + 1))
+    local success_all=$((shared_ok + web_ok))
+    local failed_all=$((shared_fail + web_fail))
+
+    echo ""
+    print_header "拉取汇总"
+    echo "  当前架构: ${CURRENT_ARCH}"
+    echo "  部署形态: $(_profile_label "$pull_profile") (${pull_profile})"
+    echo "  共享镜像: ${shared_ok}/${shared_total}"
+    echo "  WEB 镜像: ${web_ok}/1"
+    echo "  总计:     ${success_all}/${total_all}"
+    echo "  失败:     ${failed_all}"
+
+    if [ "$failed_all" -eq 0 ]; then
+        echo ""
+        print_success "所有运行时镜像拉取成功！"
+        echo ""
+
+        # ★ 写入标记文件，让各平台 install 脚本自动跳过构建
+        local _pulled_marker="${SCRIPT_DIR}/.runtime_images_pulled"
+        cat > "$_pulled_marker" <<EOF
+# EasyAIoT 运行时镜像拉取标记
+# 此文件由 runtime_image.sh pull 自动生成
+# 各平台 install 脚本检测到此文件后会跳过 docker build，直接启动服务：
+#   install_linux.sh / install_linux_arm.sh / install_linux_kylin.sh / install_mac.sh
+# 删除此文件可强制下次 install 重新本地构建
+PULL_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+PULL_ARCH=${CURRENT_ARCH}
+PULL_PROFILE=${pull_profile}
+PULL_TAG=${TAG}
+EOF
+        print_info "已记录镜像拉取状态（install 将自动跳过构建）"
+
+        print_info "现在可以直接使用对应平台的 install 脚本启动服务："
+        echo "  bash .scripts/docker/install_linux.sh start"
+        echo "  bash .scripts/docker/install_linux.sh install          (自动跳过构建)"
+        if [ "$CURRENT_ARCH" = "arm64" ] || [ "$CURRENT_ARCH" = "arm32" ]; then
+            echo "  bash .scripts/docker/install_linux_arm.sh start"
+            echo "  bash .scripts/docker/install_linux_arm.sh install      (自动跳过构建)"
+            echo "  bash .scripts/docker/install_linux_kylin.sh start      (麒麟系统)"
+            echo "  bash .scripts/docker/install_linux_kylin.sh install    (自动跳过构建)"
+        fi
+        if [ "$(uname -s)" = "Darwin" ]; then
+            echo "  bash .scripts/docker/install_mac.sh start"
+            echo "  bash .scripts/docker/install_mac.sh install            (自动跳过构建)"
+        fi
+    else
+        echo ""
+        print_warning "有 ${failed_all} 个镜像拉取失败"
+        print_info "失败的镜像需要本地构建: bash .scripts/docker/runtime_image.sh build"
+        return 1
+    fi
+
+    # 列出本地镜像
+    echo ""
+    print_info "本地运行时镜像列表 (${CURRENT_ARCH}):"
+    for mapping in "${INDEPENDENT_MODULES[@]}"; do
+        local rname="${mapping%%|*}"; local tmp="${mapping#*|}"; local lname="${tmp%%|*}"
+        for lref in "$(local_ref "$lname")" "$(is_profile_dependent "$rname" && local_ref "$lname" "$pull_profile" || true)"; do
+            [ -z "$lref" ] && continue
+            if docker image inspect "$lref" >/dev/null 2>&1; then
+                local size; size=$(docker image inspect "$lref" --format '{{.Size}}' 2>/dev/null | awk '{printf "%.1f MB", $1/1024/1024}')
+                echo "  ${lref}  (${size:-N/A})"
+            fi
+        done
+    done
+    for lname in "${DEVICE_LOCAL_NAMES[@]}"; do
+        local lref; lref=$(local_ref "$lname")
+        if docker image inspect "$lref" >/dev/null 2>&1; then
+            local size; size=$(docker image inspect "$lref" --format '{{.Size}}' 2>/dev/null | awk '{printf "%.1f MB", $1/1024/1024}')
+            echo "  ${lref}  (${size:-N/A})"
+        fi
+    done
+    return 0
+}
+
+# ============================================================================
+# 主入口
+# ============================================================================
+main() {
+    case "$COMMAND" in
+        build) build_all_modules ;;
+        pull)  pull_all_images ;;
+        *)     print_error "未知命令: $COMMAND"; exit 1 ;;
+    esac
+}
+
+main "$@"
+rc=$?
+
+if [ -n "$LOG_FILE" ] && [ -f "$LOG_FILE" ]; then
+    {
+        echo ""
+        echo "========================================="
+        echo "脚本结束时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "退出码: $rc"
+        echo "========================================="
+    } >> "$LOG_FILE"
+    print_info "日志文件已保存到: $LOG_FILE"
+fi
+
+exit $rc

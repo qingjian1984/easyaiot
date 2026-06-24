@@ -110,8 +110,10 @@ DISABLED_BY_DEFAULT_MIDDLEWARE_SERVICES=(
     "EMQX"
 )
 
-# 可选中间件：镜像拉取失败时不阻塞其余核心服务启动
+# 可选中间件：镜像拉取失败或启动失败时不阻塞其余核心服务启动
+# ZLMediaKit 是流媒体服务器（用于视频推拉流），启动失败不影响核心业务
 OPTIONAL_MIDDLEWARE_SERVICES=(
+    "ZLMediaKit"
 )
 
 # 中间件端口映射
@@ -278,7 +280,11 @@ check_nvidia_container_toolkit() {
     fi
     
     # 检查是否通过包管理器安装
-    if dpkg -l | grep -q nvidia-container-toolkit 2>/dev/null || rpm -qa | grep -q nvidia-container-toolkit 2>/dev/null; then
+    if dpkg -l 2>/dev/null | grep -q nvidia-container-toolkit 2>/dev/null; then
+        print_info "nvidia-container-toolkit 已通过包管理器安装"
+        return 0
+    fi
+    if command -v rpm >/dev/null 2>&1 && rpm -qa 2>/dev/null | grep -q nvidia-container-toolkit; then
         print_info "nvidia-container-toolkit 已通过包管理器安装"
         return 0
     fi
@@ -3876,6 +3882,17 @@ compose_up_middleware() {
     if [ ${#skip_services[@]} -gt 0 ]; then
         print_warning "以下服务已跳过: ${skip_services[*]}"
     fi
+
+    # ★ 自动检测并设置 NACOS_PLATFORM，避免 ARM/AMD64 跨架构问题
+    if [ -z "${NACOS_PLATFORM:-}" ]; then
+        local _host_arch
+        _host_arch=$(uname -m)
+        case "$_host_arch" in
+            x86_64)  export NACOS_PLATFORM="linux/amd64" ;;
+            aarch64) export NACOS_PLATFORM="linux/arm64" ;;
+        esac
+    fi
+
     print_info "启动服务 (${EASYAIOT_DEPLOY_PROFILE:-full}): ${up_services[*]}"
     mw_compose up -d "${up_services[@]}" 2>&1 | tee -a "$LOG_FILE"
     return "${PIPESTATUS[0]}"
@@ -3957,13 +3974,29 @@ check_and_pull_images() {
     done
     missing_images=${#missing_list[@]}
 
+    # ★ 检测本地架构，用于多架构镜像（如 nacos）的显式 platform 拉取
+    local _host_arch
+    _host_arch=$(uname -m)
+    case "$_host_arch" in
+        x86_64)  _host_arch="linux/amd64" ;;
+        aarch64) _host_arch="linux/arm64" ;;
+        armv7l)  _host_arch="linux/arm/v7" ;;
+        *)       _host_arch="" ;;  # 未知架构，不传 --platform，由 Docker 自动选择
+    esac
+
     # 只拉缺失的镜像：原先缺 1 个就全量 compose pull，会为已存在的十几个镜像逐一联源比对，
     # 慢且被镜像源网络质量绑架（源端一个 blob 超时即整体失败）
     if [ $missing_images -gt 0 ]; then
         print_info "已存在 $existing_images 个镜像；缺失 $missing_images 个，仅拉取缺失镜像: ${missing_list[*]}"
         local _pull_img _pull_fail=0
         for _pull_img in "${missing_list[@]}"; do
-            docker pull "$_pull_img" 2>&1 | tee -a "$LOG_FILE"
+            # ★ nacos 镜像显式指定 platform，避免在 ARM 主机上拉取 amd64 版本导致 QEMU 模拟性能极差
+            local _pull_args=()
+            if [ -n "$_host_arch" ] && echo "$_pull_img" | grep -q "nacos/nacos-server"; then
+                print_info "检测到 nacos 镜像，使用平台架构: ${_host_arch}"
+                _pull_args=(--platform "$_host_arch")
+            fi
+            docker pull "${_pull_args[@]}" "$_pull_img" 2>&1 | tee -a "$LOG_FILE"
             if [ "${PIPESTATUS[0]}" -ne 0 ]; then
                 _pull_fail=1
             fi
@@ -4822,35 +4855,115 @@ fix_nacos_derby_corruption() {
     # compose --force-recreate 默认会把旧容器的匿名卷原样带给新容器（除非 --renew-anon-volumes），
     # 坏的 derby-data 随卷复活——实测单纯重建容器修不掉，删容器+匿名卷才彻底。
     docker rm -f -v nacos-server >/dev/null 2>&1 || true
+    # ★ 重建前确保 nacos 镜像是当前架构版本（避免 QEMU 跨架构模拟）
+    local _host_arch _nacos_platform=""
+    _host_arch=$(uname -m)
+    case "$_host_arch" in
+        x86_64)  _nacos_platform="linux/amd64" ;;
+        aarch64) _nacos_platform="linux/arm64" ;;
+    esac
+    if [ -n "$_nacos_platform" ]; then
+        # 强制拉取正确的架构镜像（覆盖可能缓存的错误架构版本）
+        docker pull --platform "$_nacos_platform" nacos/nacos-server:v2.5.1-slim 2>&1 | tee -a "$LOG_FILE" || true
+        export NACOS_PLATFORM="$_nacos_platform"
+    fi
     $COMPOSE_CMD -f "$COMPOSE_FILE" up -d Nacos 2>&1 | tee -a "$LOG_FILE" || true
+    unset NACOS_PLATFORM
 }
 
 # Nacos 2.2.1+ 开启鉴权后不再内置默认账号：全新数据卷（首次安装或 Derby 修复重建后）里
 # 没有任何用户，业务服务登录会报 "User nacos not found"。
-# /v1/auth/users/admin 仅在尚无 admin 用户时可匿名调用；已有 admin 时返回错误且不做修改（幂等安全）。
+# Nacos 2.2+ 在 auth 开启后 /v1/auth/users/admin 可能不支持匿名调用，需用默认 nacos/nacos 登录后创建。
 # 密码必须与各服务 bootstrap-*.yaml 的 spring.cloud.nacos.*.password 一致。
 NACOS_INIT_PASSWORD="${NACOS_INIT_PASSWORD:-basiclab@iot78475418754}"
+NACOS_DEFAULT_PASSWORD="${NACOS_DEFAULT_PASSWORD:-nacos}"
 ensure_nacos_admin_user() {
     docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^nacos-server$' || return 0
     # 等待 nacos 就绪（新建容器约 30-60s；已就绪时首轮即通过，常态开销≈一次curl）
-    local i resp
+    local i resp token
     for i in $(seq 1 45); do
         curl -s -m 2 "http://localhost:8848/nacos/actuator/health" >/dev/null 2>&1 && break
         sleep 2
     done
+
+    # 先用目标密码尝试登录；成功说明 admin 已正确初始化
+    if curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/auth/login" \
+        --data-urlencode "username=nacos" --data-urlencode "password=${NACOS_INIT_PASSWORD}" 2>/dev/null \
+        | grep -q '"accessToken"'; then
+        # admin 已存在且密码正确，确保 dev 命名空间存在
+        token=$(curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/auth/login" \
+            --data-urlencode "username=nacos" --data-urlencode "password=${NACOS_INIT_PASSWORD}" 2>/dev/null \
+            | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+        if [ -n "$token" ]; then
+            curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/console/namespaces?accessToken=${token}" \
+                -d "customNamespaceId=dev&namespaceName=dev&namespaceDesc=dev" >/dev/null 2>&1 || true
+        fi
+        return 0
+    fi
+
+    # 目标密码登录失败，尝试旧版匿名 /v1/auth/users/admin 接口（兼容 Nacos <2.2）
     resp=$(curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/auth/users/admin" \
         --data-urlencode "password=${NACOS_INIT_PASSWORD}" 2>/dev/null || true)
-    echo "$resp" | grep -q '"username"' || return 0   # 已有 admin（常态）→ 静默返回
-    print_success "Nacos admin 用户已初始化（用户 nacos，密码与服务 bootstrap 一致）"
-    # 业务服务的注册/配置均指向 namespace dev（ID 必须为 dev），新库须一并补建
-    local token
+    if echo "$resp" | grep -q '"username"'; then
+        print_success "Nacos admin 用户已初始化（匿名接口，用户 nacos，密码与服务 bootstrap 一致）"
+        token=$(curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/auth/login" \
+            --data-urlencode "username=nacos" --data-urlencode "password=${NACOS_INIT_PASSWORD}" 2>/dev/null \
+            | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+        [ -n "$token" ] && curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/console/namespaces?accessToken=${token}" \
+            -d "customNamespaceId=dev&namespaceName=dev&namespaceDesc=dev" >/dev/null 2>&1 || true
+        print_info "Nacos 命名空间 dev 已创建"
+        return 0
+    fi
+
+    # 匿名接口也失败，尝试用默认密码 nacos/nacos 登录（Nacos 2.5 首次启动默认账号）
     token=$(curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/auth/login" \
-        --data-urlencode "username=nacos" --data-urlencode "password=${NACOS_INIT_PASSWORD}" 2>/dev/null \
+        --data-urlencode "username=nacos" --data-urlencode "password=${NACOS_DEFAULT_PASSWORD}" 2>/dev/null \
         | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
-    [ -z "$token" ] && return 0
-    curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/console/namespaces?accessToken=${token}" \
-        -d "customNamespaceId=dev&namespaceName=dev&namespaceDesc=dev" >/dev/null 2>&1 || true
-    print_info "Nacos 命名空间 dev 已创建"
+    if [ -n "$token" ]; then
+        print_info "使用 Nacos 默认密码登录成功，正在修改密码..."
+        # 修改密码为目标密码
+        local change_resp
+        change_resp=$(curl -s -m 5 -X PUT "http://localhost:8848/nacos/v1/auth/users?accessToken=${token}" \
+            --data-urlencode "username=nacos" \
+            --data-urlencode "newPassword=${NACOS_INIT_PASSWORD}" 2>/dev/null || true)
+        if echo "$change_resp" | grep -qE '"code":200|"ok":true'; then
+            print_success "Nacos admin 密码已更新为目标密码"
+            # 确保 dev 命名空间
+            curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/console/namespaces?accessToken=${token}" \
+                -d "customNamespaceId=dev&namespaceName=dev&namespaceDesc=dev" >/dev/null 2>&1 || true
+            print_info "Nacos 命名空间 dev 已创建"
+            return 0
+        fi
+        print_warning "Nacos 密码修改失败（PUT 接口返回: ${change_resp}），尝试直接创建用户..."
+    fi
+
+    # 最后兜底：用默认密码登录后直接 POST 创建用户（覆盖已存在的）
+    if [ -z "$token" ]; then
+        token=$(curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/auth/login" \
+            --data-urlencode "username=nacos" --data-urlencode "password=${NACOS_DEFAULT_PASSWORD}" 2>/dev/null \
+            | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+    fi
+    if [ -n "$token" ]; then
+        curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/auth/users?accessToken=${token}" \
+            --data-urlencode "username=nacos" \
+            --data-urlencode "password=${NACOS_INIT_PASSWORD}" >/dev/null 2>&1 || true
+        # 再验证
+        if curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/auth/login" \
+            --data-urlencode "username=nacos" --data-urlencode "password=${NACOS_INIT_PASSWORD}" 2>/dev/null \
+            | grep -q '"accessToken"'; then
+            print_success "Nacos admin 用户已创建并验证通过（用户 nacos，密码与服务 bootstrap 一致）"
+            curl -s -m 5 -X POST "http://localhost:8848/nacos/v1/console/namespaces?accessToken=${token}" \
+                -d "customNamespaceId=dev&namespaceName=dev&namespaceDesc=dev" >/dev/null 2>&1 || true
+            print_info "Nacos 命名空间 dev 已创建"
+            return 0
+        fi
+    fi
+
+    print_error "Nacos admin 用户初始化失败，请手动配置"
+    print_info "1. 登录 http://localhost:8848/nacos（默认账号 nacos/nacos）"
+    print_info "2. 将 nacos 用户密码改为: ${NACOS_INIT_PASSWORD}"
+    print_info "3. 创建命名空间: namespaceId=dev, namespaceName=dev"
+    return 1
 }
 
 # up 失败时自动展示 unhealthy 容器：健康检查最后输出 + 容器日志尾部，免手动逐个排查。
@@ -4922,11 +5035,12 @@ install_middleware() {
     # 取 PIPESTATUS[0] 判定（tee 恒 0，`if 管道` 永远走成功分支，失败会被掩盖）
     local -a _skip_optional=()
     read -r -a _skip_optional <<< "$(collect_skippable_optional_services)"
-    compose_up_middleware "${_skip_optional[@]}"
-    _up_rc=$?
-    if [ "${_up_rc}" -eq 0 ]; then
+    # 用 if 包裹以防止 compose_up 返回非零时触发 set -e（如 ZLMediaKit rlimit 等非致命错误）
+    if compose_up_middleware "${_skip_optional[@]}"; then
+        _up_rc=0
         print_success "容器启动命令执行完成"
     else
+        _up_rc=$?
         print_error "容器启动过程中出现错误（compose 退出码 ${_up_rc}），unhealthy 容器自动诊断："
         show_unhealthy_containers
     fi
@@ -5075,8 +5189,12 @@ start_middleware() {
     print_info "启动所有中间件服务..."
     local -a _skip_optional=()
     read -r -a _skip_optional <<< "$(collect_skippable_optional_services)"
-    compose_up_middleware "${_skip_optional[@]}"
-    _up_rc=${PIPESTATUS[0]}
+    # 用 if 包裹以防止 compose_up 返回非零时触发 set -e（如 ZLMediaKit rlimit 等非致命错误）
+    if compose_up_middleware "${_skip_optional[@]}"; then
+        _up_rc=0
+    else
+        _up_rc=$?
+    fi
     ensure_nacos_admin_user
     
     if [ "${_up_rc:-0}" -eq 0 ]; then
@@ -5487,8 +5605,12 @@ update_middleware() {
     print_info "重启所有中间件服务..."
     local -a _skip_optional=()
     read -r -a _skip_optional <<< "$(collect_skippable_optional_services)"
-    compose_up_middleware "${_skip_optional[@]}"
-    _up_rc=$?
+    # 用 if 包裹以防止 compose_up 返回非零时触发 set -e（如 ZLMediaKit rlimit 等非致命错误）
+    if compose_up_middleware "${_skip_optional[@]}"; then
+        _up_rc=0
+    else
+        _up_rc=$?
+    fi
     ensure_nacos_admin_user
 
     if [ "${_up_rc}" -eq 0 ]; then

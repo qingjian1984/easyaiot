@@ -160,10 +160,19 @@ docker_build_image() {
     else
         print_info "使用 Docker 守护进程层缓存（默认）；如需跨守护进程清理/换机器持久化：WEB_PERSIST_BUILD_CACHE=1"
     fi
+    local platform_opts=""
+    if [ -n "${DOCKER_PLATFORM:-}" ]; then
+        platform_opts="--platform $DOCKER_PLATFORM"
+        print_info "构建目标平台: ${DOCKER_PLATFORM}"
+    fi
     docker build \
         "${cache_from_to[@]}" \
         --build-arg "CACHE_BUST=${cache_bust}" \
         --build-arg "VITE_GLOB_DEPLOY_PROFILE=${deploy_profile}" \
+        --build-arg "SKIP_VITE_BUILD=${SKIP_VITE_BUILD:-0}" \
+        --build-arg NPM_REGISTRY="${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}" \
+        --build-arg APK_MIRROR="${APK_MIRROR:-mirrors.cloud.tencent.com}" \
+        $platform_opts \
         "$@" 2>&1 | tee "$log_new" | tee -a "$pnpm_log"
     ec=$?
     set +o pipefail
@@ -171,6 +180,9 @@ docker_build_image() {
         echo "======== docker build 结束 ${ts} 退出码: ${ec} ========"
         echo ""
     } >> "$pnpm_log"
+    if [ $ec -ne 0 ]; then
+        print_error "Docker 构建失败，请检查日志: ${log_new}"
+    fi
     return $ec
 }
 
@@ -559,6 +571,50 @@ build_frontend() {
     print_success "前端项目构建完成（此构建仅用于测试，Docker部署时会重新构建）"
 }
 
+# 验证上游后端服务是否可达（gateway/system-host）
+verify_upstream_connectivity() {
+    local container_name="web-service"
+    # 等待容器完全启动
+    local attempt=0
+    while [ $attempt -lt 10 ]; do
+        if docker exec "$container_name" wget -q --spider http://127.0.0.1/health 2>/dev/null; then
+            break
+        fi
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+
+    # 检查 gateway/system-host 可达性
+    local upstream_host upstream_port upstream_label
+    if is_mini_deploy_profile; then
+        upstream_host="system-host"
+        upstream_port="48099"
+        upstream_label="iot-system(48099)"
+    else
+        upstream_host="gateway"
+        upstream_port="48080"
+        upstream_label="iot-gateway(48080)"
+    fi
+
+    print_info "验证后端服务连通性 (${upstream_label})..."
+    if docker exec "$container_name" wget -q --timeout=3 --tries=1 --spider "http://${upstream_host}:${upstream_port}/" 2>/dev/null; then
+        print_success "后端服务 ${upstream_label} 连通正常"
+    elif docker exec "$container_name" wget -q --timeout=3 --tries=1 --spider "http://${upstream_host}:${upstream_port}/actuator/health" 2>/dev/null; then
+        print_success "后端服务 ${upstream_label} 连通正常"
+    else
+        print_warning "后端服务 ${upstream_label} 不可达，API 请求将返回 502"
+        print_warning "请确保 DEVICE 模块已成功安装并启动"
+        if ! is_mini_deploy_profile; then
+            print_info "检查 iot-gateway 是否在运行: docker ps | grep iot-gateway"
+            print_info "检查端口 48080 是否监听: ss -tlnp | grep 48080"
+        else
+            print_info "检查 iot-system 是否在运行: docker ps | grep iot-system"
+            print_info "检查端口 48099 是否监听: ss -tlnp | grep 48099"
+        fi
+        print_info "待后端就绪后重启 web 服务: ./install_linux.sh restart"
+    fi
+}
+
 # 安装服务
 install_service() {
     print_info "开始安装 WEB 服务..."
@@ -584,7 +640,11 @@ install_service() {
     print_info "前端构建将在Docker容器内自动完成"
     
     print_info "构建 Docker 镜像（根据代码重新构建）..."
-    docker_build_image -t web-service:latest .
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect web-service:latest >/dev/null 2>&1; then
+        print_success "镜像已从远程拉取 (web-service:latest)，跳过构建"
+    else
+        docker_build_image -t web-service:latest .
+    fi
     record_web_deploy_profile_built "${EASYAIOT_ROOT}"
     
     print_info "启动服务..."
@@ -596,6 +656,9 @@ install_service() {
     
     # 检查服务状态
     check_status
+    
+    # 验证上游连通性
+    verify_upstream_connectivity
     
     # 读取端口配置
     if [ -f .env ]; then
@@ -702,9 +765,15 @@ build_image() {
     # 注意：前端构建现在在Docker容器内完成，构建镜像时会自动完成
     print_info "前端构建将在Docker容器内自动完成"
     
-    docker_build_image -t web-service:latest --no-cache .
+    local build_rc=0
+    docker_build_image -t web-service:latest --no-cache . || build_rc=$?
     record_web_deploy_profile_built "${EASYAIOT_ROOT}"
-    print_success "镜像构建完成"
+    if [ $build_rc -eq 0 ]; then
+        print_success "镜像构建完成"
+    else
+        print_error "镜像构建失败 (exit=${build_rc})"
+    fi
+    return $build_rc
 }
 
 # 清理服务

@@ -2,18 +2,21 @@
 # 备用：单 Dockerfile 多 target 一体构建（日常请用 Dockerfile.base + 各模块 Dockerfile，见 install_linux.sh）
 FROM maven:3.9.11-eclipse-temurin-21-alpine AS builder
 
+# 镜像源配置（通过 --build-arg 传入，默认腾讯云）
+ARG MAVEN_MIRROR_URL=https://mirrors.cloud.tencent.com/nexus/repository/maven-public/
+
 RUN mkdir -p /m2/repository && \
-    cat > /m2/settings.xml <<'EOF'
+    cat > /m2/settings.xml <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
   <mirrors>
     <mirror>
-      <id>aliyun</id>
+      <id>tencent-maven</id>
       <mirrorOf>central</mirrorOf>
-      <name>Aliyun Maven</name>
-      <url>https://maven.aliyun.com/nexus/content/groups/public/</url>
+      <name>Tencent Cloud Maven</name>
+      <url>${MAVEN_MIRROR_URL}</url>
     </mirror>
   </mirrors>
   <localRepository>/m2/repository</localRepository>

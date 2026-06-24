@@ -1,0 +1,49 @@
+# ============================================================================
+# EasyAIoT 项目根目录 .dockerignore
+# 防止 node_modules、.git、本地编译产物或不必要的日志被发送到 Docker Daemon，
+# 极大提升 BuildKit 的构建效率和缓存命中率。
+# ============================================================================
+
+# Git / IDE
+.git
+.github
+.vscode
+.idea
+*.iml
+*.ipr
+*.iws
+
+# 前端依赖
+node_modules
+.pnpm-store
+.build-cache
+
+# 构建产物（各模块 Dockerfile 从构建阶段复制，无需上下文传输）
+dist
+dist-prebuilt*
+
+# 日志文件
+*.log
+logs/
+
+# 运行时数据（compose 卷挂载，勿打入镜像上下文）
+temp_uploads/
+db_data/
+redis_data/
+data/
+
+# 压缩文件
+*.zip
+*.tar.gz
+
+# 文档
+*.md
+README*
+LICENSE
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo

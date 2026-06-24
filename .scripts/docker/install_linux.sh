@@ -689,6 +689,66 @@ verify_service_health() {
     fi
 }
 
+# 检查 runtime_image.sh pull 是否已拉取过镜像，若已拉取则跳过构建直接启动
+# 返回 0 表示镜像已就绪可跳过构建，返回 1 表示需要本地构建
+_check_pulled_images_ready() {
+    local _marker="${SCRIPT_DIR}/.runtime_images_pulled"
+    if [ ! -f "$_marker" ]; then
+        return 1
+    fi
+
+    # 用 sed 安全提取字段值，避免 source 标记文件因意外含 `;;` 等特殊字符而引发语法错误
+    local _pull_arch="" _pull_profile="" _pull_tag=""
+    _pull_arch=$(sed -n 's/^PULL_ARCH=//p' "$_marker" 2>/dev/null || true)
+    _pull_profile=$(sed -n 's/^PULL_PROFILE=//p' "$_marker" 2>/dev/null || true)
+    _pull_tag=$(sed -n 's/^PULL_TAG=//p' "$_marker" 2>/dev/null || true)
+    _pull_arch="${_pull_arch:-}"
+    _pull_profile="${_pull_profile:-}"
+    _pull_tag="${_pull_tag:-}"
+    local _current_arch; _current_arch=$(uname -m)
+    case "$_current_arch" in
+        x86_64|amd64) _current_arch="amd64" ;;
+        aarch64|arm64) _current_arch="arm64" ;;
+        armv7l) _current_arch="arm32" ;;
+        *) _current_arch="amd64" ;;
+    esac
+
+    # 架构不匹配：标记是给别的架构拉取的，不能复用
+    if [ "${_pull_arch:-}" != "${_current_arch}" ]; then
+        print_info "拉取标记架构 (${_pull_arch:-?}) 与当前架构 (${_current_arch}) 不匹配，将重新构建"
+        return 1
+    fi
+
+    # 检查关键镜像是否在本地存在（用 docker image inspect 验证）
+    local _missing=0
+    local _check_images=(
+        "ai-service:${_pull_tag:-latest}"
+        "video-service:${_pull_tag:-latest}"
+        "iot-gateway:${_pull_tag:-latest}"
+    )
+    # 根据形态检查 WEB 镜像
+    case "${_pull_profile:-full}" in
+        mini)     _check_images+=("web-service:${_pull_tag:-latest}-mini") ;;
+        standard) _check_images+=("web-service:${_pull_tag:-latest}-standard") ;;
+        *)        _check_images+=("web-service:${_pull_tag:-latest}") ;;
+    esac
+
+    for _img in "${_check_images[@]}"; do
+        if ! docker image inspect "$_img" >/dev/null 2>&1; then
+            print_warning "拉取的镜像 ${_img} 不在本地，将重新构建"
+            _missing=1
+            break
+        fi
+    done
+
+    if [ "$_missing" -eq 1 ]; then
+        return 1
+    fi
+
+    print_success "检测到 runtime_image.sh pull 已拉取镜像 (${_pull_arch}, ${_pull_profile:-full})，跳过构建直接启动"
+    return 0
+}
+
 # 安装所有服务
 install_linux() {
     print_section "开始安装所有服务"
@@ -700,19 +760,34 @@ install_linux() {
     configure_docker_mirror
     create_network
     
+    # ★ 检测 runtime_image.sh pull 是否已拉取过镜像
+    #   若已拉取，业务模块（DEVICE/AI/VIDEO/WEB）跳过 docker build，直接用 start
+    local _skip_build=0
+    if _check_pulled_images_ready; then
+        _skip_build=1
+        export EASYAIOT_SKIP_BUILD=1
+    fi
+    
     local success_count=0
     local total_count=${#MODULES[@]}
+    local -a failed_modules=()
+    local -a succeeded_modules=()
     
     for module in "${MODULES[@]}"; do
         print_section "安装 ${MODULE_NAMES[$module]}"
+        if [ "$_skip_build" -eq 1 ] && [ "$module" != ".scripts/docker" ]; then
+            print_info "镜像已从远程拉取，跳过 docker build，直接启动 ${MODULE_NAMES[$module]}"
+        fi
         if execute_module_command "$module" "install"; then
             success_count=$((success_count + 1))
+            succeeded_modules+=("${MODULE_NAMES[$module]}")
             # 基础服务装完后精确等待 PostgreSQL/Nacos/Redis 就绪（取代原固定 sleep 5）
             if [ "$module" = ".scripts/docker" ]; then
                 wait_for_base_services
             fi
         else
             print_error "${MODULE_NAMES[$module]} 安装失败"
+            failed_modules+=("${MODULE_NAMES[$module]}")
         fi
         echo ""
     done
@@ -720,11 +795,49 @@ install_linux() {
     print_section "安装完成"
     echo "成功安装: $success_count / $total_count 个模块"
     
+    if [ ${#succeeded_modules[@]} -gt 0 ]; then
+        echo "  已成功: ${succeeded_modules[*]}"
+    fi
+    if [ ${#failed_modules[@]} -gt 0 ]; then
+        echo "  已失败: ${failed_modules[*]}"
+    fi
+    
     if [ $success_count -eq $total_count ]; then
         print_success "所有模块安装成功！"
         ensure_platform_agent_after_stack
     else
+        echo ""
         print_warning "部分模块安装失败，请检查日志"
+        echo ""
+        print_info "诊断建议："
+        for failed in "${failed_modules[@]}"; do
+            case "$failed" in
+                "基础服务")
+                    print_info "  - 基础服务：检查 Nacos/PostgreSQL/Redis 等中间件容器是否正常启动"
+                    print_info "    docker ps --filter 'name=nacos|postgres|redis'"
+                    ;;
+                "Device服务")
+                    print_info "  - Device服务：检查 Maven 编译是否成功、JAR 包是否生成"
+                    print_info "    ls DEVICE/target/jars/"
+                    print_info "    检查日志: cat ${LOG_DIR}/install_linux_*.log | grep -i 'error\|failed\|失败'"
+                    ;;
+                "AI服务")
+                    print_info "  - AI服务：检查 PyTorch 镜像拉取和 Python 依赖安装"
+                    print_info "    docker images | grep ai-service"
+                    ;;
+                "Video服务")
+                    print_info "  - Video服务：检查视频服务镜像构建"
+                    print_info "    docker images | grep video-service"
+                    ;;
+                "Web前端服务")
+                    print_info "  - Web前端服务：检查 pnpm install/build 和 nginx 镜像构建"
+                    print_info "    docker images | grep web-service"
+                    print_info "    cat WEB/docker-build-logs/pnpm-build.log | tail -50"
+                    ;;
+            esac
+        done
+        echo ""
+        print_info "完整日志文件: ${LOG_FILE}"
         exit 1
     fi
 }

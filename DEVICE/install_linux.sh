@@ -437,22 +437,31 @@ store_module_hashes() {
     printf '%s\n' "$(hash_global_inputs)" > "${MODULE_HASH_DIR}/.global-inputs" 2>/dev/null || true
 }
 
-# 确保宿主机 Maven settings.xml 存在（aliyun mirror）；docker run 卷挂载编译时以 -s 引用
+# 确保宿主机 Maven settings.xml 存在（腾讯云 mirror，可通过 MAVEN_MIRROR_URL 覆盖）；
+# docker run 卷挂载编译时以 -s 引用
+# 注意：如果 settings.xml 已存在但 mirror URL 与当前期望不一致，会重新生成
 ensure_maven_settings() {
     local s="$1"
-    [ -f "$s" ] && return 0
+    local maven_mirror="${MAVEN_MIRROR_URL:-https://mirrors.cloud.tencent.com/nexus/repository/maven-public/}"
+    # 若已存在，检查 mirror URL 是否匹配当前配置
+    if [ -f "$s" ]; then
+        if grep -qF "${maven_mirror}" "$s" 2>/dev/null; then
+            return 0
+        fi
+        print_info "Maven mirror URL 已变更，重新生成 settings.xml"
+    fi
     mkdir -p "$(dirname "$s")" 2>/dev/null || true
-    cat > "$s" <<'EOF'
+    cat > "$s" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
   <mirrors>
     <mirror>
-      <id>aliyun-all</id>
+      <id>tencent-maven</id>
       <mirrorOf>central,huaweicloud,aliyunmaven,aliyun-plugin</mirrorOf>
-      <name>Aliyun Maven</name>
-      <url>https://maven.aliyun.com/repository/public</url>
+      <name>Tencent Cloud Maven</name>
+      <url>${maven_mirror}</url>
     </mirror>
   </mirrors>
   <interactiveMode>false</interactiveMode>
@@ -525,15 +534,17 @@ collect_runtime_jars() {
 
 # ===== C2：常驻 mvnd builder 容器（守护进程复用）=====
 
-# 确保 mvnd 镜像存在（不存在则自建，从清华源下载 mvnd）。失败返回非 0 → 调用方回退 C1。
+# 确保 mvnd 镜像存在（不存在则自建，默认从腾讯云源下载 mvnd）。失败返回非 0 → 调用方回退 C1。
 ensure_mvnd_image() {
     if docker image inspect "$MVND_IMAGE" >/dev/null 2>&1; then
         return 0
     fi
-    print_info "首次构建 mvnd 镜像 $MVND_IMAGE（mvnd $MVND_VERSION，清华源）..."
+    local mvnd_url="${MVND_BASE_URL:-https://mirrors.cloud.tencent.com/apache/maven/mvnd}"
+    print_info "首次构建 mvnd 镜像 $MVND_IMAGE（mvnd $MVND_VERSION）..."
     docker build -f "${SCRIPT_DIR}/Dockerfile.mvnd" \
         --build-arg "MVND_BASE_IMAGE=${MVND_BASE_IMAGE}" \
         --build-arg "MVND_VERSION=${MVND_VERSION}" \
+        --build-arg "MVND_BASE_URL=${mvnd_url}" \
         -t "$MVND_IMAGE" "$SCRIPT_DIR"
 }
 
@@ -645,6 +656,14 @@ build_base_jars() {
     ensure_maven_settings "$MAVEN_SETTINGS_FILE"
     mkdir -p "$JARS_DIR" "$MAVEN_CACHE_DIR"
     print_info "Maven 本地仓库（卷挂载，直接持久）: $MAVEN_CACHE_DIR"
+
+    # 清理 _remote.repositories，避免 Maven 逐 artifact 验证旧仓库 ID 是否可用（大幅提速）
+    local _remote_count
+    _remote_count=$(find "$MAVEN_CACHE_DIR" -name "_remote.repositories" -type f 2>/dev/null | wc -l)
+    if [ "$_remote_count" -gt 0 ]; then
+        print_info "清理 ${_remote_count} 个 _remote.repositories（避免逐 artifact 验证旧仓库 ID）..."
+        find "$MAVEN_CACHE_DIR" -name "_remote.repositories" -type f -delete 2>/dev/null || true
+    fi
 
     # 选择性构建用更快启动的短命 JVM（StopAtLevel=1）；全量构建保持默认（长编译需完整 JIT 吞吐）
     local build_maven_opts=""
@@ -821,7 +840,7 @@ build_runtime_images() {
             || cp -f "${JARS_DIR}/${jarname}" "${ctx}/target/jars/${jarname}"
         log="${tmp_log_dir}/$(echo "$tag" | tr '/:' '__').log"
         print_info "并行构建运行时镜像: $tag ($dockerfile)"
-        ( docker build -f "$dockerfile" -t "$tag" "$ctx" ) >"$log" 2>&1 &
+        ( docker build ${DOCKER_PLATFORM:+--platform "$DOCKER_PLATFORM"} -f "$dockerfile" -t "$tag" "$ctx" ) >"$log" 2>&1 &
         pids+=("$!"); tags+=("$tag"); logs+=("$log"); dfs+=("$dockerfile")
         hashes+=("${img_hashes[$idx]}")
     done
@@ -853,7 +872,28 @@ build_runtime_images() {
 
 # 按需构建（install / update / build）：基于源码/依赖哈希增量，输入未变则整段跳过。
 # 需强制全量重建时设置环境变量 FORCE_REBUILD=1。
+# 当 EASYAIOT_SKIP_BUILD=1 且所有本地镜像已存在时，跳过构建直接启动。
 build_images_incremental() {
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ]; then
+        local _all_present=1
+        local _img_list=(
+            iot-gateway:latest iot-module-system-biz:latest iot-module-infra-biz:latest
+            iot-module-device-biz:latest iot-module-dataset-biz:latest iot-module-node-biz:latest
+            iot-module-tdengine-biz:latest iot-module-file-biz:latest iot-module-message-biz:latest
+            iot-sink-biz:latest iot-gb28181-biz:latest
+        )
+        for _img in "${_img_list[@]}"; do
+            if ! docker image inspect "$_img" >/dev/null 2>&1; then
+                print_warning "镜像 ${_img} 不在本地，需要构建"
+                _all_present=0
+                break
+            fi
+        done
+        if [ "$_all_present" -eq 1 ]; then
+            print_success "所有 Device 镜像已从远程拉取，跳过构建"
+            return 0
+        fi
+    fi
     print_info "========== 构建（按需，输入未变则跳过）=========="
     check_compose_file
     check_docker_daemon

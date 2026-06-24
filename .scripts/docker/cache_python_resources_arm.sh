@@ -46,7 +46,6 @@ case "${MODULE_ARG^^}" in
 esac
 
 PIP_WHEELS_DIR="$(arm_pip_wheels_build_context_dir_for "$EASYAIOT_ROOT" "$CACHE_MODULE")"
-ARM_REQUIREMENTS_FILE="$(easyaiot_build_cache_base "$EASYAIOT_ROOT")/arm/${CACHE_MODULE}/requirements.arm.txt"
 
 init_easyaiot_build_cache_dirs "$EASYAIOT_ROOT"
 
@@ -73,8 +72,59 @@ else
     print_info "跳过 Docker 镜像缓存（启用: CACHE_DOCKER_IMAGE=1 $0）"
 fi
 
-mkdir -p "$(dirname "$ARM_REQUIREMENTS_FILE")"
-sed 's/onnxruntime-gpu>=/onnxruntime>=/g' "$REQ_SOURCE" > "$ARM_REQUIREMENTS_FILE"
+# 展开 -r includes，避免合并文件中出现无法解析的相对引用（与 x86 版本逻辑一致）
+append_requirements_file() {
+    local req_file="$1"
+    local out_file="$2"
+    local req_dir line include_path
+
+    [ -f "$req_file" ] || return 0
+    req_dir="$(cd "$(dirname "$req_file")" && pwd)"
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%%#*}"
+        line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        [ -z "$line" ] && continue
+        case "$line" in
+            --index-url*) ;;
+            -r*)
+                include_path="${line#-r }"
+                include_path="${line#-r}"
+                include_path="$(echo "$include_path" | sed 's/^[[:space:]]*//')"
+                if [[ "$include_path" != /* ]]; then
+                    include_path="${req_dir}/${include_path}"
+                fi
+                append_requirements_file "$include_path" "$out_file"
+                ;;
+            *)
+                echo "$line" >> "$out_file"
+                ;;
+        esac
+    done < "$req_file"
+}
+
+prepare_flattened_requirements_arm() {
+    local req_file="$1"  # requirements.txt (ARM 版含 torch)
+    local out_file out_dir
+    # ★ 在项目 .build-cache 下创建临时文件，确保 Docker 挂载时路径可达
+    out_dir="$(easyaiot_build_cache_base "$EASYAIOT_ROOT")/tmp"
+    mkdir -p "$out_dir"
+    out_file="$(mktemp "${out_dir}/flat-requirements-arm-XXXXXX")"
+    : > "$out_file"
+    echo "--index-url https://mirrors.cloud.tencent.com/pypi/simple" >> "$out_file"
+    if [ ! -f "$req_file" ]; then
+        print_error "requirements 不存在: $req_file"
+        rm -f "$out_file"
+        return 1
+    fi
+    # 先做 onnxruntime-gpu → onnxruntime 替换，再展开 -r 引用
+    local tmp_req
+    tmp_req="$(mktemp "${out_dir}/tmp-req-arm-XXXXXX")"
+    sed 's/onnxruntime-gpu>=/onnxruntime>=/g' "$req_file" > "$tmp_req"
+    append_requirements_file "$tmp_req" "$out_file"
+    rm -f "$tmp_req"
+    echo "$out_file"
+}
 
 if [ "${CLEAR_PIP_WHEELS:-0}" = "1" ]; then
     print_info "[${CACHE_MODULE}] 清理旧 ARM pip wheel..."
@@ -82,10 +132,22 @@ if [ "${CLEAR_PIP_WHEELS:-0}" = "1" ]; then
 fi
 
 download_pip_packages() {
+    local flat_req
+    flat_req="$(prepare_flattened_requirements_arm "$REQ_SOURCE")"
+    trap 'rm -f "$flat_req"' RETURN
+
     print_info "[${CACHE_MODULE}] ARM pip wheel → ${PIP_WHEELS_DIR}"
+    print_info "[${CACHE_MODULE}] requirements 扁平化: $(wc -l < "$flat_req") 行"
+
+    # ★ 挂载前校验：确保 flat_req 是普通文件（非目录），防止 Docker 创建空目录
+    if [ ! -f "$flat_req" ]; then
+        print_error "[${CACHE_MODULE}] 扁平化 requirements 文件无效或为目录: ${flat_req}"
+        return 1
+    fi
+
     set +e
     docker run --rm \
-        -v "${ARM_REQUIREMENTS_FILE}:/tmp/requirements.arm.txt:ro" \
+        -v "${flat_req}:/tmp/requirements-arm.flat:ro" \
         -v "${PIP_WHEELS_DIR}:/wheels" \
         "$ARM_BASE_IMAGE" \
         /bin/bash -lc '
@@ -101,7 +163,7 @@ else
     exit 1
 fi
 "$PIP_BIN" --version
-"$PIP_BIN" download -r /tmp/requirements.arm.txt -d /wheels --timeout 120 --retries 3 -i https://pypi.tuna.tsinghua.edu.cn/simple
+"$PIP_BIN" download -r /tmp/requirements-arm.flat -d /wheels --timeout 120 --retries 3 -i https://mirrors.cloud.tencent.com/pypi/simple
 '
     local docker_download_status=$?
     set -e
@@ -118,7 +180,8 @@ fi
     fi
 
     print_warning "[${CACHE_MODULE}] 容器内下载失败，使用本机 python3 回退..."
-    python3 -m pip download -r "$ARM_REQUIREMENTS_FILE" -d "$PIP_WHEELS_DIR" --timeout 120 --retries 3
+    python3 -m pip download -r "$flat_req" -d "$PIP_WHEELS_DIR" --timeout 120 --retries 3 \
+        -i https://mirrors.cloud.tencent.com/pypi/simple
     print_warning "已使用本机环境回退下载，可能与目标容器 ABI 不一致"
     return 0
 }

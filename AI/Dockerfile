@@ -17,14 +17,19 @@ WORKDIR /app
 # ======================= 第一阶段：系统依赖安装 =======================
 FROM base AS dependencies
 
+# 镜像源配置（通过 --build-arg 传入，默认腾讯云）
+ARG APT_MIRROR_URL=https://mirrors.cloud.tencent.com
+
 # 配置镜像源和时区
 RUN set -ex && \
     # 设置时区
     ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone && \
     # 配置apt镜像源
-    sed -i 's|http://.*archive.ubuntu.com|https://mirrors.huaweicloud.com|g' /etc/apt/sources.list && \
-    sed -i 's|http://.*security.ubuntu.com|https://mirrors.huaweicloud.com|g' /etc/apt/sources.list
+    if [ -n "${APT_MIRROR_URL}" ]; then \
+        sed -i "s|http://.*archive.ubuntu.com|${APT_MIRROR_URL}|g" /etc/apt/sources.list && \
+        sed -i "s|http://.*security.ubuntu.com|${APT_MIRROR_URL}|g" /etc/apt/sources.list; \
+    fi
 
 # 安装系统依赖包（apt 缓存跨次构建复用，id 与 VIDEO 共用 devel 基础层）
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-ai-video-devel \
@@ -62,7 +67,8 @@ FROM dependencies AS python-deps
 COPY requirements-docker.txt requirements-base.txt ./
 COPY --from=pip-wheels . /opt/offline-pip
 ARG OFFLINE_MODE=0
-ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 # http 缓存落盘宿主机 pip-cache；wheels 构建目录须可写（BuildKit cache）
 RUN --mount=type=bind,from=pip-cache,source=.,target=/mnt/pip-cache,rw \

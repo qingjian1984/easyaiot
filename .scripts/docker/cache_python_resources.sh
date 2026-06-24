@@ -100,17 +100,22 @@ append_requirements_file() {
 
 prepare_flattened_requirements() {
     local module="$1"
-    local req_file out_file
+    local req_file out_file out_dir
     req_file="$(module_req_docker_file "$module")"
-    out_file="$(mktemp)"
-    : > "$out_file"
-    echo "--index-url https://pypi.tuna.tsinghua.edu.cn/simple" >> "$out_file"
+    # ★ 使用确定性文件名（按模块），避免 mktemp 随机后缀在 Docker 挂载时产生隐式竞态
+    #    路径固定在 .build-cache/tmp/ 下，确保 Docker Daemon 可访问
+    out_dir="$(easyaiot_build_cache_base "$EASYAIOT_ROOT")/tmp"
+    mkdir -p "$out_dir"
+    out_file="${out_dir}/requirements-${module}-docker-flat.txt"
+    echo "--index-url https://mirrors.cloud.tencent.com/pypi/simple" > "$out_file"
     if [ ! -f "$req_file" ]; then
         print_error "requirements-docker 不存在: $req_file"
         rm -f "$out_file"
         return 1
     fi
     append_requirements_file "$req_file" "$out_file"
+    # ★ 写入完成后 sync 确保数据落盘，避免 Docker 挂载时看到空/不完整文件
+    sync -f "$out_file" 2>/dev/null || true
     echo "$out_file"
 }
 
@@ -131,12 +136,12 @@ build_required_sdist_wheels() {
             -v "${wheels_dir}:/wheels" \
             "$build_image" \
             /bin/bash -lc "set -e
-pip install -q --upgrade pip wheel setuptools -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install -q --upgrade pip wheel setuptools -i https://mirrors.cloud.tencent.com/pypi/simple
 find_links=''
 if compgen -G '/wheels/${pkg_name}-*.tar.gz' >/dev/null; then
   find_links='--find-links /wheels'
 fi
-pip wheel '${spec}' -w /wheels --no-deps \${find_links} -i https://pypi.tuna.tsinghua.edu.cn/simple"
+pip wheel '${spec}' -w /wheels --no-deps \${find_links} -i https://mirrors.cloud.tencent.com/pypi/simple"
         if ! compgen -G "${wheels_dir}/${pkg_name}-"*.whl >/dev/null 2>&1; then
             print_error "[sdist] 未生成 ${pkg_name} wheel"
             return 1
@@ -164,13 +169,35 @@ download_module_wheels() {
     print_info "[${module}] 目标: ${wheels_dir}"
     print_info "[${module}] 镜像: ${base_image}"
 
+    # ★ 挂载前双重校验：确保 flat_req 是普通文件（非目录/空文件），防止 Docker 创建空目录
+    if [ ! -f "$flat_req" ]; then
+        print_error "[${module}] 扁平化 requirements 文件无效或为目录: ${flat_req}"
+        return 1
+    fi
+    if [ ! -s "$flat_req" ]; then
+        print_error "[${module}] 扁平化 requirements 文件为空: ${flat_req}"
+        return 1
+    fi
+    print_info "[${module}] 挂载 requirements: ${flat_req} (size=$(stat -c%s "$flat_req" 2>/dev/null || wc -c < "$flat_req") bytes)"
+    # ★ 容器内预检：确保 Docker 将源文件挂载为普通文件（非目录），避免 Docker 在源路径
+    #    不可达/权限不足时自动创建目录的隐式行为
+    docker run --rm \
+        -v "${flat_req}:/tmp/requirements-docker.flat:ro" \
+        --entrypoint /bin/bash \
+        "$base_image" \
+        -c 'test -f /tmp/requirements-docker.flat' 2>/dev/null || {
+        print_error "[${module}] Docker 无法将 ${flat_req} 挂载为普通文件（可能是路径不可达或权限问题）"
+        return 1
+    }
+
     set +e
     docker run --rm \
         -e PYTHONUNBUFFERED=1 \
+        -e PIP_ROOT_USER_ACTION=ignore \
         -v "${flat_req}:/tmp/requirements-docker.flat:ro" \
         -v "${wheels_dir}:/wheels" \
         "$base_image" \
-        /bin/bash -lc 'pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple && pip download -r /tmp/requirements-docker.flat -d /wheels --timeout 120 --retries 3 -i https://pypi.tuna.tsinghua.edu.cn/simple'
+        /bin/bash -lc 'pip install --upgrade pip -i https://mirrors.cloud.tencent.com/pypi/simple && pip download -r /tmp/requirements-docker.flat -d /wheels --timeout 120 --retries 3 -i https://mirrors.cloud.tencent.com/pypi/simple'
     status=$?
     set -e
 
@@ -180,8 +207,9 @@ download_module_wheels() {
             return 1
         fi
         print_warning "[${module}] 容器内下载失败，使用本机 python3 回退..."
+        export PIP_ROOT_USER_ACTION=ignore
         python3 -m pip download -r "$flat_req" -d "$wheels_dir" --timeout 120 --retries 3 \
-            -i https://pypi.tuna.tsinghua.edu.cn/simple
+            -i https://mirrors.cloud.tencent.com/pypi/simple
     fi
 
     build_required_sdist_wheels "$wheels_dir"

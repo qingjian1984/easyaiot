@@ -3,6 +3,7 @@
 # ============================================
 # AI服务 Docker Compose 管理脚本 (ARM架构版本)
 # ============================================
+# 管理服务：ai-service (5000)，数据集标注已合并至 WEB + /model/dataset API
 # 使用方法：
 #   ./install_linux_arm.sh [命令]
 #
@@ -37,6 +38,8 @@ DOCKER_PLATFORM="linux/arm64"
 EASYAIOT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=../.scripts/docker/init-build-cache-dirs.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/init-build-cache-dirs.sh"
+# shellcheck source=../.scripts/docker/deploy_profile.sh
+source "${EASYAIOT_ROOT}/.scripts/docker/deploy_profile.sh"
 BUILD_CACHE_DIR="$(easyaiot_build_cache_base "$EASYAIOT_ROOT")"
 
 # 打印带颜色的消息
@@ -54,6 +57,18 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# 清理 compose recreate 被中断后遗留的「改名孤儿容器」（形如 <12位hex>_ai-service）。
+# recreate 时 compose 先把旧容器改名让出 container_name，中途被打断旧容器就残留；
+# 它若仍在运行会占住宿主机端口，新容器起不来。--remove-orphans 清不掉它
+# （只清「服务已从 compose 文件移除」的孤儿），须在 up 前按名主动删除。
+cleanup_renamed_containers() {
+    local names
+    names=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^[0-9a-f]{12}_ai-service$' || true)
+    [ -z "$names" ] && return 0
+    print_warning "清理上次中断遗留的改名孤儿容器: $(echo "$names" | tr '\n' ' ')"
+    echo "$names" | xargs -r docker rm -f >/dev/null 2>&1 || true
 }
 
 init_build_cache_dirs() {
@@ -106,15 +121,17 @@ build_with_cache() {
 
     init_build_cache_dirs
     enable_docker_buildkit
-    optimize_dockerfile_pip_cache Dockerfile
     optimize_dockerfile_pip_cache Dockerfile.arm
 
     cache_opts="--build-arg BASE_IMAGE=${ARM_BASE_IMAGE} --build-arg OFFLINE_MODE=${OFFLINE_MODE:-0}"
-    print_info "docker build（ARM，.build-cache bind mount）..."
+    cache_opts="$cache_opts --build-arg YUM_MIRROR_URL=${YUM_MIRROR_URL:-https://mirrors.cloud.tencent.com}"
+    cache_opts="$cache_opts --build-arg PIP_INDEX_URL=${PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}"
+    print_info "docker build（ARM，Dockerfile.arm，.build-cache bind mount）..."
     while [ $attempt -le $max_retries ]; do
         print_info "执行构建（第 ${attempt}/${max_retries} 次）..."
         set +e
         docker build \
+            -f Dockerfile.arm \
             --build-context "pip-cache=$(pip_cache_build_context_dir_for "$EASYAIOT_ROOT" ai)" \
             --build-context "pip-wheels=$(arm_pip_wheels_build_context_dir_for "$EASYAIOT_ROOT" ai)" \
             --target runtime \
@@ -172,6 +189,10 @@ check_docker() {
 
 # 检查 Docker Compose 是否安装
 check_docker_compose() {
+    # 已检测过（COMPOSE_CMD 已确定）则直接复用，避免重复执行 docker compose version
+    if [ -n "$COMPOSE_CMD" ]; then
+        return 0
+    fi
     # 先检查 docker-compose 命令
     if check_command docker-compose; then
         COMPOSE_CMD="docker-compose"
@@ -212,10 +233,17 @@ detect_architecture() {
             print_info "使用 ARM 基础镜像: $ARM_BASE_IMAGE"
             ;;
         x86_64|amd64)
-            print_error "检测到 x86_64 架构"
-            print_error "本脚本专用于 ARM 架构部署"
-            print_info "如需在 x86_64 架构上部署，请使用 install_linux.sh"
-            exit 1
+            if [ "${EASYAIOT_CROSS_BUILD:-0}" = "1" ]; then
+                ARCH="aarch64"
+                DOCKER_PLATFORM="linux/arm64"
+                print_info "跨架构构建模式: 在 x86_64 上构建 ARM64 镜像"
+                print_info "基础镜像: $ARM_BASE_IMAGE"
+            else
+                print_error "检测到 x86_64 架构"
+                print_error "本脚本专用于 ARM 架构部署"
+                print_info "如需在 x86_64 架构上部署，请使用 install_linux.sh"
+                exit 1
+            fi
             ;;
         *)
             print_error "未识别的架构: $ARCH"
@@ -230,48 +258,28 @@ detect_architecture() {
     export BASE_IMAGE="$ARM_BASE_IMAGE"
 }
 
-# 配置ARM架构的Dockerfile
+# 确保 ARM 架构 Dockerfile（Dockerfile.arm）存在，不覆写 x86 Dockerfile
 configure_arm_dockerfile() {
-    print_info "配置 ARM 架构 Dockerfile..."
+    print_info "配置 ARM 架构 Dockerfile（Dockerfile.arm）..."
     
-    # 备份原始 Dockerfile
-    if [ ! -f Dockerfile.orig ]; then
-        cp Dockerfile Dockerfile.orig
-        print_info "已备份原始 Dockerfile 为 Dockerfile.orig"
-    fi
-    
-    # 创建 ARM 版本的 Dockerfile
     if [ -f Dockerfile.arm ]; then
         print_info "使用现有的 Dockerfile.arm"
-        cp Dockerfile.arm Dockerfile
     else
-        print_info "创建 ARM 版本的 Dockerfile..."
+        print_info "创建 ARM 版本的 Dockerfile.arm..."
         # 替换第一行的 FROM 语句
-        sed "1s|^FROM.*|FROM ${ARM_BASE_IMAGE} AS base|" Dockerfile.orig > Dockerfile.arm.tmp
+        sed "1s|^FROM.*|FROM ${ARM_BASE_IMAGE} AS base|" Dockerfile > Dockerfile.arm.tmp
         
         # 检查 manylinuxaarch64-builder 镜像是否需要特殊处理
-        # 如果是构建器镜像，可能需要额外的运行时镜像
         if echo "$ARM_BASE_IMAGE" | grep -q "manylinuxaarch64-builder"; then
             print_warning "检测到构建器镜像，可能需要额外的运行时配置"
             print_info "如果构建失败，请考虑使用运行时镜像，如：pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime"
         fi
         
         mv Dockerfile.arm.tmp Dockerfile.arm
-        cp Dockerfile.arm Dockerfile
-        print_success "已创建 ARM 版本的 Dockerfile"
+        print_success "已创建 ARM 版本的 Dockerfile.arm"
     fi
 
-    optimize_dockerfile_pip_cache Dockerfile
     optimize_dockerfile_pip_cache Dockerfile.arm
-}
-
-# 恢复原始 Dockerfile（可选）
-restore_dockerfile() {
-    if [ -f Dockerfile.orig ]; then
-        print_info "恢复原始 Dockerfile..."
-        cp Dockerfile.orig Dockerfile
-        print_success "已恢复原始 Dockerfile"
-    fi
 }
 
 # 配置架构相关的docker-compose设置
@@ -367,13 +375,13 @@ create_env_file() {
             # 自动配置中间件连接信息（使用localhost，因为docker-compose.yaml使用host网络模式）
             print_info "自动配置中间件连接信息..."
             
-            # 更新数据库连接（使用localhost，因为使用host网络模式，中间件端口已映射到宿主机）
+            # 更新数据库连接
             sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:iot45722414822@localhost:5432/iot-ai20|' .env.docker
             
-            # 更新Nacos配置（使用localhost，因为使用host网络模式）
+            # 更新Nacos配置
             sed -i 's|^NACOS_SERVER=.*|NACOS_SERVER=localhost:8848|' .env.docker
             
-            # 更新MinIO配置（使用localhost，因为使用host网络模式）
+            # 更新MinIO配置
             sed -i 's|^MINIO_ENDPOINT=.*|MINIO_ENDPOINT=localhost:9000|' .env.docker
             sed -i 's|^MINIO_SECRET_KEY=.*|MINIO_SECRET_KEY=basiclab@iot975248395|' .env.docker
             
@@ -393,29 +401,35 @@ create_env_file() {
         print_info ".env.docker 文件已存在"
         print_info "检查并更新中间件连接信息..."
         
-        # 检查并更新数据库连接（如果使用Docker服务名，改为localhost，因为使用host网络模式）
         if grep -q "DATABASE_URL=.*PostgresSQL" .env.docker || grep -q "DATABASE_URL=.*postgres-server" .env.docker; then
             sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:iot45722414822@localhost:5432/iot-ai20|' .env.docker
             print_info "已更新数据库连接为 localhost:5432（host网络模式）"
         fi
         
-        # 检查并更新Nacos配置（如果使用Docker服务名或IP地址，改为localhost，因为使用host网络模式）
         if grep -q "NACOS_SERVER=.*Nacos" .env.docker || grep -q "NACOS_SERVER=.*14\.18\.122\.2" .env.docker || grep -q "NACOS_SERVER=.*nacos-server" .env.docker; then
             sed -i 's|^NACOS_SERVER=.*|NACOS_SERVER=localhost:8848|' .env.docker
             print_info "已更新Nacos连接为 localhost:8848（host网络模式）"
         fi
         
-        # 检查并更新MinIO配置（如果使用Docker服务名，改为localhost，因为使用host网络模式）
         if grep -q "MINIO_ENDPOINT=.*MinIO" .env.docker || grep -q "MINIO_ENDPOINT=.*minio-server" .env.docker; then
             sed -i 's|^MINIO_ENDPOINT=.*|MINIO_ENDPOINT=localhost:9000|' .env.docker
             print_info "已更新MinIO连接为 localhost:9000（host网络模式）"
         fi
         
-        # 检查并更新Nacos命名空间（如果设置为local或其他非空值，则重置为空，使用默认命名空间）
         if grep -q "^NACOS_NAMESPACE=.*" .env.docker && ! grep -q "^NACOS_NAMESPACE=$" .env.docker; then
             sed -i 's|^NACOS_NAMESPACE=.*|NACOS_NAMESPACE=|' .env.docker
             print_info "已更新Nacos命名空间为空（使用默认命名空间）"
         fi
+    fi
+
+    # 部署形态集成：与 x86 install_linux.sh 保持一致，确保同形态部署相同服务
+    ensure_deploy_profile
+    apply_python_service_deploy_env "${EASYAIOT_ROOT}"
+    if is_mini_deploy_profile; then
+        print_info "mini 形态：已配置本机部署（JAVA_BACKEND_URL=48099, NODE_REMOTE_DEPLOY=false）"
+        migrate_mini_minio_data_to_local_storage "${EASYAIOT_ROOT}"
+    else
+        print_info "${EASYAIOT_DEPLOY_PROFILE:-full} 形态：已配置网关部署（JAVA_BACKEND_URL=48080, MinIO 启用）"
     fi
 }
 
@@ -433,19 +447,24 @@ install_service() {
     create_env_file
     prepare_cached_resources
     
-    print_info "构建 Docker 镜像（ARM架构，优先复用离线 pip 缓存）..."
-    print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
-    print_warning "首次构建可能需要较长时间（20-40分钟），请耐心等待..."
-    echo ""
-    
-    if ! build_with_cache ""; then
-        exit 1
+    if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect ai-service:latest >/dev/null 2>&1; then
+        print_success "镜像已从远程拉取 (ai-service:latest)，跳过构建"
+    else
+        print_info "构建 Docker 镜像（ARM架构，优先复用离线 pip 缓存）..."
+        print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
+        print_warning "首次构建可能需要较长时间（20-40分钟），请耐心等待..."
+        echo ""
+        
+        if ! build_with_cache ""; then
+            exit 1
+        fi
+        echo ""
+        print_success "镜像构建完成！"
     fi
-    echo ""
-    print_success "镜像构建完成！"
     
     print_info "启动服务..."
-    $COMPOSE_CMD up -d --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
+    cleanup_renamed_containers
+    $COMPOSE_CMD up -d --remove-orphans --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
     
     print_success "服务安装完成！"
     print_info "等待服务启动..."
@@ -454,12 +473,13 @@ install_service() {
     # 检查服务状态
     check_status
     
-    print_info "服务访问地址: http://localhost:5000"
-    print_info "健康检查地址: http://localhost:5000/actuator/health"
+    print_info "AI 服务访问地址: http://localhost:5000"
+    print_info "AI 健康检查: http://localhost:5000/actuator/health"
+    print_info "数据集标注: WEB 数据集详情 → 图像数据集标注"
     print_info "查看日志: ./install_linux_arm.sh logs"
 }
 
-# 启动服务
+# 启动服务（同步部署形态 env 后 force-recreate，使 compose env_file 注入生效）
 start_service() {
     print_info "启动服务..."
     check_docker
@@ -471,9 +491,12 @@ start_service() {
     if [ ! -f .env.docker ]; then
         print_warning ".env.docker 文件不存在，正在创建..."
         create_env_file
+    else
+        ensure_deploy_profile
     fi
     
-    $COMPOSE_CMD up -d --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
+    cleanup_renamed_containers
+    $COMPOSE_CMD up -d --force-recreate --remove-orphans --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
     print_success "服务已启动"
     check_status
 }
@@ -488,15 +511,17 @@ stop_service() {
     print_success "服务已停止"
 }
 
-# 重启服务
+# 重启服务（同步部署形态 env 后 force-recreate）
 restart_service() {
     print_info "重启服务..."
     check_docker
     check_docker_compose
     detect_architecture
     configure_arm_dockerfile
-    
-    $COMPOSE_CMD restart 2>&1 | grep -v "^Restarting" || true
+
+    ensure_deploy_profile
+    cleanup_renamed_containers
+    $COMPOSE_CMD up -d --force-recreate --remove-orphans --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
     print_success "服务已重启"
     check_status
 }
@@ -511,16 +536,21 @@ check_status() {
     
     echo ""
     print_info "容器健康状态:"
-    if docker ps --filter "name=ai-service" --format "{{.Names}}" 2>/dev/null | grep -q ai-service; then
-        docker ps --filter "name=ai-service" --format "table {{.Names}}\t{{.Status}}" 2>/dev/null
-        
-        # 检查健康检查
-        HEALTH=$(docker inspect --format='{{.State.Health.Status}}' ai-service 2>/dev/null || echo "N/A")
-        if [ "$HEALTH" != "N/A" ]; then
-            echo "健康状态: $HEALTH"
+    local any_running=false
+    for svc in ai-service; do
+        if docker ps --filter "name=^${svc}$" --format "{{.Names}}" 2>/dev/null | grep -q "^${svc}$"; then
+            any_running=true
+            docker ps --filter "name=^${svc}$" --format "table {{.Names}}\t{{.Status}}" 2>/dev/null
+            HEALTH=$(docker inspect --format='{{.State.Health.Status}}' "$svc" 2>/dev/null || echo "N/A")
+            if [ "$HEALTH" != "N/A" ]; then
+                echo "${svc} 健康状态: $HEALTH"
+            fi
+        else
+            print_warning "${svc} 未运行"
         fi
-    else
-        print_warning "服务未运行"
+    done
+    if [ "$any_running" = true ]; then
+        print_info "AI 服务: http://localhost:5000"
     fi
 }
 
@@ -560,28 +590,40 @@ build_image() {
 
 # 清理服务
 clean_service() {
-    print_warning "这将删除容器、镜像和数据卷，确定要继续吗？(y/N)"
-    read -r response
-    
-    if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-        check_docker
-        check_docker_compose
-        print_info "停止并删除容器..."
-        $COMPOSE_CMD down -v --remove-orphans 2>&1 | grep -v "^Stopping\|^Removing\|^Network" || true
-        
-        print_info "删除镜像..."
-        docker rmi ai-service:latest >/dev/null 2>&1 || true
-        
-        # 可选：恢复原始 Dockerfile
-        # restore_dockerfile
-        
-        print_success "清理完成"
-    else
-        print_info "已取消清理操作"
+    if [ "${EASYAIOT_AUTO_YES:-}" != "1" ]; then
+        print_warning "这将删除容器、镜像和数据卷，确定要继续吗？"
+        local response
+        while true; do
+            read -r -p "确认继续? [y/n] " response
+            case "$(echo "$response" | tr '[:upper:]' '[:lower:]')" in
+                y|yes) break ;;
+                n|no|'')
+                    print_info "已取消清理操作"
+                    return
+                    ;;
+                *) echo "请输入 y/yes 或 n/no" ;;
+            esac
+        done
     fi
+
+    check_docker
+    check_docker_compose
+    print_info "停止并删除容器..."
+    $COMPOSE_CMD down -v --remove-orphans 2>&1 | grep -v "^Stopping\|^Removing\|^Network" || true
+    
+    print_info "删除镜像..."
+    docker rmi ai-service:latest >/dev/null 2>&1 || true
+    
+    print_success "清理完成"
 }
 
 # 更新服务
+# 性能优化（与 x86 install_linux.sh 保持一致）：
+#   1. 业务源码经 docker-compose 卷挂载（./:/app）进容器。「仅改业务代码、依赖不变」时，
+#      update 完全跳过 docker build：git pull 后只重启容器进程即可加载新代码（秒级）。
+#   2. 仅当以下任一成立时才重建镜像：镜像不存在 / FORCE_REBUILD=1 /
+#      本次 git pull 改动了依赖或构建输入（requirements*.txt、Dockerfile、docker-entrypoint.sh）。
+#   3. 需要构建时复用 BuildKit 层缓存 + 离线 pip 缓存（build_with_cache 已内置 prepare）。
 update_service() {
     print_info "更新服务..."
     check_docker
@@ -590,25 +632,78 @@ update_service() {
     configure_architecture
     configure_arm_dockerfile
     check_network
-    prepare_cached_resources
-    
+
+    # 记录更新前代码版本，用于判断依赖/构建文件是否变化
+    local rev_before=""
+    rev_before="$(git rev-parse HEAD 2>/dev/null || echo "")"
+
     print_info "拉取最新代码..."
-    git pull || print_warning "Git pull 失败，继续使用当前代码"
-    
-    print_info "重新构建镜像（优先复用离线 pip 缓存）..."
-    print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
-    print_warning "构建可能需要较长时间（20-40分钟），请耐心等待..."
-    echo ""
-    
-    if ! build_with_cache ""; then
-        exit 1
+    # --ff-only：快进失败立即返回，不产生意外合并提交，比默认 pull 更快更安全
+    git pull --ff-only || print_warning "Git pull 失败，继续使用当前代码"
+
+    local rev_after=""
+    rev_after="$(git rev-parse HEAD 2>/dev/null || echo "")"
+
+    # ---- 判断是否需要重建镜像 ----
+    local needs_build=0
+    if ! docker image inspect ai-service:latest >/dev/null 2>&1; then
+        needs_build=1
+        print_info "镜像不存在，需要构建"
+    elif [ "${FORCE_REBUILD:-0}" = "1" ]; then
+        needs_build=1
+        print_info "FORCE_REBUILD=1，强制重建镜像"
+    elif [ -z "$rev_before" ]; then
+        needs_build=1
+        print_warning "无法获取 git 版本信息，保守起见重建镜像"
+    elif [ "$rev_before" != "$rev_after" ]; then
+        local dep_changes dep_diff_rc=0
+        dep_changes="$(git diff --name-only "$rev_before" "$rev_after" -- \
+            requirements.txt requirements-base.txt requirements-docker.txt \
+            Dockerfile Dockerfile.arm docker-entrypoint.sh 2>/dev/null)" || dep_diff_rc=$?
+        if [ "$dep_diff_rc" -ne 0 ]; then
+            needs_build=1
+            print_warning "无法比较依赖变化（git diff 失败），保守起见重建镜像"
+        elif [ -n "$dep_changes" ]; then
+            needs_build=1
+            print_info "检测到依赖/构建文件变化，需要重建镜像："
+            echo "$dep_changes" | sed 's/^/    /'
+        fi
     fi
-    echo ""
-    print_success "镜像构建完成！"
-    
-    print_info "重启服务..."
-    $COMPOSE_CMD up -d --quiet-pull 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
-    
+
+    if [ "$needs_build" = "1" ]; then
+        prepare_cached_resources
+        print_info "重新构建镜像（复用 BuildKit 层缓存 + 离线 pip 缓存）..."
+        print_info "架构: $ARCH, 平台: $DOCKER_PLATFORM, 基础镜像: $ARM_BASE_IMAGE"
+        print_warning "构建可能需要较长时间（20-40分钟），请耐心等待..."
+        echo ""
+        if ! build_with_cache ""; then
+            exit 1
+        fi
+        echo ""
+        print_success "镜像构建完成！"
+        print_info "应用新镜像（仅重建变更服务，最小化停机）..."
+        cleanup_renamed_containers
+        $COMPOSE_CMD up -d --remove-orphans --no-deps --quiet-pull ai-service 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
+    else
+        print_success "依赖未变，跳过镜像构建（业务代码经卷挂载，重启进程即可生效）"
+        cleanup_renamed_containers
+        $COMPOSE_CMD up -d --remove-orphans --no-deps --quiet-pull ai-service 2>&1 | grep -v "^Creating\|^Starting\|^Pulling\|^Waiting\|^Container" || true
+
+        local code_changed=0
+        if [ -n "$rev_before" ] && [ "$rev_before" != "$rev_after" ]; then
+            code_changed=1
+        elif ! git diff --quiet HEAD -- . 2>/dev/null; then
+            code_changed=1
+        fi
+
+        if [ "$code_changed" = "1" ]; then
+            print_info "重启容器进程以加载最新源码（秒级）..."
+            $COMPOSE_CMD restart ai-service 2>&1 | grep -v "^Restarting" || true
+        else
+            print_info "代码无变更，无需重启"
+        fi
+    fi
+
     print_success "服务更新完成"
     check_status
 }
@@ -616,6 +711,9 @@ update_service() {
 # 显示帮助信息
 show_help() {
     echo "AI服务 Docker Compose 管理脚本 (ARM架构版本)"
+    echo ""
+    echo "管理服务:"
+    echo "  - ai-service (端口 5000，含 /model/dataset 自动标注 API)"
     echo ""
     echo "使用方法:"
     echo "  ./install_linux_arm.sh [命令]"
@@ -636,6 +734,8 @@ show_help() {
     echo "注意："
     echo "  - 本脚本专用于 ARM 架构（aarch64/arm64）"
     echo "  - 使用基础镜像: $ARM_BASE_IMAGE"
+    echo "  - 支持与 x86 版本相同的部署形态: mini(1) / standard(2) / full(3)"
+    echo "    通过环境变量 EASYAIOT_DEPLOY_PROFILE 控制"
     echo "  - 如需在 x86_64 架构上部署，请使用 install_linux.sh"
     echo ""
 }
@@ -684,4 +784,3 @@ main() {
 
 # 运行主函数
 main "$@"
-
