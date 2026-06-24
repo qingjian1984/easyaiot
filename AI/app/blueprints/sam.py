@@ -92,14 +92,14 @@ def health_check():
     try:
         status = 'healthy' if svc.enabled else 'disabled'
         if svc.enabled and not svc.model_loaded and not os.getenv('SAM_WORKER_URL'):
-            status = 'unhealthy'
+            status = 'standby'
         return jsonify({
             'status': status,
             'engine': os.getenv('SAM_ENGINE', 'sam3'),
             'model_loaded': svc.model_loaded,
             'device': svc.get_device(),
             'enabled': svc.enabled,
-        }), 200 if status == 'healthy' else 503
+        }), 200 if status in ('healthy', 'disabled', 'standby') else 503
     except Exception as e:
         logger.error('SAM health check failed: %s', e)
         return jsonify({'status': 'unhealthy', 'message': str(e)}), 500

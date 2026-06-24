@@ -56,8 +56,17 @@ class SamService:
         self._model_lock = threading.Lock()
         self._initialized = False
         self._warmup_done = False
-        self._device = 'cpu'
         self._engine = SAM_ENGINE
+        try:
+            import torch
+            if torch.cuda.is_available():
+                self._device = 'cuda:0'
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                self._device = 'mps'
+            else:
+                self._device = 'cpu'
+        except Exception:
+            self._device = 'cpu'
 
     @property
     def enabled(self) -> bool:
@@ -93,26 +102,42 @@ class SamService:
             return
         if not SAM_ENABLED:
             raise RuntimeError('SAM 未启用，请设置 SAM_ENABLED=true 或配置 SAM_WORKER_URL')
-        try:
-            import torch
-            self._device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-        except Exception:
-            self._device = 'cpu'
 
         if SAM_ENGINE == 'sam3':
             try:
                 from ultralytics.models.sam import SAM3SemanticPredictor
+
+                # Monkey-patch: ultralytics build_sam3.py creates
+                #   tokenizer=clip.simple_tokenizer.SimpleTokenizer()
+                # but SimpleTokenizer has no __call__, only encode().
+                # VETextEncoder.forward() calls self.tokenizer(text, context_length=...),
+                # which requires a callable. The correct callable is clip.tokenize.
+                # We monkey-patch at the class level: make SimpleTokenizer() return
+                # clip.tokenize instead of a SimpleTokenizer instance.
+                import clip
+                _orig_st = clip.simple_tokenizer.SimpleTokenizer
+                clip.simple_tokenizer.SimpleTokenizer = lambda: clip.tokenize
+
                 overrides = dict(
                     conf=SAM_CONF,
                     imgsz=SAM_IMGSZ,
                     task='segment',
                     mode='predict',
                     model=SAM_MODEL_PATH,
-                    half=self._device.startswith('cuda'),
+                    half=self._device.startswith('cuda') or self._device == 'mps',
                     save=False,
                     device=self._device,
                 )
                 self._predictor = SAM3SemanticPredictor(overrides=overrides)
+
+                # Force eager model loading while the monkey-patch is active.
+                # SAM3SemanticPredictor lazily calls build_sam3_image_model()
+                # in get_model() / setup_model(), so we must load it now.
+                self._predictor.setup_model()
+
+                # Restore original class after model is built
+                clip.simple_tokenizer.SimpleTokenizer = _orig_st
+
                 self._engine = 'sam3'
                 logger.info('SAM3 模型加载成功: %s device=%s', SAM_MODEL_PATH, self._device)
             except Exception as e:

@@ -1,4 +1,4 @@
-package cn.iocoder.Yudao;
+package cn.iocoder.yudao;
 
 import cn.hutool.core.io.FileTypeUtil;
 import cn.hutool.core.io.FileUtil;
