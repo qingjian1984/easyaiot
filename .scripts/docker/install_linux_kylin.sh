@@ -762,6 +762,15 @@ _check_pulled_images_ready() {
         return 1
     fi
 
+    # 部署形态不匹配：标记是给别的形态拉取的，不能复用
+    # （如 mini 形态下的镜像缺少 GB28181 等前端配置，直接从 full 切换到 mini 时须重建）
+    ensure_deploy_profile
+    local _current_profile="${EASYAIOT_DEPLOY_PROFILE:-full}"
+    if [ "${_pull_profile:-full}" != "${_current_profile}" ]; then
+        print_info "拉取标记部署形态 (${_pull_profile:-full}) 与当前部署形态 (${_current_profile}) 不匹配，将重新构建"
+        return 1
+    fi
+
     # 检查关键镜像是否在本地存在（用 docker image inspect 验证）
     local _missing=0
     local _check_images=(

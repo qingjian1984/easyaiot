@@ -46,6 +46,9 @@ cd "$PROJECT_ROOT"
 # 脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=deploy_profile.sh
+source "${SCRIPT_DIR}/deploy_profile.sh"
+
 # 日志文件配置
 LOG_DIR="${SCRIPT_DIR}/logs"
 mkdir -p "$LOG_DIR"
@@ -688,6 +691,15 @@ _check_pulled_images_ready() {
     # 架构不匹配：标记是给别的架构拉取的，不能复用
     if [ "${_pull_arch:-}" != "${_current_arch}" ]; then
         print_info "拉取标记架构 (${_pull_arch:-?}) 与当前架构 (${_current_arch}) 不匹配，将重新构建"
+        return 1
+    fi
+
+    # 部署形态不匹配：标记是给别的形态拉取的，不能复用
+    # （如 mini 形态下的镜像缺少 GB28181 等前端配置，直接从 full 切换到 mini 时须重建）
+    ensure_deploy_profile
+    local _current_profile="${EASYAIOT_DEPLOY_PROFILE:-full}"
+    if [ "${_pull_profile:-full}" != "${_current_profile}" ]; then
+        print_info "拉取标记部署形态 (${_pull_profile:-full}) 与当前部署形态 (${_current_profile}) 不匹配，将重新构建"
         return 1
     fi
 

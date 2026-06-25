@@ -111,6 +111,19 @@ check_docker_compose() {
     fi
 }
 
+# 检查当前部署形态是否与已记录的 WEB 镜像构建形态一致
+# 返回 0 表示一致（可安全复用镜像），1 表示不一致或无法判断（应触发重建）
+web_image_profile_matches() {
+    ensure_deploy_profile
+    local current_profile="${EASYAIOT_DEPLOY_PROFILE:-full}"
+    local built_profile=""
+    local profile_stamp="${EASYAIOT_ROOT}/.scripts/docker/.web_deploy_profile_built"
+    if [ -f "$profile_stamp" ]; then
+        built_profile=$(tr -d '\n' < "$profile_stamp")
+    fi
+    [ "$built_profile" = "$current_profile" ]
+}
+
 # 组合 git 提交与 clean 写入的戳，用于 Dockerfile ARG CACHE_BUST（使 COPY 之后层在代码/clean 后重建）
 get_web_build_cache_bust() {
     local git_rev stamp
@@ -670,7 +683,12 @@ install_service() {
     
     print_info "构建 Docker 镜像（根据代码重新构建）..."
     if [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ] && docker image inspect web-service:latest >/dev/null 2>&1; then
-        print_success "镜像已从远程拉取 (web-service:latest)，跳过构建"
+        if web_image_profile_matches; then
+            print_success "镜像已从远程拉取 (web-service:latest)，跳过构建"
+        else
+            print_warning "已拉取的镜像部署形态不匹配当前配置，将重新构建"
+            docker_build_image -t web-service:latest .
+        fi
     else
         docker_build_image -t web-service:latest .
     fi
@@ -878,13 +896,15 @@ update_service() {
     local rev_after=""
     rev_after="$(git rev-parse HEAD 2>/dev/null || echo "")"
 
-    # 无变更快速路径：提交号未变 + 本地无未提交改动 + 镜像已存在 → 跳过前端重建
+    # 无变更快速路径：提交号未变 + 本地无未提交改动 + 镜像已存在 + 部署形态未变 → 跳过前端重建
     # 说明1：clean 会删除镜像并刷新构建戳，故 clean 后镜像不存在 → 此处不会误跳过
     # 说明2：git diff --quiet HEAD 捕获「已跟踪文件的本地未提交修改」，避免改了代码没 commit
     #        却被误判为无变更而跳过重建（git diff 不受未跟踪的构建日志干扰）。
     #        注意：全新的未跟踪文件 git diff 检测不到，这种情况请先 git add，或用 FORCE_REBUILD=1。
+    # 说明3：部署形态（mini/standard/full）变更时，即使代码无变更也必须重建以写入正确的 VITE_GLOB_DEPLOY_PROFILE
     if [ "${FORCE_REBUILD:-0}" != "1" ] \
         && docker image inspect web-service:latest >/dev/null 2>&1 \
+        && web_image_profile_matches \
         && [ -n "$rev_before" ] && [ "$rev_before" = "$rev_after" ] \
         && git diff --quiet HEAD -- . 2>/dev/null; then
         print_success "代码无变更且镜像已存在，跳过前端重建"
