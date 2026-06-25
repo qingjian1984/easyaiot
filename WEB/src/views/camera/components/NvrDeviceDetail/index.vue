@@ -132,10 +132,10 @@ async function handleSyncChannels() {
     return;
   }
   if (!nvr.username) {
-    createMessage.warning('请先在 NVR 编辑中填写 Web 登录用户名与密码');
+    createMessage.warning('请先在 NVR 编辑中填写 Web 登录用户名');
     return;
   }
-  if (!nvr.password) {
+  if (!nvr.has_password && !nvr.password) {
     createMessage.warning('请先在 NVR 编辑中填写 Web 登录密码后再同步通道');
     return;
   }
@@ -145,14 +145,14 @@ async function handleSyncChannels() {
       ip: nvr.ip,
       port: nvr.port ?? 80,
       username: nvr.username,
-      password: nvr.password,
+      ...(nvr.password ? { password: nvr.password } : {}),
       vendor: nvr.vendor,
       name: nvr.name,
       model: nvr.model,
       serial_number: nvr.serial_number,
       scheme: nvr.scheme,
     });
-    nvrInfo.value = res || nvr;
+    nvrInfo.value = { ...(res || nvr), has_password: true };
     cameras.value = mapCameras(res || null);
     const n = nvrRegisterRegisteredCount(res);
     createMessage.success(`已同步 ${n} 路通道`);

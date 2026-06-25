@@ -5,7 +5,9 @@ import VectorSource from 'ol/source/Vector';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import BasicTiandituMap from './BasicTiandituMap.vue';
+import MapSearchBox from './components/MapSearchBox.vue';
 import { useMapPicker } from '../composables/useMapPicker';
+import { reverseGeocode } from '../core/tiandituApi';
 import { toMercator } from '../core/coordUtils';
 import { createCircleMarkerStyle } from '../core/markerStyles';
 import { MAP_LAYER_ZINDEX } from '../constants';
@@ -71,9 +73,17 @@ function setPickerMarker(lngVal: number, latVal: number) {
 }
 
 async function onMapClick({ lng: lngVal, lat: latVal }: { lng: number; lat: number }) {
-  if (mode.value !== 'click') return;
+  if (!props.embedded && mode.value !== 'click') return;
   await pickFromClick(lngVal, latVal);
   setPickerMarker(lngVal, latVal);
+  emitPick();
+}
+
+async function onSearchSelect(p: { lng: number; lat: number; name: string }) {
+  lng.value = p.lng;
+  lat.value = p.lat;
+  address.value = p.name || await reverseGeocode({ lng: p.lng, lat: p.lat });
+  setPickerMarker(p.lng, p.lat);
   emitPick();
 }
 
@@ -132,53 +142,12 @@ watch(() => props.modelValue, (v) => {
     :style="{ height: props.height }"
   >
     <a-layout-sider
-      :width="embedded ? 300 : 320"
+      v-if="!embedded"
+      :width="320"
       theme="light"
       class="map-location-picker__sider"
     >
-      <div v-if="embedded" class="map-location-picker__panel map-location-picker__panel--plain">
-        <div class="map-location-picker__panel-title">定位</div>
-        <a-tabs v-model:activeKey="mode" size="small" class="map-location-picker__tabs">
-          <a-tab-pane key="click" tab="点选" />
-          <a-tab-pane key="search" tab="搜索" />
-        </a-tabs>
-
-        <template v-if="mode === 'search'">
-          <a-input-search
-            v-model:value="keyword"
-            placeholder="地点、道路、建筑"
-            :loading="searching"
-            class="map-location-picker__search"
-            @search="() => search(1)"
-          />
-          <a-list
-            class="map-location-picker__results"
-            size="small"
-            :data-source="results"
-            :locale="{ emptyText: '无匹配结果' }"
-          >
-            <template #renderItem="{ item }">
-              <a-list-item class="map-location-picker__result" @click="onSelectPoi(item)">
-                <a-list-item-meta :title="item.name" :description="item.address" />
-              </a-list-item>
-            </template>
-          </a-list>
-          <a-pagination
-            v-if="total > pageSize"
-            size="small"
-            simple
-            :current="page"
-            :total="total"
-            :page-size="pageSize"
-            class="map-location-picker__pager"
-            @change="search"
-          />
-        </template>
-
-        <p v-else class="map-location-picker__hint">在地图区域单击放置标记，坐标将写入右侧属性栏</p>
-      </div>
-
-      <CollapseContainer v-else title="位置选择" :can-expan="false" class="map-location-picker__panel">
+      <CollapseContainer title="位置选择" :can-expan="false" class="map-location-picker__panel">
         <a-tabs v-model:activeKey="mode" size="small">
           <a-tab-pane key="click" tab="点击选点" />
           <a-tab-pane key="search" tab="搜索定位" />
@@ -236,7 +205,12 @@ watch(() => props.modelValue, (v) => {
         clickable
         @map-click="onMapClick"
         @ready="onMapReady"
-      />
+      >
+        <div v-if="embedded" class="map-location-picker__float-bar">
+          <MapSearchBox class="map-location-picker__float-search" @select="onSearchSelect" />
+          <span class="map-location-picker__float-hint">或点击地图选点</span>
+        </div>
+      </BasicTiandituMap>
     </a-layout-content>
   </a-layout>
 </template>
@@ -253,80 +227,41 @@ watch(() => props.modelValue, (v) => {
     background: #fff;
   }
 
-  &--embedded &__sider {
-    background: #fafbfd !important;
-    border-right: 1px solid #e4e9f2;
-  }
-
   &--embedded &__map {
     background: #e8ebf2;
   }
 
-  &--embedded &__result:hover {
-    background: rgba(38, 108, 251, 0.06);
-  }
-
-  &--embedded &__results {
-    flex: 1;
-    max-height: none;
-    min-height: 120px;
-    border-color: #e4e9f2;
-  }
-
-  &--embedded &__panel--plain {
-    height: 100%;
+  &__float-bar {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    z-index: 10;
     display: flex;
-    flex-direction: column;
-    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    max-width: calc(100% - 24px);
+    padding: 10px 14px;
+    background: rgb(255 255 255 / 98%);
+    backdrop-filter: blur(8px);
+    border-radius: 10px;
+    border: 1px solid #e4e9f2;
+    box-shadow: 0 4px 14px rgb(15 23 42 / 8%);
+    pointer-events: auto;
   }
 
-  &--embedded &__tabs {
-    :deep(.ant-tabs-tab) {
-      padding: 6px 0;
-      font-size: 13px;
-      color: rgba(0, 0, 0, 0.55);
-    }
-
-    :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
-      color: #266cfb;
-      font-weight: 500;
-    }
-
-    :deep(.ant-tabs-ink-bar) {
-      background: #266cfb;
-      height: 2px;
-    }
-
-    :deep(.ant-tabs-nav::before) {
-      border-bottom-color: #eef1f6;
-    }
+  &__float-search {
+    width: min(320px, 100%);
+    flex: 1 1 220px;
+    min-width: 200px;
   }
 
-  &--embedded &__search {
-    :deep(.ant-input) {
-      border-radius: 6px;
-      border-color: #e4e9f2;
-    }
-
-    :deep(.ant-input-search-button) {
-      border-radius: 0 6px 6px 0;
-    }
-  }
-
-  &__panel--plain {
-    height: 100%;
-    padding: 20px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  &__panel-title {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: rgba(0, 0, 0, 0.65);
-    letter-spacing: -0.01em;
+  &__float-hint {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.45);
+    white-space: nowrap;
   }
 
   &__tabs {

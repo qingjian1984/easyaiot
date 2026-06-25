@@ -873,6 +873,9 @@ function handleSuccess() {
   } else if (deviceMixedCardListRef.value) {
     deviceMixedCardListRef.value.fetch();
   }
+  if (nvrDetailVisible.value) {
+    nvrDeviceDetailRef.value?.load?.();
+  }
 }
 
 // 删除设备

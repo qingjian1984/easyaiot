@@ -111,6 +111,7 @@ def _nvr_to_dict(nvr: Nvr, *, include_cameras: bool = False) -> dict[str, Any]:
         'scheme': sch,
         'web_url': nvr.web_url,
         'username': nvr.username,
+        'has_password': bool((nvr.password or '').strip()),
         'name': nvr.name,
         'device_name': nvr.name,
         'model': nvr.model,

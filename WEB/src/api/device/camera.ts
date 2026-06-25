@@ -85,6 +85,8 @@ export interface NvrInfo {
   web_url?: string;
   username?: string;
   password?: string;
+  /** 库中是否已保存 Web 登录密码（详情接口不回传明文） */
+  has_password?: boolean;
   name?: string;
   device_name?: string;
   model?: string;
