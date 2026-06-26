@@ -44,7 +44,7 @@ The platform comprises seven core modules—<strong>WEB, APP, DEVICE, NODE, VIDE
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-📄 For a more complete illustrated introduction, see <a href=".doc/项目介绍/EasyAIoT项目介绍.pdf" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT Project Introduction (PDF)</a>.
+📄 For a more complete illustrated introduction, see <a href=".doc/项目介绍/EasyAIoT项目介绍 V2.0.pptx" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT Project Introduction (PDF)</a>.
 </p>
 
 ## 🌟 Some Thoughts on the Project

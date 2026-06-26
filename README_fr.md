@@ -44,7 +44,7 @@ La plateforme comprend sept modules principaux — <strong>WEB, APP, DEVICE, NOD
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-📄 Pour une présentation illustrée plus complète, consultez <a href=".doc/项目介绍/EasyAIoT项目介绍.pdf" style="color: #3498db; text-decoration: none; font-weight: 600;">Présentation du projet EasyAIoT (PDF)</a>.
+📄 Pour une présentation illustrée plus complète, consultez <a href=".doc/项目介绍/EasyAIoT项目介绍 V2.0.pptx" style="color: #3498db; text-decoration: none; font-weight: 600;">Présentation du projet EasyAIoT (PDF)</a>.
 </p>
 
 ## 🌟 Réflexions sur le projet

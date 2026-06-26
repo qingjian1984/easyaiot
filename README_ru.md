@@ -44,7 +44,7 @@
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-📄 Для более полного иллюстрированного описания см. <a href=".doc/项目介绍/EasyAIoT项目介绍.pdf" style="color: #3498db; text-decoration: none; font-weight: 600;">Презентация проекта EasyAIoT (PDF)</a>.
+📄 Для более полного иллюстрированного описания см. <a href=".doc/项目介绍/EasyAIoT项目介绍 V2.0.pptx" style="color: #3498db; text-decoration: none; font-weight: 600;">Презентация проекта EasyAIoT (PDF)</a>.
 </p>
 
 ## 🌟 Размышления о проекте

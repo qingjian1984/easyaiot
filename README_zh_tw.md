@@ -44,7 +44,7 @@
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-📄 如需更完整的圖文介紹，請參閱 <a href=".doc/项目介绍/EasyAIoT项目介绍.pdf" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT 項目介紹（PDF）</a>。
+📄 如需更完整的圖文介紹，請參閱 <a href=".doc/项目介绍/EasyAIoT项目介绍 V2.0.pptx" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT 項目介紹（PDF）</a>。
 </p>
 
 ## 🌟 關於項目的一些思考

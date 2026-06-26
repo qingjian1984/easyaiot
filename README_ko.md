@@ -44,7 +44,7 @@
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-📄 보다 완전한 그림·문자 소개는 <a href=".doc/项目介绍/EasyAIoT项目介绍.pdf" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT 프로젝트 소개 (PDF)</a>를 참조하세요.
+📄 보다 완전한 그림·문자 소개는 <a href=".doc/项目介绍/EasyAIoT项目介绍 V2.0.pptx" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT 프로젝트 소개 (PDF)</a>를 참조하세요.
 </p>
 
 ## 🌟 프로젝트에 대한 몇 가지 생각
