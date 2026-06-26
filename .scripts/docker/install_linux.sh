@@ -782,7 +782,7 @@ install_linux() {
     
     local success_count=0
     local total_count=${#MODULES[@]}
-    # APP 模块无需安装（无 install_linux.sh），不计入安装总数
+    # APP 模块仅在 full 形态启用；无 install_linux.sh 时不计入安装总数
     if ! _module_has_install_script "APP"; then
         total_count=$((total_count - 1))
     fi
@@ -796,7 +796,7 @@ install_linux() {
         fi
         print_section "安装 ${MODULE_NAMES[$module]}"
 
-        # 检查模块是否存在安装脚本，无安装脚本的模块直接跳过（如 APP 无需安装）
+        # 检查模块是否存在安装脚本，无安装脚本的模块直接跳过
         local _inst_script
         _inst_script="${PROJECT_ROOT}/${module}/$(module_install_script "$module")"
         if [ ! -f "$_inst_script" ]; then
