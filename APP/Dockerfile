@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/pnpm/store,id=app-pnpm-store \
 
 RUN --mount=type=cache,target=/pnpm/store,id=app-pnpm-store \
     pnpm config set store-dir /pnpm/store && \
-    pnpm install --frozen-lockfile 2>&1 | tee /tmp/app-build-logs/pnpm-install.log && \
+    pnpm install --frozen-lockfile --ignore-scripts 2>&1 | tee /tmp/app-build-logs/pnpm-install.log && \
     test -x node_modules/.bin/cross-env || (echo "=== pnpm install 未生成 node_modules/.bin/cross-env ===" && exit 1)
 
 ARG CACHE_BUST=0
@@ -45,6 +45,7 @@ RUN printf '\nVITE_APP_PROXY_ENABLE = true\nVITE_APP_PROXY_PREFIX = /admin-api\n
 RUN --mount=type=cache,target=/pnpm/store,id=app-pnpm-store \
     pnpm config set store-dir /pnpm/store && \
     set -e && \
+    pnpm init-baseFiles && \
     if [ "${SKIP_VITE_BUILD}" = "1" ]; then \
         echo "=== SKIP_VITE_BUILD=1：使用预构建 dist-prebuilt（规避 QEMU 模拟 uni build）==="; \
         test -d dist-prebuilt || (echo "=== SKIP_VITE_BUILD=1 但 dist-prebuilt/ 不存在！ ===" && exit 1); \

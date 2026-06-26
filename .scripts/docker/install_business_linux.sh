@@ -544,7 +544,7 @@ EasyAIoT 业务系统统一管理脚本
   status        查看状态
   logs [服务名] 查看日志（可指定模块后接服务名，如 logs DEVICE iot-gateway）
   build         重新构建镜像（各模块本地构建）
-  build-runtime 构建/推送运行时镜像到远程仓库（交互式）
+  build-runtime 构建/推送运行时镜像到远程仓库（交互式，可选单架构）
   pull          从远程仓库拉取预构建运行时镜像（交互式，默认 full）
   build-base    仅 DEVICE：Maven 编译并提取 Jar（第一阶段）
   clean         清理容器（DEVICE 保留镜像）
@@ -578,6 +578,7 @@ EasyAIoT 业务系统统一管理脚本
   中间件请使用 .scripts/docker/install_linux.sh 或 install_middleware_linux.sh
   运行时镜像仓库配置: .scripts/docker/runtime_registry.conf
   环境变量 EASYAIOT_DEPLOY_PROFILE: mini(1) | standard(2) | full(3，默认)
+  build-runtime 可选 EASYAIOT_RUNTIME_BUILD_ARCH: all(默认) | amd64 | arm64（单架构时跳过 manifest）
   日志: $LOG_DIR/
 EOF
 }
