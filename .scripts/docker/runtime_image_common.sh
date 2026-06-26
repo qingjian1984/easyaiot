@@ -539,6 +539,71 @@ runtime_images_pulled_ready() {
     return 0
 }
 
+# 判断 docker push 输出是否为可重试的瞬时网络/服务端错误
+runtime_docker_push_is_transient_error() {
+    local output="$1"
+    echo "$output" | grep -qiE \
+        'use of closed network connection|connection reset by peer|broken pipe|unexpected EOF|EOF|i/o timeout|temporary failure|timeout|network is unreachable|TLS handshake timeout|read: connection|write tcp.*443:|failed to copy: failed to do request|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|server closed idle connection|transport is closing'
+}
+
+# 带重试执行镜像上传命令（docker push / docker manifest push 等；已推送层会自动复用）
+# 环境变量: EASYAIOT_DOCKER_PUSH_RETRIES（默认 5）, EASYAIOT_DOCKER_PUSH_RETRY_DELAY（默认 10，秒，指数退避）
+runtime_docker_upload_with_retry() {
+    local label="$1"
+    shift
+    local max_retries="${EASYAIOT_DOCKER_PUSH_RETRIES:-5}"
+    local base_delay="${EASYAIOT_DOCKER_PUSH_RETRY_DELAY:-10}"
+    local attempt=1 rc=0 delay=0 log_file push_out
+
+    log_file=$(mktemp "${TMPDIR:-/tmp}/easyaiot_docker_push.XXXXXX") || return 1
+
+    while [ "$attempt" -le "$max_retries" ]; do
+        if [ "$attempt" -gt 1 ]; then
+            case $((attempt - 1)) in
+                1) delay=$base_delay ;;
+                2) delay=$((base_delay * 2)) ;;
+                3) delay=$((base_delay * 4)) ;;
+                4) delay=$((base_delay * 8)) ;;
+                *) delay=120 ;;
+            esac
+            [ "$delay" -gt 120 ] && delay=120
+            runtime_img_msg warn "${label} 失败（第 ${attempt}/${max_retries} 次），${delay}s 后重试（已推送层会自动复用）..."
+            sleep "$delay"
+        fi
+
+        : > "$log_file"
+        "$@" 2>&1 | tee "$log_file"
+        rc=${PIPESTATUS[0]}
+        if [ "$rc" -eq 0 ]; then
+            rm -f "$log_file"
+            return 0
+        fi
+
+        push_out=$(cat "$log_file" 2>/dev/null || true)
+
+        # 认证/权限错误不可重试
+        if echo "$push_out" | grep -qiE 'no basic auth credentials|unauthorized|authentication required|authorization failed|push access denied|access denied|denied: requested access'; then
+            rm -f "$log_file"
+            return "$rc"
+        fi
+
+        if [ "$attempt" -ge "$max_retries" ] || ! runtime_docker_push_is_transient_error "$push_out"; then
+            rm -f "$log_file"
+            return "$rc"
+        fi
+
+        attempt=$((attempt + 1))
+    done
+
+    rm -f "$log_file"
+    return 1
+}
+
+# 带重试的 docker push
+runtime_docker_push_with_retry() {
+    runtime_docker_upload_with_retry "推送 $1" docker push "$1"
+}
+
 # 轻量消息输出（source 方有 print_* 时复用）
 runtime_img_msg() {
     local level="$1" text="$2"
@@ -648,6 +713,8 @@ runtime_images_usage() {
   EASYAIOT_RUNTIME_FORCE_REBUILD=1       强制重建（交互式 build-runtime 默认开启）
   EASYAIOT_RUNTIME_FORCE_REBUILD=0       复用本地镜像（已存在则跳过构建，直接推送）
   EASYAIOT_SKIP_REGISTRY_AUTH_CHECK=1     跳过 build-runtime 前的 CNB 登录/推送权限检查
+  EASYAIOT_DOCKER_PUSH_RETRIES=5          推送失败时的最大重试次数（默认 5，网络抖动时自动退避重试）
+  EASYAIOT_DOCKER_PUSH_RETRY_DELAY=10     推送重试初始间隔秒数（默认 10，指数退避，上限 120s）
 
 build-runtime 会在构建开始前校验 CNB 登录与推送权限；未登录请先执行:
   docker login docker.cnb.cool -u cnb -p \${CNB_TOKEN}
