@@ -619,32 +619,34 @@ create_env_file() {
 install_service() {
     print_info "开始安装 AI 服务..."
 
-    # ★ 新增：提示是否本地构建镜像（默认 N = 不本地构建，拉取预制镜像）
-    local _do_local_build=0
-    if [ -t 0 ]; then
-        print_info "========================================"
-        print_info "  镜像构建选项"
-        print_info "========================================"
-        print_info "  1) 本地构建：编译并制作 Docker 镜像（耗时较长）"
-        print_info "  2) 拉取预制镜像：从远程仓库下载预构建的镜像（快速，默认）"
-        echo ""
-        read -r -p "是否本地构建镜像？(y/N) " _build_response
-        case "${_build_response:-}" in
-            y|Y|yes|YES) _do_local_build=1 ;;
-            *) _do_local_build=0 ;;
-        esac
-    else
-        print_info "非交互模式，默认拉取预制镜像"
-    fi
-
-    if [ "$_do_local_build" -eq 0 ]; then
-        print_info "正在拉取预制镜像..."
-        if bash "${EASYAIOT_ROOT}/.scripts/docker/runtime_image.sh" pull; then
-            print_success "预制镜像拉取成功"
-            export EASYAIOT_SKIP_BUILD=1
+    # 镜像获取方式（install_business_linux.sh 已统一询问时跳过）
+    if [ "${EASYAIOT_SKIP_IMAGE_PROMPT:-0}" != "1" ]; then
+        local _do_local_build=0
+        if [ -t 0 ]; then
+            print_info "========================================"
+            print_info "  镜像获取方式"
+            print_info "========================================"
+            print_info "  1) 拉取预构建镜像：从远程仓库下载（快速，默认）"
+            print_info "  2) 本地构建：编译并制作 Docker 镜像（耗时较长）"
+            echo ""
+            read -r -p "是否从远程仓库下载预构建的镜像？(Y/n) " _pull_response
+            case "${_pull_response:-Y}" in
+                n|N|no|NO) _do_local_build=1 ;;
+                *) _do_local_build=0 ;;
+            esac
         else
-            print_warning "预制镜像拉取失败，将尝试本地构建"
-            _do_local_build=1
+            print_info "非交互模式，默认拉取预构建镜像"
+        fi
+
+        if [ "$_do_local_build" -eq 0 ]; then
+            print_info "正在拉取预构建镜像..."
+            if bash "${EASYAIOT_ROOT}/.scripts/docker/runtime_image.sh" pull; then
+                print_success "预构建镜像拉取成功"
+                export EASYAIOT_SKIP_BUILD=1
+            else
+                print_warning "预构建镜像拉取失败，将尝试本地构建"
+                _do_local_build=1
+            fi
         fi
     fi
 

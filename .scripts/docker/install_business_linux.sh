@@ -406,6 +406,8 @@ execute_module() {
         export EASYAIOT_DEFER_PLATFORM_AGENT_SYNC=1
         export EASYAIOT_DEPLOY_PROFILE
         export EASYAIOT_SKIP_PROFILE_PROMPT
+        export EASYAIOT_SKIP_IMAGE_PROMPT
+        export EASYAIOT_SKIP_BUILD
         bash install_linux.sh "$mapped" "$@"
     ) 2>&1 | tee -a "$LOG_FILE"
 
@@ -485,11 +487,45 @@ is_no() {
     esac
 }
 
+# 镜像获取方式：默认从远程拉取预构建镜像；回车即 Y（与 install_linux.sh 一致，仅 install 时询问一次）
+prompt_and_acquire_runtime_images() {
+    local _do_local_build=0
+    if [ -t 0 ]; then
+        print_info "========================================"
+        print_info "  镜像获取方式"
+        print_info "========================================"
+        print_info "  1) 拉取预构建镜像：从远程仓库下载（快速，默认）"
+        print_info "  2) 本地构建：编译并制作 Docker 镜像（耗时较长）"
+        echo ""
+        read -r -p "是否从远程仓库下载预构建的镜像？(Y/n) " _pull_response
+        case "${_pull_response:-Y}" in
+            n|N|no|NO) _do_local_build=1 ;;
+            *) _do_local_build=0 ;;
+        esac
+    else
+        print_info "非交互模式，默认拉取预构建镜像"
+    fi
+
+    if [ "$_do_local_build" -eq 0 ]; then
+        print_info "正在拉取预构建镜像..."
+        if bash "${SCRIPT_DIR}/runtime_image.sh" pull; then
+            print_success "预构建镜像拉取成功"
+            export EASYAIOT_SKIP_BUILD=1
+        else
+            print_warning "预构建镜像拉取失败，将尝试本地构建"
+            _do_local_build=1
+        fi
+    fi
+
+    export EASYAIOT_SKIP_IMAGE_PROMPT=1
+}
+
 init_deploy_profile_for_command() {
     local cmd="$1"
     case "$cmd" in
         install)
             select_deploy_profile_for_install
+            prompt_and_acquire_runtime_images
             print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
             ;;
         start|restart|update|verify|status|build|build-base)
