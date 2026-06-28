@@ -32,9 +32,10 @@ echo "=========================================="
 echo "开始初始化 PostgreSQL 数据库"
 echo "=========================================="
 
-# 等待 PostgreSQL 就绪
+# 等待 PostgreSQL 就绪（entrypoint init 完成且非 recovery 状态）
 echo "等待 PostgreSQL 就绪..."
-until psql -U "$POSTGRES_USER" -d postgres -c '\q' 2>/dev/null; do
+until psql -U "$POSTGRES_USER" -d postgres -tAc "SELECT 1" >/dev/null 2>&1 \
+    && [ "$(psql -U "$POSTGRES_USER" -d postgres -tAc "SELECT pg_is_in_recovery();" 2>/dev/null || echo t)" = "f" ]; do
     sleep 1
 done
 

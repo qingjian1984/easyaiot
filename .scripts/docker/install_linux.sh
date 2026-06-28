@@ -115,6 +115,27 @@ MODULE_HEALTH_ENDPOINTS["VIDEO"]="/actuator/health"
 MODULE_HEALTH_ENDPOINTS["WEB"]="/health"
 MODULE_HEALTH_ENDPOINTS["APP"]="/health"
 
+# 统计当前部署形态下参与 install 汇总的模块数（已启用且存在安装脚本）
+_count_installable_modules() {
+    local count=0 module _inst_script
+    for module in "${MODULES[@]}"; do
+        module_enabled_for_deploy_profile "$module" || continue
+        _inst_script="${PROJECT_ROOT}/${module}/$(module_install_script "$module")"
+        [ -f "$_inst_script" ] || continue
+        count=$((count + 1))
+    done
+    echo "$count"
+}
+
+# 统计当前部署形态下参与 verify 汇总的模块数
+_count_verifiable_modules() {
+    local count=0 module
+    for module in "${MODULES[@]}"; do
+        module_enabled_for_deploy_profile "$module" && count=$((count + 1))
+    done
+    echo "$count"
+}
+
 # 日志输出函数（去掉颜色代码后写入日志文件）
 log_to_file() {
     local message="$1"
@@ -687,11 +708,8 @@ install_linux() {
     fi
     
     local success_count=0
-    local total_count=${#MODULES[@]}
-    # APP 模块仅在 full 形态启用；无 install_linux.sh 时不计入安装总数
-    if ! _module_has_install_script "APP"; then
-        total_count=$((total_count - 1))
-    fi
+    local total_count
+    total_count=$(_count_installable_modules)
     local -a failed_modules=()
     local -a succeeded_modules=()
     
@@ -878,9 +896,9 @@ wait_for_base_services() {
 
     if container_exists postgres-server; then
         if container_running postgres-server; then
-            wait_for_container_ready "PostgreSQL" 60 2 docker exec postgres-server pg_isready -U postgres || true
-            wait_for_container_ready "PostgreSQL (查询就绪)" 30 2 \
-                docker exec postgres-server psql -U postgres -d postgres -c "SELECT 1" || true
+            wait_for_container_ready "PostgreSQL" 180 2 docker exec postgres-server pg_isready -U postgres || true
+            wait_for_container_ready "PostgreSQL (查询就绪)" 180 2 \
+                bash -c 'docker exec postgres-server psql -U postgres -d postgres -tAc "SELECT 1" >/dev/null 2>&1 && [ "$(docker exec postgres-server psql -U postgres -d postgres -tAc "SELECT pg_is_in_recovery();" 2>/dev/null)" = "f" ]' || true
             _pg_ok=true
         else
             print_error "PostgreSQL 容器已创建但未运行，请检查: docker logs postgres-server"
@@ -1320,7 +1338,8 @@ verify_all() {
     check_docker "$@"
     
     local success_count=0
-    local total_count=${#MODULES[@]}
+    local total_count
+    total_count=$(_count_verifiable_modules)
     local failed_modules=()
     
     for module in "${MODULES[@]}"; do

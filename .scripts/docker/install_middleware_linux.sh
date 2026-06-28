@@ -2685,14 +2685,42 @@ check_compose_file() {
     fi
 }
 
+# PostgreSQL 是否已结束 docker-entrypoint 首次初始化（空数据目录时会先跑 initdb.d 再重启）
+_postgresql_entrypoint_init_done() {
+    local logs
+    logs=$(docker logs postgres-server 2>&1 || true)
+    if echo "$logs" | grep -q "Skipping initialization"; then
+        return 0
+    fi
+    if echo "$logs" | grep -q "PostgreSQL init process complete"; then
+        return 0
+    fi
+    return 1
+}
+
+# 确认 PostgreSQL 可执行业务 SQL（非恢复中、非启动中）
+_postgresql_accepts_queries() {
+    docker exec postgres-server pg_isready -U postgres > /dev/null 2>&1 \
+        || return 1
+    docker exec postgres-server psql -U postgres -d postgres -tAc "SELECT 1" > /dev/null 2>&1 \
+        || return 1
+    # WAL 恢复或未达一致状态时 pg_isready 可能已通过，但查询会失败
+    local _in_recovery
+    _in_recovery=$(docker exec postgres-server psql -U postgres -d postgres -tAc "SELECT pg_is_in_recovery();" 2>/dev/null || echo "t")
+    [ "$_in_recovery" = "f" ]
+}
+
 # 等待 PostgreSQL 服务就绪
 wait_for_postgresql() {
-    local max_attempts=60
+    # 首次安装需导入约 20MB SQL，entrypoint init 可能超过 2 分钟
+    local max_attempts=180
     local attempt=0
+    local stable_checks=0
+    local required_stable=3
     
     print_info "等待 PostgreSQL 服务就绪..."
 
-    # 容器不存在 → 快速失败，不浪费 120s 轮询
+    # 容器不存在 → 快速失败，不浪费轮询
     if ! docker ps -a --filter "name=^postgres-server$" --format "{{.Names}}" | grep -q "^postgres-server$"; then
         print_error "PostgreSQL 容器不存在（postgres-server），无法等待"
         return 1
@@ -2701,6 +2729,7 @@ wait_for_postgresql() {
     while [ $attempt -lt $max_attempts ]; do
         # 检查容器是否在运行
         if ! docker ps --filter "name=postgres-server" --format "{{.Names}}" | grep -q "postgres-server"; then
+            stable_checks=0
             if [ $attempt -eq 0 ]; then
                 print_warning "PostgreSQL 容器未运行，等待启动..."
             fi
@@ -2717,29 +2746,39 @@ wait_for_postgresql() {
             sleep 2
             continue
         fi
+
+        # 首次启动：entrypoint 仍在执行 initdb.d（含 init-databases.sh）时不可建库
+        if ! _postgresql_entrypoint_init_done; then
+            stable_checks=0
+            if [ $((attempt % 5)) -eq 0 ]; then
+                print_info "PostgreSQL 首次初始化中（entrypoint 正在执行 initdb.d 脚本），继续等待..."
+            fi
+            attempt=$((attempt + 1))
+            sleep 2
+            continue
+        fi
         
-        # 检查服务是否就绪
-        if docker exec postgres-server pg_isready -U postgres > /dev/null 2>&1; then
-            # pg_isready 仅检查 TCP 层是否接受连接。
-            # PostgreSQL 崩溃后 WAL 恢复期间虽可通过 pg_isready 检测，但实际查询会返回：
-            #   "the database system is not yet accepting connections"
-            #   "DETAIL: Consistent recovery state has not been yet reached."
-            # 需执行实际查询，确认数据库已完全恢复并可接受业务 SQL。
-            if docker exec postgres-server psql -U postgres -d postgres -c "SELECT 1" > /dev/null 2>&1; then
+        # pg_isready 仅检查 socket 是否监听；需实际查询 + 非 recovery + 连续稳定
+        if _postgresql_accepts_queries; then
+            stable_checks=$((stable_checks + 1))
+            if [ $stable_checks -ge $required_stable ]; then
                 print_success "PostgreSQL 服务已就绪"
                 return 0
-            else
-                print_info "PostgreSQL 正在崩溃恢复中（pg_isready 已通过但查询尚未可用），继续等待..."
-                attempt=$((attempt + 1))
-                sleep 2
-                continue
             fi
+        else
+            if [ $stable_checks -gt 0 ]; then
+                print_info "PostgreSQL 连接不稳定（可能正在重启或 WAL 恢复），继续等待..."
+            elif docker exec postgres-server pg_isready -U postgres > /dev/null 2>&1; then
+                print_info "PostgreSQL 正在崩溃恢复或启动中（pg_isready 已通过但查询尚未可用），继续等待..."
+            fi
+            stable_checks=0
         fi
         attempt=$((attempt + 1))
         sleep 2
     done
     
-    print_error "PostgreSQL 服务未就绪"
+    print_error "PostgreSQL 服务未就绪（已等待 $((max_attempts * 2))s）"
+    print_info "查看日志: docker logs postgres-server --tail 80"
     return 1
 }
 
@@ -3692,24 +3731,35 @@ check_database_initialized() {
     fi
 }
 
-# 创建数据库
+# 创建数据库（带重试：entrypoint 重启或 WAL 恢复间隙可能短暂不可连）
 create_database() {
     local db_name=$1
+    local max_attempts=15
+    local attempt=0
     
     print_info "创建数据库: $db_name"
     
-    if docker exec postgres-server psql -U postgres -lqt | cut -d \| -f 1 | grep -qw "$db_name"; then
-        print_info "数据库 $db_name 已存在，跳过创建"
-        return 0
-    fi
+    while [ $attempt -lt $max_attempts ]; do
+        if docker exec postgres-server psql -U postgres -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$db_name"; then
+            print_info "数据库 $db_name 已存在，跳过创建"
+            return 0
+        fi
+        
+        if docker exec postgres-server psql -U postgres -c "CREATE DATABASE \"$db_name\";" > /dev/null 2>&1; then
+            print_success "数据库 $db_name 创建成功"
+            return 0
+        fi
+        
+        attempt=$((attempt + 1))
+        if [ $attempt -lt $max_attempts ]; then
+            print_info "数据库 $db_name 创建失败，等待 PostgreSQL 稳定后重试 ($attempt/$max_attempts)..."
+            sleep 3
+        fi
+    done
     
-    if docker exec postgres-server psql -U postgres -c "CREATE DATABASE \"$db_name\";" > /dev/null 2>&1; then
-        print_success "数据库 $db_name 创建成功"
-        return 0
-    else
-        print_error "数据库 $db_name 创建失败"
-        return 1
-    fi
+    print_error "数据库 $db_name 创建失败"
+    docker exec postgres-server psql -U postgres -c "CREATE DATABASE \"$db_name\";" 2>&1 | head -3 || true
+    return 1
 }
 
 # 执行 SQL 初始化脚本
