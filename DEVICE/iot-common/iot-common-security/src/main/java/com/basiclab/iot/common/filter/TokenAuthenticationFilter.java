@@ -1,25 +1,23 @@
 package com.basiclab.iot.common.filter;
 
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import com.basiclab.iot.common.config.SecurityProperties;
 import com.basiclab.iot.common.domain.CommonResult;
 import com.basiclab.iot.common.domain.LoginUser;
-import com.basiclab.iot.common.service.RedisService;
+import com.basiclab.iot.common.exception.ServiceException;
 import com.basiclab.iot.common.utils.SecurityFrameworkUtils;
-import com.basiclab.iot.common.utils.StringUtils;
 import com.basiclab.iot.common.utils.json.JsonUtils;
 import com.basiclab.iot.common.utils.servlet.ServletUtils;
 import com.basiclab.iot.common.web.core.handler.GlobalExceptionHandler;
 import com.basiclab.iot.common.web.core.util.WebFrameworkUtils;
 import com.basiclab.iot.system.api.oauth2.OAuth2TokenApi;
+import com.basiclab.iot.system.api.oauth2.dto.OAuth2AccessTokenCheckRespDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.filter.OncePerRequestFilter;
-
-import javax.annotation.Resource;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
@@ -45,9 +43,6 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
     private final GlobalExceptionHandler globalExceptionHandler;
 
     private final OAuth2TokenApi oauth2TokenApi;
-
-    @Resource
-    private StringRedisTemplate stringRedisTemplate;
 
     @Override
     @SuppressWarnings("NullableProblems")
@@ -87,26 +82,25 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private LoginUser buildLoginUserByToken(String token, Integer userType) {
-        if (StringUtils.isNotEmpty(token)) {
-            LoginUser loginUser = new LoginUser();
-            OAuth2AccessTokenDO authDO = this.get(token);
-            loginUser.setId(authDO.getUserId());
-            loginUser.setUserType(authDO.getUserType());
-            loginUser.setTenantId(authDO.getTenantId());
-            loginUser.setInfo(authDO.getUserInfo());
-            loginUser.setScopes(authDO.getScopes());
-            return loginUser;
+        try {
+            OAuth2AccessTokenCheckRespDTO accessToken = oauth2TokenApi.checkAccessToken(token).getCheckedData();
+            if (accessToken == null) {
+                return null;
+            }
+            // 用户类型不匹配，无权限
+            // 注意：只有 /admin-api/* 和 /app-api/* 有 userType，才需要比对用户类型
+            // 类似 WebSocket 的 /ws/* 连接地址，是不需要比对用户类型的
+            if (userType != null
+                    && ObjectUtil.notEqual(accessToken.getUserType(), userType)) {
+                throw new AccessDeniedException("错误的用户类型");
+            }
+            return new LoginUser().setId(accessToken.getUserId()).setUserType(accessToken.getUserType())
+                    .setInfo(accessToken.getUserInfo())
+                    .setTenantId(accessToken.getTenantId()).setScopes(accessToken.getScopes());
+        } catch (ServiceException serviceException) {
+            // 校验 Token 不通过时，考虑到一些接口是无需登录的，所以直接返回 null 即可
+            return null;
         }
-        return null;
-    }
-
-    public OAuth2AccessTokenDO get(String accessToken) {
-        String redisKey = formatKey(accessToken);
-        return JsonUtils.parseObject(stringRedisTemplate.opsForValue().get(redisKey), OAuth2AccessTokenDO.class);
-    }
-
-    private static String formatKey(String accessToken) {
-        return String.format("oauth2_access_token:%s", accessToken);
     }
 
     /**
