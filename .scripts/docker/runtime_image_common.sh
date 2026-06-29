@@ -652,6 +652,101 @@ runtime_device_pull_count_for_profile() {
 }
 
 # ============================================================================
+# 本地镜像架构检测（预下载链路）
+# ============================================================================
+runtime_image_actual_arch() {
+    docker image inspect "$1" --format '{{.Architecture}}' 2>/dev/null || echo ""
+}
+
+# 本地镜像存在且架构与期望一致
+runtime_local_image_arch_ready() {
+    local ref="$1" expected="${2:-$(runtime_detect_arch)}"
+    if ! docker image inspect "$ref" >/dev/null 2>&1; then
+        return 1
+    fi
+    local actual; actual=$(runtime_image_actual_arch "$ref")
+    [ -n "$actual" ] && [ "$actual" = "$expected" ]
+}
+
+# 收集当前部署形态下需校验的本地运行时镜像引用
+# 用法: runtime_images_collect_check_refs <数组名> [profile] [tag]
+runtime_images_collect_check_refs() {
+    local -n _out="$1"
+    local profile="${2:-${EASYAIOT_DEPLOY_PROFILE:-full}}"
+    local tag="${3:-latest}"
+    _out=(
+        "ai-service:${tag}"
+        "video-service:${tag}"
+    )
+    local _di _dlname
+    for _di in "${!DEVICE_LOCAL_NAMES[@]}"; do
+        if runtime_device_image_needed_for_pull "$_di" "$profile"; then
+            _dlname="${DEVICE_LOCAL_NAMES[$_di]}"
+            _out+=("${_dlname}:${tag}")
+        fi
+    done
+    case "$profile" in
+        mini)     _out+=("web-service:${tag}-mini") ;;
+        standard) _out+=("web-service:${tag}-standard") ;;
+        *)        _out+=("web-service:${tag}") ;;
+    esac
+    if [ "$profile" = "full" ]; then
+        _out+=("app-service:${tag}")
+    fi
+}
+
+# 删除与当前系统架构不一致的本地预构建镜像；清除无效拉取标记
+runtime_images_ensure_arch_consistency() {
+    local expected_arch="${1:-$(runtime_detect_arch)}"
+    local profile="${2:-${EASYAIOT_DEPLOY_PROFILE:-full}}"
+    local tag="${3:-latest}"
+    local marker="${RUNTIME_IMAGES_MARKER}"
+
+    if [ -f "$marker" ]; then
+        local pull_arch
+        pull_arch=$(sed -n 's/^PULL_ARCH=//p' "$marker" 2>/dev/null || true)
+        if [ -n "${pull_arch:-}" ] && [ "$pull_arch" != "$expected_arch" ]; then
+            runtime_img_msg info "拉取标记架构 (${pull_arch}) 与当前系统 (${expected_arch}) 不一致，清除标记"
+            rm -f "$marker"
+        fi
+    fi
+
+    local -a refs=()
+    runtime_images_collect_check_refs refs "$profile" "$tag"
+    local ref actual cleaned=0
+    for ref in "${refs[@]}"; do
+        if ! docker image inspect "$ref" >/dev/null 2>&1; then
+            continue
+        fi
+        actual=$(runtime_image_actual_arch "$ref")
+        if [ -z "$actual" ] || [ "$actual" != "$expected_arch" ]; then
+            runtime_img_msg info "镜像架构不匹配: ${ref} (现有=${actual:-?}, 期望=${expected_arch})，删除后重新拉取"
+            docker rmi "$ref" 2>/dev/null || true
+            cleaned=$((cleaned + 1))
+            rm -f "$marker"
+        fi
+    done
+    if [ "$cleaned" -gt 0 ]; then
+        runtime_img_msg info "已清理 ${cleaned} 个架构不匹配的预构建镜像"
+    fi
+}
+
+# pull 时：镜像已存在且架构正确则跳过；否则删除错误架构后返回需拉取
+runtime_pull_should_skip_image() {
+    local ref="$1" expected="${2:-$(runtime_detect_arch)}"
+    if runtime_local_image_arch_ready "$ref" "$expected"; then
+        return 0
+    fi
+    if docker image inspect "$ref" >/dev/null 2>&1; then
+        local actual; actual=$(runtime_image_actual_arch "$ref")
+        runtime_img_msg info "镜像架构不匹配: ${ref} (现有=${actual:-?}, 期望=${expected})，删除后重新拉取"
+        docker rmi "$ref" 2>/dev/null || true
+        rm -f "${RUNTIME_IMAGES_MARKER}"
+    fi
+    return 1
+}
+
+# ============================================================================
 # 拉取标记与本地镜像就绪检测
 # ============================================================================
 # 返回 0 = 已拉取且本地镜像齐全，可跳过构建
@@ -668,7 +763,8 @@ runtime_images_pulled_ready() {
 
     local current_arch; current_arch=$(runtime_detect_arch)
     if [ "${pull_arch:-}" != "$current_arch" ]; then
-        runtime_img_msg info "拉取标记架构 (${pull_arch:-?}) 与当前 (${current_arch}) 不匹配，将重新构建"
+        runtime_img_msg info "拉取标记架构 (${pull_arch:-?}) 与当前系统 (${current_arch}) 不一致，将重新拉取"
+        rm -f "$marker"
         return 1
     fi
 
@@ -677,33 +773,23 @@ runtime_images_pulled_ready() {
     fi
     local current_profile="${EASYAIOT_DEPLOY_PROFILE:-full}"
     if [ "${pull_profile:-full}" != "$current_profile" ]; then
-        runtime_img_msg info "拉取标记形态 (${pull_profile:-full}) 与当前 (${current_profile}) 不匹配，将重新构建"
+        runtime_img_msg info "拉取标记形态 (${pull_profile:-full}) 与当前 (${current_profile}) 不匹配，将重新拉取"
         return 1
     fi
 
-    local -a check_images=(
-        "ai-service:${pull_tag:-latest}"
-        "video-service:${pull_tag:-latest}"
-    )
-    local _di _dlname
-    for _di in "${!DEVICE_LOCAL_NAMES[@]}"; do
-        if runtime_device_image_needed_for_pull "$_di" "${pull_profile:-full}"; then
-            _dlname="${DEVICE_LOCAL_NAMES[$_di]}"
-            check_images+=("${_dlname}:${pull_tag:-latest}")
-        fi
-    done
-    case "${pull_profile:-full}" in
-        mini)     check_images+=("web-service:${pull_tag:-latest}-mini") ;;
-        standard) check_images+=("web-service:${pull_tag:-latest}-standard") ;;
-        *)        check_images+=("web-service:${pull_tag:-latest}") ;;
-    esac
-    if [ "${pull_profile:-full}" = "full" ]; then
-        check_images+=("app-service:${pull_tag:-latest}")
-    fi
+    local -a check_images=()
+    runtime_images_collect_check_refs check_images "${pull_profile:-full}" "${pull_tag:-latest}"
 
+    local img actual
     for img in "${check_images[@]}"; do
-        if ! docker image inspect "$img" >/dev/null 2>&1; then
-            runtime_img_msg warn "拉取的镜像 ${img} 不在本地，将重新构建"
+        if ! runtime_local_image_arch_ready "$img" "$current_arch"; then
+            if docker image inspect "$img" >/dev/null 2>&1; then
+                actual=$(runtime_image_actual_arch "$img")
+                runtime_img_msg warn "本地镜像 ${img} 架构 (${actual:-?}) 与当前系统 (${current_arch}) 不一致，将重新拉取"
+                rm -f "$marker"
+            else
+                runtime_img_msg warn "预构建镜像 ${img} 不在本地，将重新拉取"
+            fi
             return 1
         fi
     done

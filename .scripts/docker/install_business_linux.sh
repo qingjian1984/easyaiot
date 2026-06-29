@@ -87,6 +87,7 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/install_business_$(date +%Y%m%d_%H%M%S).log"
 
 SELECTED_MODULES=()
+MODULE_POSITIONAL=()
 COMMAND=""
 EXTRA_ARGS=()
 AUTO_YES=false
@@ -634,6 +635,8 @@ parse_args() {
         return 0
     fi
 
+    MODULE_POSITIONAL=("${positional[@]}")
+
     if [ "$COMMAND" = "logs" ] && [ ${#positional[@]} -gt 0 ]; then
         local first
         first=$(normalize_module_name "${positional[0]}")
@@ -642,6 +645,11 @@ parse_args() {
             EXTRA_ARGS=("${positional[@]:1}")
             return 0
         fi
+    fi
+
+    # install 需在交互选定部署形态后再 resolve（见 main）
+    if [ "$COMMAND" = "install" ]; then
+        return 0
     fi
 
     resolve_modules "${positional[@]}"
@@ -667,7 +675,12 @@ main() {
             init_deploy_profile_for_command verify
             verify_all || exit 1
             ;;
-        install|start|restart|update|build|build-base|status)
+        install)
+            init_deploy_profile_for_command install
+            resolve_modules "${MODULE_POSITIONAL[@]}"
+            run_on_modules install "${EXTRA_ARGS[@]}" || exit 1
+            ;;
+        start|restart|update|build|build-base|status)
             init_deploy_profile_for_command "$COMMAND"
             run_on_modules "$COMMAND" "${EXTRA_ARGS[@]}" || exit 1
             ;;

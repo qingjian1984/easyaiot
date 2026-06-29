@@ -1302,6 +1302,9 @@ pull_all_images() {
     select_pull_profile
     local pull_profile="${EASYAIOT_DEPLOY_PROFILE}"
 
+    # ★ 拉取前校验本地镜像架构，删除与当前系统不一致的残留镜像（避免仅按「存在」跳过拉取）
+    runtime_images_ensure_arch_consistency "$CURRENT_ARCH" "$pull_profile" "$TAG"
+
     local shared_ok=0 shared_fail=0 shared_skipped=0
     local device_pull_total
     device_pull_total=$(runtime_device_pull_count_for_profile "$pull_profile")
@@ -1319,8 +1322,8 @@ pull_all_images() {
         local lref; lref=$(local_ref "$lname")
 
         print_step "拉取: ${rref}"
-        if docker image inspect "$lref" >/dev/null 2>&1; then
-            print_info "${lref} 已存在，跳过"; shared_ok=$((shared_ok + 1)); continue
+        if runtime_pull_should_skip_image "$lref" "$CURRENT_ARCH"; then
+            print_info "${lref} 已存在（${CURRENT_ARCH}），跳过"; shared_ok=$((shared_ok + 1)); continue
         fi
         pull_and_tag_image "$rref" "$lref" && shared_ok=$((shared_ok + 1)) || shared_fail=$((shared_fail + 1))
     done
@@ -1336,8 +1339,8 @@ pull_all_images() {
         local lref; lref=$(local_ref "$lname")
 
         print_step "拉取: ${rref}"
-        if docker image inspect "$lref" >/dev/null 2>&1; then
-            print_info "${lref} 已存在，跳过"; shared_ok=$((shared_ok + 1)); continue
+        if runtime_pull_should_skip_image "$lref" "$CURRENT_ARCH"; then
+            print_info "${lref} 已存在（${CURRENT_ARCH}），跳过"; shared_ok=$((shared_ok + 1)); continue
         fi
         pull_and_tag_image "$rref" "$lref" && shared_ok=$((shared_ok + 1)) || shared_fail=$((shared_fail + 1))
     done
@@ -1350,8 +1353,8 @@ pull_all_images() {
             local lref; lref=$(local_ref "$lname")
 
             print_step "拉取: ${rref}"
-            if docker image inspect "$lref" >/dev/null 2>&1; then
-                print_info "${lref} 已存在，跳过"; shared_ok=$((shared_ok + 1)); continue
+            if runtime_pull_should_skip_image "$lref" "$CURRENT_ARCH"; then
+                print_info "${lref} 已存在（${CURRENT_ARCH}），跳过"; shared_ok=$((shared_ok + 1)); continue
             fi
             pull_and_tag_image "$rref" "$lref" && shared_ok=$((shared_ok + 1)) || shared_fail=$((shared_fail + 1))
         done
@@ -1382,11 +1385,13 @@ pull_all_images() {
         local lref; lref=$(local_ref "$lname" "$pull_profile")
 
         print_step "拉取: ${rref}"
-        if pull_and_tag_image "$rref" "$lref"; then
+        if runtime_pull_should_skip_image "$lref" "$CURRENT_ARCH"; then
+            print_info "${lref} 已存在（${CURRENT_ARCH}），跳过"
             web_ok=$((web_ok + 1))
             record_web_deploy_profile_built "${PROJECT_ROOT}"
-        elif docker image inspect "$lref" >/dev/null 2>&1; then
-            print_info "${lref} 已存在，跳过"
+            continue
+        fi
+        if pull_and_tag_image "$rref" "$lref"; then
             web_ok=$((web_ok + 1))
             record_web_deploy_profile_built "${PROJECT_ROOT}"
         else
