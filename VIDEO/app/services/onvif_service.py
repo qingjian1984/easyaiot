@@ -99,27 +99,60 @@ class PTZController:
             logger.error(f"RelativeMove failed: {e.fault_string}")
 
     # 预置位管理功能
-    def save_preset(self, name: str) -> Optional[str]:
-        """保存当前位置为预置位"""
+    def save_preset(self, name: str, preset_token: Optional[str] = None) -> Optional[str]:
+        """保存当前位置为预置位（可指定 token 覆盖已有预置点）"""
         try:
-            response = self._ptz_svc.SetPreset({
+            params: Dict[str, str] = {
                 'ProfileToken': self._token,
-                'PresetName': name
-            })
-            return response.PresetToken
-        except Exception:
-            logger.warning("Preset save not supported")
+                'PresetName': name,
+            }
+            if preset_token:
+                params['PresetToken'] = preset_token
+            response = self._ptz_svc.SetPreset(params)
+            return getattr(response, 'PresetToken', None) or preset_token
+        except Exception as e:
+            logger.warning("Preset save failed: %s", e)
             return None
+
+    def list_presets(self) -> list[Dict[str, str]]:
+        """查询设备预置点列表"""
+        try:
+            response = self._ptz_svc.GetPresets({'ProfileToken': self._token})
+            raw = response if isinstance(response, list) else getattr(response, 'Preset', None) or []
+            items = []
+            for idx, preset in enumerate(raw, start=1):
+                token = getattr(preset, 'token', None) or getattr(preset, 'Token', None)
+                if token is None:
+                    continue
+                name = getattr(preset, 'Name', None) or f'预置点 {idx}'
+                items.append({'token': str(token), 'name': str(name)})
+            return items
+        except Exception as e:
+            logger.warning("GetPresets failed: %s", e)
+            return []
 
     def goto_preset(self, token: str):
         """移动到指定预置位"""
         try:
             self._ptz_svc.GotoPreset({
                 'ProfileToken': self._token,
-                'PresetToken': token
+                'PresetToken': token,
             })
-        except Exception:
-            logger.error("Preset move failed")
+        except Exception as e:
+            logger.error("Preset move failed: %s", e)
+            raise
+
+    def remove_preset(self, token: str) -> bool:
+        """删除预置点"""
+        try:
+            self._ptz_svc.RemovePreset({
+                'ProfileToken': self._token,
+                'PresetToken': token,
+            })
+            return True
+        except Exception as e:
+            logger.error("RemovePreset failed: %s", e)
+            return False
 
 
 class OnvifCamera:
@@ -217,14 +250,24 @@ class OnvifCamera:
             logger.critical("Camera connection lost")
 
     # 预置位快捷方法
-    def save_position(self, name: str) -> Optional[str]:
+    def list_positions(self) -> list[Dict[str, str]]:
+        if not self._ptz_controller:
+            return []
+        return self._ptz_controller.list_presets()
+
+    def save_position(self, name: str, preset_token: Optional[str] = None) -> Optional[str]:
         """保存当前位置为预置位"""
-        return self._ptz_controller.save_preset(name) if self._ptz_controller else None
+        return self._ptz_controller.save_preset(name, preset_token) if self._ptz_controller else None
 
     def goto_position(self, token: str):
         """移动到指定预置位"""
         if self._ptz_controller:
             self._ptz_controller.goto_preset(token)
+
+    def remove_position(self, token: str) -> bool:
+        if not self._ptz_controller:
+            return False
+        return self._ptz_controller.remove_preset(token)
 
     # 视频流获取
     def get_stream_uri(self, protocol: str = 'RTSP') -> str:

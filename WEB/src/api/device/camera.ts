@@ -445,6 +445,29 @@ export const controlPTZ = (device_id: string, data: {
   return commonApi('post', `${CAMERA_PREFIX}/device/${device_id}/ptz`, data, {}, false);
 };
 
+export interface OnvifPresetItem {
+  token: string;
+  name: string;
+}
+
+/** 查询 ONVIF 设备预置点列表 */
+export const queryOnvifPresets = (device_id: string) =>
+  commonApi('get', `${CAMERA_PREFIX}/device/${device_id}/onvif/presets`, {}, {}, false);
+
+/** 保存 ONVIF 预置点（preset_token 可选，用于覆盖已有预置点） */
+export const setOnvifPreset = (
+  device_id: string,
+  data: { name: string; preset_token?: string },
+) => commonApi('post', `${CAMERA_PREFIX}/device/${device_id}/onvif/presets`, data, {}, false);
+
+/** 调用 ONVIF 预置点 */
+export const callOnvifPreset = (device_id: string, preset_token: string) =>
+  commonApi('post', `${CAMERA_PREFIX}/device/${device_id}/onvif/presets/call`, { preset_token }, {}, false);
+
+/** 删除 ONVIF 预置点 */
+export const deleteOnvifPreset = (device_id: string, preset_token: string) =>
+  commonApi('delete', `${CAMERA_PREFIX}/device/${device_id}/onvif/presets/${encodeURIComponent(preset_token)}`, {}, {}, false);
+
 // ====================== 截图任务接口 ======================
 export const startRtspCapture = (device_id: number, data: {
   rtsp_url?: string;

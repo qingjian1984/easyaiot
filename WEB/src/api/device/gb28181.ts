@@ -169,6 +169,57 @@ export const controlGbPtz = (
   return commonApi('get', `/gb28181/front-end/ptz/${deviceId}/${channelId}`, payload);
 };
 
+/** 国标预置位查询 */
+export const queryGbPreset = (deviceId: string, channelId: string) =>
+  commonApi('get', `/gb28181/front-end/preset/query/${deviceId}/${channelId}`, {}, false);
+
+/** 国标预置位设置 */
+export const addGbPreset = (deviceId: string, channelId: string, presetId: number) =>
+  commonApi('get', `/gb28181/front-end/preset/add/${deviceId}/${channelId}`, { presetId });
+
+/** 国标预置位调用 */
+export const callGbPreset = (deviceId: string, channelId: string, presetId: number) =>
+  commonApi('get', `/gb28181/front-end/preset/call/${deviceId}/${channelId}`, { presetId });
+
+/** 国标预置位删除 */
+export const deleteGbPreset = (deviceId: string, channelId: string, presetId: number) =>
+  commonApi('get', `/gb28181/front-end/preset/delete/${deviceId}/${channelId}`, { presetId });
+
+/** 国标聚焦 */
+export const controlGbFocus = (
+  deviceId: string,
+  channelId: string,
+  command: 'near' | 'far' | 'stop',
+  speed = 100,
+) =>
+  commonApi('get', `/gb28181/front-end/fi/focus/${deviceId}/${channelId}`, { command, speed });
+
+/** 国标光圈 */
+export const controlGbIris = (
+  deviceId: string,
+  channelId: string,
+  command: 'in' | 'out' | 'stop',
+  speed = 100,
+) =>
+  commonApi('get', `/gb28181/front-end/fi/iris/${deviceId}/${channelId}`, { command, speed });
+
+/** 启动国标语音广播/对讲 */
+export const startGbAudioBroadcast = (
+  deviceId: string,
+  channelId: string,
+  broadcastMode = true,
+) =>
+  commonApi(
+    'get',
+    `/gb28181/play/broadcast/${deviceId}/${channelId}`,
+    { broadcastMode },
+    false,
+  );
+
+/** 停止国标语音广播 */
+export const stopGbAudioBroadcast = (deviceId: string, channelId: string) =>
+  commonApi('get', `/gb28181/play/broadcast/stop/${deviceId}/${channelId}`);
+
 /**
  * 添加设备
  * @param device 设备信息

@@ -39,6 +39,21 @@ export function gb28181VirtualDeviceId(sipDeviceId: string, channelId: string): 
   return `gb28181_${sipDeviceId}_${channelId}`;
 }
 
+/** 从虚拟设备 ID `gb28181_{sip}_{channel}` 解析点播参数 */
+export function parseGb28181VirtualDeviceId(
+  id?: string | null,
+): { sipDeviceId: string; channelId: string } | null {
+  const raw = String(id ?? '').trim();
+  if (!raw.startsWith('gb28181_')) return null;
+  const rest = raw.slice('gb28181_'.length);
+  const sep = rest.indexOf('_');
+  if (sep <= 0) return null;
+  const sipDeviceId = rest.slice(0, sep).trim();
+  const channelId = rest.slice(sep + 1).trim();
+  if (!sipDeviceId || !channelId) return null;
+  return { sipDeviceId, channelId };
+}
+
 /** 解析 gb28181://{deviceId}/{channelId} */
 export function parseGb28181Source(source?: string | null): { deviceId: string; channelId: string } | null {
   if (!source?.trim().toLowerCase().startsWith(GB28181_SOURCE_PREFIX)) {
@@ -58,6 +73,7 @@ export function shouldPlayViaGb28181(record: Record<string, any> | null | undefi
   if (!record) return false;
   const parsed = parseGb28181Source(record.source);
   if (parsed) return true;
+  if (parseGb28181VirtualDeviceId(record.id)) return true;
   const sip = String(record.deviceIdentification || '').trim();
   const ch = String(record.channelId || '').trim();
   if (sip && ch && sip !== ch) return true;
@@ -74,6 +90,8 @@ export function getGb28181PlayIds(
   if (parsed) {
     return { sipDeviceId: parsed.deviceId, channelId: parsed.channelId };
   }
+  const fromId = parseGb28181VirtualDeviceId(record.id);
+  if (fromId) return fromId;
   const sipDeviceId = String(record.deviceIdentification || record.deviceId || '').trim();
   const channelId = String(record.channelId || '').trim();
   if (!sipDeviceId || !channelId || sipDeviceId === channelId) return null;

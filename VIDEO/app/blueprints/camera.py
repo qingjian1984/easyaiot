@@ -1287,6 +1287,88 @@ def onvif_status(device_id):
         return jsonify({'code': 500, 'msg': f'获取ONVIF截图状态失败: {str(e)}'}), 500
 
 
+# ------------------------- ONVIF 预置点接口 -------------------------
+@camera_bp.route('/device/<string:device_id>/onvif/presets', methods=['GET'])
+def list_onvif_presets_api(device_id: str):
+    """查询 ONVIF 设备预置点列表"""
+    try:
+        presets = camera_service.list_onvif_presets(device_id)
+        return jsonify({'code': 0, 'msg': 'success', 'data': presets})
+    except ValueError as e:
+        return jsonify({'code': 400, 'msg': str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({'code': 500, 'msg': str(e)}), 500
+    except Exception as e:
+        logger.error('查询 ONVIF 预置点失败: %s', e, exc_info=True)
+        return jsonify({'code': 500, 'msg': f'查询预置点失败: {str(e)}'}), 500
+
+
+@camera_bp.route('/device/<string:device_id>/onvif/presets', methods=['POST'])
+def set_onvif_preset_api(device_id: str):
+    """保存当前位置为 ONVIF 预置点
+
+    Body: { "name": "预置点 1", "preset_token": "可选，覆盖已有预置点" }
+    """
+    try:
+        data = request.get_json() or {}
+        name = str(data.get('name') or '').strip()
+        if not name:
+            return jsonify({'code': 400, 'msg': '预置点名称不能为空'}), 400
+        preset_token = data.get('preset_token')
+        if preset_token is not None:
+            preset_token = str(preset_token).strip() or None
+        token = camera_service.set_onvif_preset(device_id, name, preset_token)
+        return jsonify({
+            'code': 0,
+            'msg': '预置点已保存',
+            'data': {'token': token, 'name': name},
+        })
+    except ValueError as e:
+        return jsonify({'code': 400, 'msg': str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({'code': 500, 'msg': str(e)}), 500
+    except Exception as e:
+        logger.error('保存 ONVIF 预置点失败: %s', e, exc_info=True)
+        return jsonify({'code': 500, 'msg': f'保存预置点失败: {str(e)}'}), 500
+
+
+@camera_bp.route('/device/<string:device_id>/onvif/presets/call', methods=['POST'])
+def call_onvif_preset_api(device_id: str):
+    """调用 ONVIF 预置点
+
+    Body: { "preset_token": "1" }
+    """
+    try:
+        data = request.get_json() or {}
+        preset_token = str(data.get('preset_token') or data.get('token') or '').strip()
+        if not preset_token:
+            return jsonify({'code': 400, 'msg': '缺少 preset_token'}), 400
+        camera_service.call_onvif_preset(device_id, preset_token)
+        return jsonify({'code': 0, 'msg': '预置点已调用'})
+    except ValueError as e:
+        return jsonify({'code': 400, 'msg': str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({'code': 500, 'msg': str(e)}), 500
+    except Exception as e:
+        logger.error('调用 ONVIF 预置点失败: %s', e, exc_info=True)
+        return jsonify({'code': 500, 'msg': f'调用预置点失败: {str(e)}'}), 500
+
+
+@camera_bp.route('/device/<string:device_id>/onvif/presets/<string:preset_token>', methods=['DELETE'])
+def delete_onvif_preset_api(device_id: str, preset_token: str):
+    """删除 ONVIF 预置点"""
+    try:
+        camera_service.delete_onvif_preset(device_id, preset_token)
+        return jsonify({'code': 0, 'msg': '预置点已删除'})
+    except ValueError as e:
+        return jsonify({'code': 400, 'msg': str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({'code': 500, 'msg': str(e)}), 500
+    except Exception as e:
+        logger.error('删除 ONVIF 预置点失败: %s', e, exc_info=True)
+        return jsonify({'code': 500, 'msg': f'删除预置点失败: {str(e)}'}), 500
+
+
 def grab_frame_for_snapshot(device):
     """解析设备源地址并抓取一帧。
 

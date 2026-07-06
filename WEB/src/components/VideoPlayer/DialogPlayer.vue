@@ -1,110 +1,76 @@
 <template>
   <BasicModal
     @register="register"
-    title="视频播放"
-    :footer=null
-    :width="900"
+    :title="modalTitle"
+    :footer="null"
+    :width="layoutWidth"
     :canFullscreen="true"
+    :defaultFullscreen="true"
     :zIndex="10000"
+    wrapClassName="monitor-dialog-wrap"
     @cancel="handleCancel"
   >
-    <div class="ant-modal-content">
-      <div class="ant-modal-body" style="padding: 0px;">
-        <div style="min-height: 200px; max-height: 680px;">
-          <!-- 播放器：有 URL 再挂载，避免 destroyOnClose + 快速二次 openModal 时 vodMode/playUrl 竞态 -->
-          <div class="player-stage">
+    <div class="monitor-dialog" :class="{ 'monitor-dialog--vod': state.vodMode }">
+      <MonitorControlPanel
+        v-if="showControlPanel"
+        :talk-protocol="talkProtocol"
+        :talk-status="activeTalk.status"
+        :talk-info-text="activeTalk.infoText"
+        :talk-volume="activeTalk.volume"
+        :talk-noise-suppression="activeTalk.noiseSuppression"
+        :talk-echo-cancellation="activeTalk.echoCancellation"
+        :talk-level="activeTalk.level"
+        :show-presets="state.isGb28181 || state.isOnvif"
+        :presets="state.presets"
+        :preset-loading="state.presetLoading"
+        @talk-start="handleStartTalk"
+        @talk-stop="handleStopTalk"
+        @talk-volume-change="activeTalk.updateVolume"
+        @talk-noise-change="(v) => (activeTalk.noiseSuppression = v)"
+        @talk-echo-change="(v) => (activeTalk.echoCancellation = v)"
+        @ptz="handlePtzCamera"
+        @aux="handleAuxControl"
+        @preset-call="handlePresetCall"
+        @preset-set="handlePresetSet"
+        @preset-delete="handlePresetDelete"
+        @preset-add="handlePresetAdd"
+      />
+
+      <div class="monitor-dialog__main">
+        <div class="monitor-dialog__video">
+          <div v-if="!state.vodMode" class="monitor-dialog__video-bar">
+            <div class="monitor-dialog__video-bar-left">
+              <span class="monitor-dialog__live-tag" :class="{ 'is-live': !state.vodMode && state.currentUrl }">
+                <span class="monitor-dialog__live-dot" />
+                {{ streamLabel }}
+              </span>
+            </div>
+            <div class="monitor-dialog__video-bar-right">
+              <span class="monitor-dialog__status-chip" :class="playStatusClass">{{ playStatusText }}</span>
+            </div>
+          </div>
+          <div class="monitor-dialog__video-body">
             <Jessibuca
               v-if="state.currentUrl"
               :key="`${playerKey}-${state.currentUrl}`"
-              ref="jessibuca"
+              ref="jessibucaRef"
               :playUrl="state.currentUrl"
-              :hasAudio="false"
+              :hasAudio="!!talkProtocol"
               :vodMode="state.vodMode"
             />
-            <div v-else-if="state.playLoading" class="player-stage__loading">
-              <div class="ant-spin ant-spin-lg">
-                <span class="ant-spin-dot ant-spin-dot-spin">
-                  <i class="ant-spin-dot-item"></i><i class="ant-spin-dot-item"></i>
-                  <i class="ant-spin-dot-item"></i><i class="ant-spin-dot-item"></i>
-                </span>
-              </div>
-              <div class="player-stage__loading-text">录像加载中...</div>
+            <div v-else-if="state.playLoading" class="monitor-dialog__loading">
+              <Spin size="large" />
+              <span>{{ state.vodMode ? '录像加载中...' : '正在请求点播...' }}</span>
+            </div>
+            <div v-else class="monitor-dialog__loading">
+              <Icon icon="ant-design:video-camera-outlined" :size="48" />
+              <span>暂无播放地址</span>
             </div>
           </div>
-          <!-- 控制台 -->
-          <div class="tabs">
-            <Tabs v-model:activeKey="state.activeKey">
-              <TabPane key="info" tab="实时视频">
-                <div class="real-time-info">
-                  <div>
-                    <div class="label" style="margin: 0 0 8px 0;">播放地址：</div>
-                    <span class="ant-input-group-wrapper"><span
-                      class="ant-input-wrapper ant-input-group">
-                      <input type="text"
-                             :disabled="true"
-                             class="ant-input ant-input-disabled" :value="state.currentUrl"><span
-                      class="ant-input-group-addon">
-                     <svg style="cursor: pointer;"
-                          :onclick="handleCopy.bind(null, state.currentUrl)"
-                          xmlns="http://www.w3.org/2000/svg" width="22" height="22"
-                          viewBox="0 0 1024 1024"><path fill="currentColor"
-                                                        d="M856 376H648V168c0-8.8-7.2-16-16-16H168c-8.8 0-16 7.2-16 16v464c0 8.8 7.2 16 16 16h208v208c0 8.8 7.2 16 16 16h464c8.8 0 16-7.2 16-16V392c0-8.8-7.2-16-16-16m-480 16v188H220V220h360v156H392c-8.8 0-16 7.2-16 16m204 52v136H444V444zm224 360H444V648h188c8.8 0 16-7.2 16-16V444h156z"/></svg>
-                    </span></span></span>
-                  </div>
-                  <div>
-                    <div class="label">iframe：</div>
-                    <span class="ant-input-group-wrapper">
-                      <span class="ant-input-wrapper ant-input-group">
-                      <input type="text"
-                             :disabled="true"
-                             class="ant-input ant-input-disabled" :value="state.iframeUrl"><span
-                        class="ant-input-group-addon">
-                        <svg style="cursor: pointer;"
-                             :onclick="handleCopy.bind(null, state.iframeUrl)"
-                             xmlns="http://www.w3.org/2000/svg" width="22" height="22"
-                             viewBox="0 0 1024 1024"><path fill="currentColor"
-                                                           d="M856 376H648V168c0-8.8-7.2-16-16-16H168c-8.8 0-16 7.2-16 16v464c0 8.8 7.2 16 16 16h208v208c0 8.8 7.2 16 16 16h464c8.8 0 16-7.2 16-16V392c0-8.8-7.2-16-16-16m-480 16v188H220V220h360v156H392c-8.8 0-16 7.2-16 16m204 52v136H444V444zm224 360H444V648h188c8.8 0 16-7.2 16-16V444h156z"/></svg>
-                      </span>
-                      </span>
-                    </span>
-                  </div>
-                  <div>
-                    <div class="label">资源地址：</div>
-                    <span class="ant-input-group-wrapper">
-                      <Select
-                        v-model:value="state.mediaType"
-                        :options="state.videoUrlList"
-                        @change="handleChange"
-                        style="width: 150px;"
-                      />
-                      <span class="ant-input-wrapper ant-input-group">
-                      <input type="text"
-                             :disabled="true"
-                             class="ant-input ant-input-disabled" :value="state.currentUrl"><span
-                        class="ant-input-group-addon">
-                        <svg style="cursor: pointer;"
-                             :onclick="handleCopy.bind(null, state.currentUrl)"
-                             xmlns="http://www.w3.org/2000/svg" width="22" height="22"
-                             viewBox="0 0 1024 1024"><path fill="currentColor"
-                                                           d="M856 376H648V168c0-8.8-7.2-16-16-16H168c-8.8 0-16 7.2-16 16v464c0 8.8 7.2 16 16 16h208v208c0 8.8 7.2 16 16 16h464c8.8 0 16-7.2 16-16V392c0-8.8-7.2-16-16-16m-480 16v188H220V220h360v156H392c-8.8 0-16 7.2-16 16m204 52v136H444V444zm224 360H444V648h188c8.8 0 16-7.2 16-16V444h156z"/></svg>
-                      </span>
-                      </span>
-                    </span>
-                  </div>
-                </div>
-                <section class="full-loading absolute" :style="{ display: state.playLoading ? 'flex' : 'none' }">
-                  <div class="ant-spin ant-spin-lg"><span
-                    class="ant-spin-dot ant-spin-dot-spin"><i class="ant-spin-dot-item"></i><i
-                    class="ant-spin-dot-item"></i><i class="ant-spin-dot-item"></i><i
-                    class="ant-spin-dot-item"></i></span></div>
-                  <div class="jessibuca-loading-text" v-if="state.playLoading">正在请求点播...</div>
-                </section>
-              </TabPane>
-              <TabPane key="camera" tab="云台控制">
-                <Ptz @ptz-camera="handlePtzCamera" style="width: 100%"/>
-              </TabPane>
-            </Tabs>
-          </div>
+        </div>
+        <div class="monitor-dialog__statusbar">
+          <span>{{ state.deviceName || '摄像机' }}</span>
+          <span v-if="state.currentUrl">码率 {{ bitrateText }}</span>
         </div>
       </div>
     </div>
@@ -112,69 +78,105 @@
 </template>
 
 <script lang="ts" setup>
-import {useModalInner} from "@/components/Modal";
-import BasicModal from "@/components/Modal/src/BasicModal.vue";
-
-import {nextTick, reactive, ref} from "vue";
-import {Select, TabPane, Tabs} from 'ant-design-vue';
-import Jessibuca from "@/components/Player/module/jessibuca.vue";
-import Ptz from "@/components/Player/module/ptz.vue";
-import {copyText} from "@/utils/copyTextToClipboard";
-import {useMessage} from "@/hooks/web/useMessage";
-import {controlPTZ} from "@/api/device/camera";
-import {controlGbPtz, playByDeviceAndChannel} from "@/api/device/gb28181";
-import { getGb28181PlayIds, shouldPlayViaGb28181 } from '@/views/camera/utils/deviceLabel';
+import { computed, nextTick, reactive, ref } from 'vue';
+import { Spin } from 'ant-design-vue';
+import { useModalInner } from '@/components/Modal';
+import BasicModal from '@/components/Modal/src/BasicModal.vue';
+import Jessibuca from '@/components/Player/module/jessibuca.vue';
+import { Icon } from '@/components/Icon';
+import { useMessage } from '@/hooks/web/useMessage';
+import { controlPTZ, callOnvifPreset, deleteOnvifPreset, queryOnvifPresets, setOnvifPreset } from '@/api/device/camera';
+import {
+  addGbPreset,
+  callGbPreset,
+  controlGbFocus,
+  controlGbIris,
+  controlGbPtz,
+  deleteGbPreset,
+  playByDeviceAndChannel,
+  queryGbPreset,
+} from '@/api/device/gb28181';
+import {
+  formatCameraDeviceLabel,
+  getGb28181PlayIds,
+  shouldPlayViaGb28181,
+} from '@/views/camera/utils/deviceLabel';
 import { pickWvpPlayUrl } from '@/views/camera/utils/devicePlay';
 import { isVodPlaybackUrl } from '@/utils/alertRecord';
+import {
+  resolveDeviceTalkProtocol,
+  supportsMonitorControl,
+  isOnvifDevice,
+} from '@/views/camera/utils/deviceTalkProtocol';
+import MonitorControlPanel from './monitor/MonitorControlPanel.vue';
+import { useOnvifAudioTalk } from './monitor/useOnvifAudioTalk';
+import { useGb28181AudioTalk } from './monitor/useGb28181AudioTalk';
+import type { PresetItem } from './monitor/MonitorPresetPanel.vue';
 
-const {createMessage} = useMessage()
+const { createMessage } = useMessage();
+const jessibucaRef = ref();
+const playerKey = ref(0);
 
-let jessibuca = ref()
-const playerKey = ref(0)
-//state.videoUrl
 const state = reactive({
-  video: 'http://lndxyj.iqilu.com/public/upload/2019/10/14/8c001ea0c09cdc59a57829dabc8010fa.mp4',
-  videoUrl: '',
-  activePlayer: "jessibuca",
-  presetPos: '',
-  deviceIdentification: '',
-  // 如何你只是用一种播放器，直接注释掉不用的部分即可
-  player: {
-    jessibuca: ["ws_flv", "flv"],
-    webRTC: ["rtc", "rtcs"],
-  },
-  hasAudio: false,
-  currentUrl: '',
-  iframeUrl: '',
-  mediaType: 'flv',
-  videoUrlList: [{label: 'flv', value: "1"}],
+  deviceName: '',
   deviceId: '',
-  activeKey: 'info',
+  deviceIdentification: '',
+  channelId: '',
+  presetPos: '',
+  currentUrl: '',
   playLoading: false,
   vodMode: false,
-  playerOptions: {
-    aspectRatio: '16:5',
-    controls: true,
-    loop: true,
-    volume: 0.6,
-    notSupportedMessage: '此视频暂无法播放，请稍后再试',
-  },
-})
+  isGb28181: false,
+  isOnvif: false,
+  presets: [] as PresetItem[],
+  presetLoading: false,
+  record: null as Record<string, any> | null,
+});
 
-const [register, {closeModal}] = useModalInner(async (record) => {
+const talkProtocol = computed(() => resolveDeviceTalkProtocol(state.record));
+
+const onvifTalk = useOnvifAudioTalk(() => state.deviceId);
+const gbTalk = useGb28181AudioTalk(
+  () => state.deviceIdentification,
+  () => state.presetPos || state.channelId,
+);
+
+const audioTalk = computed(() => (talkProtocol.value === 'gb28181' ? gbTalk : onvifTalk));
+const activeTalk = computed(() => audioTalk.value);
+
+const showControlPanel = computed(() => supportsMonitorControl(state.record, state.vodMode));
+const layoutWidth = computed(() => {
+  if (state.vodMode) return 960;
+  return 'min(1280px, 96vw)';
+});
+const modalTitle = computed(() => state.deviceName || '视频监控');
+const streamLabel = computed(() => (state.vodMode ? '录像回放' : state.isGb28181 ? '国标通道' : '实时预览'));
+const playStatusText = computed(() => {
+  if (state.playLoading) return '连接中';
+  if (state.currentUrl) return '已连接';
+  return '未连接';
+});
+const playStatusClass = computed(() => {
+  if (state.playLoading) return 'is-connecting';
+  if (state.currentUrl) return 'is-online';
+  return 'is-offline';
+});
+const bitrateText = ref('— kbps');
+
+async function loadStream(record: Record<string, any>) {
   const gbIds = getGb28181PlayIds(record);
   const sipDeviceId = gbIds?.sipDeviceId ?? '';
   const channelId = gbIds?.channelId ?? '';
   const gbRecord = shouldPlayViaGb28181(record);
 
   state.deviceIdentification = gbRecord ? sipDeviceId : '';
+  state.channelId = channelId;
   state.presetPos = gbRecord ? channelId : '';
+  state.isGb28181 = gbRecord;
+  state.isOnvif = gbRecord ? false : isOnvifDevice(record);
 
-  // 国标通道：一律走 WVP 点播（忽略同步到 device 表的占位 http_stream）
   if (gbRecord) {
     state.currentUrl = '';
-    state.iframeUrl = '';
-    state.vodMode = false;
     state.playLoading = true;
     try {
       const res = await playByDeviceAndChannel(sipDeviceId, channelId);
@@ -183,31 +185,22 @@ const [register, {closeModal}] = useModalInner(async (record) => {
       if (url) {
         state.vodMode = false;
         state.currentUrl = url;
-        state.iframeUrl = '<iframe src="' + url + '"></iframe>';
-        state.videoUrlList = [{ label: 'flv', value: url }];
-        state.mediaType = url;
         playerKey.value += 1;
       } else {
         createMessage.error(streamContent?.msg || res?.data?.msg || '未获取到播放地址');
       }
-    } catch (e) {
-      console.error('点播请求失败:', e);
+    } catch {
       createMessage.error('点播失败，请检查设备连接');
     } finally {
       state.playLoading = false;
     }
-    state.deviceId = record['id'] ?? '';
     return;
   }
 
-  // 已有播放地址（如摄像头、告警录像等）
-  state.deviceId = record['id'];
-  const streamUrl = String(record['http_stream'] ?? '').trim();
-
-  // 告警录像解析中：仅展示加载占位，不挂载 Jessibuca
-  if (!streamUrl && record['_pendingRecord']) {
+  state.deviceId = String(record.id ?? '');
+  const streamUrl = String(record.http_stream ?? '').trim();
+  if (!streamUrl && record._pendingRecord) {
     state.currentUrl = '';
-    state.iframeUrl = '';
     state.vodMode = false;
     state.playLoading = true;
     return;
@@ -217,56 +210,137 @@ const [register, {closeModal}] = useModalInner(async (record) => {
   state.vodMode = isVodPlaybackUrl(streamUrl);
   await nextTick();
   state.currentUrl = streamUrl;
-  state.iframeUrl = streamUrl ? '<iframe src="' + streamUrl + '"></iframe>' : '';
-  state.videoUrlList = streamUrl
-    ? [{ label: state.vodMode ? 'record' : 'http_stream', value: streamUrl }]
-    : [{ label: 'flv', value: '1' }];
-  if (streamUrl) {
-    playerKey.value += 1;
+  if (streamUrl) playerKey.value += 1;
+}
+
+async function loadOnvifPresets() {
+  if (!state.isOnvif || !state.deviceId) return;
+  state.presetLoading = true;
+  try {
+    const res: any = await queryOnvifPresets(state.deviceId);
+    const body = res?.data ?? res;
+    const list = body?.data ?? body?.list ?? body;
+    const items = Array.isArray(list) ? list : [];
+    state.presets = items.map((item: any, idx: number) => ({
+      id: String(item.token ?? item.preset_token ?? idx + 1),
+      name: item.name ?? `预置点 ${idx + 1}`,
+    }));
+  } catch {
+    state.presets = [];
+  } finally {
+    state.presetLoading = false;
   }
+}
+
+async function loadPresets() {
+  if (state.isGb28181) {
+    await loadGbPresets();
+  } else if (state.isOnvif) {
+    await loadOnvifPresets();
+  }
+}
+
+async function loadGbPresets() {
+  if (!state.isGb28181 || !state.deviceIdentification || !state.presetPos) return;
+  state.presetLoading = true;
+  try {
+    const res: any = await queryGbPreset(state.deviceIdentification, state.presetPos);
+    const body = res?.data ?? res;
+    const list = body?.data ?? body?.list ?? body;
+    const items = Array.isArray(list) ? list : [];
+    state.presets = items.map((item: any, idx: number) => ({
+      id: Number(item.presetId ?? item.id ?? idx + 1),
+      name: item.presetName ?? item.name ?? `预置点 ${item.presetId ?? idx + 1}`,
+    }));
+  } catch {
+    state.presets = Array.from({ length: 0 });
+  } finally {
+    state.presetLoading = false;
+  }
+}
+
+async function handleStopTalk() {
+  await audioTalk.value.stop();
+}
+
+async function handleStartTalk() {
+  await audioTalk.value.start();
+}
+
+const [register, { closeModal }] = useModalInner(async (record) => {
+  await handleStopTalk();
+  state.record = record;
+  state.deviceName = formatCameraDeviceLabel(record);
+  state.presets = [];
+  await loadStream(record);
+  if (talkProtocol.value === 'onvif') {
+    await onvifTalk.checkCapabilities();
+  }
+  await loadPresets();
 });
 
-const handleChange = (value: string) => {
-  copyText(value);
+async function handlePresetAdd() {
+  if (state.isOnvif) {
+    const name = `预置点 ${state.presets.length + 1}`;
+    try {
+      await setOnvifPreset(state.deviceId, { name });
+      createMessage.success(`${name} 已添加`);
+      await loadOnvifPresets();
+    } catch {
+      createMessage.error('添加预置点失败');
+    }
+    return;
+  }
+  const lastId = Number(state.presets[state.presets.length - 1]?.id ?? 0);
+  const nextId = lastId + 1;
+  if (nextId > 255) {
+    createMessage.warning('预置点编号已达上限');
+    return;
+  }
+  handlePresetSet(nextId);
+}
+
+const gbCommandMap: Record<string, string> = {
+  UP: 'up',
+  DOWN: 'down',
+  LEFT: 'left',
+  RIGHT: 'right',
+  LEFT_UP: 'upleft',
+  RIGHT_UP: 'upright',
+  LEFT_DOWN: 'downleft',
+  RIGHT_DOWN: 'downright',
+  ZOOM_IN: 'zoomin',
+  ZOOM_OUT: 'zoomout',
+  STOP: 'stop',
 };
 
-const handleCopy = (value: string) => {
-  copyText(value);
-};
-
-const handlePtzCamera = async (command: string, speed: number) => {
-  // 国标通道优先走国标云台接口
+async function handlePtzCamera(command: string, speed: number) {
   if (state.deviceIdentification && state.presetPos) {
-    const commandMap = {
-      UP: 'up',
-      DOWN: 'down',
-      LEFT: 'left',
-      RIGHT: 'right',
-      ZOOM_IN: 'zoomin',
-      ZOOM_OUT: 'zoomout',
-      STOP: 'stop',
-    };
-    const gbCommand = commandMap[command];
+    const gbCommand = gbCommandMap[command];
     if (!gbCommand) return;
     await controlGbPtz(state.deviceIdentification, state.presetPos, {
       command: gbCommand,
-      horizonSpeed: ['LEFT', 'RIGHT'].includes(command) ? speed : 0,
-      verticalSpeed: ['UP', 'DOWN'].includes(command) ? speed : 0,
-      zoomSpeed: ['ZOOM_IN', 'ZOOM_OUT'].includes(command) ? Math.min(Math.max(Math.round(speed / 10), 1), 15) : 0,
+      horizonSpeed: ['LEFT', 'RIGHT', 'LEFT_UP', 'RIGHT_UP', 'LEFT_DOWN', 'RIGHT_DOWN'].includes(command)
+        ? speed
+        : 0,
+      verticalSpeed: ['UP', 'DOWN', 'LEFT_UP', 'RIGHT_UP', 'LEFT_DOWN', 'RIGHT_DOWN'].includes(command)
+        ? speed
+        : 0,
+      zoomSpeed: ['ZOOM_IN', 'ZOOM_OUT'].includes(command)
+        ? Math.min(Math.max(Math.round(speed / 10), 1), 15)
+        : 0,
     });
     return;
   }
 
-  // 方向指令映射为坐标
-  const directionMap = {
-    UP:    { x: 0, y: speed, z: 0 },
-    DOWN:  { x: 0, y: -speed, z: 0 },
-    LEFT:  { x: -speed, y: 0, z: 0 },
+  const directionMap: Record<string, { x: number; y: number; z: number }> = {
+    UP: { x: 0, y: speed, z: 0 },
+    DOWN: { x: 0, y: -speed, z: 0 },
+    LEFT: { x: -speed, y: 0, z: 0 },
     RIGHT: { x: speed, y: 0, z: 0 },
-    ZOOM_IN:  { x: 0, y: 0, z: speed },
-    ZOOM_OUT: { x: 0, y: 0, z: -speed }
+    ZOOM_IN: { x: 0, y: 0, z: speed },
+    ZOOM_OUT: { x: 0, y: 0, z: -speed },
   };
-  // 停止指令（松开按钮时发送）
   if (command === 'STOP') {
     controlPTZ(state.deviceId, { x: 0, y: 0, z: 0 });
   } else if (directionMap[command]) {
@@ -274,470 +348,257 @@ const handlePtzCamera = async (command: string, speed: number) => {
   }
 }
 
+async function handleAuxControl(type: 'focus' | 'iris', action: 'in' | 'out' | 'stop') {
+  if (!state.isGb28181 || !state.deviceIdentification || !state.presetPos) return;
+  if (type === 'focus') {
+    const cmd = action === 'in' ? 'near' : action === 'out' ? 'far' : 'stop';
+    await controlGbFocus(state.deviceIdentification, state.presetPos, cmd);
+  } else {
+    const cmd = action === 'stop' ? 'stop' : action;
+    await controlGbIris(state.deviceIdentification, state.presetPos, cmd);
+  }
+}
+
+async function handlePresetCall(id: string | number) {
+  if (state.isOnvif) {
+    await callOnvifPreset(state.deviceId, String(id));
+    return;
+  }
+  if (!state.deviceIdentification || !state.presetPos) return;
+  await callGbPreset(state.deviceIdentification, state.presetPos, Number(id));
+}
+
+async function handlePresetSet(id: string | number) {
+  if (state.isOnvif) {
+    const preset = state.presets.find((p) => p.id === id);
+    const name = preset?.name ?? `预置点 ${id}`;
+    try {
+      await setOnvifPreset(state.deviceId, {
+        name,
+        preset_token: String(id),
+      });
+      createMessage.success(`${name} 已更新`);
+      await loadOnvifPresets();
+    } catch {
+      createMessage.error('设置预置点失败');
+    }
+    return;
+  }
+  if (!state.deviceIdentification || !state.presetPos) return;
+  await addGbPreset(state.deviceIdentification, state.presetPos, Number(id));
+  createMessage.success(`预置点 ${id} 已设置`);
+  await loadGbPresets();
+}
+
+async function handlePresetDelete(id: string | number) {
+  if (state.isOnvif) {
+    try {
+      await deleteOnvifPreset(state.deviceId, String(id));
+      createMessage.success('预置点已删除');
+      await loadOnvifPresets();
+    } catch {
+      createMessage.error('删除预置点失败');
+    }
+    return;
+  }
+  if (!state.deviceIdentification || !state.presetPos) return;
+  await deleteGbPreset(state.deviceIdentification, state.presetPos, Number(id));
+  createMessage.success(`预置点 ${id} 已删除`);
+  await loadGbPresets();
+}
+
 function handleCancel() {
+  handleStopTalk();
   state.currentUrl = '';
   state.playLoading = false;
+  state.record = null;
   closeModal();
 }
 </script>
 
-<style>
-.player-stage {
-  height: 420px;
-  position: relative;
-  background: #000c17;
+<style lang="less">
+.monitor-dialog-wrap {
+  .ant-modal-body {
+    padding: 0 !important;
+  }
+
+  .ant-modal-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .ant-modal-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .monitor-ptz {
+    .ant-slider-track {
+      background-color: #3b6cf5;
+    }
+
+    .ant-slider-handle::after {
+      box-shadow: 0 0 0 2px #3b6cf5;
+    }
+  }
+
+  .audio-talk {
+    .ant-slider-track {
+      background-color: #3b6cf5;
+    }
+
+    .ant-slider-handle::after {
+      box-shadow: 0 0 0 2px #3b6cf5;
+    }
+  }
 }
 
-.player-stage__loading {
+.monitor-dialog {
+  display: flex;
+  height: min(82vh, 780px);
+  min-height: 520px;
+  background: #f1f5f9;
+
+  &--vod {
+    .monitor-dialog__main {
+      flex: 1;
+    }
+  }
+}
+
+.monitor-dialog__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0a0f1a;
+}
+
+.monitor-dialog__video {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+}
+
+.monitor-dialog__video-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.88));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.monitor-dialog__video-bar-left,
+.monitor-dialog__video-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.monitor-dialog__live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  white-space: nowrap;
+  line-height: 1;
+
+  &.is-live {
+    background: rgba(59, 108, 245, 0.18);
+    color: #93bbfd;
+  }
+}
+
+.monitor-dialog__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #64748b;
+  flex-shrink: 0;
+
+  .is-live & {
+    background: #5b8df7;
+    box-shadow: 0 0 0 3px rgba(91, 141, 247, 0.28);
+  }
+}
+
+.monitor-dialog__status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
+  line-height: 1.2;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+
+  &.is-online {
+    background: rgba(59, 108, 245, 0.2);
+    color: #93bbfd;
+  }
+
+  &.is-connecting {
+    background: rgba(245, 158, 11, 0.18);
+    color: #fcd34d;
+  }
+
+  &.is-offline {
+    background: rgba(148, 163, 184, 0.16);
+    color: #cbd5e1;
+  }
+}
+
+.monitor-dialog__video-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.monitor-dialog__loading {
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: #fff;
-}
-
-.player-stage__loading-text {
+  color: rgba(255, 255, 255, 0.75);
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.85);
 }
 
-.ant-modal-content {
+.monitor-dialog__statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background: rgba(15, 23, 42, 0.96);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 
-  .ant-modal-body {
-    padding: 0px;
+  span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-    & > .scrollbar {
-      position: relative;
-      height: 100%;
-      overflow: hidden;
-      padding: 0;
-    }
-
-    .scroll-container {
-      width: 100%;
-      height: 100%;
-
-      .scrollbar__wrap--hidden-default {
-        scrollbar-width: none;
-      }
-
-      .scrollbar__wrap {
-        margin-bottom: 18px !important;
-        overflow-x: hidden;
-
-        .scroll-container .scrollbar__view {
-          box-sizing: border-box;
-        }
-
-        .root {
-          display: flex;
-
-          .container-shell {
-            width: 100%;
-            position: relative;
-            background: #000;
-            padding: 30px 0 0;
-            border-radius: 4px;
-
-            .performance {
-              position: absolute;
-              top: 10px;
-              right: 14px;
-              display: flex;
-              align-items: center;
-              gap: 12px;
-
-              .k-bps {
-                color: #fff;
-                font-size: 12px;
-              }
-
-              .performance-content {
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-              }
-            }
-
-            .vide-main {
-              position: relative;
-
-              #container {
-                background: rgba(13, 14, 27, .7);
-                height: 350px;
-              }
-
-              .jessibuca-container {
-                position: relative;
-                display: block;
-                width: 100%;
-                height: 100%;
-                overflow: hidden;
-
-                .jessibuca-loading {
-                  display: none;
-                  flex-direction: column;
-                  justify-content: center;
-                  align-items: center;
-                  position: absolute;
-                  z-index: 20;
-                  left: 0;
-                  top: 0;
-                  right: 0;
-                  bottom: 0;
-                  width: 100%;
-                  height: 100%;
-                  pointer-events: none;
-
-                  .icon-title-tips {
-                    pointer-events: none;
-                    position: absolute;
-                    left: 50%;
-                    bottom: 100%;
-                    visibility: hidden;
-                    opacity: 0;
-                    transform: translateX(-50%);
-                    transition: visibility .3s ease 0s, opacity .3s ease 0s;
-                    background-color: rgba(0, 0, 0, .5);
-                    border-radius: 4px;
-
-                    .icon-title {
-                      display: inline-block;
-                      padding: 5px 10px;
-                      font-size: 12px;
-                      white-space: nowrap;
-                      color: #fff;
-                    }
-                  }
-
-                  .jessibuca-icon-loading {
-                    width: 50px;
-                    height: 50px;
-                    background: url(data:image/png;base64,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) no-repeat 50%;
-                    background-size: 100% 100%;
-                    animation: rotation 1s linear infinite;
-                  }
-
-                  .jessibuca-loading-text {
-                    line-height: 20px;
-                    font-size: 13px;
-                    color: #fff;
-                    margin-top: 10px;
-                  }
-                }
-              }
-            }
-
-            .bottom-operate {
-              background-color: #ffffff80;
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              padding: 0 8px;
-
-              .operate-left {
-                .operate-icon {
-                  transition: all linear .2s;
-                  cursor: pointer;
-                }
-
-                .thinglinks-svg-icon {
-                  display: inline-block;
-                  overflow: hidden;
-                  vertical-align: -.15em;
-                  fill: currentColor;
-                }
-              }
-
-              .operate-right {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-
-                .volume-control {
-                  display: flex;
-                  align-items: center;
-
-                  .operate-icon {
-                    transition: all linear .2s;
-                    cursor: pointer;
-                  }
-
-                  .thinglinks-svg-icon {
-                    display: inline-block;
-                    overflow: hidden;
-                    vertical-align: -.15em;
-                    fill: currentColor;
-                  }
-
-                  .slider-wrapper {
-                    width: 100px;
-                  }
-
-                  .ant-slider {
-                    box-sizing: border-box;
-                    color: #000000d9;
-                    font-size: 14px;
-                    font-variant: tabular-nums;
-                    line-height: 1.5715;
-                    list-style: none;
-                    font-feature-settings: "tnum";
-                    position: relative;
-                    height: 12px;
-                    margin: 10px 6px;
-                    padding: 4px 0;
-                    cursor: pointer;
-                    touch-action: none;
-
-                    .ant-slider-rail {
-                      position: absolute;
-                      width: 100%;
-                      height: 4px;
-                      background-color: #f5f5f5;
-                      border-radius: 2px;
-                      transition: background-color .3s;
-                    }
-
-                    .ant-slider-track {
-                      position: absolute;
-                      height: 4px;
-                      background-color: #5bbda9;
-                      border-radius: 2px;
-                      transition: background-color .3s;
-                    }
-
-                    .ant-slider-step {
-                      position: absolute;
-                      width: 100%;
-                      height: 4px;
-                      background: transparent;
-                    }
-
-                    .ant-slider-handle {
-                      position: absolute;
-                      width: 14px;
-                      height: 14px;
-                      margin-top: -5px;
-                      background-color: #fff;
-                      border-radius: 50%;
-                      box-shadow: 0;
-                      cursor: pointer;
-                      border: solid 2px #5bbda9;
-                      transition: border-color .3s, box-shadow .6s, transform .3s cubic-bezier(.18, .89, .32, 1.28);
-                    }
-
-                    .ant-slider-mark {
-                      position: absolute;
-                      top: 14px;
-                      left: 0;
-                      width: 100%;
-                      font-size: 14px;
-                    }
-                  }
-                }
-
-                .operate-icon {
-                  transition: all linear .2s;
-                  cursor: pointer;
-                }
-
-                .thinglinks-svg-icon {
-                  display: inline-block;
-                  overflow: hidden;
-                  vertical-align: -.15em;
-                  fill: currentColor;
-                }
-              }
-            }
-          }
-        }
-
-        .real-time-info {
-          .label {
-            margin: 8px 0;
-          }
-
-          .ant-input-group-wrapper {
-            display: flex;
-            width: 100%;
-            text-align: start;
-            vertical-align: top;
-
-            .ant-input-group {
-              box-sizing: border-box;
-              margin: 0;
-              padding: 0;
-              color: #000000d9;
-              font-size: 14px;
-              font-variant: tabular-nums;
-              line-height: 1.5715;
-              list-style: none;
-              font-feature-settings: "tnum";
-              position: relative;
-              display: table;
-              width: 100%;
-              border-collapse: separate;
-              border-spacing: 0;
-
-              .ant-input {
-                float: left;
-                width: 100%;
-                margin-bottom: 0;
-                text-align: inherit;
-                box-sizing: border-box;
-                margin: 0;
-                font-variant: tabular-nums;
-                list-style: none;
-                font-feature-settings: "tnum";
-                position: relative;
-                display: inline-block;
-                width: 100%;
-                min-width: 0;
-                padding: 4px 11px;
-                color: #000000d9;
-                font-size: 14px;
-                line-height: 1.5715;
-                background-color: #fff;
-                background-image: none;
-                border: 1px solid #d9d9d9;
-                border-top-width: 1px;
-                border-right-width: 1px;
-                border-bottom-width: 1px;
-                border-left-width: 1px;
-                border-top-style: solid;
-                border-right-style: solid;
-                border-bottom-style: solid;
-                border-left-style: solid;
-                border-top-color: rgb(217, 217, 217);
-                border-right-color: rgb(217, 217, 217);
-                border-bottom-color: rgb(217, 217, 217);
-                border-left-color: rgb(217, 217, 217);
-                border-image-source: initial;
-                border-image-slice: initial;
-                border-image-width: initial;
-                border-image-outset: initial;
-                border-image-repeat: initial;
-                border-radius: 2px;
-                border-top-left-radius: 2px;
-                border-top-right-radius: 2px;
-                border-bottom-right-radius: 2px;
-                border-bottom-left-radius: 2px;
-                transition: all .3s;
-              }
-
-              .ant-input[disabled] {
-                color: #00000040;
-                background-color: #f5f5f5;
-                border-color: #d9d9d9;
-                box-shadow: none;
-                cursor: not-allowed;
-                opacity: 1;
-              }
-
-              & > .ant-input:last-child, .ant-input-group-addon:last-child {
-                border-top-left-radius: 0;
-                border-bottom-left-radius: 0;
-              }
-
-              .ant-input-group-addon:last-child {
-                border-left: 0;
-              }
-
-              .ant-input-group-addon, .ant-input-group-wrap {
-                width: 1px;
-                white-space: nowrap;
-                vertical-align: middle;
-              }
-
-              .ant-input-group-addon, .ant-input-group-wrap, .ant-input-group > .ant-input {
-                display: table-cell;
-              }
-
-              .ant-input-group-addon {
-                position: relative;
-                padding: 0 11px;
-                color: #000000d9;
-                font-weight: 400;
-                font-size: 14px;
-                text-align: center;
-                background-color: #fafafa;
-                border: 1px solid #d9d9d9;
-                border-radius: 2px;
-                transition: all .3s;
-
-                .ant-select {
-                  box-sizing: border-box;
-                  margin: 0;
-                  padding: 0;
-                  color: #000000d9;
-                  font-size: 14px;
-                  font-variant: tabular-nums;
-                  line-height: 1.5715;
-                  list-style: none;
-                  font-feature-settings: "tnum";
-                  position: relative;
-                  display: inline-block;
-                  cursor: pointer;
-
-                  &.ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
-                    background-color: inherit;
-                    border: 1px solid transparent;
-                    border-top-width: 1px;
-                    border-right-width: 1px;
-                    border-bottom-width: 1px;
-                    border-left-width: 1px;
-                    border-top-style: solid;
-                    border-right-style: solid;
-                    border-bottom-style: solid;
-                    border-left-style: solid;
-                    border-top-color: transparent;
-                    border-right-color: transparent;
-                    border-bottom-color: transparent;
-                    border-left-color: transparent;
-                    border-image-source: initial;
-                    border-image-slice: initial;
-                    border-image-width: initial;
-                    border-image-outset: initial;
-                    border-image-repeat: initial;
-                    box-shadow: none;
-                  }
-
-                  &:not(.ant-select-customize-input) .ant-select-selector .ant-select-selection-search-input {
-                    margin: 0;
-                    padding: 0;
-                    background: transparent;
-                    border: none;
-                    border-top-width: initial;
-                    border-right-width: initial;
-                    border-bottom-width: initial;
-                    border-left-width: initial;
-                    border-top-style: none;
-                    border-right-style: none;
-                    border-bottom-style: none;
-                    border-left-style: none;
-                    border-top-color: initial;
-                    border-right-color: initial;
-                    border-bottom-color: initial;
-                    border-left-color: initial;
-                    border-image-source: initial;
-                    border-image-slice: initial;
-                    border-image-width: initial;
-                    border-image-outset: initial;
-                    border-image-repeat: initial;
-                    outline: none;
-                    -webkit-appearance: none;
-                    -moz-appearance: none;
-                    appearance: none;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+  span:last-child {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 }
 </style>

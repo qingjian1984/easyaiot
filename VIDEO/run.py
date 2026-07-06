@@ -829,6 +829,13 @@ def create_app(start_background_tasks=None):
         traceback.print_exc()
 
     try:
+        from app.blueprints import audio_talk
+        app.register_blueprint(audio_talk.audio_talk_bp, url_prefix='/video/camera/audio/talk')
+        print(f"✅ Audio Talk Blueprint 注册成功")
+    except Exception as e:
+        print(f"⚠️  Audio Talk Blueprint 注册失败: {str(e)}")
+
+    try:
         from app.blueprints import media_hook
         app.register_blueprint(media_hook.media_hook_bp, url_prefix='/video/media')
         print(f"✅ Media Hook Blueprint 注册成功")

@@ -379,6 +379,42 @@ def _create_onvif_camera(camera_id, *args, **kwargs) -> OnvifCamera:
             raise RuntimeError(f'连接异常: {str(e)}')
 
 
+def list_onvif_presets(device_id: str) -> list[dict]:
+    """查询 ONVIF 设备预置点列表"""
+    cam = _get_onvif_camera(device_id)
+    if not cam._ptz_controller:
+        raise RuntimeError('该设备不支持云台/预置点')
+    return cam.list_positions()
+
+
+def set_onvif_preset(device_id: str, name: str, preset_token: str | None = None) -> str | None:
+    """保存当前云台位置为预置点"""
+    cam = _get_onvif_camera(device_id)
+    if not cam._ptz_controller:
+        raise RuntimeError('该设备不支持云台/预置点')
+    token = cam.save_position(name, preset_token)
+    if not token:
+        raise RuntimeError('保存预置点失败，设备可能不支持该操作')
+    return token
+
+
+def call_onvif_preset(device_id: str, preset_token: str) -> None:
+    """调用 ONVIF 预置点"""
+    cam = _get_onvif_camera(device_id)
+    if not cam._ptz_controller:
+        raise RuntimeError('该设备不支持云台/预置点')
+    cam.goto_position(preset_token)
+
+
+def delete_onvif_preset(device_id: str, preset_token: str) -> None:
+    """删除 ONVIF 预置点"""
+    cam = _get_onvif_camera(device_id)
+    if not cam._ptz_controller:
+        raise RuntimeError('该设备不支持云台/预置点')
+    if not cam.remove_position(preset_token):
+        raise RuntimeError('删除预置点失败')
+
+
 def _get_camera(id: str) -> Device:
     """获取单个设备ORM对象"""
     return Device.query.get(id)
