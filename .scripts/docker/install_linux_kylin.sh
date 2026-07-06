@@ -1060,6 +1060,7 @@ pull_runtime_images() {
 build_runtime_images() {
     detect_architecture
     check_docker "$@"
+    runtime_apply_build_module_arg "${2:-}" || exit 1
     runtime_images_prepare_build_interactive
     runtime_images_export_for_invoke
     runtime_images_invoke build || exit 1
@@ -1273,7 +1274,7 @@ show_help() {
     echo "  logs            - 查看所有服务日志"
     echo "  logs [模块]     - 查看指定模块日志"
     echo "  build           - 重新构建所有镜像（各模块本地构建）"
-    echo "  build-runtime   - 构建/推送运行时镜像到远程仓库"
+    echo "  build-runtime [模块] - 构建/推送运行时镜像到远程仓库（可选 DEVICE|AI|VIDEO|WEB|APP）"
     echo "  pull            - 从远程仓库拉取预构建运行时镜像（交互式，默认 full）"
     echo "  clean           - 清理所有容器和镜像"
     echo "  update          - 更新镜像并重启所有服务（交互可选拉取/本地重建）"
@@ -1300,6 +1301,7 @@ show_help() {
     echo "  FORCE_NETWORK_RECREATE=true  - 启动时强制重建 easyaiot-network（宿主机 IP 变更后使用）"
     echo "  HOST_IP=<ip>                 - 跳过自动探测，强制指定宿主机 IP"
     echo "  EASYAIOT_RUNTIME_BUILD_ARCH  - build-runtime 目标架构: all(默认) | amd64 | arm64"
+    echo "  EASYAIOT_RUNTIME_BUILD_MODULE - build-runtime 目标模块: all(默认) | DEVICE | AI | VIDEO | WEB | APP"
     echo ""
 }
 
@@ -1329,7 +1331,7 @@ main() {
             build_all
             ;;
         build-runtime|images-build)
-            build_runtime_images
+            build_runtime_images "$@"
             ;;
         pull|images-pull)
             pull_runtime_images

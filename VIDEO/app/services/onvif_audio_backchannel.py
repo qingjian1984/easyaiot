@@ -65,6 +65,7 @@ class ONVIFAudioBackchannel:
         self.audio_codec = audio_codec
         self.sample_rate = sample_rate
         self.channels = channels
+        self.socket_timeout = 10.0
         
         # RTSP连接状态
         self.rtsp_socket: Optional[socket.socket] = None
@@ -97,7 +98,7 @@ class ONVIFAudioBackchannel:
             
             # 创建RTSP socket
             self.rtsp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.rtsp_socket.settimeout(10.0)
+            self.rtsp_socket.settimeout(self.socket_timeout)
             self.rtsp_socket.connect((self.camera_ip, self.camera_port))
             
             logger.info(f"[OK] 已连接到RTSP服务器: {self.camera_ip}:{self.camera_port}")
@@ -1062,6 +1063,58 @@ class RTPPacketBuilder:
         logger.debug(f"[RTP] 构建RTP包: seq={self.sequence_number-1}, ts={self.timestamp-timestamp_increment}, len={len(rtp_packet)}")
         
         return rtp_packet
+
+
+def probe_onvif_audio_backchannel_capabilities(
+    camera_ip: str,
+    camera_port: int = 554,
+    username: str = "admin",
+    password: str = "",
+    socket_timeout: float = 3.0,
+) -> Dict[str, Any]:
+    """
+    轻量探测对讲能力：仅 RTSP DESCRIBE，不建立 SETUP/PLAY（避免 capabilities 接口阻塞数秒）。
+    """
+    client = ONVIFAudioBackchannel(
+        camera_ip=camera_ip,
+        camera_port=camera_port,
+        username=username,
+        password=password,
+        audio_codec="PCMA",
+        sample_rate=8000,
+    )
+    client.socket_timeout = socket_timeout
+
+    result: Dict[str, Any] = {
+        'success': False,
+        'audio_backchannel_supported': False,
+        'audio_tracks': [],
+        'error': '',
+    }
+
+    try:
+        if not client.connect():
+            result['error'] = 'RTSP连接失败'
+            return result
+
+        sdp_info = client.describe_audio_backchannel(audio_path="/audio")
+        result['audio_backchannel_supported'] = bool(sdp_info.get('audio_backchannel_supported'))
+        result['audio_tracks'] = sdp_info.get('audio_tracks', [])
+        result['success'] = result['audio_backchannel_supported']
+        if not result['audio_backchannel_supported']:
+            result['error'] = '摄像机不支持 Audio Back Channel'
+        return result
+    except Exception as e:
+        logger.warning('ONVIF 对讲能力探测失败 %s:%s - %s', camera_ip, camera_port, e)
+        result['error'] = str(e)
+        return result
+    finally:
+        try:
+            if client.rtsp_socket:
+                client.rtsp_socket.close()
+                client.rtsp_socket = None
+        except Exception:
+            pass
 
 
 def test_onvif_audio_backchannel(

@@ -3,14 +3,24 @@ ONVIF 语音对讲 API（Audio Back Channel）
 """
 import base64
 import logging
+import time
 import uuid
+from threading import Lock
 
 from flask import Blueprint, jsonify, request
 
 from app.services.camera_service import _get_camera
-from app.services.onvif_audio_backchannel import test_onvif_audio_backchannel
+from app.services.onvif_audio_backchannel import (
+    probe_onvif_audio_backchannel_capabilities,
+    test_onvif_audio_backchannel,
+)
 
 logger = logging.getLogger(__name__)
+
+# 设备对讲能力缓存（能力不常变，避免每次打开播放器都探测摄像机）
+_capabilities_cache: dict[str, tuple[float, dict]] = {}
+_capabilities_cache_lock = Lock()
+_capabilities_cache_ttl = 120.0
 
 audio_talk_bp = Blueprint('audio_talk', __name__)
 
@@ -46,12 +56,22 @@ def get_capabilities():
         return jsonify({'code': 404, 'msg': '设备不存在'}), 404
 
     rtsp_port = camera.port or 554
-    result = test_onvif_audio_backchannel(
-        camera_ip=camera.ip,
-        camera_port=rtsp_port,
-        username=camera.username or 'admin',
-        password=camera.password or '',
-    )
+
+    cache_key = f'{device_id}:{camera.ip}:{rtsp_port}'
+    now = time.time()
+    with _capabilities_cache_lock:
+        cached = _capabilities_cache.get(cache_key)
+        if cached and now - cached[0] < _capabilities_cache_ttl:
+            result = cached[1]
+        else:
+            result = probe_onvif_audio_backchannel_capabilities(
+                camera_ip=camera.ip,
+                camera_port=rtsp_port,
+                username=camera.username or 'admin',
+                password=camera.password or '',
+            )
+            _capabilities_cache[cache_key] = (now, result)
+
     capabilities = {
         'supported': bool(result.get('audio_backchannel_supported')),
         'audio_backchannel_supported': bool(result.get('audio_backchannel_supported')),

@@ -96,6 +96,68 @@ runtime_is_single_arch_build() {
     [ -n "$a" ] && [ "$a" != "all" ]
 }
 
+# build-runtime 可选单模块（DEVICE / AI / VIDEO / WEB / APP）
+ALL_RUNTIME_BUILD_MODULES=(DEVICE AI VIDEO WEB APP)
+
+# 规范化 build-runtime 目标模块（空/all=全部；无效返回 INVALID）
+runtime_normalize_build_module() {
+    local raw="${1:-}"
+    raw="${raw,,}"
+    case "$raw" in
+        ""|all) echo "" ;;
+        device) echo "DEVICE" ;;
+        ai|aiot-ai) echo "AI" ;;
+        video|aiot-video) echo "VIDEO" ;;
+        web|aiot-web) echo "WEB" ;;
+        app|aiot-app) echo "APP" ;;
+        *) echo "INVALID" ;;
+    esac
+}
+
+# 是否仅构建单一模块（非 all/空）
+runtime_is_single_module_build() {
+    [ -n "${EASYAIOT_RUNTIME_BUILD_MODULE:-}" ]
+}
+
+# 当前构建计划是否包含指定运行时模块（未指定模块时视为全部）
+runtime_build_includes_module() {
+    local mod="$1"
+    local sel="${EASYAIOT_RUNTIME_BUILD_MODULE:-}"
+    [ -z "$sel" ] || [ "$sel" = "$mod" ]
+}
+
+# 解析 build-runtime 模块 CLI/环境变量（install_*.sh 第二参数）
+runtime_apply_build_module_arg() {
+    local arg="${1:-${EASYAIOT_RUNTIME_BUILD_MODULE:-}}"
+    [ -z "$arg" ] && return 0
+    local normalized
+    normalized=$(runtime_normalize_build_module "$arg")
+    if [ "$normalized" = "INVALID" ]; then
+        runtime_img_msg error "无效的运行时模块: ${arg}，可选: all | DEVICE | AI | VIDEO | WEB | APP"
+        return 1
+    fi
+    if [ -n "$normalized" ]; then
+        export EASYAIOT_RUNTIME_BUILD_MODULE="$normalized"
+        runtime_img_msg info "已指定模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}"
+    else
+        unset EASYAIOT_RUNTIME_BUILD_MODULE
+    fi
+    return 0
+}
+
+# 单模块 APP 与部署形态兼容性校验
+runtime_validate_build_module_profile() {
+    [ "${EASYAIOT_RUNTIME_BUILD_MODULE:-}" != "APP" ] && return 0
+    if [ "${EASYAIOT_RUNTIME_BUILD_ALL_PROFILES:-0}" = "1" ]; then
+        return 0
+    fi
+    if [ "${EASYAIOT_DEPLOY_PROFILE:-full}" != "full" ]; then
+        runtime_img_msg error "APP 模块仅 full 形态可用，当前形态: ${EASYAIOT_DEPLOY_PROFILE:-未设置}"
+        return 1
+    fi
+    return 0
+}
+
 # 解析 build-runtime 目标架构列表 → RUNTIME_RESOLVED_BUILD_ARCHS
 runtime_resolve_build_archs() {
     local target normalized current a supported=false
@@ -436,6 +498,63 @@ runtime_interactive_select_build_arch() {
     echo ""
 }
 
+# build-runtime 交互选择目标模块（默认全部）
+runtime_interactive_select_build_module() {
+    local normalized choice idx mod
+    if [ -n "${EASYAIOT_RUNTIME_BUILD_MODULE:-}" ]; then
+        normalized=$(runtime_normalize_build_module "$EASYAIOT_RUNTIME_BUILD_MODULE")
+        if [ "$normalized" = "INVALID" ]; then
+            runtime_img_msg error "无效的运行时模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}，可选: all | DEVICE | AI | VIDEO | WEB | APP"
+            exit 1
+        fi
+        if [ -n "$normalized" ]; then
+            export EASYAIOT_RUNTIME_BUILD_MODULE="$normalized"
+            runtime_img_msg info "已选择模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}"
+        else
+            unset EASYAIOT_RUNTIME_BUILD_MODULE
+        fi
+        return 0
+    fi
+    if [ ! -t 0 ]; then
+        return 0
+    fi
+
+    echo ""
+    echo "请选择要构建/推送的运行时模块："
+    echo "  1) 全部     — DEVICE + AI + VIDEO + WEB + APP（默认）"
+    idx=2
+    declare -A _MODULE_CHOICES=()
+    for mod in "${ALL_RUNTIME_BUILD_MODULES[@]}"; do
+        case "$mod" in
+            DEVICE) echo "  ${idx}) DEVICE  — Device 微服务（11 个镜像）" ;;
+            AI)     echo "  ${idx}) AI      — AI 服务" ;;
+            VIDEO)  echo "  ${idx}) VIDEO   — Video 服务" ;;
+            WEB)    echo "  ${idx}) WEB     — Web 前端（按上方所选部署形态）" ;;
+            APP)    echo "  ${idx}) APP     — App 移动端 H5（仅 full 形态）" ;;
+        esac
+        _MODULE_CHOICES[$idx]="$mod"
+        idx=$((idx + 1))
+    done
+    echo ""
+    read -r -p "请输入选项 [1-$((idx - 1))，默认 1]: " choice
+    case "${choice:-1}" in
+        1)
+            unset EASYAIOT_RUNTIME_BUILD_MODULE
+            runtime_img_msg info "已选择: 全部模块"
+            ;;
+        *)
+            if [ -n "${_MODULE_CHOICES[$choice]:-}" ]; then
+                export EASYAIOT_RUNTIME_BUILD_MODULE="${_MODULE_CHOICES[$choice]}"
+                runtime_img_msg info "已选择模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}"
+            else
+                runtime_img_msg warning "无效选项，使用默认: 全部模块"
+                unset EASYAIOT_RUNTIME_BUILD_MODULE
+            fi
+            ;;
+    esac
+    echo ""
+}
+
 runtime_interactive_select_tag() {
     if [ -n "${EASYAIOT_RUNTIME_TAG:-}" ]; then
         return 0
@@ -508,6 +627,8 @@ runtime_images_prepare_build_interactive() {
     export REGISTRY="$RUNTIME_IMAGE_REGISTRY"
     runtime_verify_registry_push_access "$RUNTIME_IMAGE_REGISTRY" || exit 1
     runtime_interactive_select_profile build
+    runtime_interactive_select_build_module
+    runtime_validate_build_module_profile || exit 1
     runtime_interactive_select_build_arch
     runtime_interactive_select_tag
     runtime_interactive_confirm_push
@@ -552,6 +673,18 @@ runtime_images_export_for_invoke() {
             export EASYAIOT_RUNTIME_BUILD_ARCH="$_ba"
         else
             unset EASYAIOT_RUNTIME_BUILD_ARCH
+        fi
+    fi
+    if [ -n "${EASYAIOT_RUNTIME_BUILD_MODULE:-}" ]; then
+        local _bm; _bm=$(runtime_normalize_build_module "$EASYAIOT_RUNTIME_BUILD_MODULE")
+        if [ "$_bm" = "INVALID" ]; then
+            runtime_img_msg error "无效的运行时模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}"
+            exit 1
+        fi
+        if [ -n "$_bm" ]; then
+            export EASYAIOT_RUNTIME_BUILD_MODULE="$_bm"
+        else
+            unset EASYAIOT_RUNTIME_BUILD_MODULE
         fi
     fi
 }
@@ -1142,7 +1275,8 @@ pull 按部署形态过滤 DEVICE 镜像（与 compose 启停一致）：
   mini     — 仅拉 aiot-system（1/11）
   standard — 跳过 aiot-device、aiot-tdengine（9/11）
   full     — 拉全部 DEVICE（11/11）
-  build-runtime 仍构建/推送全量 DEVICE，供各形态共用远程仓库
+  build-runtime 默认构建/推送全部模块；可指定单模块 DEVICE|AI|VIDEO|WEB|APP
+  全量 build-runtime 仍构建/推送全量 DEVICE，供各形态共用远程仓库
 
 本地安装（含本地构建）:
   bash .scripts/docker/install_linux.sh install       # 交互可选拉取或本地构建
@@ -1153,6 +1287,7 @@ pull 按部署形态过滤 DEVICE 镜像（与 compose 启停一致）：
 远程镜像拉取/推送（交互式，默认部署形态 full）:
   bash .scripts/docker/install_linux.sh pull
   bash .scripts/docker/install_linux.sh build-runtime
+  bash .scripts/docker/install_linux.sh build-runtime AI    # 仅构建/推送 AI 模块
   bash .scripts/docker/install_business_linux.sh pull
   bash .scripts/docker/install_business_linux.sh build-runtime
 
@@ -1167,6 +1302,7 @@ pull 按部署形态过滤 DEVICE 镜像（与 compose 启停一致）：
   EASYAIOT_RUNTIME_PUSH=1      构建后推送（仅 build-runtime）
   EASYAIOT_RUNTIME_BUILD_ALL_PROFILES=1  构建全部形态（仅 build-runtime）
   EASYAIOT_RUNTIME_BUILD_ARCH=all|amd64|arm64  目标架构（默认 all=全部；单架构时跳过 manifest）
+  EASYAIOT_RUNTIME_BUILD_MODULE=all|DEVICE|AI|VIDEO|WEB|APP  目标模块（默认 all=全部）
   EASYAIOT_RUNTIME_FORCE_REBUILD=1       强制重建全部镜像（忽略本地缓存）
   EASYAIOT_RUNTIME_FORCE_REBUILD=0       复用本地镜像（已存在则跳过构建，直接推送）
   EASYAIOT_SKIP_REGISTRY_AUTH_CHECK=1     跳过 build-runtime 前的远程仓库登录/推送权限检查
@@ -1178,6 +1314,7 @@ build-runtime 会在构建开始前校验远程仓库登录与推送权限；未
 也可直接调用 runtime_image.sh（支持命令行参数，适合 CI）:
   bash .scripts/docker/runtime_image.sh pull
   bash .scripts/docker/runtime_image.sh build --push
+  bash .scripts/docker/runtime_image.sh build --push --module VIDEO
 EOF
 }
 

@@ -18,7 +18,7 @@
 # 远程仓库配置见 runtime_registry.conf（或 EASYAIOT_RUNTIME_REGISTRY 环境变量）
 #
 # 直接调用本脚本（支持命令行参数，适合 CI）:
-#   bash .scripts/docker/runtime_image.sh build [--push] [--tag <tag>] [--profile <profile>] [--registry <url>] [--arch <arch>] [--native-source] [--force-rebuild]
+#   bash .scripts/docker/runtime_image.sh build [--push] [--tag <tag>] [--profile <profile>] [--registry <url>] [--arch <arch>] [--module <module>] [--native-source] [--force-rebuild]
 #   bash .scripts/docker/runtime_image.sh pull [--tag <tag>] [--profile <profile>] [--registry <url>]
 #
 # 选项:
@@ -31,6 +31,8 @@
 #                    - pull:  不指定则交互选择（默认 full）；指定则直接拉取该形态
 #   --arch <arch>    指定构建架构：all | amd64 | arm64（默认 all=全部架构）
 #                    单架构模式仅构建/推送该架构镜像，跳过多架构 manifest 更新
+#   --module <mod>   指定构建模块：all | DEVICE | AI | VIDEO | WEB | APP（默认 all=全部）
+#                    单模块模式仅构建/推送该模块镜像，跳过全量 install_linux.sh build
 #   --native-source  使用原始源（非国内镜像源），默认使用腾讯云镜像源加速
 #
 # 架构自动检测（uname -m）:
@@ -68,6 +70,7 @@
 #   bash .scripts/docker/runtime_image.sh build --profile standard
 #   bash .scripts/docker/runtime_image.sh build --push --profile mini --registry my-registry.com/easyaiot/
 #   bash .scripts/docker/runtime_image.sh build --push --arch arm64
+#   bash .scripts/docker/runtime_image.sh build --push --module AI
 #   bash .scripts/docker/runtime_image.sh pull
 #   bash .scripts/docker/runtime_image.sh pull --profile mini --registry my-registry.com/easyaiot/
 #   bash .scripts/docker/runtime_image.sh pull --tag v1.2.0 --profile full
@@ -126,6 +129,7 @@ COMMAND=""
 NATIVE_SOURCE="${NATIVE_SOURCE:-false}"
 FORCE_REBUILD=false
 _BUILD_ARCH=""
+_BUILD_MODULE=""
 
 # 内部布尔开关；子进程通过 subshell 导出数值型 FORCE_REBUILD=0|1，避免污染本变量
 is_force_rebuild() { [ "$FORCE_REBUILD" = true ]; }
@@ -140,6 +144,8 @@ while [[ $# -gt 0 ]]; do
             TAG="$2"; shift 2 ;;
         --arch)
             _BUILD_ARCH="$2"; shift 2 ;;
+        --module)
+            _BUILD_MODULE="$2"; shift 2 ;;
         --native-source)
             NATIVE_SOURCE=true; shift ;;
         --force-rebuild)
@@ -199,6 +205,21 @@ if [ "${EASYAIOT_RUNTIME_BUILD_ALL_PROFILES:-0}" = "1" ]; then
 fi
 if [ -n "$_BUILD_ARCH" ]; then
     export EASYAIOT_RUNTIME_BUILD_ARCH="$_BUILD_ARCH"
+fi
+if [ -n "$_BUILD_MODULE" ]; then
+    export EASYAIOT_RUNTIME_BUILD_MODULE="$_BUILD_MODULE"
+fi
+if [ -n "${EASYAIOT_RUNTIME_BUILD_MODULE:-}" ]; then
+    _bm_norm=$(runtime_normalize_build_module "$EASYAIOT_RUNTIME_BUILD_MODULE")
+    if [ "$_bm_norm" = "INVALID" ]; then
+        print_error "无效的目标模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}，可选: all | DEVICE | AI | VIDEO | WEB | APP"
+        exit 1
+    fi
+    if [ -n "$_bm_norm" ]; then
+        export EASYAIOT_RUNTIME_BUILD_MODULE="$_bm_norm"
+    else
+        unset EASYAIOT_RUNTIME_BUILD_MODULE
+    fi
 fi
 if [ -n "${EASYAIOT_RUNTIME_BUILD_ARCH:-}" ]; then
     _ba_norm=$(runtime_normalize_build_arch "$EASYAIOT_RUNTIME_BUILD_ARCH")
@@ -697,32 +718,45 @@ local_image_ready() {
     [ "$actual" = "$target_arch" ]
 }
 
-# 检查构建计划中指定架构的本地镜像是否已全部就绪（依赖外层 build_profiles）
+# 检查构建计划中指定架构的本地镜像是否已全部就绪（依赖外层 build_profiles；单模块时仅检查该模块）
 all_build_plan_images_ready_for_arch() {
     local target_arch="$1" profile mapping tmp rname lname
 
-    for mapping in "${INDEPENDENT_MODULES[@]}"; do
-        rname="${mapping%%|*}"; tmp="${mapping#*|}"; lname="${tmp%%|*}"
-        is_profile_dependent "$rname" && continue
-        local_image_ready "$lname" "" "$target_arch" || return 1
-    done
+    if runtime_build_includes_module AI || runtime_build_includes_module VIDEO; then
+        for mapping in "${INDEPENDENT_MODULES[@]}"; do
+            rname="${mapping%%|*}"; tmp="${mapping#*|}"; lname="${tmp%%|*}"
+            is_profile_dependent "$rname" && continue
+            case "$rname" in
+                aiot-ai)    runtime_build_includes_module AI || continue ;;
+                aiot-video) runtime_build_includes_module VIDEO || continue ;;
+            esac
+            local_image_ready "$lname" "" "$target_arch" || return 1
+        done
+    fi
 
-    for profile in "${build_profiles[@]}"; do
-        if [ "$profile" = "full" ]; then
-            for mapping in "${FULL_ONLY_MODULES[@]}"; do
-                tmp="${mapping#*|}"; lname="${tmp%%|*}"
-                local_image_ready "$lname" "" "$target_arch" || return 1
-            done
-        fi
-    done
+    if runtime_build_includes_module APP; then
+        for profile in "${build_profiles[@]}"; do
+            if [ "$profile" = "full" ]; then
+                for mapping in "${FULL_ONLY_MODULES[@]}"; do
+                    tmp="${mapping#*|}"; lname="${tmp%%|*}"
+                    local_image_ready "$lname" "" "$target_arch" || return 1
+                done
+                break
+            fi
+        done
+    fi
 
-    for lname in "${DEVICE_LOCAL_NAMES[@]}"; do
-        local_image_ready "$lname" "" "$target_arch" || return 1
-    done
+    if runtime_build_includes_module DEVICE; then
+        for lname in "${DEVICE_LOCAL_NAMES[@]}"; do
+            local_image_ready "$lname" "" "$target_arch" || return 1
+        done
+    fi
 
-    for profile in "${build_profiles[@]}"; do
-        local_image_ready "web-service" "$profile" "$target_arch" || return 1
-    done
+    if runtime_build_includes_module WEB; then
+        for profile in "${build_profiles[@]}"; do
+            local_image_ready "web-service" "$profile" "$target_arch" || return 1
+        done
+    fi
     return 0
 }
 
@@ -895,22 +929,39 @@ _build_push_track() {
     return 1
 }
 
-# 统计当前构建计划下单架构应构建的镜像数量（用于跨架构前置失败时汇总）
+# 统计当前构建计划下单架构应构建的镜像数量（用于跨架构前置失败时汇总；单模块时仅计该模块）
 count_planned_images_for_arch() {
     local -a profiles=("$@")
-    local count=0 mapping rname
-    for mapping in "${INDEPENDENT_MODULES[@]}"; do
-        rname="${mapping%%|*}"
-        is_profile_dependent "$rname" || count=$((count + 1))
-    done
-    local _bp
-    for _bp in "${profiles[@]}"; do
-        if [ "$_bp" = "full" ]; then
+    local count=0 mapping rname _bp
+
+    if runtime_build_includes_module AI || runtime_build_includes_module VIDEO; then
+        for mapping in "${INDEPENDENT_MODULES[@]}"; do
+            rname="${mapping%%|*}"
+            is_profile_dependent "$rname" && continue
+            case "$rname" in
+                aiot-ai)    runtime_build_includes_module AI || continue ;;
+                aiot-video) runtime_build_includes_module VIDEO || continue ;;
+            esac
             count=$((count + 1))
-            break
-        fi
-    done
-    count=$((count + ${#DEVICE_REMOTE_NAMES[@]} + ${#profiles[@]}))
+        done
+    fi
+
+    if runtime_build_includes_module APP; then
+        for _bp in "${profiles[@]}"; do
+            if [ "$_bp" = "full" ]; then
+                count=$((count + 1))
+                break
+            fi
+        done
+    fi
+
+    if runtime_build_includes_module DEVICE; then
+        count=$((count + ${#DEVICE_REMOTE_NAMES[@]}))
+    fi
+
+    if runtime_build_includes_module WEB; then
+        count=$((count + ${#profiles[@]}))
+    fi
     echo "$count"
 }
 
@@ -966,6 +1017,10 @@ build_all_modules() {
         build_profiles=("${ALL_DEPLOY_PROFILES[@]}")
     fi
 
+    if ! runtime_validate_build_module_profile; then
+        exit 1
+    fi
+
     local -a build_archs=()
     if ! runtime_resolve_build_archs; then
         exit 1
@@ -978,6 +1033,11 @@ build_all_modules() {
     print_header "运行时镜像构建与推送"
     runtime_log_registry_info
     echo "  当前架构: ${CURRENT_ARCH}"; printf '  构建架构: %s\n' "${build_archs[*]}"
+    if runtime_is_single_module_build; then
+        echo "  构建模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}（单模块）"
+    else
+        echo "  构建模块: 全部 (DEVICE + AI + VIDEO + WEB + APP)"
+    fi
     if runtime_is_single_arch_build; then
         echo "  架构模式: 单架构（跳过多架构 manifest 更新）"
     else
@@ -1005,7 +1065,10 @@ build_all_modules() {
     print_build_plan_summary
     echo ""
 
-    if ! is_force_rebuild && all_build_plan_images_ready; then
+    if runtime_is_single_module_build; then
+        print_info "单模块构建 (${EASYAIOT_RUNTIME_BUILD_MODULE})：跳过全量本机编译，由模块 install 脚本按需构建"
+        _NATIVE_BUILT=1
+    elif ! is_force_rebuild && all_build_plan_images_ready; then
         print_info "所有架构的运行时镜像均已就绪，跳过本机编译"
         _NATIVE_BUILT=1
     elif ! is_force_rebuild && all_build_plan_images_ready_for_arch "$CURRENT_ARCH"; then
@@ -1017,7 +1080,9 @@ build_all_modules() {
     fi
     echo ""
 
-    ensure_web_dist_for_cross_arch_build build_archs build_profiles
+    if runtime_build_includes_module WEB; then
+        ensure_web_dist_for_cross_arch_build build_archs build_profiles
+    fi
 
     local success_all=0 failed_all=0
     declare -A _MANIFEST_ARCH_REFS
@@ -1083,75 +1148,87 @@ build_all_modules() {
         esac
 
         # ── 共享模块（AI + VIDEO）──
-        for mapping in "${INDEPENDENT_MODULES[@]}"; do
-            local rname="${mapping%%|*}"; local tmp="${mapping#*|}"; local lname="${tmp%%|*}"
-            is_profile_dependent "$rname" && continue
-            _build_push_track "$rname" "$lname" "" "$target_arch"
-        done
+        if runtime_build_includes_module AI || runtime_build_includes_module VIDEO; then
+            for mapping in "${INDEPENDENT_MODULES[@]}"; do
+                local rname="${mapping%%|*}"; local tmp="${mapping#*|}"; local lname="${tmp%%|*}"
+                is_profile_dependent "$rname" && continue
+                case "$rname" in
+                    aiot-ai)    runtime_build_includes_module AI || continue ;;
+                    aiot-video) runtime_build_includes_module VIDEO || continue ;;
+                esac
+                _build_push_track "$rname" "$lname" "" "$target_arch"
+            done
+        fi
 
         # ── APP（仅 full 形态）──
-        local _bp
-        for _bp in "${build_profiles[@]}"; do
-            if [ "$_bp" = "full" ]; then
-                _build_push_track "aiot-app" "app-service" "" "$target_arch"
-                break
-            fi
-        done
+        if runtime_build_includes_module APP; then
+            local _bp
+            for _bp in "${build_profiles[@]}"; do
+                if [ "$_bp" = "full" ]; then
+                    _build_push_track "aiot-app" "app-service" "" "$target_arch"
+                    break
+                fi
+            done
+        fi
 
         # ── DEVICE ──
-        build_device_all "$target_arch"
-        for i in "${!DEVICE_REMOTE_NAMES[@]}"; do
-            local drname="${DEVICE_REMOTE_NAMES[$i]}"; local dlname="${DEVICE_LOCAL_NAMES[$i]}"
-            local dlref; dlref=$(local_ref "$dlname" "" "$target_arch")
-            local drref; drref=$(remote_ref "$drname" "" "$target_arch")
-            local dmref; dmref=$(manifest_ref "$drname" "")
-            if docker image inspect "$dlref" >/dev/null 2>&1; then
-                print_step "推送: ${drname} [${target_arch}]"
-                if tag_and_push "$dlref" "$drref"; then
-                    _MANIFEST_ARCH_REFS["$dmref"]="${_MANIFEST_ARCH_REFS["$dmref"]:+${_MANIFEST_ARCH_REFS["$dmref"]} }${drref}"
-                    success_all=$((success_all + 1))
+        if runtime_build_includes_module DEVICE; then
+            build_device_all "$target_arch"
+            for i in "${!DEVICE_REMOTE_NAMES[@]}"; do
+                local drname="${DEVICE_REMOTE_NAMES[$i]}"; local dlname="${DEVICE_LOCAL_NAMES[$i]}"
+                local dlref; dlref=$(local_ref "$dlname" "" "$target_arch")
+                local drref; drref=$(remote_ref "$drname" "" "$target_arch")
+                local dmref; dmref=$(manifest_ref "$drname" "")
+                if docker image inspect "$dlref" >/dev/null 2>&1; then
+                    print_step "推送: ${drname} [${target_arch}]"
+                    if tag_and_push "$dlref" "$drref"; then
+                        _MANIFEST_ARCH_REFS["$dmref"]="${_MANIFEST_ARCH_REFS["$dmref"]:+${_MANIFEST_ARCH_REFS["$dmref"]} }${drref}"
+                        success_all=$((success_all + 1))
+                    else
+                        failed_all=$((failed_all + 1))
+                    fi
                 else
+                    print_warning "DEVICE 镜像未找到: ${dlref}"
                     failed_all=$((failed_all + 1))
                 fi
-            else
-                print_warning "DEVICE 镜像未找到: ${dlref}"
-                failed_all=$((failed_all + 1))
-            fi
-        done
+            done
+        fi
 
         # ── WEB 各形态 ──
-        for profile in "${build_profiles[@]}"; do
-            export EASYAIOT_DEPLOY_PROFILE="$profile"
-            apply_deploy_profile
-            save_deploy_profile
-            sync_deploy_profile_to_modules
+        if runtime_build_includes_module WEB; then
+            for profile in "${build_profiles[@]}"; do
+                export EASYAIOT_DEPLOY_PROFILE="$profile"
+                apply_deploy_profile
+                save_deploy_profile
+                sync_deploy_profile_to_modules
 
-            # 跨架构 WEB：复用本机构建的 dist
-            if ! is_native_arch "$target_arch"; then
-                local prebuilt_src="${PROJECT_ROOT}/WEB/dist-prebuilt-${profile}"
-                if [ -d "$prebuilt_src" ]; then
-                    print_info "跨架构 WEB: 复用本机预构建 dist/ → ${prebuilt_src}"
+                # 跨架构 WEB：复用本机构建的 dist
+                if ! is_native_arch "$target_arch"; then
+                    local prebuilt_src="${PROJECT_ROOT}/WEB/dist-prebuilt-${profile}"
+                    if [ -d "$prebuilt_src" ]; then
+                        print_info "跨架构 WEB: 复用本机预构建 dist/ → ${prebuilt_src}"
+                        rm -rf "${PROJECT_ROOT}/WEB/dist-prebuilt" 2>/dev/null || true
+                        mkdir -p "${PROJECT_ROOT}/WEB/dist-prebuilt"
+                        cp -a "${prebuilt_src}/." "${PROJECT_ROOT}/WEB/dist-prebuilt/"
+                        export SKIP_VITE_BUILD=1
+                    else
+                        print_warning "跨架构 WEB: 预构建 dist 不存在 ${prebuilt_src}，将回退到容器内 vite build"
+                        unset SKIP_VITE_BUILD
+                    fi
+                fi
+
+                _build_push_track "aiot-web" "web-service" "$profile" "$target_arch"
+
+                # 清理跨架构 WEB 临时 dist
+                if ! is_native_arch "$target_arch"; then
                     rm -rf "${PROJECT_ROOT}/WEB/dist-prebuilt" 2>/dev/null || true
-                    mkdir -p "${PROJECT_ROOT}/WEB/dist-prebuilt"
-                    cp -a "${prebuilt_src}/." "${PROJECT_ROOT}/WEB/dist-prebuilt/"
-                    export SKIP_VITE_BUILD=1
-                else
-                    print_warning "跨架构 WEB: 预构建 dist 不存在 ${prebuilt_src}，将回退到容器内 vite build"
                     unset SKIP_VITE_BUILD
                 fi
-            fi
-
-            _build_push_track "aiot-web" "web-service" "$profile" "$target_arch"
-
-            # 清理跨架构 WEB 临时 dist
-            if ! is_native_arch "$target_arch"; then
-                rm -rf "${PROJECT_ROOT}/WEB/dist-prebuilt" 2>/dev/null || true
-                unset SKIP_VITE_BUILD
-            fi
-        done
+            done
+        fi
 
         # 提取 WEB dist 供后续跨架构复用
-        if is_native_arch "$target_arch" && [ ${#cross_archs[@]} -gt 0 ]; then
+        if runtime_build_includes_module WEB && is_native_arch "$target_arch" && [ ${#cross_archs[@]} -gt 0 ]; then
             echo ""
             print_info "提取 ${target_arch} WEB dist 供跨架构复用 ..."
             for profile in "${build_profiles[@]}"; do
