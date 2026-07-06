@@ -5451,6 +5451,7 @@ start_middleware() {
     
     check_docker "$@"
     check_docker_compose
+    configure_docker_mirror
     check_compose_file
     create_network
     
@@ -5564,6 +5565,7 @@ restart_middleware() {
     
     check_docker "$@"
     check_docker_compose
+    configure_docker_mirror
     check_compose_file
     create_network
     
@@ -5910,6 +5912,7 @@ update_middleware() {
     
     check_docker "$@"
     check_docker_compose
+    configure_docker_mirror
     check_compose_file
     create_network
     

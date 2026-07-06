@@ -742,8 +742,8 @@ install_linux() {
     detect_architecture
     check_docker "$@"
     check_docker_compose
-    prepare_runtime_environment
     configure_docker_mirror
+    prepare_runtime_environment
     create_network
     
     local _skip_build=0
@@ -930,6 +930,7 @@ start_all() {
     detect_architecture
     check_docker "$@"
     check_docker_compose
+    configure_docker_mirror
     prepare_runtime_environment
     create_network
     
@@ -987,6 +988,7 @@ restart_all() {
     detect_architecture
     check_docker "$@"
     check_docker_compose
+    configure_docker_mirror
     prepare_runtime_environment
     create_network
     
@@ -1137,6 +1139,7 @@ update_all() {
     detect_architecture
     check_docker "$@"
     check_docker_compose
+    configure_docker_mirror
     prepare_runtime_environment
     create_network
     

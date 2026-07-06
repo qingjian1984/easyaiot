@@ -41,6 +41,9 @@ source "${SCRIPT_DIR}/deploy_profile.sh"
 # shellcheck source=runtime_image_common.sh
 source "${SCRIPT_DIR}/runtime_image_common.sh"
 
+# shellcheck source=docker_mirror_common.sh
+source "${SCRIPT_DIR}/docker_mirror_common.sh"
+
 # shellcheck source=node/ensure_platform_agent_invoke.sh
 source "${PROJECT_ROOT}/.scripts/node/ensure_platform_agent_invoke.sh"
 
@@ -440,6 +443,7 @@ run_on_modules() {
 
     check_docker
     check_docker_compose
+    configure_docker_mirror
 
     if $need_network; then
         create_network
@@ -502,6 +506,8 @@ init_deploy_profile_for_command() {
     case "$cmd" in
         install)
             select_deploy_profile_for_install
+            check_docker
+            configure_docker_mirror
             init_runtime_images_for_install
             print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"
             ;;
@@ -687,6 +693,7 @@ main() {
         pull|images-pull)
             init_deploy_profile_for_command pull
             check_docker
+            configure_docker_mirror
             runtime_images_prepare_pull_interactive
             runtime_images_export_for_invoke
             runtime_images_invoke pull || exit 1
