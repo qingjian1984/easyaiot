@@ -1,511 +1,577 @@
-# EasyAIoT 배포 가이드
+# EasyAIoT 배포 모범 사례
 
-> 본 문서는 프로젝트 소스 코드 분석을 기반으로 생성되었으며, Linux 환경에서 원클릭 배포에 적용됩니다.
-
----
-
-## 1. 환경 요구사항
-
-### 1.1 하드웨어 요구사항
-
-| 리소스 | 최소 구성 | 권장 구성 |
-|------|---------|---------|
-| CPU | 4코어 | 8코어+ |
-| 메모리 | 8 GB | 16 GB+ |
-| 디스크 | 100 GB | 500 GB+ SSD |
-| GPU | 없음 (CPU로 실행 가능) | NVIDIA GPU (CUDA 12.8) |
-
-### 1.2 소프트웨어 요구사항
-
-| 소프트웨어 | 최소 버전 | 설명 |
-|------|---------|------|
-| 운영체제 | Ubuntu 20.04 / CentOS 7 | Ubuntu 22.04 LTS 권장 |
-| Docker | 20.10+ | `docker compose` v2 지원 필요 |
-| Docker Compose | v2 | Docker Desktop과 함께 자동 설치 또는 별도 설치 |
-| NVIDIA Driver | 525+ | GPU 환경에서만 필요 |
-| NVIDIA Container Toolkit | 최신 버전 | GPU 환경에서만 필요 |
-
-### 1.3 포트 요구사항
-
-배포 전 다음 포트가 사용 중이 아닌지 확인하세요:
-
-| 포트 | 서비스 | 설명 |
-|------|------|------|
-| 1880 | Node-RED | 규칙 엔진 |
-| 1883 | EMQX | MQTT Broker |
-| 1935 | SRS | 스트리밍 RTMP |
-| 5432 | PostgreSQL | 주 데이터베이스 |
-| 6000 | VIDEO 서비스 | 비디오 처리 |
-| 6030 | TDengine | 시계열 데이터베이스 |
-| 6080 | ZLMediaKit | 미디어 서버 |
-| 6379 | Redis | 캐시 |
-| 8848 | Nacos | 등록/설정 센터 |
-| 8888 | WEB 프론트엔드 | 관리 인터페이스 |
-| 9000 | MinIO API | 객체 스토리지 |
-| 9001 | MinIO Console | 객체 스토리지 콘솔 |
-| 9092 | Kafka | 메시지 큐 |
-| 10180 | GPUStack | GPU 관리 |
-| 10190 | Dify | LLM 애플리케이션 플랫폼 |
-| 19530 | Milvus | 벡터 데이터베이스 |
-| 48080 | API Gateway | 백엔드 게이트웨이 |
-| 5000 | AI 서비스 | AI 추론 |
+> 본 문서는 **프로젝트 스크립트와 실시간 동기화**되며 Linux 프로덕션/테스트 환경에 적용됩니다.  
+> 빠른 시작은 [플랫폼 배포 가이드](./平台部署文档_ko.md)를, Windows는 [Windows 배포 가이드](./平台Windows部署文档_ko.md)를 참조하세요.
 
 ---
 
-## 2. 빠른 배포 (원클릭 설치)
+## 목차
 
-### 2.1 소스 코드 가져오기
+- [5분 빠른 시작](#5분-빠른-시작)
+- [배포 프로필 선택](#배포-프로필-선택)
+- [환경 요구사항](#환경-요구사항)
+- [배포 전 점검 목록](#배포-전-점검-목록)
+- [원클릭 배포](#원클릭-배포)
+- [단계별 배포](#단계별-배포)
+- [일반 운영](#일반-운영)
+- [사전 빌드 이미지(선택)](#사전-빌드-이미지선택)
+- [GPU 구성](#gpu-구성)
+- [특수 환경](#특수-환경)
+- [데이터베이스 참고사항](#데이터베이스-참고사항)
+- [기본 자격 증명](#기본-자격-증명)
+- [문제 해결](#문제-해결)
+- [로그 위치](#로그-위치)
+- [업데이트 및 제거](#업데이트-및-제거)
+- [아키텍처 참고](#아키텍처-참고)
+
+---
+
+## 5분 빠른 시작
 
 ```bash
+# 1. Clone the repository
 git clone https://gitee.com/volara/easyaiot.git
 cd easyaiot
-```
 
-### 2.2 원클릭 설치
+# 2. Verify Docker (see Environment Requirements below)
+docker --version
+docker compose version
 
-```bash
-# root 권한 필요 (Docker 미러 소스 구성, RTP 포트 예약 등)
+# 3. One-click install (interactive profile selection on first run; sudo recommended for mirror & RTP setup)
 sudo .scripts/docker/install_linux.sh install
+
+# 4. Verify
+.scripts/docker/install_linux.sh verify
+
+# 5. Open the management console in a browser
+# http://<server-ip>:8888
 ```
 
-이 명령은 다음 절차를 자동으로 실행합니다:
+**최초 설치 소요 시간**: 사전 빌드 이미지 없이 스크립트가 DEVICE / AI / VIDEO / WEB에 대해 로컬 `docker build`를 실행하며, CPU·디스크·네트워크에 따라 일반적으로 **30분에서 수 시간** 소요됩니다. 설치 시간을 크게 단축하려면 먼저 `pull`을 실행하세요([사전 빌드 이미지](#사전-빌드-이미지선택) 참조).
 
-1. **환경 검사** — Docker / Docker Compose 설치 여부 확인
-2. **IP 감지** — 호스트 IP 자동 감지 (GB28181/ZLMediaKit 미디어 주소 주입용)
-3. **RTP 포트 예약** — Linux 커널 예약 포트 30000-30500 구성 (임시 포트 점유 방지)
-4. **Docker 미러 소스 구성** — `docker.m.daocloud.io` 자동 구성으로 이미지 가속 ([DaoCloud 공개 미러](https://github.com/DaoCloud/public-image-mirror))
-5. **Docker 네트워크 생성** — 통합 네트워크 `easyaiot-network` 생성
-6. **미들웨어 배포** — Nacos, PostgreSQL, Redis, Kafka, MinIO, TDengine, Milvus, SRS, EMQX, ZLMediaKit, GPUStack, Dify, Node-RED 순차 기동
-7. **기본 서비스 준비 대기** — PostgreSQL / Nacos / Redis 헬스 체크 통과 자동 대기
-8. **DEVICE 서비스 배포** — Java 마이크로서비스 클러스터 빌드 및 기동 (게이트웨이 + 8개 비즈니스 서비스)
-9. **AI 서비스 배포** — Python AI 추론 서비스 빌드 및 기동
-10. **VIDEO 서비스 배포** — Python 비디오 처리 서비스 및 6개 하위 서비스 빌드 및 기동
-11. **WEB 프론트엔드 배포** — Vue 3 프론트엔드 빌드 및 기동
+---
 
-### 2.3 배포 검증
+## 배포 프로필 선택
+
+설치 시 스크립트가 **배포 프로필**을 대화형으로 선택합니다(`EASYAIOT_DEPLOY_PROFILE` 설정 가능). 선택 내용은 `.scripts/docker/.deploy_profile`에 저장되며 `start` / `stop` / `update`에서 재사용됩니다.
+
+| 프로필 | 별칭 | 권장 RAM | 사용 사례 |
+|---------|---------|-----------------|----------|
+| **mini** | `1` / `4g` | ≥ 4 GB | 엣지 노드, PoC, 리소스 제한 호스트 |
+| **standard** | `2` / `16g` | ≥ 16 GB | 일부 무거운 구성 요소 없는 일반 프로덕션 |
+| **full** | `3` (기본값) | ≥ 20 GB | APP 모바일 H5 포함 전체 기능 |
+
+현재 프로필 및 서비스 범위 확인:
 
 ```bash
-# 모든 서비스가 성공적으로 시작되었는지 확인
+.scripts/docker/install_linux.sh profile
+```
+
+### 프로필별 서비스
+
+**mini (엣지 최소)**
+
+- 비즈니스: `iot-system`, VIDEO, AI, WEB
+- 미들웨어: PostgreSQL, Redis, SRS
+- 미시작: Nacos, Gateway, Kafka, iot-sink, MinIO, Milvus, ZLMediaKit, Node-RED, TDengine, EMQX 및 대부분의 DEVICE 하위 모듈
+- API 라우팅: nginx가 `/admin-api` 및 `/dev-api`를 `iot-system:48099`로 직접 프록시
+
+**standard**
+
+- 미시작: TDengine, EMQX, Node-RED, `iot-device`, `iot-tdengine`
+- 그 외 모든 비즈니스 모듈 및 미들웨어 시작
+
+**full**
+
+- **APP 모바일 H5** 포함 모든 비즈니스 모듈 및 미들웨어(포트 9010)
+
+컨테이너 메모리가 프로필과 일치하는지 분석:
+
+```bash
+.scripts/docker/analyze_deploy_memory.sh
+.scripts/docker/analyze_deploy_memory.sh --all-profiles   # compare all three
+```
+
+---
+
+## 환경 요구사항
+
+### 하드웨어
+
+| 리소스 | 최소 | 권장 |
+|----------|---------|-------------|
+| CPU | 4코어 | 8코어+ |
+| RAM | [배포 프로필 선택](#배포-프로필-선택) 참조(full 최소 20 GB) | 32 GB+ |
+| 디스크 | **300 GB** 여유 | 500 GB+ SSD |
+| GPU | 없음(CPU 가능) | NVIDIA GPU(AI 추론/학습용 CUDA 12.8) |
+
+> 디스크는 Docker 이미지 레이어, 빌드 캐시(`.build-cache/`), 데이터베이스 및 객체 스토리지 볼륨에 사용됩니다. 최초 로컬 빌드는 상당한 공간을 소비하므로 충분한 여유를 확보하세요.
+
+### 소프트웨어
+
+| 소프트웨어 | 요구사항 | 참고 |
+|----------|-------------|-------|
+| OS | **Ubuntu 24.04 LTS**(최소) | **Ubuntu 26.04 LTS 권장**; Kylin 및 ARM64도 지원([특수 환경](#특수-환경) 참조) |
+| Docker | 설치 및 데몬 접근 가능 | 없을 경우: `curl -fsSL https://get.docker.com \| sudo sh` |
+| Docker Compose | **v2.35.0+**(`docker compose` 플러그인) | 없을 경우: `sudo apt install docker-compose-plugin` |
+| NVIDIA Driver | 525+ | GPU 시나리오만 |
+| NVIDIA Container Toolkit | 최신 | GPU 시나리오만 |
+
+### Docker 권한(Linux)
+
+```bash
+# Add current user to docker group (recommended)
+sudo usermod -aG docker $USER
+newgrp docker   # or log in again
+
+# Verify
+docker ps
+```
+
+> Docker 미러 구성 및 RTP 포트 예약에는 root가 필요합니다 — **최초 설치 시 `sudo` 사용을 권장합니다**.
+
+### 포트 요구사항
+
+배포 전 다음 포트가 비어 있는지 확인하세요(프로필에 따라 일부는 미사용):
+
+| Port | Service | Notes |
+|------|---------|-------|
+| 1880 | Node-RED | 규칙 엔진(full/standard) |
+| 1883 | EMQX | MQTT 브로커(full) |
+| 1935 | SRS | RTMP 스트리밍 |
+| 5432 | PostgreSQL | 주 데이터베이스 |
+| 6000 | VIDEO | 비디오 처리 |
+| 6030 | TDengine | 시계열 DB(full) |
+| 6080 | ZLMediaKit | 미디어 서버 |
+| 6379 | Redis | 캐시 |
+| 8848 | Nacos | 레지스트리/설정 센터 |
+| 8888 | WEB | 관리 UI |
+| 9000/9001 | MinIO | 객체 스토리지 API / 콘솔 |
+| 9010 | APP | 모바일 H5(full만) |
+| 9092 | Kafka | 메시지 큐 |
+| 19530 | Milvus | 벡터 데이터베이스 |
+| 48080 | Gateway | API 게이트웨이 |
+| 5000 | AI | AI 추론 |
+| 30000-30500 | ZLM RTP | 미디어 수집(스크립트가 예약 시도) |
+
+포트 사용 확인:
+
+```bash
+ss -tlnp | grep -E '8848|5432|6379|9092|5000|6000|8888|48080'
+```
+
+---
+
+## 배포 전 점검 목록
+
+```bash
+# System info and resources
+.scripts/docker/detect_system_info.sh
+
+# Docker environment
+.scripts/docker/install_linux.sh check
+
+# Disk space (root partition: ≥ 300 GB free recommended)
+df -h /
+docker system df
+```
+
+---
+
+## 원클릭 배포
+
+### 진입 스크립트
+
+통합 오케스트레이터: `.scripts/docker/install_linux.sh`
+
+```bash
+# From project root (recommended)
+sudo .scripts/docker/install_linux.sh install
+
+# Or from script directory
+cd .scripts/docker
+sudo ./install_linux.sh install
+```
+
+### `install`이 자동으로 수행하는 작업
+
+1. **배포 프로필 선택** — mini / standard / full, `.deploy_profile`에 저장
+2. **사전 빌드 이미지** — 원격 레지스트리가 구성되고 pull이 선택된 경우 로컬 빌드 건너뜀
+3. **환경 점검** — Docker, Compose, 컨테이너 생성(`/dev/null` 포함)
+4. **호스트 IP 감지** — GB28181 / ZLMediaKit 미디어 URL용(`HOST_IP=<ip>` 설정 시 건너뜀)
+5. **RTP 포트 예약** — 커널이 30000-30500 예약(root 필요)
+6. **Docker 미러** — `docker.m.daocloud.io` 가속 구성(root 필요)
+7. **Docker 네트워크 생성** — `easyaiot-network`
+8. **순서대로 모듈 배포**:
+   - 미들웨어(`.scripts/docker/install_middleware_linux.sh`)
+   - DEVICE → AI → VIDEO → WEB → APP(full)
+9. **기본 서비스 대기** — PostgreSQL / Nacos / Redis 상태 점검
+10. **Platform Agent** — 필요 시 엣지 에이전트 확보
+
+### 배포 확인
+
+```bash
 .scripts/docker/install_linux.sh verify
 ```
 
-성공 시 모든 서비스의 접속 주소가 표시됩니다:
+성공 출력 예시:
 
 ```
-서비스 접속 주소:
-  기본 서비스 (Nacos):     http://localhost:8848/nacos
-  기본 서비스 (MinIO):     http://localhost:9000 (API), http://localhost:9001 (Console)
-  기본 서비스 (Milvus):    http://localhost:9091 (Health), localhost:19530 (gRPC)
-  기본 서비스 (GPUStack):  http://localhost:10180  (사용자 admin)
-  Device 서비스 (Gateway): http://localhost:48080
-  AI 서비스:               http://localhost:5000
-  Video 서비스:            http://localhost:6000
-  Web 프론트엔드:          http://localhost:8888
+Service URLs:
+  Middleware (Nacos):     http://localhost:8848/nacos
+  Middleware (MinIO):     http://localhost:9000 (API), http://localhost:9001 (Console)
+  Middleware (Milvus):    http://localhost:9091 (Health), localhost:19530 (gRPC)
+  DEVICE (Gateway):       http://localhost:48080
+  AI:                     http://localhost:5000
+  VIDEO:                  http://localhost:6000
+  WEB:                    http://localhost:8888
+  APP H5:                 http://localhost:9010    # full only
 ```
 
-### 2.4 시스템 접속
-
-브라우저에서 `http://<服务器IP>:8888`을 열면 EasyAIoT 관리 플랫폼에 접속할 수 있습니다.
+브라우저에서 `http://<server-ip>:8888`을 엽니다.
 
 ---
 
-## 3. 단계별 배포 (수동 작업)
+## 단계별 배포
 
-더 세밀한 제어가 필요한 경우 모듈별로 단계적으로 배포할 수 있습니다.
+세밀한 제어를 위해 모듈별로 배포합니다. **먼저 배포 프로필을 설정**하여 모든 모듈이 일관되게 유지되도록 합니다:
 
-### 3.1 1단계: 미들웨어 배포
+```bash
+export EASYAIOT_DEPLOY_PROFILE=full   # or mini / standard
+```
+
+### 1단계: 미들웨어
 
 ```bash
 cd .scripts/docker
 ./install_middleware_linux.sh install
 ```
 
-**미들웨어 목록:**
+| 미들웨어 | Image | Port | 용도 |
+|------------|-------|------|---------|
+| Nacos | nacos/nacos-server:v2.5.1 | 8848 | 서비스 레지스트리 및 설정 |
+| PostgreSQL | postgres:18 | 5432 | 주 DB(6개 비즈니스 DB) |
+| Redis | redis:7.4.8 | 6379 | Cache |
+| Kafka | apache/kafka:3.8.0 | 9092 | Message queue |
+| MinIO | minio/minio | 9000/9001 | Object storage |
+| Milvus | milvusdb/milvus:v2.6.0 | 19530/9091 | Vector DB(얼굴 인식) |
+| SRS | ossrs/srs:5 | 1935 | Streaming |
+| EMQX | emqx/emqx:5.8.7 | 1883 | MQTT(full 프로필) |
+| ZLMediaKit | zlmediakit/zlmediakit:master | 6080 | Media server |
+| TDengine | tdengine/tsdb:3.3.8.4 | 6030 | Time-series DB(full 프로필) |
+| Node-RED | nodered/node-red:latest | 1880 | Rule engine |
 
-| 미들웨어 | 이미지 | 포트 | 용도 |
-|--------|------|------|------|
-| Nacos | nacos/nacos-server:v2.5.1 | 8848, 9848, 9849 | 서비스 등록 및 설정 센터 |
-| PostgreSQL | postgres:18 | 5432 | 주 데이터베이스 (6개 비즈니스 DB) |
-| TDengine | tdengine/tsdb:3.3.8.4 | 6030, 6041, 6060 | 시계열 데이터베이스 |
-| Redis | redis:7.4.8 | 6379 | 캐시 및 분산 잠금 |
-| Kafka | apache/kafka:3.8.0 | 9092, 9093, 9094 | 메시지 큐 |
-| MinIO | minio/minio | 9000, 9001 | 객체 스토리지 |
-| Milvus | milvusdb/milvus:v2.6.0 | 19530, 9091 | 벡터 데이터베이스 (얼굴 인식) |
-| SRS | ossrs/srs:5 | 1935, 1985 | 스트리밍 서버 |
-| EMQX | emqx/emqx:5.8.7 | 1883, 8083, 18083 | MQTT Broker |
-| ZLMediaKit | zlmediakit/zlmediakit:master | 6080, 5540, 10935 | 미디어 서버 |
-| GPUStack | gpustack/gpustack:v2.1.2 | 10180 | GPU 리소스 관리 |
-| Dify | dify-api / dify-web / ... | 10190 | LLM 애플리케이션 플랫폼 |
-| Node-RED | nodered/node-red:latest | 1880 | 규칙 엔진 |
-
-미들웨어 준비 완료 대기:
+준비 상태 점검:
 
 ```bash
-# PostgreSQL 확인
 docker exec postgres-server pg_isready -U postgres
-
-# Nacos 확인
 curl -s http://localhost:8848/nacos/actuator/health
-
-# Redis 확인
 docker exec redis-server redis-cli -a basiclab@iot975248395 ping
 ```
 
-### 3.2 2단계: DEVICE 서비스 배포
+### 2단계: DEVICE
 
 ```bash
 cd DEVICE
 ./install_linux.sh install
 ```
 
-**DEVICE 서비스 목록:**
-
-| 서비스 | 포트 | 설명 |
-|------|------|------|
-| iot-gateway | 48080 | API 게이트웨이 (Spring Cloud Gateway) |
+| 서비스 | Port | 설명 |
+|---------|------|-------------|
+| iot-gateway | 48080 | API Gateway |
 | iot-system | 48099 | 시스템 관리 |
 | iot-infra | 48066 | 인프라 |
 | iot-device | 48055 | 디바이스 관리 |
-| iot-dataset | 48077 | 데이터셋 관리 |
-| iot-message | 48033 | 메시지 푸시 |
+| iot-dataset | 48077 | 데이터셋 |
+| iot-message | 48033 | 메시징 |
 | iot-file | 48022 | 파일 서비스 |
-| iot-sink | 48011 | 프로토콜 어댑터 (MQTT/TCP/HTTP/EMQX) |
-| iot-gb28181 | 5060 | GB28181 비디오 감시 프로토콜 |
+| iot-sink | 48011 | 프로토콜 어댑터 |
+| iot-gb28181 | 5060 | GB28181 비디오 감시 |
 
-**빌드 방식:**
-- 2단계 빌드: `Dockerfile.base` (Maven 의존성 캐시) → 각 모듈 `Dockerfile`
-- Java 21 + Spring Boot 2.7.18
-- 빌드 캐시 디렉터리: `.build-cache/device/m2/repository`
-
-### 3.3 3단계: AI 서비스 배포
+### 3–5단계: AI / VIDEO / WEB
 
 ```bash
-cd AI
-./install_linux.sh install
+cd AI    && ./install_linux.sh install
+cd VIDEO && ./install_linux.sh install
+cd WEB   && ./install_linux.sh install
+cd APP   && ./install_linux.sh install   # full only
 ```
 
-**AI 서비스 설명:**
-- 포트: 5000
-- 프레임워크: Flask + PyTorch 2.9+ (CUDA 12.8)
-- 기능: 모델 학습, 추론, 배포, OCR, 음성, LLM
-- GPU 지원: GPU 자동 감지 및 NVIDIA Container Runtime 활성화
-- 빌드 캐시: `.build-cache/ai/pip-cache`、`.build-cache/ai/pip-wheels`
-- 기본 이미지: `pytorch/pytorch:2.9.0-cuda12.8-cudnn9-devel`
-
-### 3.4 4단계: VIDEO 서비스 배포
-
-```bash
-cd VIDEO
-./install_linux.sh install
-```
-
-**VIDEO 서비스 설명:**
-- 포트: 6000
-- 프레임워크: Flask + OpenCV + FFmpeg
-- 기능: 비디오 스트림 처리, 실시간/스냅샷 알고리즘 분석, 녹화, 알람, 얼굴 인식
-- 하위 서비스: 6개 독립 마이크로서비스 (실시간 알고리즘, 스냅샷 알고리즘, 프레임 추출, 정렬, 스트림 푸시, 스트림 포워딩)
-- 메시지 큐: Kafka (알람 이벤트)
-- 벡터 데이터베이스: Milvus (얼굴 인식)
-
-### 3.5 5단계: WEB 프론트엔드 배포
-
-```bash
-cd WEB
-./install_linux.sh install
-```
-
-**WEB 프론트엔드 설명:**
-- 포트: 8888
-- 프레임워크: Vue 3.4 + TypeScript + Vite
-- UI 라이브러리: Ant Design Vue 4.0
-- 빌드: Node.js 18+ / 20+，pnpm 11.3+
-
----
-
-## 4. 단일 모듈 관리
-
-각 모듈은 다음 명령을 지원합니다:
-
-```bash
-./install_linux.sh install    # 설치 및 시작 (최초 실행)
-./install_linux.sh start      # 시작
-./install_linux.sh stop       # 중지
-./install_linux.sh restart    # 재시작
-./install_linux.sh status     # 상태 확인
-./install_linux.sh logs       # 로그 확인
-./install_linux.sh build      # 이미지 재빌드
-./install_linux.sh clean      # 컨테이너 및 이미지 정리
-./install_linux.sh update     # 업데이트 및 재시작
-```
-
-**미들웨어 개별 관리:**
+### 비즈니스 모듈만(미들웨어 없음)
 
 ```bash
 cd .scripts/docker
-./install_middleware_linux.sh install    # 모든 미들웨어 설치
-./install_middleware_linux.sh start      # 시작
-./install_middleware_linux.sh stop       # 중지
-./install_middleware_linux.sh status     # 상태
-./install_middleware_linux.sh logs       # 로그
+./install_business_linux.sh install              # all business modules
+./install_business_linux.sh update DEVICE WEB    # update specific modules
+./install_business_linux.sh verify
 ```
 
 ---
 
-## 5. GPU 구성
+## 일반 운영
 
-### 5.1 NVIDIA 드라이버 설치
+### 통합 스크립트
 
 ```bash
-# GPU 사용 가능 여부 확인
-nvidia-smi
+cd .scripts/docker   # or use .scripts/docker/install_linux.sh from project root
 
-# NVIDIA Container Toolkit 설치
-# 참고: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
-
-# Docker GPU 지원 확인
-docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu22.04 nvidia-smi
+./install_linux.sh install    # first install
+./install_linux.sh start      # start
+./install_linux.sh stop       # stop
+./install_linux.sh restart    # restart
+./install_linux.sh status     # status
+./install_linux.sh logs       # all logs (last 100 lines)
+./install_linux.sh logs WEB   # module-specific logs
+./install_linux.sh build      # rebuild images locally
+./install_linux.sh update     # update & restart (optional pull/rebuild)
+./install_linux.sh verify     # health check
+./install_linux.sh check      # check Docker environment
+./install_linux.sh profile    # show deployment profile
+./install_linux.sh clean      # remove containers & images (dangerous)
+./install_linux.sh pull       # pull pre-built runtime images
+./install_linux.sh help       # help
 ```
 
-### 5.2 GPU 자동 감지
+### 모듈별 스크립트
 
-설치 스크립트가 GPU를 자동으로 감지합니다:
-- GPU 감지됨 → `runtime: nvidia` 자동 활성화, `NVIDIA_VISIBLE_DEVICES=all` 설정
-- GPU 미감지 → CPU 모드로 실행
-
-### 5.3 다중 GPU 구성
-
-AI 서비스는 환경 변수로 제어하는 다중 GPU 병렬 추론을 지원합니다:
+각 모듈 디렉터리(`DEVICE` / `AI` / `VIDEO` / `WEB` / `APP`)는 다음을 지원합니다:
 
 ```bash
-# GPU 0과 1 사용 지정
+./install_linux.sh install | start | stop | restart | status | logs | build | clean | update
+```
+
+미들웨어만:
+
+```bash
+cd .scripts/docker
+./install_middleware_linux.sh install | start | stop | restart | status | logs | build | clean | update
+```
+
+### 일반 환경 변수
+
+| 변수 | 설명 |
+|----------|-------------|
+| `EASYAIOT_DEPLOY_PROFILE` | Profile: `mini` / `standard` / `full` |
+| `HOST_IP` | 호스트 IP 강제 지정, 자동 감지 건너뜀 |
+| `PARALLEL_MODULES=true` | 비즈니스 모듈 병렬 시작/업데이트(RAM 허용 시) |
+| `PARALLEL_BUILD=true` | 병렬 빌드(기본값은 OOM 방지를 위해 순차) |
+| `FORCE_NETWORK_RECREATE=true` | 호스트 IP 변경 후 Docker 네트워크 재생성 |
+| `EASYAIOT_RUNTIME_REGISTRY` | 사전 빌드 이미지 레지스트리 URL |
+
+---
+
+## 사전 빌드 이미지(선택)
+
+원격 레지스트리에서 사전 빌드된 비즈니스 이미지를 pull하여 긴 로컬 Maven / pnpm / pip 빌드를 건너뜁니다.
+
+구성 파일: `.scripts/docker/runtime_registry.conf`
+
+```bash
+# Interactive pull (before install or during update)
+.scripts/docker/install_linux.sh pull
+
+# Build and push runtime images (CI/release)
+.scripts/docker/install_linux.sh build-runtime          # all modules
+.scripts/docker/install_linux.sh build-runtime DEVICE   # specific module
+```
+
+pull 성공 후 후속 `install` / `update`는 `.runtime_images_pulled`를 감지하고 컨테이너를 직접 시작합니다.
+
+---
+
+## GPU 구성
+
+### 설치 및 확인
+
+```bash
+nvidia-smi
+
+# Install NVIDIA Container Toolkit
+# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+
+docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu24.04 nvidia-smi
+```
+
+### 자동 감지
+
+설치 스크립트가 GPU를 자동 감지합니다:
+
+- GPU 있음 → `runtime: nvidia`, `NVIDIA_VISIBLE_DEVICES=all` 활성화
+- GPU 없음 → CPU 모드
+
+### 다중 GPU
+
+```bash
 export CUDA_VISIBLE_DEVICES=0,1
 ```
 
 ---
 
-## 6. 국산화 적응
+## 특수 환경
 
-### 6.1 Kylin(은하기린) 운영체제
+### Kylin OS
 
 ```bash
-.scripts/docker/install_linux_kylin.sh install
+sudo .scripts/docker/install_linux_kylin.sh install
 ```
 
-### 6.2 ARM64 아키텍처
+### ARM64
 
 ```bash
-# 미들웨어
-.scripts/docker/install_linux_arm.sh install
-
-# AI 서비스 (ARM 버전 Dockerfile)
-cd AI
-./install_linux.sh install  # 스크립트가 ARM Dockerfile을 자동 선택
+sudo .scripts/docker/install_linux_arm.sh install
+# AI / VIDEO automatically use ARM Dockerfiles
 ```
 
 ---
 
-## 7. 데이터베이스 설명
+## 데이터베이스 참고사항
 
-### 7.1 PostgreSQL 비즈니스 DB
+### PostgreSQL 비즈니스 데이터베이스
 
-PostgreSQL 시작 시 다음 6개 비즈니스 DB가 자동으로 생성됩니다:
+시작 시 6개 데이터베이스가 초기화됩니다(스크립트는 `.scripts/postgresql/`):
 
-| DB명 | SQL 파일 | 용도 |
-|------|---------|------|
-| ruoyi-vue-pro20 | ruoyi-vue-pro10.sql | 시스템 관리 주 DB |
-| iot-ai20 | iot-ai10.sql | AI 서비스 DB |
-| iot-device10 | iot-device10.sql | 디바이스 관리 DB |
-| iot-gb2818110 | iot-gb2818110.sql | 비디오 감시 DB |
-| iot-message10 | iot-message10.sql | 메시지 푸시 DB |
-| iot-video10 | iot-video10.sql | 비디오 처리 DB |
+| Database | SQL File | 용도 |
+|----------|----------|---------|
+| ruoyi-vue-pro20 | ruoyi-vue-pro10.sql | 시스템 관리 |
+| iot-ai20 | iot-ai10.sql | AI 서비스 |
+| iot-device10 | iot-device10.sql | 디바이스 관리 |
+| iot-gb2818110 | iot-gb2818110.sql | 비디오 감시 |
+| iot-message10 | iot-message10.sql | 메시징 |
+| iot-video10 | iot-video10.sql | 비디오 처리 |
 
-초기화 스크립트는 `.scripts/postgresql/` 디렉터리에 있으며, Docker 시작 시 `docker-entrypoint-initdb.d`를 통해 자동 실행됩니다.
+### TDengine
 
-### 7.2 TDengine 시계열 DB
+SQL은 `.scripts/tdengine/tdengine_super_tables.sql`에 있으며 full 프로필에서 자동 초기화됩니다.
 
-TDengine 시작 후 슈퍼 테이블이 자동으로 초기화되며, SQL 파일은 `.scripts/tdengine/tdengine_super_tables.sql`에 있습니다.
-
-### 7.3 데이터베이스 백업
+### 백업
 
 ```bash
-# 모든 데이터베이스 백업
 .scripts/postgresql/backup_databases.sh
 ```
 
 ---
 
-## 8. 미들웨어 기본 계정 및 비밀번호
+## 기본 자격 증명
 
-| 미들웨어 | 사용자명 | 비밀번호 | 콘솔 주소 |
-|--------|--------|------|-----------|
-| Nacos | nacos | nacos | http://<IP>:8848/nacos |
+| 미들웨어 | Username | Password | Console |
+|------------|----------|----------|---------|
+| Nacos | nacos | nacos | http://\<IP\>:8848/nacos |
 | PostgreSQL | postgres | iot45722414822 | — |
 | Redis | — | basiclab@iot975248395 | — |
-| MinIO | minioadmin | basiclab@iot975248395 | http://<IP>:9001 |
-| EMQX | admin | basiclab@iot6874125784 | http://<IP>:18083 |
-| GPUStack | admin | basiclab@iotp4JWmQSvzdh0z4mF | http://<IP>:10180 |
-| Milvus | — | — | http://<IP>:9091 |
+| MinIO | minioadmin | basiclab@iot975248395 | http://\<IP\>:9001 |
+| EMQX | admin | basiclab@iot6874125784 | http://\<IP\>:18083 |
+| Milvus | — | — | http://\<IP\>:9091 |
 
-> ⚠️ **보안 안내**: 운영 환경에서는 반드시 모든 기본 비밀번호를 변경하세요.
+> **프로덕션에서는 모든 기본 비밀번호를 변경하세요.**
 
 ---
 
-## 9. 문제 해결
+## 문제 해결
 
-### 9.1 서비스 시작 실패
+### 서비스 시작 실패
 
 ```bash
-# 특정 서비스 로그 확인
+docker ps -a
 docker logs -f postgres-server
 docker logs -f nacos-server
 docker logs -f ai-service
 docker logs -f video-service
-
-# 모든 서비스 상태 확인
-docker ps -a
+.scripts/docker/install_linux.sh logs
 ```
 
-### 9.2 네트워크 문제
+### 네트워크 문제
 
 ```bash
-# Docker 네트워크 확인
 docker network ls | grep easyaiot
 docker network inspect easyaiot-network
 
-# 네트워크 재생성 (호스트 IP 변경 후)
-docker network rm easyaiot-network
-docker network create easyaiot-network
-docker compose restart
+# After host IP change
+export FORCE_NETWORK_RECREATE=true
+.scripts/docker/install_linux.sh restart
 ```
 
-### 9.3 PostgreSQL 연결 문제
+### PostgreSQL / Redis
 
 ```bash
-# 자동 복구
 .scripts/docker/fix_postgresql.sh
-
-# 수동 확인
-docker exec postgres-server pg_isready -U postgres
-docker exec postgres-server psql -U postgres -c "SELECT 1;"
-```
-
-### 9.4 Redis 연결 문제
-
-```bash
-# 자동 복구
 .scripts/docker/fix_redis.sh
-
-# 수동 확인
-docker exec redis-server redis-cli -a basiclab@iot975248395 ping
 ```
 
-### 9.5 Docker 서비스 문제
+### Docker 시스템 문제
 
 ```bash
-# Docker systemd 문제 진단
 sudo .scripts/docker/diagnose_docker_systemd.sh diagnose
-
-# systemd 타임아웃 복구
 sudo .scripts/docker/diagnose_docker_systemd.sh fix-all
-
-# 디스크 공간 확인
-df -h
-docker system df
-
-# Docker 불필요 파일 정리
 .scripts/docker/cleanup_docker_space.sh
+df -h && docker system df
 ```
 
-### 9.6 Kafka 컨슈머 그룹 문제
+### Kafka Consumer Group
 
 ```bash
-# Kafka 컨슈머 그룹 복구
-cd VIDEO
-python fix_kafka_consumer_group.py
+cd VIDEO && ./fix_kafka_consumer_group.sh
 ```
 
-### 9.7 포트 충돌
+### 포트 충돌
+
+모듈의 `docker-compose.yml`에서 포트 매핑을 수정하거나 충돌하는 프로세스를 중지하세요.
+
+### 프로필 변경 후 WEB 문제
+
+프론트엔드는 빌드 시 배포 프로필을 내장하므로 전환 후 WEB을 재빌드하세요:
 
 ```bash
-# 포트 사용 여부 확인
-ss -tlnp | grep -E "8848|5432|6379|9092|5000|6000|8888"
-
-# 충돌 시 해당 docker-compose.yml의 포트 매핑 수정
+cd WEB && ./install_linux.sh build
 ```
 
 ---
 
-## 10. 로그 파일 위치
+## 로그 위치
 
 | 위치 | 설명 |
-|------|------|
-| `.scripts/docker/logs/` | 설치 스크립트 로그 |
+|----------|-------------|
+| `.scripts/docker/logs/` | 통합 설치 / 미들웨어 스크립트 로그 |
 | `DEVICE/logs/` | DEVICE 서비스 로그 |
 | `AI/data/logs/` | AI 서비스 로그 |
 | `VIDEO/data/logs/` | VIDEO 서비스 로그 |
-| `docker logs <컨테이너명>` | 컨테이너 실시간 로그 |
+| `docker logs <container>` | 컨테이너 실시간 로그 |
 
 ---
 
-## 11. 업데이트 및 업그레이드
+## 업데이트 및 제거
 
-### 11.1 코드 업데이트
+### 코드 및 서비스 업데이트
 
 ```bash
-cd easyaiot
 git pull origin main
-```
-
-### 11.2 모든 서비스 업데이트 및 재시작
-
-```bash
 sudo .scripts/docker/install_linux.sh update
+.scripts/docker/install_linux.sh verify
 ```
 
-### 11.3 단일 모듈 업데이트
+단일 모듈 업데이트:
 
 ```bash
-# 예: AI 서비스만 업데이트
-cd AI
-./install_linux.sh update
+cd AI && ./install_linux.sh update
 ```
 
-### 11.4 이미지 재빌드
+### 제거
 
 ```bash
-# 모든 이미지 재빌드
-sudo .scripts/docker/install_linux.sh build
-
-# 단일 모듈 재빌드
-cd DEVICE
-./install_linux.sh build
-```
-
----
-
-## 12. 제거
-
-```bash
-# 모든 컨테이너, 이미지 및 네트워크 중지 및 삭제
 sudo .scripts/docker/install_linux.sh clean
 
-# 데이터 볼륨 수동 정리 (선택)
-rm -rf .scripts/docker/db_data
-rm -rf .scripts/docker/redis_data
-rm -rf .scripts/docker/minio_data
-rm -rf .scripts/docker/mq_data
-rm -rf .scripts/docker/taos_data
-rm -rf .scripts/docker/milvus_data
-rm -rf .scripts/docker/gpustack_data
+# Optional: remove data volume directories
+rm -rf .scripts/docker/db_data .scripts/docker/redis_data \
+       .scripts/docker/minio_data .scripts/docker/mq_data \
+       .scripts/docker/taos_data .scripts/docker/milvus_data
 ```
 
 ---
 
-## 13. 아키텍처 참고
+## 아키텍처 참고
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    WEB 프론트엔드 (:8888)                        │
+│                    WEB Frontend (:8888)                          │
 │              Vue 3 + Ant Design Vue + Vite                       │
 ├─────────────────────────────────────────────────────────────────┤
 │                 API Gateway (:48080)                              │
@@ -513,19 +579,17 @@ rm -rf .scripts/docker/gpustack_data
 ├───────────┬───────────┬───────────┬───────────┬─────────────────┤
 │ iot-system│ iot-infra │ iot-device│ iot-dataset│  iot-message   │
 │ iot-file  │ iot-sink  │ iot-gb28181                        │
-│           │           │           │           │                  │
-│    Java 21 + Spring Boot 2.7 + MyBatis-Plus                     │
+│           Java 21 + Spring Boot 2.7 + MyBatis-Plus              │
 ├───────────┴───────────┴───────────┴───────────┴─────────────────┤
-│  AI 서비스 (:5000)        │  VIDEO 서비스 (:6000)  │  TASK (C++)  │
-│  Flask + PyTorch + YOLO  │  Flask + OpenCV + FFmpeg│  ONNX Runtime│
-│  학습/추론/배포/OCR/LLM  │  스트림/알람/녹화/얼굴  │  엣지 추론   │
-├──────────────────────────┴───────────────────────┴──────────────┤
-│                     미들웨어 계층                                │
+│  AI (:5000)              │  VIDEO (:6000)    │  APP H5 (:9010) │
+│  Flask + PyTorch         │  Flask + OpenCV   │  Mobile         │
+├──────────────────────────┴───────────────────┴─────────────────┤
+│                     Middleware Layer                             │
 │  Nacos │ PostgreSQL │ Redis │ Kafka │ MinIO │ TDengine          │
-│  Milvus │ SRS │ EMQX │ ZLMediaKit │ GPUStack │ Dify │ Node-RED  │
+│  Milvus │ SRS │ EMQX │ ZLMediaKit │ Node-RED                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-*문서 생성일: 2026-05-31 | 프로젝트: https://gitee.com/volara/easyaiot*
+*문서 버전: 2026-07-07 | 스크립트 진입점: `.scripts/docker/install_linux.sh`*
