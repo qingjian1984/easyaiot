@@ -2526,8 +2526,9 @@ _apply_srs_http_hooks() {
 
     if is_mini_deploy_profile; then
         local video_port="${FLASK_RUN_PORT:-6000}"
-        on_publish_url="http://localhost:${video_port}/video/camera/callback/on_publish"
-        on_dvr_url="http://localhost:${video_port}/video/camera/callback/on_dvr"
+        local host_ip=$(get_host_ip)
+        on_publish_url="http://${host_ip}:${video_port}/video/camera/callback/on_publish"
+        on_dvr_url="http://${host_ip}:${video_port}/video/camera/callback/on_dvr"
         print_info "mini 形态：SRS Hook 直连 VIDEO 服务 ${on_publish_url}（无 Gateway）"
     else
         on_publish_url="http://${gateway_ip}:48080/admin-api/video/camera/callback/on_publish"
@@ -2596,8 +2597,8 @@ prepare_srs_config() {
     local on_publish_url on_dvr_url
     if is_mini_deploy_profile; then
         local video_port="${FLASK_RUN_PORT:-6000}"
-        on_publish_url="http://localhost:${video_port}/video/camera/callback/on_publish"
-        on_dvr_url="http://localhost:${video_port}/video/camera/callback/on_dvr"
+        on_publish_url="http://${host_ip}:${video_port}/video/camera/callback/on_publish"
+        on_dvr_url="http://${host_ip}:${video_port}/video/camera/callback/on_dvr"
     else
         on_publish_url="http://${gateway_ip}:48080/admin-api/video/camera/callback/on_publish"
         on_dvr_url="http://${gateway_ip}:48080/admin-api/video/camera/callback/on_dvr"
