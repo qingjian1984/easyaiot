@@ -70,6 +70,7 @@ import { getPlaybackList, deletePlayback, type PlaybackInfo } from '@/api/device
 import PlaybackCardList from './PlaybackCardList.vue';
 import DialogPlayer from '@/components/VideoPlayer/DialogPlayer.vue';
 import { useModal } from '@/components/Modal';
+import { resolveAlertVideoUrl } from '@/utils/alertRecord';
 import { Button } from '@/components/Button'
 defineOptions({ name: 'PLAYBACK_LIST' });
 
@@ -314,24 +315,15 @@ async function handleFormReset() {
 }
 
 // 获取录像播放地址
-const getPlaybackUrl = (filePath: string): string => {
-  if (!filePath) return '';
-  // 如果是完整URL，直接返回
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-    return filePath;
-  }
-  // 如果是相对路径，拼接API前缀
-  if (filePath.startsWith('/')) {
-    return `${import.meta.env.VITE_GLOB_API_URL || ''}${filePath}`;
-  }
-  // 其他情况直接返回
-  return filePath;
+const getPlaybackUrl = (record: PlaybackInfo): string => {
+  const raw = (record.video_url || record.file_path || '').trim();
+  return raw ? resolveAlertVideoUrl(raw) : '';
 };
 
 // 播放录像
 const handlePlay = (record: PlaybackInfo) => {
   // 获取播放地址
-  const httpStream = getPlaybackUrl(record.file_path);
+  const httpStream = getPlaybackUrl(record);
   
   if (!httpStream) {
     createMessage.warning('录像文件地址无效，无法播放');

@@ -1893,9 +1893,12 @@ class Playback(db.Model):
     
     def to_dict(self):
         """转换为字典"""
+        from app.utils.service_urls import resolve_playback_display_url
+        file_path = self.file_path or ''
         return {
             'id': self.id,
-            'file_path': self.file_path,
+            'file_path': file_path,
+            'video_url': resolve_playback_display_url(file_path),
             'event_time': self.event_time.isoformat() if self.event_time else None,
             'device_id': self.device_id,
             'device_name': self.device_name,

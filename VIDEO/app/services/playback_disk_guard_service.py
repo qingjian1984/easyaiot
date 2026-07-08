@@ -49,6 +49,12 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _normalize_config_path(path: str) -> str:
+    if not path:
+        return path
+    return os.path.normpath(os.path.expanduser(os.path.expandvars(path.strip())))
+
+
 def get_srs_record_dir() -> str:
     try:
         from cluster_storage import get_playbacks_dir, is_cluster_mode
@@ -58,13 +64,13 @@ def get_srs_record_dir() -> str:
         pass
     media_record = (os.getenv('MEDIA_RECORD_DIR') or '').strip()
     if media_record:
-        return media_record.rstrip('/\\')
+        return _normalize_config_path(media_record)
     srs_record = (os.getenv('SRS_RECORD_DIR') or '').strip()
     if srs_record:
-        return srs_record.rstrip('/\\')
+        return _normalize_config_path(srs_record)
     host_root = (os.getenv('MEDIA_HOST_DATA_ROOT') or '').strip()
     if host_root:
-        return os.path.join(host_root.rstrip('/\\'), 'playbacks')
+        return os.path.join(_normalize_config_path(host_root), 'playbacks')
     from app.services.media_dvr_utils import discover_srs_host_data_root
     return os.path.join(discover_srs_host_data_root(), 'playbacks')
 

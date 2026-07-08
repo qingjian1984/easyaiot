@@ -104,6 +104,7 @@ export const getPlaybackStatistics = (params?: {
 export interface PlaybackInfo {
   id: number;
   file_path: string;
+  video_url?: string;
   event_time: string;
   device_id: string;
   device_name: string;

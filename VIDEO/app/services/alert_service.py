@@ -665,7 +665,8 @@ def _record_path_playback_payload(record_path: str, device_id: str) -> dict:
             'source': 'alert_record_path',
         }
     if not minio_storage_enabled() and is_local_filesystem_path(record_path):
-        api_path = f'/video/alert/record?path={quote(record_path, safe="")}'
+        from app.utils.service_urls import build_alert_record_api_url
+        api_path = build_alert_record_api_url(record_path)
         return {
             'video_url': api_path,
             'file_path': record_path,
@@ -707,11 +708,12 @@ def resolve_alert_record_video(
 
     playback = find_playback_for_alert(device_id, alert_time, time_range)
     if playback and (playback.file_path or '').strip():
+        from app.utils.service_urls import resolve_playback_display_url
         file_path = playback.file_path.strip()
         return {
             'playback_id': playback.id,
             'file_path': file_path,
-            'video_url': file_path,
+            'video_url': resolve_playback_display_url(file_path),
             'event_time': playback.event_time.isoformat() if playback.event_time else None,
             'duration': playback.duration,
             'device_id': playback.device_id,

@@ -215,6 +215,21 @@ def build_alert_image_api_url(local_path: str) -> str:
     return f'/video/alert/image?path={quote(local_path, safe="")}'
 
 
+def build_alert_record_api_url(local_path: str) -> str:
+    from urllib.parse import quote
+    return f'/video/alert/record?path={quote(local_path, safe="")}'
+
+
+def resolve_playback_display_url(file_path: str) -> str:
+    """将 DB 中的录像 file_path 转为浏览器可请求的 VIDEO API 相对路径。"""
+    if not file_path:
+        return file_path
+    u = file_path.strip()
+    if is_local_filesystem_path(u):
+        return build_alert_record_api_url(u)
+    return u
+
+
 def build_snap_image_api_url(space_id: int, object_name: str) -> str:
     from urllib.parse import quote
     safe_name = quote(object_name, safe='/')

@@ -226,6 +226,7 @@ import {
   type RecordSessionGroup,
 } from '@/api/device/record';
 import { resolveAlertImageDisplayUrl } from '@/utils/alertMinioImage';
+import { resolveAlertVideoUrl } from '@/utils/alertRecord';
 import {
   buildCameraStorageQuery,
   parseSpaceFolderQuery,
@@ -470,7 +471,7 @@ function handlePlayerMouseMove(e: MouseEvent) {
 }
 
 function getVideoUrl(seg: RecordDaySegment) {
-  return resolveAlertImageDisplayUrl(seg.url);
+  return resolveAlertVideoUrl(seg.url || '');
 }
 
 function playSegment(seg: RecordDaySegment, auto = false) {

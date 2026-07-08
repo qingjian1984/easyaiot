@@ -134,6 +134,7 @@ import { useMessage } from '@/hooks/web/useMessage';
 import { getRecordVideoList, deleteRecordVideos, type RecordVideo } from '@/api/device/record';
 import DialogPlayer from '@/components/VideoPlayer/DialogPlayer.vue';
 import { resolveAlertImageDisplayUrl } from '@/utils/alertMinioImage';
+import { resolveAlertVideoUrl } from '@/utils/alertRecord';
 import { Button } from '@/components/Button'
 defineOptions({ name: 'RecordVideoModal' });
 
@@ -189,7 +190,7 @@ function pageSizeChange(_current: number, size: number) {
 const getVideoUrl = (record: RecordVideo) => {
   // 优先使用后台返回的 url 字段，如果没有则使用 object_name 构建
   if (record.url) {
-    return resolveAlertImageDisplayUrl(record.url);
+    return resolveAlertVideoUrl(record.url);
   }
   if (!modalData.value.space_id) return '';
   return `/video/record/space/${modalData.value.space_id}/video/${record.object_name}`;
