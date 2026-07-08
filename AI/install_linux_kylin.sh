@@ -65,15 +65,15 @@ prepare_cached_resources() {
     wheels="$(arm_pip_wheels_build_context_dir_for "$EASYAIOT_ROOT" ai)"
     local cache_script="${SCRIPT_DIR}/cache_resources_arm.sh"
 
-    if find "$wheels" -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" -o -name "*.zip" \) 2>/dev/null | grep -q .; then
-        print_success "检测到 pip-wheels: $wheels"
+    if arm_pip_wheels_ready_for "$EASYAIOT_ROOT" ai; then
+        print_success "检测到完整 pip-wheels: $wheels"
         return 0
     fi
     if [ "${AUTO_CACHE_PIP:-1}" != "1" ] || [ ! -f "$cache_script" ]; then
-        print_info "构建时将使用 pip-cache 在线安装（清华源）"
+        print_info "ARM pip-wheels 缺失或不完整，构建时将使用 pip-cache 在线安装（清华源）"
         return 0
     fi
-    print_warning "自动执行 cache_resources_arm.sh 预下载 wheel..."
+    print_warning "ARM pip-wheels 缺失或不完整，自动执行 cache_resources_arm.sh 预下载 wheel..."
     if [ -x "$cache_script" ]; then
         "$cache_script" || true
     else

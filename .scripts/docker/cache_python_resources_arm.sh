@@ -73,13 +73,19 @@ else
 fi
 
 # 展开 -r includes，避免合并文件中出现无法解析的相对引用（与 x86 版本逻辑一致）
+# 第三参数 include_base_dir：解析 -r 相对路径的基准目录（默认同 req_file 所在目录）
 append_requirements_file() {
     local req_file="$1"
     local out_file="$2"
+    local include_base_dir="${3:-}"
     local req_dir line include_path
 
     [ -f "$req_file" ] || return 0
-    req_dir="$(cd "$(dirname "$req_file")" && pwd)"
+    if [ -n "$include_base_dir" ]; then
+        req_dir="$(cd "$include_base_dir" && pwd)"
+    else
+        req_dir="$(cd "$(dirname "$req_file")" && pwd)"
+    fi
 
     while IFS= read -r line || [ -n "$line" ]; do
         line="${line%%#*}"
@@ -105,22 +111,29 @@ append_requirements_file() {
 
 prepare_flattened_requirements_arm() {
     local req_file="$1"  # requirements.txt (ARM 版含 torch)
-    local out_file out_dir tmp_req
+    local out_file out_dir tmp_req req_dir line_count
     # ★ 使用确定性文件名（按模块），避免 mktemp 随机后缀在 Docker 挂载时产生隐式竞态
     out_dir="$(easyaiot_build_cache_base "$EASYAIOT_ROOT")/tmp"
     mkdir -p "$out_dir"
     out_file="${out_dir}/requirements-${CACHE_MODULE}-arm-flat.txt"
     tmp_req="${out_dir}/requirements-${CACHE_MODULE}-arm-src.txt"
+    req_dir="$(cd "$(dirname "$req_file")" && pwd)"
     echo "--index-url https://mirrors.cloud.tencent.com/pypi/simple" > "$out_file"
     if [ ! -f "$req_file" ]; then
         print_error "requirements 不存在: $req_file"
         rm -f "$out_file"
         return 1
     fi
-    # 先做 onnxruntime-gpu → onnxruntime 替换，再展开 -r 引用
+    # onnxruntime 替换写入 tmp；-r 相对路径仍按原 requirements.txt 所在目录解析
     sed 's/onnxruntime-gpu>=/onnxruntime>=/g' "$req_file" > "$tmp_req"
-    append_requirements_file "$tmp_req" "$out_file"
+    append_requirements_file "$tmp_req" "$out_file" "$req_dir"
     rm -f "$tmp_req"
+    line_count=$(grep -cve '^[[:space:]]*$' -- "$out_file" || echo 0)
+    if [ "$line_count" -lt 8 ]; then
+        print_error "requirements 扁平化结果异常（仅 ${line_count} 行），-r 引用可能未展开: ${req_file}"
+        rm -f "$out_file"
+        return 1
+    fi
     sync -f "$out_file" 2>/dev/null || true
     echo "$out_file"
 }
@@ -128,6 +141,7 @@ prepare_flattened_requirements_arm() {
 if [ "${CLEAR_PIP_WHEELS:-0}" = "1" ]; then
     print_info "[${CACHE_MODULE}] 清理旧 ARM pip wheel..."
     find "$PIP_WHEELS_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+    rm -f "$(arm_pip_wheels_stamp_file_for "$EASYAIOT_ROOT" "$CACHE_MODULE")"
 fi
 
 download_pip_packages() {
@@ -172,6 +186,7 @@ fi
     set -e
 
     if [ $docker_download_status -eq 0 ]; then
+        grep -cve '^[[:space:]]*$' -- "$flat_req" > "$(arm_pip_wheels_stamp_file_for "$EASYAIOT_ROOT" "$CACHE_MODULE")"
         print_success "[${CACHE_MODULE}] pip wheel 下载完成（与目标容器 ABI 一致）"
         return 0
     fi
@@ -185,6 +200,7 @@ fi
     print_warning "[${CACHE_MODULE}] 容器内下载失败，使用本机 python3 回退..."
     python3 -m pip download -r "$flat_req" -d "$PIP_WHEELS_DIR" --timeout 120 --retries 3 \
         -i https://mirrors.cloud.tencent.com/pypi/simple
+    grep -cve '^[[:space:]]*$' -- "$flat_req" > "$(arm_pip_wheels_stamp_file_for "$EASYAIOT_ROOT" "$CACHE_MODULE")"
     print_warning "已使用本机环境回退下载，可能与目标容器 ABI 不一致"
     return 0
 }

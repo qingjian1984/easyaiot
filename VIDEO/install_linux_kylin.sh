@@ -65,15 +65,18 @@ prepare_cached_resources() {
     wheels="$(arm_pip_wheels_build_context_dir_for "$EASYAIOT_ROOT" video)"
     local cache_script="${SCRIPT_DIR}/cache_resources_arm.sh"
 
-    if find "$wheels" -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" -o -name "*.zip" \) 2>/dev/null | grep -q .; then
-        print_success "检测到 pip-wheels: $wheels"
+    if arm_pip_wheels_ready_for "$EASYAIOT_ROOT" video; then
+        print_success "检测到完整 pip-wheels: $wheels"
+        if stage_arm_ffmpeg_into_build_context "$EASYAIOT_ROOT" "$SCRIPT_DIR"; then
+            print_success "ARM ffmpeg 离线包已就绪（.build-cache/arm/video/ffmpeg）"
+        fi
         return 0
     fi
     if [ "${AUTO_CACHE_PIP:-1}" != "1" ] || [ ! -f "$cache_script" ]; then
-        print_info "构建时将使用 pip-cache 在线安装（清华源）"
+        print_info "ARM pip-wheels 缺失或不完整，构建时将使用 pip-cache 在线安装（清华源）"
         return 0
     fi
-    print_warning "首次需预下载 pip 离线包，可能需要 10–30 分钟，进度如下..."
+    print_warning "ARM pip-wheels 缺失或不完整，首次需预下载 pip 离线包，可能需要 10–30 分钟，进度如下..."
     if [ -x "$cache_script" ]; then
         ARM_BASE_IMAGE="${ARM_BASE_IMAGE:-pytorch/manylinuxaarch64-builder:cuda12.9}" "$cache_script" || true
     else

@@ -125,7 +125,7 @@ prepare_cached_resources() {
     if ! is_image_available_offline "$ARM_BASE_IMAGE" "$base_tar"; then
         need_prefetch=1
     fi
-    if ! find "$arm_wheels" -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" -o -name "*.zip" \) | grep -q .; then
+    if ! arm_pip_wheels_ready_for "$EASYAIOT_ROOT" video; then
         need_prefetch=1
     fi
 
@@ -136,6 +136,7 @@ prepare_cached_resources() {
             if ! find "$arm_wheels" -maxdepth 1 -type f -name "torch-*-${py_tag}-*.whl" | grep -q .; then
                 print_warning "检测到离线 pip 包 ABI 不匹配（目标: ${py_tag}），将自动清理并重新下载..."
                 rm -f "$arm_wheels"/*
+                rm -f "$(arm_pip_wheels_stamp_file_for "$EASYAIOT_ROOT" video)"
                 need_prefetch=1
             fi
         fi
@@ -160,10 +161,10 @@ prepare_cached_resources() {
 
     prepare_arm_ffmpeg_for_build || true
 
-    if find "$arm_wheels" -maxdepth 1 -type f 2>/dev/null | grep -q .; then
-        print_success "检测到 pip-wheels: $arm_wheels"
+    if arm_pip_wheels_ready_for "$EASYAIOT_ROOT" video; then
+        print_success "检测到完整 pip-wheels: $arm_wheels"
     else
-        print_info "未检测到 pip-wheels，构建时将使用 pip-cache 在线安装"
+        print_info "ARM pip-wheels 缺失或不完整，构建时将使用 pip-cache 在线安装"
     fi
 }
 

@@ -378,13 +378,33 @@ arm_docker_images_dir() {
     echo "$dir"
 }
 
-# ARM pip-wheels 是否已有离线包（供 build-runtime / install 脚本复用）
-arm_pip_wheels_ready_for() {
+arm_pip_wheels_stamp_file_for() {
     local root="${1:-${EASYAIOT_ROOT:-.}}"
     local module="$2"
     local wheels
     wheels="$(arm_pip_wheels_build_context_dir_for "$root" "$module")" || return 1
-    find "$wheels" -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" -o -name "*.zip" \) 2>/dev/null | grep -q .
+    echo "${wheels}/.requirements-flat-lines"
+}
+
+# ARM pip-wheels 是否已有完整离线包（供 build-runtime / install 脚本复用）
+arm_pip_wheels_ready_for() {
+    local root="${1:-${EASYAIOT_ROOT:-.}}"
+    local module="$2"
+    local wheels stamp stamped_lines min_lines=8
+    wheels="$(arm_pip_wheels_build_context_dir_for "$root" "$module")" || return 1
+    stamp="$(arm_pip_wheels_stamp_file_for "$root" "$module")" || return 1
+
+    if ! find "$wheels" -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" -o -name "*.zip" \) 2>/dev/null | grep -q .; then
+        return 1
+    fi
+    if [ ! -f "$stamp" ]; then
+        return 1
+    fi
+    stamped_lines=$(tr -d '[:space:]' < "$stamp" 2>/dev/null || echo 0)
+    if [ "${stamped_lines:-0}" -lt "$min_lines" ]; then
+        return 1
+    fi
+    return 0
 }
 
 # build-runtime 跨架构构建前：缺失则预下载 .build-cache/arm/{ai,video}/pip-wheels
