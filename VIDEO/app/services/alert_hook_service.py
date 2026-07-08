@@ -506,97 +506,47 @@ def _resolve_detection_switches_from_alert_data(
 
 
 def _get_notify_users_from_message_templates(channels: list) -> list:
-    """
-    从消息模板中获取通知人信息
-    
-    注意：告警通知配置中的template_id是消息模板（TMsgMail、TMsgSms等）的ID。
-    消息模板中包含userGroupId字段，通知人信息应该从用户组中获取。
-    
-    实现方式：通过HTTP API调用消息服务来获取消息模板的详细信息，然后从用户组中获取通知人信息。
-    
-    Args:
-        channels: 通知渠道列表，格式：[{"method": "sms", "template_id": "xxx", "template_name": "xxx"}, ...]
-    
-    Returns:
-        list: 通知人列表，格式：[{"phone": "xxx"}, {"email": "xxx"}, ...]
-    """
-    notify_users = []
+    """告警触发时从消息模板提取通知人（与保存任务时逻辑一致）。"""
     if not channels:
-        return notify_users
-    
+        return []
     try:
-        import os
-        import requests
-        
-        # 获取消息服务API地址（从环境变量或配置中获取）
-        try:
-            message_service_url = current_app.config.get('MESSAGE_SERVICE_URL', 'http://localhost:48080')
-        except RuntimeError:
-            message_service_url = os.getenv('MESSAGE_SERVICE_URL', 'http://localhost:48080')
-        
-        # 消息类型映射
-        method_to_msg_type = {
-            'sms': 1,  # 短信（阿里云/腾讯云）
-            'email': 3,  # 邮件
-            'mail': 3,  # 邮件（别名）
-            'wxcp': 4,  # 企业微信
-            'wechat': 4,  # 企业微信（别名）
-            'weixin': 4,  # 企业微信（别名）
-            'http': 5,  # HTTP
-            'webhook': 5,  # HTTP（别名）
-            'ding': 6,  # 钉钉
-            'dingtalk': 6,  # 钉钉（别名）
-            'feishu': 7,  # 飞书
-            'lark': 7,  # 飞书（别名）
-        }
-        
-        # 遍历所有渠道，收集通知人信息
-        all_notify_users = {}  # 使用字典去重，key为phone或email
-        
-        for channel in channels:
-            method = channel.get('method', '').lower()
-            template_id = channel.get('template_id')
-            
-            if not template_id:
-                continue
-            
-            msg_type = method_to_msg_type.get(method)
-            if not msg_type:
-                logger.warning(f"不支持的通知方式: {method}")
-                continue
-            
-            try:
-                # 调用消息服务API获取模板详情
-                # 注意：这里需要根据实际的消息服务API接口调整
-                # 由于消息服务可能没有直接提供获取模板详情的公开API，这里采用简化方案
-                # 实际应该调用：/api/message/template/get?id={template_id}
-                # 或者通过消息服务的内部API获取模板信息
-                
-                # 简化实现：尝试从消息服务获取模板信息
-                # 如果消息服务提供了相关API，可以在这里调用
-                # 否则，返回空列表，依赖配置时存储的通知人信息
-                
-                logger.debug(f"尝试从消息模板获取通知人: method={method}, template_id={template_id}, msg_type={msg_type}")
-                
-                # 注意：由于消息服务的API可能不可用或需要认证，这里暂时跳过
-                # 实际部署时，如果消息服务提供了相关API，可以在这里实现
-                # 当前建议：在配置告警通知时，从消息模板中提取通知人信息并存储
-                
-            except Exception as e:
-                logger.warning(f"从消息模板获取通知人失败: method={method}, template_id={template_id}, error={str(e)}")
-                continue
-        
-        # 将字典转换为列表
-        notify_users = list(all_notify_users.values())
-        
-        if not notify_users:
-            logger.warning(f"从消息模板获取通知人失败，返回空列表: channels={channels}")
-            logger.warning(f"建议：在配置告警通知时，从消息模板中提取通知人信息并存储在alert_notification_config中")
-        
+        from app.services.algorithm_task_service import _extract_notify_users_from_templates
+        notify_users = _extract_notify_users_from_templates(channels)
+        if notify_users:
+            logger.info(f"✅ 告警触发时从消息模板提取到 {len(notify_users)} 个通知人")
+        else:
+            logger.warning(
+                "⚠️  告警触发时未能从消息模板提取通知人，"
+                "请检查模板是否绑定用户分组及 VIDEO 服务 MESSAGE_SERVICE_URL/JWT_TOKEN 配置"
+            )
+        return notify_users
     except Exception as e:
         logger.error(f"从消息模板获取通知人异常: {str(e)}", exc_info=True)
-    
-    return notify_users
+        return []
+
+
+def _is_robot_fallback_channel(channel: dict) -> bool:
+    """判断渠道是否可在无 notify_users 时兜底发送（仅 HTTP/Webhook 与群机器人）。"""
+    if not channel or not channel.get('template_id'):
+        return False
+    method = (channel.get('method') or '').lower()
+    if method in ('http', 'webhook'):
+        return True
+    if method not in ('wxcp', 'wechat', 'weixin', 'ding', 'dingtalk', 'feishu', 'lark'):
+        return False
+    if channel.get('userless'):
+        return True
+    try:
+        from app.services.algorithm_task_service import _fetch_message_template_meta
+        template_meta = _fetch_message_template_meta(method, channel.get('template_id'))
+        if template_meta and (
+            template_meta.get('radioType') == '群机器人消息'
+            or template_meta.get('webHook')
+        ):
+            return True
+    except Exception as e:
+        logger.debug(f"查询模板元数据失败，不视为群机器人渠道: method={method}, error={e}")
+    return False
 
 
 
@@ -1157,24 +1107,16 @@ def _build_notification_message_for_kafka(alert_data: Dict, notification_config:
                 f"shouldNotify={should_notify}")
 
     if not should_notify and has_channels and not has_users and not has_userless:
-        # 群机器人等渠道模板元数据查询失败时，仍携带 channels，由 iot-message 解析发送
-        robot_methods = frozenset({
-            'wxcp', 'wechat', 'weixin', 'http', 'webhook',
-            'ding', 'dingtalk', 'feishu', 'lark',
-        })
-        if any(
-            (ch.get('method') or '').lower() in robot_methods and ch.get('template_id')
-            for ch in channels
-        ):
+        # 仅群机器人 / HTTP Webhook 可在无 notify_users 时兜底；工作通知必须带通知人
+        robot_channels = [ch for ch in channels if _is_robot_fallback_channel(ch)]
+        if robot_channels:
             should_notify = True
-            for ch in channels:
-                method = (ch.get('method') or '').lower()
-                if method in robot_methods and ch.get('template_id'):
-                    ch['userless'] = True
+            for ch in robot_channels:
+                ch['userless'] = True
             has_userless = True
             logger.info(
-                f"ℹ️  按群机器人/模板渠道兜底启用通知: device_id={device_id}, "
-                f"task_id={task_id}, channels数量={len(channels)}"
+                f"ℹ️  按群机器人/Webhook 渠道兜底启用通知: device_id={device_id}, "
+                f"task_id={task_id}, robot_channels={len(robot_channels)}"
             )
 
     if notification_config.get('notification_suppressed'):
@@ -1191,11 +1133,23 @@ def _build_notification_message_for_kafka(alert_data: Dict, notification_config:
             )
             return None
         if not has_users and not has_userless:
-            logger.warning(
-                f"⚠️  告警通知消息中没有通知人且无群机器人/Webhook 渠道，跳过发送: "
-                f"device_id={device_id}, task_id={task_id}, task_name={task_name}, "
-                f"channels={channels}"
+            wxcp_methods = frozenset({'wxcp', 'wechat', 'weixin'})
+            has_wxcp_work = any(
+                (ch.get('method') or '').lower() in wxcp_methods and not _is_robot_fallback_channel(ch)
+                for ch in (channels or [])
             )
+            if has_wxcp_work:
+                logger.warning(
+                    f"⚠️  企业微信工作通知缺少通知人(notify_users)，无法推送: "
+                    f"device_id={device_id}, task_id={task_id}, task_name={task_name}. "
+                    f"请确认「办公室告警」模板已绑定用户分组，并重新保存算法任务"
+                )
+            else:
+                logger.warning(
+                    f"⚠️  告警通知消息中没有通知人且无群机器人/Webhook 渠道，跳过发送: "
+                    f"device_id={device_id}, task_id={task_id}, task_name={task_name}, "
+                    f"channels={channels}"
+                )
             return None
     
     # 处理告警时间格式
