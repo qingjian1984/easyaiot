@@ -395,9 +395,9 @@ def _query_alert_notification_config(device_id: str, task_type: str = None) -> O
                 except Exception as e:
                     logger.error(f"❌ 解析告警通知配置失败: device_id={device_id}, task_id={task.id}, error={str(e)}, config={task.alert_notification_config[:200] if task.alert_notification_config else None}")
 
-            # 检查抑制时间
-            if task.last_notify_time:
-                suppress_seconds = task.alarm_suppress_time or 300
+            # 检查抑制时间（alarm_suppress_time=0 表示不抑制）
+            if task.last_notify_time and (task.alarm_suppress_time or 0) > 0:
+                suppress_seconds = task.alarm_suppress_time
                 time_since_last_notify = (datetime.utcnow() - task.last_notify_time).total_seconds()
                 if time_since_last_notify < suppress_seconds:
                     logger.debug(
@@ -517,7 +517,7 @@ def _get_notify_users_from_message_templates(channels: list) -> list:
         else:
             logger.warning(
                 "⚠️  告警触发时未能从消息模板提取通知人，"
-                "请检查模板是否绑定用户分组及 VIDEO 服务 MESSAGE_SERVICE_URL/JWT_TOKEN 配置"
+                "请检查模板是否绑定用户分组及 MESSAGE_SERVICE_URL 配置"
             )
         return notify_users
     except Exception as e:
