@@ -4,7 +4,8 @@
 # EasyAIoT 统一安装脚本
 # ============================================
 # 使用方法：
-#   ./install_linux.sh [命令]
+#   ./install_linux.sh              # 无参数：打开两层交互引导（部署 / 分析）
+#   ./install_linux.sh [命令]       # 直接执行命令（适合脚本/automation）
 #
 # 可用命令：
 #   install    - 安装并启动所有服务（首次运行，交互选择部署形态）
@@ -21,6 +22,10 @@
 #   verify     - 验证所有服务是否启动成功
 #   check      - 检查 Docker 和 Docker Compose 安装状态
 #   profile    - 显示当前部署形态与服务范围
+#   menu       - 打开两层交互引导（同无参数）
+#   diagnose       - 问题分析定位（进入【分析】子菜单）
+#   analyze-logs   - 多模块日志合并分析（各模块约 500 行，带分割线）
+#   analyze-disk   - 项目关键目录磁盘占用分析
 #
 # 部署形态（EASYAIOT_DEPLOY_PROFILE）：
 #   mini(1)     - 4G：iot-system + VIDEO/AI/WEB + 最小中间件（无 Kafka/iot-sink/Nacos/Gateway/Infra）
@@ -40,6 +45,7 @@ NC='\033[0m' # No Color
 # 脚本所在目录（必须在 cd 之前计算：相对路径调用时，cd 后 dirname 会解析错位，
 # 曾导致日志目录落到项目根 /logs 而非 .scripts/docker/logs）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EASYAIOT_INSTALL_LABEL="${EASYAIOT_INSTALL_LABEL:-EasyAIoT 统一安装脚本 (AMD64/x86_64)}"
 
 # 项目根目录（从.scripts/docker回到项目根目录）
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -50,6 +56,9 @@ source "${SCRIPT_DIR}/deploy_profile.sh"
 
 # shellcheck source=runtime_image_common.sh
 source "${SCRIPT_DIR}/runtime_image_common.sh"
+
+# shellcheck source=diagnose_tools.sh
+source "${SCRIPT_DIR}/diagnose_tools.sh"
 
 # shellcheck source=node/ensure_platform_agent_invoke.sh
 source "${PROJECT_ROOT}/.scripts/node/ensure_platform_agent_invoke.sh"
@@ -1493,7 +1502,13 @@ show_help() {
     echo "EasyAIoT 统一安装脚本"
     echo ""
     echo "使用方法:"
+    echo "  ./install_linux.sh                 - 打开交互式引导（推荐新手）"
+    echo "  ./install_linux.sh menu            - 同上"
     echo "  ./install_linux.sh [命令] [模块]"
+    echo ""
+    echo "交互引导两层结构:"
+    echo "  1) 部署 — 安装/启停/更新/状态/日志等"
+    echo "  2) 分析 — 日志合并/磁盘占用/健康检查等"
     echo ""
     echo "可用命令:"
     echo "  install         - 安装并启动所有服务（首次运行）"
@@ -1511,6 +1526,10 @@ show_help() {
     echo "  verify          - 验证所有服务是否启动成功"
     echo "  check           - 检查 Docker 和 Docker Compose 安装状态"
     echo "  profile         - 显示当前部署形态与服务范围"
+    echo "  menu            - 打开两层交互引导（部署 / 分析）"
+    echo "  diagnose        - 进入【分析】子菜单"
+    echo "  analyze-logs    - 多模块日志合并分析（各模块约 500 行，带分割线）"
+    echo "  analyze-disk    - 项目关键目录磁盘占用分析"
     echo "  help            - 显示此帮助信息"
     echo ""
     echo "模块列表:"
@@ -1532,8 +1551,17 @@ show_help() {
 
 # 主函数
 main() {
-    
-    case "${1:-help}" in
+    local cmd="${1:-}"
+
+    if [ -z "$cmd" ] || [ "$cmd" = "menu" ] || [ "$cmd" = "interactive" ]; then
+        if [ "${EASYAIOT_FROM_MENU:-}" != "1" ]; then
+            run_install_root_menu
+            return 0
+        fi
+        cmd="help"
+    fi
+
+    case "$cmd" in
         install)
             install_linux
             ;;
@@ -1576,6 +1604,15 @@ main() {
         profile)
             ensure_deploy_profile
             print_deploy_profile_summary
+            ;;
+        diagnose|diagnose-tools)
+            run_analyze_interactive_menu
+            ;;
+        analyze-logs|analyze-log|merge-logs)
+            invoke_analyze_merge_logs "${@:2}"
+            ;;
+        analyze-disk|analyze-disk-usage|disk-usage)
+            invoke_analyze_disk_usage "${@:2}"
             ;;
         help|--help|-h)
             show_help

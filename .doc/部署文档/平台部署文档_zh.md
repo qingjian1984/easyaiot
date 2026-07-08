@@ -1,451 +1,321 @@
 # EasyAIoT 平台部署文档
 
-> **新手推荐路径**：先读本文「快速开始」完成首次部署；进阶运维、故障排查、GPU 与数据库细节请参阅 [部署最佳实践.md](./部署最佳实践.md)。
+> 首次部署请参阅 [快速开始](#快速开始)；进阶运维、GPU、数据库与故障排查见 [部署最佳实践.md](./部署最佳实践.md)。
+
+---
 
 ## 目录
 
 - [概述](#概述)
-- [环境要求](#环境要求)
+- [两种使用模式](#两种使用模式)
 - [快速开始](#快速开始)
-- [部署规格说明](#部署规格说明)
-- [脚本使用说明](#脚本使用说明)
-- [模块说明](#模块说明)
-- [服务端口](#服务端口)
+- [部署规格](#部署规格)
+- [脚本命令参考](#脚本命令参考)
+- [服务访问与端口](#服务访问与端口)
 - [常见问题](#常见问题)
-- [日志管理](#日志管理)
-- [部署流程建议](#部署流程建议)
+- [环境要求](#环境要求)
 
 ---
 
 ## 概述
 
-EasyAIoT 是云边一体化智能算法应用平台，采用 **Docker 容器化 + 统一安装脚本** 一键部署。
-
-### 平台组成
+EasyAIoT 采用 **Docker 容器化 + 统一安装脚本** 部署，平台由基础中间件与 DEVICE / AI / VIDEO / WEB / APP 等业务模块组成。
 
 | 模块 | 目录 | 说明 |
 |------|------|------|
-| 基础服务 | `.scripts/docker` | Nacos、PostgreSQL、Redis、Kafka、MinIO 等中间件 |
+| 基础服务 | `.scripts/docker` | Nacos、PostgreSQL、Redis、Kafka、MinIO 等 |
 | DEVICE | `DEVICE/` | 设备管理与 API 网关（Java / Spring Cloud） |
-| AI | `AI/` | 模型训练、推理、OCR、LLM 等（Python） |
-| VIDEO | `VIDEO/` | 视频流处理、告警、录像、人脸识别（Python） |
+| AI | `AI/` | 模型训练、推理（Python） |
+| VIDEO | `VIDEO/` | 视频流处理、告警、录像（Python） |
 | WEB | `WEB/` | 管理控制台（Vue 3） |
-| APP | `APP/` | 移动端 H5（仅 **full** 全量规格） |
+| APP | `APP/` | 移动端 H5（仅 **full** 规格） |
 
-### 统一入口脚本
+**统一入口脚本**（下文以 Linux x86 为例）：
 
-| 系统 | 脚本路径 |
-|------|----------|
-| Linux | `.scripts/docker/install_linux.sh` |
+| 系统 | 脚本 |
+|------|------|
+| Linux x86 | `.scripts/docker/install_linux.sh` |
+| Linux ARM | `.scripts/docker/install_linux_arm.sh` |
+| 银河麒麟 | `.scripts/docker/install_linux_kylin.sh` |
 | macOS | `.scripts/docker/install_mac.sh` |
 | Windows | `.scripts/docker/install_win.ps1` |
 
-> 下文以 **Linux** 为主；macOS / Windows 命令将 `install_linux.sh` 替换为对应脚本即可。
-
 ---
 
-## 环境要求
+## 两种使用模式
 
-### 系统与硬件
+统一入口脚本支持 **交互引导** 与 **指定命令** 两种用法，底层能力一致，可按场景选择：
 
-| 项目 | 要求 |
-|------|------|
-| **操作系统** | **Ubuntu 24.04 LTS 及以上**（**建议 Ubuntu 26.04 LTS**）；亦支持 macOS 10.15+、Windows 10/11 |
-| **CPU** | 最低 4 核，推荐 8 核+ |
-| **内存** | 取决于部署规格（见下表）；full 规格最低 20 GB，推荐 32 GB |
-| **磁盘** | **最低 300 GB 可用空间**，推荐 500 GB+ SSD |
-| **GPU** | 可选；AI 训练/推理建议 NVIDIA GPU（CUDA 12.8） |
-
-### 软件依赖
-
-| 软件 | 版本要求 | 验证命令 |
-|------|----------|----------|
-| Docker | 已安装且 daemon 可访问 | `docker --version` |
-| Docker Compose | **v2.35.0+**（`docker compose` 插件） | `docker compose version` |
-| curl | 健康检查用 | `curl --version` |
-
-安装参考：
+| | 交互引导 | 指定命令 |
+|---|---|---|
+| **入口** | 无参数 / `menu` / `interactive` | `<命令> [参数]` |
+| **适用场景** | 首次部署、现场运维、问题排查 | 开发调试、脚本化运维、CI/CD |
+| **操作方式** | 中文菜单，数字选择 | 直接执行子命令 |
+| **执行后** | 自动回到当前菜单层 | 执行完毕即退出 |
 
 ```bash
-# Docker（Ubuntu）
-curl -fsSL https://get.docker.com | sudo sh
-sudo apt install -y docker-compose-plugin
+# 交互引导
+sudo .scripts/docker/install_linux.sh
 
-# 权限
-sudo usermod -aG docker $USER && newgrp docker
-docker ps
+# 指定命令
+sudo .scripts/docker/install_linux.sh install
+.scripts/docker/install_linux.sh status
 ```
 
-### Docker 权限（Linux）
+**选型建议：**
 
-```bash
-sudo usermod -aG docker $USER
-newgrp docker          # 或重新登录
-docker ps              # 应无 permission denied
+- 日常手动运维、不熟悉命令参数 → 交互引导
+- 已知目标操作、需写入脚本或定时任务 → 指定命令（**禁止**在 Cron/CI 中无参数调用，否则会阻塞等待输入）
+
+### 交互引导：菜单结构
+
+**根菜单**
+
+```
+  1) 部署 — 安装、启停、更新、状态、日志
+  2) 分析 — 日志合并、磁盘占用、健康检查
+  0) 退出
 ```
 
-首次安装建议使用 `sudo`，以便脚本配置镜像加速与 RTP 端口预留。
+**【部署】子菜单**
+
+| # | 操作 | 等价命令 |
+|:-:|------|----------|
+| 1 | 首次安装并启动 | `install` |
+| 2 | 启动所有服务 | `start` |
+| 3 | 停止所有服务 | `stop` |
+| 4 | 重启所有服务 | `restart` |
+| 5 | 查看运行状态 | `status` |
+| 6 | 查看服务日志 | `logs` |
+| 7 | 验证服务健康 | `verify` |
+| 8 | 更新镜像并重启 | `update` |
+| 9 | 检查 Docker 环境 | `check` |
+| 10 | 查看部署规格 | `profile` |
+| 11 | 完整命令行帮助 | `help` |
+
+**【分析】子菜单**
+
+| # | 操作 | 等价命令 |
+|:-:|------|----------|
+| 1 | 多模块日志合并（各源约 500 行） | `analyze-logs` |
+| 2 | 磁盘占用分析 | `analyze-disk` |
+| 3 | 服务状态 + 健康验证 | `status` + `verify` |
+| 4 | Docker 环境检查 | `check` |
+
+**典型操作路径：**
+
+| 场景 | 交互路径 |
+|------|----------|
+| 首次部署 | 1 → 1 → 7 |
+| 重启后拉起服务 | 1 → 2 → 7 |
+| 故障信息采集 | 2 → 3 → 1 → 2 |
 
 ---
 
 ## 快速开始
 
-### Linux 四步部署
+### 环境前提
+
+- 操作系统：**Ubuntu 24.04+**（建议 26.04）
+- Docker + Docker Compose **v2.35+**
+- 磁盘可用空间 **≥ 300 GB**
 
 ```bash
-# ① 克隆代码
+docker --version && docker compose version && docker ps
+```
+
+### 方式一：交互引导
+
+```bash
 git clone https://gitee.com/volara/easyaiot.git
 cd easyaiot
 
-# ② 环境自检（可选但推荐）
-.scripts/docker/install_linux.sh check
-.scripts/docker/detect_system_info.sh
-
-# ③ 一键安装（首次会询问部署规格 1/2/3）
-sudo .scripts/docker/install_linux.sh install
-
-# ④ 验证并访问
-.scripts/docker/install_linux.sh verify
-# 浏览器打开 http://<服务器IP>:8888
+sudo .scripts/docker/install_linux.sh
+# 1 部署 → 1 首次安装 → 7 健康验证
 ```
 
-### 安装过程中会发生什么？
+首次安装会交互选择部署规格，完成后浏览器访问 `http://<服务器IP>:8888`。
 
-1. 选择 **部署规格**（mini / standard / full）
-2. 检查 Docker、Compose、容器创建能力
-3. 检测宿主机 IP，创建 `easyaiot-network`
-4. 按顺序部署：中间件 → DEVICE → AI → VIDEO → WEB → APP（full）
-5. 输出各服务访问地址
-
-**预计耗时**：
-
-- 已拉取预构建镜像：**约 10～30 分钟**
-- 本地完整构建：**30 分钟～数小时**（视硬件而定）
-
-缩短安装时间：安装前执行 `.scripts/docker/install_linux.sh pull` 拉取预构建镜像（详见 [部署最佳实践 - 预构建镜像](./部署最佳实践.md#预构建镜像可选)）。
-
-### macOS 快速开始
+### 方式二：指定命令
 
 ```bash
-git clone https://gitee.com/volara/easyaiot.git && cd easyaiot
-cd .scripts/docker && chmod +x install_mac.sh
-./install_mac.sh install
-./install_mac.sh verify
+git clone https://gitee.com/volara/easyaiot.git
+cd easyaiot
+
+# 可选：拉取预构建镜像，缩短 install 耗时
+sudo .scripts/docker/install_linux.sh pull
+
+sudo .scripts/docker/install_linux.sh install
+.scripts/docker/install_linux.sh verify
 ```
 
-### Windows
+### 安装耗时
 
-请参阅 [平台Windows部署文档_zh.md](./平台Windows部署文档_zh.md)。
+| 情况 | 预计耗时 |
+|------|----------|
+| 已拉取预构建镜像 | 10～30 分钟 |
+| 本地完整构建 | 30 分钟～数小时 |
+
+`install` 执行流程：选择部署规格 → 环境检查 → 创建网络 → 按序部署中间件与业务模块 → 健康等待。详见 [部署最佳实践 - 一键部署](./部署最佳实践.md#一键部署与分步部署)。
 
 ---
 
-## 部署规格说明
+## 部署规格
 
-首次 `install` 时会交互选择规格，选择结果保存在 `.scripts/docker/.deploy_profile`。
+首次 `install` 时交互选择，结果保存在 `.scripts/docker/.deploy_profile`，后续 `start` / `stop` / `update` 自动沿用。
 
-| 选项 | 名称 | 推荐内存 | 典型场景 |
+| 选项 | 名称 | 推荐内存 | 适用场景 |
 |:----:|------|----------|----------|
 | 1 | **mini** | ≥ 4 GB | 边缘节点、PoC 验证 |
-| 2 | **standard** | ≥ 16 GB | 常规生产（不含 TDengine/EMQX 等） |
-| 3 | **full**（默认） | ≥ 20 GB | 完整功能 + APP H5 |
-
-查看当前规格：
+| 2 | **standard** | ≥ 16 GB | 常规生产 |
+| 3 | **full**（默认） | ≥ 20 GB | 完整功能，含 APP H5 |
 
 ```bash
-.scripts/docker/install_linux.sh profile
+.scripts/docker/install_linux.sh profile                              # 查看当前规格
+export EASYAIOT_DEPLOY_PROFILE=full && sudo .../install_linux.sh install  # 非交互指定
 ```
 
-非交互指定规格：
-
-```bash
-export EASYAIOT_DEPLOY_PROFILE=full
-sudo .scripts/docker/install_linux.sh install
-```
-
-各规格服务差异详见 [部署最佳实践 - 部署规格选型](./部署最佳实践.md#部署规格选型)。
+各规格服务差异见 [部署最佳实践 - 部署规格选型](./部署最佳实践.md#部署规格选型)。
 
 ---
 
-## 脚本使用说明
+## 脚本命令参考
 
 ### 命令一览
 
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `install` | 首次安装并启动 | `./install_linux.sh install` |
-| `start` | 启动全部服务 | `./install_linux.sh start` |
-| `stop` | 停止全部服务 | `./install_linux.sh stop` |
-| `restart` | 重启全部服务 | `./install_linux.sh restart` |
-| `status` | 查看运行状态 | `./install_linux.sh status` |
-| `logs` | 查看日志 | `./install_linux.sh logs` |
-| `logs <模块>` | 指定模块日志 | `./install_linux.sh logs VIDEO` |
-| `build` | 本地重新构建镜像 | `./install_linux.sh build` |
-| `pull` | 拉取预构建镜像 | `./install_linux.sh pull` |
-| `update` | 更新并重启 | `./install_linux.sh update` |
-| `verify` | 健康检查 | `./install_linux.sh verify` |
-| `check` | 检查 Docker 环境 | `./install_linux.sh check` |
-| `profile` | 查看部署规格 | `./install_linux.sh profile` |
-| `clean` | 清理容器与镜像 ⚠️ | `./install_linux.sh clean` |
-| `help` | 显示帮助 | `./install_linux.sh help` |
-
-> 在项目根目录可将 `./install_linux.sh` 替换为 `.scripts/docker/install_linux.sh`。
-
-### install 命令
-
-首次部署使用。会自动按依赖顺序安装所有已启用模块，并在中间件就绪后继续后续模块。
-
-```bash
-sudo .scripts/docker/install_linux.sh install
-```
-
-### verify 命令
-
-检查各模块端口与健康端点，全部通过时打印访问地址：
-
-```
-[SUCCESS] 所有服务运行正常！
-
-服务访问地址:
-  基础服务 (Nacos):     http://localhost:8848/nacos
-  基础服务 (MinIO):     http://localhost:9000 (API), http://localhost:9001 (Console)
-  Device服务 (Gateway): http://localhost:48080
-  AI服务:               http://localhost:5000
-  Video服务:            http://localhost:6000
-  Web前端:              http://localhost:8888
-```
-
-### clean 命令 ⚠️
-
-**危险操作**：删除容器、镜像及数据卷。执行前会要求确认（输入 `y`）。
-
-### 分模块 / 仅业务部署
-
-```bash
-# 仅中间件
-cd .scripts/docker && ./install_middleware_linux.sh install
-
-# 仅业务模块（不含中间件）
-cd .scripts/docker && ./install_business_linux.sh install
-
-# 单模块（例：AI）
-cd AI && ./install_linux.sh install
-```
-
----
-
-## 模块说明
-
-### 基础服务（`.scripts/docker`）
-
-平台运行所需的中间件，由 `install_middleware_linux.sh` 管理。
-
-包含：Nacos、PostgreSQL、Redis、TDengine、Kafka、MinIO、Milvus、SRS、EMQX、ZLMediaKit、Node-RED 等（具体启用的服务取决于部署规格）。
-
-### DEVICE 服务
-
-- **技术栈**：Java 21、Spring Boot 2.7、Spring Cloud Gateway
-- **核心能力**：设备接入、产品管理、规则引擎、GB28181、系统管理
-- **入口端口**：48080（Gateway）
-
-### AI 服务
-
-- **技术栈**：Flask、PyTorch 2.9+（CUDA 12.8）
-- **核心能力**：模型训练/推理/部署、OCR、语音、LLM
-- **端口**：5000
-
-### VIDEO 服务
-
-- **技术栈**：Flask、OpenCV、FFmpeg
-- **核心能力**：视频流处理、实时/快照算法、录像、告警、人脸识别
-- **端口**：6000
-
-### WEB 服务
-
-- **技术栈**：Vue 3.4、TypeScript、Vite、Ant Design Vue 4
-- **端口**：8888
-
-### APP 服务（仅 full）
-
-- **说明**：移动端 H5
-- **端口**：9010
-
----
-
-## 服务端口
-
-### 核心端口
-
-| 服务 | 端口 | 访问地址 |
-|------|------|----------|
-| WEB 前端 | 8888 | http://localhost:8888 |
-| DEVICE Gateway | 48080 | http://localhost:48080 |
-| AI 服务 | 5000 | http://localhost:5000 |
-| VIDEO 服务 | 6000 | http://localhost:6000 |
-| Nacos | 8848 | http://localhost:8848/nacos |
-| MinIO API / Console | 9000 / 9001 | http://localhost:9001 |
-| APP H5（full） | 9010 | http://localhost:9010 |
-
-完整端口列表见 [部署最佳实践 - 端口要求](./部署最佳实践.md#端口要求)。
-
-### 健康检查端点
-
-| 模块 | 端点 |
+| 命令 | 说明 |
 |------|------|
-| 基础服务 (Nacos) | `/nacos/actuator/health` |
-| DEVICE | `/actuator/health` |
-| AI | `/actuator/health` |
-| VIDEO | `/actuator/health` |
-| WEB | `/health` |
-| APP | `/health` |
+| `install` | 首次安装并启动 |
+| `start` / `stop` / `restart` | 启停控制 |
+| `status` | 查看运行状态 |
+| `logs [模块]` | 查看日志，如 `logs VIDEO` |
+| `verify` | 健康检查 |
+| `check` | Docker 环境检查 |
+| `update` | 更新镜像并重启 |
+| `pull` | 拉取预构建镜像 |
+| `build` | 本地重新构建镜像 |
+| `profile` | 查看部署规格 |
+| `analyze-logs` | 多模块日志合并 |
+| `analyze-disk` | 磁盘占用分析 |
+| `diagnose` | 进入【分析】子菜单 |
+| `clean` | 清理容器与镜像 ⚠️（含数据卷） |
+| `help` | 显示帮助 |
+| `menu` | 打开交互引导 |
+
+### 非交互日志采集
+
+```bash
+cd .scripts/docker
+
+./analyze_merge_logs.sh --non-interactive \
+  --modules dev-iot-sink,dev-iot-message,biz-video --lines 500 --save
+
+./analyze_merge_logs.sh --non-interactive --modules DEVICE --save
+./analyze_disk_usage.sh --save --top 15
+```
+
+### 模式对照
+
+| 操作 | 交互引导 | 指定命令 |
+|------|----------|----------|
+| 首次安装 | 1 → 1 | `install` |
+| 启动服务 | 1 → 2 | `start` |
+| 健康检查 | 1 → 7 | `verify` |
+| 日志合并 | 2 → 1 | `analyze-logs` |
+| 磁盘分析 | 2 → 2 | `analyze-disk` |
+
+### 分模块部署
+
+```bash
+cd .scripts/docker && ./install_middleware_linux.sh install   # 仅中间件
+cd .scripts/docker && ./install_business_linux.sh install     # 仅业务模块
+cd AI && ./install_linux.sh install                           # 单模块
+```
+
+---
+
+## 服务访问与端口
+
+`verify` 通过后主要访问地址：
+
+| 服务 | 地址 |
+|------|------|
+| WEB 管理平台 | http://\<服务器IP\>:8888 |
+| API Gateway | http://\<服务器IP\>:48080 |
+| Nacos | http://\<服务器IP\>:8848/nacos |
+| MinIO Console | http://\<服务器IP\>:9001 |
+| AI | http://\<服务器IP\>:5000 |
+| VIDEO | http://\<服务器IP\>:6000 |
+| APP H5（full） | http://\<服务器IP\>:9010 |
+
+| 端口 | 服务 |
+|------|------|
+| 8888 | WEB |
+| 48080 | Gateway |
+| 8848 | Nacos |
+| 9000/9001 | MinIO |
+| 5000 | AI |
+| 6000 | VIDEO |
+| 9010 | APP（full） |
+
+完整端口列表见 [部署最佳实践 - 端口要求](./部署最佳实践.md#环境要求与部署前检查)。
 
 ---
 
 ## 常见问题
 
-### 1. Docker 权限不足
+| 现象 | 处理 |
+|------|------|
+| Docker `permission denied` | `sudo usermod -aG docker $USER && newgrp docker` |
+| Compose 版本过低 | `sudo apt install -y docker-compose-plugin` |
+| 端口被占用 | `ss -tlnp \| grep <端口>` |
+| 安装失败 | `tail .scripts/docker/logs/install_linux_*.log` |
+| 服务正常但无法访问 | `verify` + 检查防火墙 |
+| 磁盘不足 | `df -h /`，建议预留 ≥ 300 GB |
 
-```
-permission denied while trying to connect to the Docker daemon socket
-```
-
-```bash
-sudo usermod -aG docker $USER
-newgrp docker
-docker ps
-```
-
-### 2. Docker Compose 版本过低
-
-脚本要求 **v2.35.0+**：
+**故障信息采集：**
 
 ```bash
-sudo apt update && sudo apt install -y docker-compose-plugin
-docker compose version
-```
-
-### 3. 端口被占用
-
-```bash
-ss -tlnp | grep <端口号>
-# 停止占用进程，或修改对应 docker-compose.yml 端口映射
-```
-
-### 4. 安装中途失败
-
-```bash
-# 查看脚本日志
-ls -lt .scripts/docker/logs/ | head -5
-tail -100 .scripts/docker/logs/install_linux_*.log
-
-# 查看容器状态
-docker ps -a
+# 交互：2 分析 → 1 日志 + 2 磁盘
+# 命令行：
+.scripts/docker/install_linux.sh check
 .scripts/docker/install_linux.sh status
-```
-
-### 5. 服务已启动但浏览器无法访问
-
-```bash
 .scripts/docker/install_linux.sh verify
-sudo ufw allow 8888    # 如启用了防火墙
-.scripts/docker/install_linux.sh logs WEB
+cd .scripts/docker && ./analyze_merge_logs.sh --non-interactive --modules all --save
+./analyze_disk_usage.sh --save
 ```
 
-### 6. 磁盘空间不足
-
-首次构建会占用大量磁盘，**建议预留 ≥ 300 GB**：
-
-```bash
-df -h /
-docker system df
-.scripts/docker/cleanup_docker_space.sh
-```
-
-### 7. 切换部署规格后前端异常
-
-WEB 镜像与部署规格绑定，切换后需重建：
-
-```bash
-cd WEB && ./install_linux.sh build
-```
-
-更多排查方案见 [部署最佳实践 - 故障排查](./部署最佳实践.md#故障排查)。
+更多排查见 [部署最佳实践 - 故障排查](./部署最佳实践.md#故障排查)。
 
 ---
 
-## 日志管理
+## 环境要求
 
-### 脚本日志
-
-保存在 `.scripts/docker/logs/`：
-
-```
-install_linux_YYYYMMDD_HHMMSS.log
-install_middleware_YYYYMMDD_HHMMSS.log
-```
-
-```bash
-ls -lt .scripts/docker/logs/ | head -5
-tail -f .scripts/docker/logs/install_linux_*.log
-```
-
-### 容器日志
+| 项目 | 要求 |
+|------|------|
+| 操作系统 | Ubuntu 24.04+（建议 26.04）；亦支持 macOS、Windows、ARM、银河麒麟 |
+| CPU | 最低 4 核，推荐 8 核+ |
+| 内存 | 取决于部署规格（full ≥ 20 GB，推荐 32 GB） |
+| 磁盘 | 最低 300 GB 可用，推荐 500 GB+ SSD |
+| GPU | 可选；AI 训练/推理建议 NVIDIA GPU（CUDA 12.8） |
+| Docker Compose | v2.35.0+ |
 
 ```bash
-.scripts/docker/install_linux.sh logs           # 全部模块摘要
-cd DEVICE && docker compose logs -f            # 单模块详细日志
-docker logs -f video-service                   # 单容器
+# Docker 安装（Ubuntu）
+curl -fsSL https://get.docker.com | sudo sh
+sudo apt install -y docker-compose-plugin
+sudo usermod -aG docker $USER && newgrp docker
 ```
+
+**注意事项：**
+
+1. 首次安装建议使用 `sudo`（配置镜像加速与 RTP 端口预留）
+2. 生产环境修改中间件默认密码（见 [部署最佳实践](./部署最佳实践.md#默认账号密码)）
+3. `clean` 会删除数据卷，执行前务必备份
+4. 切换部署规格后需重建 WEB：`cd WEB && ./install_linux.sh build`
 
 ---
 
-## 部署流程建议
-
-### 首次部署检查表
-
-- [ ] Ubuntu ≥ 24.04，磁盘可用 ≥ 300 GB
-- [ ] Docker + Compose v2.35+ 已安装
-- [ ] 当前用户可执行 `docker ps`
-- [ ] 核心端口未被占用
-- [ ] 已选定部署规格（mini / standard / full）
-- [ ] 执行 `install` → `verify` → 浏览器访问 `:8888`
-
-### 日常运维
-
-```bash
-.scripts/docker/install_linux.sh start      # 开机后启动
-.scripts/docker/install_linux.sh status       # 查看状态
-.scripts/docker/install_linux.sh logs         # 查看日志
-.scripts/docker/install_linux.sh restart      # 重启
-```
-
-### 版本更新
-
-```bash
-git pull
-sudo .scripts/docker/install_linux.sh update
-.scripts/docker/install_linux.sh verify
-```
-
----
-
-## 注意事项
-
-1. **部署规格**：安装前确认内存与规格匹配；可用 `analyze_deploy_memory.sh` 分析
-2. **磁盘**：本地构建 + 数据卷增长快，**最低 300 GB**，生产建议 500 GB+ SSD
-3. **sudo**：首次安装建议 sudo，以配置镜像源与 RTP 端口
-4. **密码**：生产环境务必修改中间件默认密码（见 [部署最佳实践](./部署最佳实践.md#默认账号密码)）
-5. **clean**：会删除数据卷，执行前务必备份
-6. **网络**：需能访问 Docker Hub 或已配置的镜像加速源
-
-## 技术支持
-
-1. 查阅 [部署最佳实践.md](./部署最佳实践.md) 故障排查章节
-2. 查看日志：`.scripts/docker/install_linux.sh logs`
-3. 检查容器：`docker ps -a`
-4. 向项目仓库提交 Issue
-
----
-
-**文档版本**：2.0  
-**最后更新**：2026-07-07  
-**脚本入口**：`.scripts/docker/install_linux.sh`
+**文档版本**：3.1  
+**最后更新**：2026-07-08  
+**脚本入口**：`.scripts/docker/install_linux.sh`（无参数 = 交互引导；`<命令>` = 直接执行）

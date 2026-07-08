@@ -1,20 +1,19 @@
 # EasyAIoT Deployment Best Practices
 
-> This document stays **in sync with project scripts** and applies to Linux production/test environments.  
-> For a quick start, see [Platform Deployment Guide](./平台部署文档.md). For Windows, see [Windows Deployment Guide](./平台Windows部署文档.md).
+> This document stays in sync with project scripts and covers production deployment and operations.  
+> For a quick start, see [Platform Deployment Guide](./平台部署文档.md).
 
 ---
 
 ## Table of Contents
 
-- [5-Minute Quick Start](#5-minute-quick-start)
+- [Two Usage Modes (Detailed)](#two-usage-modes-detailed)
+- [5-Minute Deployment Flow](#5-minute-deployment-flow)
 - [Deployment Profile Selection](#deployment-profile-selection)
-- [Environment Requirements](#environment-requirements)
-- [Pre-Deployment Checklist](#pre-deployment-checklist)
-- [One-Click Deployment](#one-click-deployment)
-- [Step-by-Step Deployment](#step-by-step-deployment)
+- [Environment Requirements & Pre-Deployment Checks](#environment-requirements--pre-deployment-checks)
+- [One-Click & Step-by-Step Deployment](#one-click--step-by-step-deployment)
 - [Common Operations](#common-operations)
-- [Pre-Built Images (Optional)](#pre-built-images-optional)
+- [Pre-Built Images](#pre-built-images)
 - [GPU Configuration](#gpu-configuration)
 - [Special Environments](#special-environments)
 - [Database Notes](#database-notes)
@@ -26,42 +25,170 @@
 
 ---
 
-## 5-Minute Quick Start
+## Two Usage Modes (Detailed)
+
+Unified entry scripts (`install_linux.sh` / `install_linux_arm.sh` / `install_linux_kylin.sh`) support **two equivalent usage patterns**:
+
+| Mode | Entry | Audience | Characteristics |
+|------|-------|----------|-----------------|
+| **Interactive** | No args / `menu` / `interactive` | On-site ops, manual operations | Menu-driven, step-by-step, returns to current menu after execution |
+| **Direct command** | `<command> [args]` | Dev, SRE, CI/CD | Scriptable, repeatable, exits when done |
 
 ```bash
-# 1. Clone the repository
-git clone https://gitee.com/volara/easyaiot.git
-cd easyaiot
+# Interactive
+sudo .scripts/docker/install_linux.sh
 
-# 2. Verify Docker (see Environment Requirements below)
-docker --version
-docker compose version
-
-# 3. One-click install (interactive profile selection on first run; sudo recommended for mirror & RTP setup)
+# Direct command
 sudo .scripts/docker/install_linux.sh install
-
-# 4. Verify
-.scripts/docker/install_linux.sh verify
-
-# 5. Open the management console in a browser
-# http://<server-ip>:8888
+.scripts/docker/install_linux.sh status
 ```
 
-**First-install duration**: Without pre-built images, the script runs local `docker build` for DEVICE / AI / VIDEO / WEB, typically **30 minutes to several hours** depending on CPU, disk, and network. Run `pull` first to significantly shorten install time (see [Pre-Built Images](#pre-built-images-optional)).
+**Selection guide:** Prefer interactive for manual ops; use direct commands for scripted scenarios (Cron / Ansible / CI). **Do not** invoke without args in automation.
+
+### Interactive: Menu Structure
+
+**Root menu**
+
+```
+  1) Deploy — install, start/stop, update, status, logs
+  2) Analyze — logs, disk, status diagnostics
+  0) Exit
+```
+
+**[Deploy] submenu**
+
+| # | Action | Equivalent command |
+|:-:|--------|-------------------|
+| 1 | First install & start | `install` |
+| 2 | Start all services | `start` |
+| 3 | Stop all services | `stop` |
+| 4 | Restart all services | `restart` |
+| 5 | View status | `status` |
+| 6 | View logs | `logs` |
+| 7 | Health verification | `verify` |
+| 8 | Update images & restart | `update` |
+| 9 | Check Docker environment | `check` |
+| 10 | View deploy profile | `profile` |
+| 11 | Full CLI help | `help` |
+
+**[Analyze] submenu** — output suitable for support teams
+
+| # | Action | Equivalent command |
+|:-:|--------|-------------------|
+| 1 | Multi-module log merge | `analyze-logs` |
+| 2 | Disk usage analysis | `analyze-disk` |
+| 3 | Status + health verification | `status` + `verify` |
+| 4 | Docker environment check | `check` |
+
+**Log merge inner menu** (from Analyze → 1): select sources by number (e.g. `24,23,27`), `0` = all for current profile, `b` = back to [Analyze].
+
+### Direct Command: Full Reference
+
+```bash
+cd .scripts/docker   # or use .scripts/docker/install_linux.sh from project root
+
+# Lifecycle
+./install_linux.sh install | start | stop | restart | update | clean
+
+# Observability
+./install_linux.sh status | logs | logs WEB | verify | check | profile
+
+# Build & images
+./install_linux.sh build | pull | build-runtime [module]
+
+# Diagnostics
+./install_linux.sh diagnose          # Enter [Analyze] submenu (still interactive)
+./install_linux.sh analyze-logs      # Log merge
+./install_linux.sh analyze-disk      # Disk report
+
+# Help
+./install_linux.sh help | menu
+```
+
+### Analysis Tools: Advanced Usage
+
+Analysis scripts in `.scripts/docker/` can run standalone:
+
+**Multi-module log merge `analyze_merge_logs.sh`**
+
+```bash
+cd .scripts/docker
+
+# Non-interactive (recommended for runbooks)
+./analyze_merge_logs.sh --non-interactive \
+  --modules dev-iot-sink,dev-iot-message,biz-video --lines 500 --save
+
+# Module aliases
+./analyze_merge_logs.sh --non-interactive --modules DEVICE
+./analyze_merge_logs.sh --non-interactive --modules .scripts/docker
+./analyze_merge_logs.sh --non-interactive --modules all --save
+
+# Common unit IDs: mw-nacos / mw-postgres / dev-iot-gateway / dev-iot-sink / biz-ai / biz-video / biz-web
+./analyze_merge_logs.sh --help
+```
+
+Collection strategy: `docker logs` (last N lines) → host log files if container unavailable → latest rotated file tail.
+
+**Disk usage `analyze_disk_usage.sh`**
+
+```bash
+./analyze_disk_usage.sh                  # Terminal report
+./analyze_disk_usage.sh --save           # Save to logs/disk_usage_*.log
+./analyze_disk_usage.sh --top 20
+```
+
+Key directories: MinIO `record-space` / `alert-images`, local `playbacks`, alert image staging.
+
+### Automation Notes
+
+- Cron / Ansible / CI **must not** invoke without args (blocks on menu)
+- Menu-triggered ops set `EASYAIOT_FROM_MENU=1` to avoid returning to root menu after install
+- Non-interactive profile: `export EASYAIOT_DEPLOY_PROFILE=full`
+
+### Relationship to Per-Module Scripts
+
+Module directories (`DEVICE/`, `AI/`, `VIDEO/` …) have independent `install_linux.sh` for that module only — **no** unified [Analyze] menu.  
+Full platform orchestration + interactive guide + cross-module log/disk analysis → use `.scripts/docker/install_linux.sh` only.
+
+---
+
+## 5-Minute Deployment Flow
+
+```bash
+git clone https://gitee.com/volara/easyaiot.git && cd easyaiot
+
+docker --version && docker compose version
+
+# Option A: Direct command
+sudo .scripts/docker/install_linux.sh pull    # Optional: pre-built images
+sudo .scripts/docker/install_linux.sh install
+.scripts/docker/install_linux.sh verify
+
+# Option B: Interactive
+sudo .scripts/docker/install_linux.sh         # 1 Deploy → 1 Install → 7 Verify
+
+# Access: http://<server-ip>:8888
+```
+
+### Install Duration
+
+| Scenario | Time |
+|----------|------|
+| Pre-built images pulled | 10–30 minutes |
+| Full local build | 30 minutes to several hours |
 
 ---
 
 ## Deployment Profile Selection
 
-On install, the script interactively selects a **deployment profile** (or set `EASYAIOT_DEPLOY_PROFILE`). The choice is saved to `.scripts/docker/.deploy_profile` and reused by `start` / `stop` / `update`.
+Selected interactively on first `install`, or via `export EASYAIOT_DEPLOY_PROFILE=mini|standard|full`.  
+Saved to `.scripts/docker/.deploy_profile`, reused by `start` / `stop` / `update`.
 
-| Profile | Aliases | Recommended RAM | Use Case |
+| Profile | Aliases | Recommended RAM | Use case |
 |---------|---------|-----------------|----------|
-| **mini** | `1` / `4g` | ≥ 4 GB | Edge nodes, PoC, resource-constrained hosts |
-| **standard** | `2` / `16g` | ≥ 16 GB | Regular production without some heavy components |
-| **full** | `3` (default) | ≥ 20 GB | Full features including APP mobile H5 |
-
-View current profile and service scope:
+| **mini** | `1` / `4g` | ≥ 4 GB | Edge nodes, PoC |
+| **standard** | `2` / `16g` | ≥ 16 GB | Regular production |
+| **full** | `3` (default) | ≥ 20 GB | Full features + APP H5 |
 
 ```bash
 .scripts/docker/install_linux.sh profile
@@ -69,92 +196,89 @@ View current profile and service scope:
 
 ### Services per Profile
 
-**mini (edge minimal)**
+**mini**
 
 - Business: `iot-system`, VIDEO, AI, WEB
 - Middleware: PostgreSQL, Redis, SRS
 - Not started: Nacos, Gateway, Kafka, iot-sink, MinIO, Milvus, ZLMediaKit, Node-RED, TDengine, EMQX, and most DEVICE sub-modules
-- API routing: nginx proxies `/admin-api` and `/dev-api` directly to `iot-system:48099`
+- API routing: nginx proxies `/admin-api` and `/dev-api` to `iot-system:48099`
 
 **standard**
 
 - Not started: TDengine, EMQX, Node-RED, `iot-device`, `iot-tdengine`
-- All other business modules and middleware are started
+- All others started
 
 **full**
 
-- All business modules and middleware, including **APP mobile H5** (port 9010)
+- All business modules and middleware, including **APP mobile H5** (9010)
 
-Analyze whether container memory matches the profile:
+Memory analysis:
 
 ```bash
 .scripts/docker/analyze_deploy_memory.sh
-.scripts/docker/analyze_deploy_memory.sh --all-profiles   # compare all three
+.scripts/docker/analyze_deploy_memory.sh --all-profiles
 ```
 
 ---
 
-## Environment Requirements
+## Environment Requirements & Pre-Deployment Checks
 
 ### Hardware
 
 | Resource | Minimum | Recommended |
 |----------|---------|-------------|
 | CPU | 4 cores | 8+ cores |
-| RAM | See [Deployment Profile Selection](#deployment-profile-selection) (full min. 20 GB) | 32 GB+ |
+| RAM | See profiles (full ≥ 20 GB) | 32 GB+ |
 | Disk | **300 GB** free | 500 GB+ SSD |
-| GPU | None (CPU works) | NVIDIA GPU (CUDA 12.8 for AI inference/training) |
-
-> Disk is used for Docker image layers, build cache (`.build-cache/`), databases, and object storage volumes. First local build consumes significant space—reserve ample headroom.
+| GPU | None (CPU works) | NVIDIA GPU (CUDA 12.8) |
 
 ### Software
 
-| Software | Requirement | Notes |
-|----------|-------------|-------|
-| OS | **Ubuntu 24.04 LTS** (minimum) | **Ubuntu 26.04 LTS recommended**; Kylin and ARM64 also supported (see [Special Environments](#special-environments)) |
-| Docker | Installed and daemon accessible | If missing: `curl -fsSL https://get.docker.com \| sudo sh` |
-| Docker Compose | **v2.35.0+** (`docker compose` plugin) | If missing: `sudo apt install docker-compose-plugin` |
-| NVIDIA Driver | 525+ | GPU scenarios only |
-| NVIDIA Container Toolkit | Latest | GPU scenarios only |
+| Software | Requirement |
+|----------|-------------|
+| OS | Ubuntu 24.04+ (26.04 recommended); Kylin, ARM64 also supported |
+| Docker | Installed and daemon accessible |
+| Docker Compose | **v2.35.0+** (`docker compose` plugin) |
+| NVIDIA Driver / Container Toolkit | GPU scenarios only |
 
-### Docker Permissions (Linux)
+### Docker Permissions
 
 ```bash
-# Add current user to docker group (recommended)
-sudo usermod -aG docker $USER
-newgrp docker   # or log in again
-
-# Verify
-docker ps
+sudo usermod -aG docker $USER && newgrp docker
+docker ps   # should succeed without permission denied
 ```
 
-> Configuring Docker mirrors and RTP port reservation requires root—**use `sudo` for first install**.
+Use `sudo` on first install for mirror and RTP port setup.
+
+### Pre-Deployment Checks
+
+```bash
+.scripts/docker/detect_system_info.sh
+.scripts/docker/install_linux.sh check
+df -h / && docker system df
+```
 
 ### Port Requirements
 
-Ensure these ports are free before deployment (some may be unused depending on profile):
-
 | Port | Service | Notes |
 |------|---------|-------|
-| 1880 | Node-RED | Rule engine (full/standard) |
-| 1883 | EMQX | MQTT broker (full) |
-| 1935 | SRS | RTMP streaming |
+| 1880 | Node-RED | full/standard |
+| 1883 | EMQX | full |
+| 1935 | SRS | RTMP |
 | 5432 | PostgreSQL | Primary database |
 | 6000 | VIDEO | Video processing |
-| 6030 | TDengine | Time-series DB (full) |
+| 6030 | TDengine | full |
 | 6080 | ZLMediaKit | Media server |
 | 6379 | Redis | Cache |
-| 8848 | Nacos | Registry/config center |
+| 8848 | Nacos | Registry/config |
 | 8888 | WEB | Management UI |
-| 9000/9001 | MinIO | Object storage API / console |
-| 9010 | APP | Mobile H5 (full only) |
+| 9000/9001 | MinIO | Object storage |
+| 9010 | APP | full only |
 | 9092 | Kafka | Message queue |
-| 19530 | Milvus | Vector database |
+| 19530 | Milvus | Vector DB |
 | 48080 | Gateway | API gateway |
-| 5000 | AI | AI inference |
-| 30000-30500 | ZLM RTP | Media ingest (script attempts reservation) |
-
-Check port usage:
+| 5000 | AI | AI service |
+| 30000-30500 | ZLM RTP | Script attempts reservation |
 
 ```bash
 ss -tlnp | grep -E '8848|5432|6379|9092|5000|6000|8888|48080'
@@ -162,147 +286,72 @@ ss -tlnp | grep -E '8848|5432|6379|9092|5000|6000|8888|48080'
 
 ---
 
-## Pre-Deployment Checklist
+## One-Click & Step-by-Step Deployment
+
+### One-Click
 
 ```bash
-# System info and resources
-.scripts/docker/detect_system_info.sh
-
-# Docker environment
-.scripts/docker/install_linux.sh check
-
-# Disk space (root partition: ≥ 300 GB free recommended)
-df -h /
-docker system df
-```
-
----
-
-## One-Click Deployment
-
-### Entry Script
-
-Unified orchestrator: `.scripts/docker/install_linux.sh`
-
-```bash
-# From project root (recommended)
 sudo .scripts/docker/install_linux.sh install
-
-# Or from script directory
-cd .scripts/docker
-sudo ./install_linux.sh install
-```
-
-### What `install` Does Automatically
-
-1. **Select deployment profile** — mini / standard / full, saved to `.deploy_profile`
-2. **Pre-built images** — skip local build if remote registry is configured and pull is chosen
-3. **Environment checks** — Docker, Compose, container creation (including `/dev/null`)
-4. **Host IP detection** — for GB28181 / ZLMediaKit media URLs (set `HOST_IP=<ip>` to skip)
-5. **RTP port reservation** — kernel reserves 30000-30500 (requires root)
-6. **Docker mirror** — configures `docker.m.daocloud.io` acceleration (requires root)
-7. **Create Docker network** — `easyaiot-network`
-8. **Deploy modules in order**:
-   - Middleware (`.scripts/docker/install_middleware_linux.sh`)
-   - DEVICE → AI → VIDEO → WEB → APP (full)
-9. **Wait for base services** — PostgreSQL / Nacos / Redis health checks
-10. **Platform Agent** — ensure edge agent when needed
-
-### Verify Deployment
-
-```bash
 .scripts/docker/install_linux.sh verify
 ```
 
-Example success output:
+**Automatic `install` flow:**
 
-```
-Service URLs:
-  Middleware (Nacos):     http://localhost:8848/nacos
-  Middleware (MinIO):     http://localhost:9000 (API), http://localhost:9001 (Console)
-  Middleware (Milvus):    http://localhost:9091 (Health), localhost:19530 (gRPC)
-  DEVICE (Gateway):       http://localhost:48080
-  AI:                     http://localhost:5000
-  VIDEO:                  http://localhost:6000
-  WEB:                    http://localhost:8888
-  APP H5:                 http://localhost:9010    # full only
-```
+1. Select profile → save to `.deploy_profile`
+2. Pre-built image detection (skip local build if pulled)
+3. Docker / Compose / container creation checks
+4. Host IP detection (set `HOST_IP=<ip>` to override)
+5. RTP port 30000-30500 reservation (requires root)
+6. Docker mirror configuration (requires root)
+7. Create `easyaiot-network`
+8. Deploy in order: middleware → DEVICE → AI → VIDEO → WEB → APP (full)
+9. Wait for PostgreSQL / Nacos / Redis
+10. Ensure edge Agent when needed
 
-Open `http://<server-ip>:8888` in a browser.
+### Step-by-Step
 
----
-
-## Step-by-Step Deployment
-
-For fine-grained control, deploy module by module. **Set the deployment profile first** so all modules stay consistent:
+Set profile first:
 
 ```bash
-export EASYAIOT_DEPLOY_PROFILE=full   # or mini / standard
+export EASYAIOT_DEPLOY_PROFILE=full
 ```
 
-### Step 1: Middleware
+**Step 1: Middleware**
 
 ```bash
-cd .scripts/docker
-./install_middleware_linux.sh install
+cd .scripts/docker && ./install_middleware_linux.sh install
 ```
 
-| Middleware | Image | Port | Purpose |
-|------------|-------|------|---------|
-| Nacos | nacos/nacos-server:v2.5.1 | 8848 | Service registry & config |
-| PostgreSQL | postgres:18 | 5432 | Primary DB (6 business DBs) |
-| Redis | redis:7.4.8 | 6379 | Cache |
-| Kafka | apache/kafka:3.8.0 | 9092 | Message queue |
-| MinIO | minio/minio | 9000/9001 | Object storage |
-| Milvus | milvusdb/milvus:v2.6.0 | 19530/9091 | Vector DB (face recognition) |
-| SRS | ossrs/srs:5 | 1935 | Streaming |
-| EMQX | emqx/emqx:5.8.7 | 1883 | MQTT (full profile) |
-| ZLMediaKit | zlmediakit/zlmediakit:master | 6080 | Media server |
-| TDengine | tdengine/tsdb:3.3.8.4 | 6030 | Time-series DB (full profile) |
-| Node-RED | nodered/node-red:latest | 1880 | Rule engine |
+| Middleware | Port | Purpose |
+|------------|------|---------|
+| Nacos | 8848 | Registry/config |
+| PostgreSQL | 5432 | Primary DB (6 databases) |
+| Redis | 6379 | Cache |
+| Kafka | 9092 | Message queue |
+| MinIO | 9000/9001 | Object storage |
+| Milvus | 19530/9091 | Vector DB |
+| SRS | 1935 | Streaming |
+| EMQX | 1883 | MQTT (full) |
+| ZLMediaKit | 6080 | Media server |
+| TDengine | 6030 | Time-series DB (full) |
+| Node-RED | 1880 | Rule engine |
 
-Readiness checks:
-
-```bash
-docker exec postgres-server pg_isready -U postgres
-curl -s http://localhost:8848/nacos/actuator/health
-docker exec redis-server redis-cli -a basiclab@iot975248395 ping
-```
-
-### Step 2: DEVICE
+**Steps 2+: Business modules**
 
 ```bash
-cd DEVICE
-./install_linux.sh install
-```
-
-| Service | Port | Description |
-|---------|------|-------------|
-| iot-gateway | 48080 | API gateway |
-| iot-system | 48099 | System management |
-| iot-infra | 48066 | Infrastructure |
-| iot-device | 48055 | Device management |
-| iot-dataset | 48077 | Dataset |
-| iot-message | 48033 | Messaging |
-| iot-file | 48022 | File service |
-| iot-sink | 48011 | Protocol adapter |
-| iot-gb28181 | 5060 | GB28181 video surveillance |
-
-### Steps 3–5: AI / VIDEO / WEB
-
-```bash
+cd DEVICE && ./install_linux.sh install
 cd AI    && ./install_linux.sh install
 cd VIDEO && ./install_linux.sh install
 cd WEB   && ./install_linux.sh install
 cd APP   && ./install_linux.sh install   # full only
 ```
 
-### Business Modules Only (No Middleware)
+**Business modules only**
 
 ```bash
 cd .scripts/docker
-./install_business_linux.sh install              # all business modules
-./install_business_linux.sh update DEVICE WEB    # update specific modules
+./install_business_linux.sh install
+./install_business_linux.sh update DEVICE WEB
 ./install_business_linux.sh verify
 ```
 
@@ -313,131 +362,91 @@ cd .scripts/docker
 ### Unified Script
 
 ```bash
-cd .scripts/docker   # or use .scripts/docker/install_linux.sh from project root
-
-./install_linux.sh install    # first install
-./install_linux.sh start      # start
-./install_linux.sh stop       # stop
-./install_linux.sh restart    # restart
-./install_linux.sh status     # status
-./install_linux.sh logs       # all logs (last 100 lines)
-./install_linux.sh logs WEB   # module-specific logs
-./install_linux.sh build      # rebuild images locally
-./install_linux.sh update     # update & restart (optional pull/rebuild)
-./install_linux.sh verify     # health check
-./install_linux.sh check      # check Docker environment
-./install_linux.sh profile    # show deployment profile
-./install_linux.sh clean      # remove containers & images (dangerous)
-./install_linux.sh pull       # pull pre-built runtime images
-./install_linux.sh help       # help
+./install_linux.sh install | start | stop | restart | status
+./install_linux.sh logs | logs WEB | verify | check | profile
+./install_linux.sh build | pull | update | clean
+./install_linux.sh diagnose | analyze-logs | analyze-disk | help
 ```
 
 ### Per-Module Scripts
 
-Each module directory (`DEVICE` / `AI` / `VIDEO` / `WEB` / `APP`) supports:
+Each module (`DEVICE` / `AI` / `VIDEO` / `WEB` / `APP`):
 
 ```bash
 ./install_linux.sh install | start | stop | restart | status | logs | build | clean | update
 ```
 
-Middleware only:
+Middleware:
 
 ```bash
 cd .scripts/docker
 ./install_middleware_linux.sh install | start | stop | restart | status | logs | build | clean | update
 ```
 
-### Common Environment Variables
+### Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `EASYAIOT_DEPLOY_PROFILE` | Profile: `mini` / `standard` / `full` |
-| `HOST_IP` | Force host IP, skip auto-detection |
-| `PARALLEL_MODULES=true` | Parallel start/update for business modules (when RAM allows) |
+| `EASYAIOT_DEPLOY_PROFILE` | `mini` / `standard` / `full` |
+| `HOST_IP` | Force host IP |
+| `PARALLEL_MODULES=true` | Parallel start/update for business modules |
 | `PARALLEL_BUILD=true` | Parallel build (default serial to avoid OOM) |
-| `FORCE_NETWORK_RECREATE=true` | Recreate Docker network after host IP change |
-| `EASYAIOT_RUNTIME_REGISTRY` | Pre-built image registry URL |
+| `FORCE_NETWORK_RECREATE=true` | Recreate network after IP change |
+| `EASYAIOT_RUNTIME_REGISTRY` | Pre-built image registry |
 
 ---
 
-## Pre-Built Images (Optional)
+## Pre-Built Images
 
-Pull pre-built business images from a remote registry to skip lengthy local Maven / pnpm / pip builds.
-
-Config file: `.scripts/docker/runtime_registry.conf`
+Config: `.scripts/docker/runtime_registry.conf`
 
 ```bash
-# Interactive pull (before install or during update)
-.scripts/docker/install_linux.sh pull
-
-# Build and push runtime images (CI/release)
-.scripts/docker/install_linux.sh build-runtime          # all modules
-.scripts/docker/install_linux.sh build-runtime DEVICE   # specific module
+.scripts/docker/install_linux.sh pull                    # Interactive pull
+.scripts/docker/install_linux.sh build-runtime           # Build & push (CI/release)
+.scripts/docker/install_linux.sh build-runtime DEVICE    # Single module
 ```
 
-After a successful pull, subsequent `install` / `update` detects `.runtime_images_pulled` and starts containers directly.
+After pull, `install` / `update` detects `.runtime_images_pulled` and starts containers directly.
 
 ---
 
 ## GPU Configuration
 
-### Install & Verify
-
 ```bash
 nvidia-smi
-
-# Install NVIDIA Container Toolkit
-# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
-
 docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu24.04 nvidia-smi
 ```
 
-### Auto-Detection
+Auto-detection: GPU present → `runtime: nvidia`; no GPU → CPU mode.
 
-Install scripts auto-detect GPU:
-
-- GPU present → enable `runtime: nvidia`, `NVIDIA_VISIBLE_DEVICES=all`
-- No GPU → CPU mode
-
-### Multi-GPU
-
-```bash
-export CUDA_VISIBLE_DEVICES=0,1
-```
+Multi-GPU: `export CUDA_VISIBLE_DEVICES=0,1`
 
 ---
 
 ## Special Environments
 
-### Kylin OS
-
 ```bash
+# Kylin OS
 sudo .scripts/docker/install_linux_kylin.sh install
-```
 
-### ARM64
-
-```bash
+# ARM64
 sudo .scripts/docker/install_linux_arm.sh install
-# AI / VIDEO automatically use ARM Dockerfiles
 ```
 
 ---
 
 ## Database Notes
 
-### PostgreSQL Business Databases
+### PostgreSQL (6 databases, scripts in `.scripts/postgresql/`)
 
-Six databases are initialized on startup (scripts in `.scripts/postgresql/`):
-
-| Database | SQL File | Purpose |
-|----------|----------|---------|
-| ruoyi-vue-pro20 | ruoyi-vue-pro10.sql | System management |
-| iot-ai20 | iot-ai10.sql | AI service |
-| iot-device10 | iot-device10.sql | Device management |
-| iot-gb2818110 | iot-gb2818110.sql | Video surveillance |
-| iot-message10 | iot-message10.sql | Messaging |
-| iot-video10 | iot-video10.sql | Video processing |
+| Database | Purpose |
+|----------|---------|
+| ruoyi-vue-pro20 | System management |
+| iot-ai20 | AI service |
+| iot-device10 | Device management |
+| iot-gb2818110 | Video surveillance |
+| iot-message10 | Messaging |
+| iot-video10 | Video processing |
 
 ### TDengine
 
@@ -455,12 +464,12 @@ SQL in `.scripts/tdengine/tdengine_super_tables.sql`; auto-initialized under ful
 
 | Middleware | Username | Password | Console |
 |------------|----------|----------|---------|
-| Nacos | nacos | nacos | http://\<IP\>:8848/nacos |
+| Nacos | nacos | nacos | :8848/nacos |
 | PostgreSQL | postgres | iot45722414822 | — |
 | Redis | — | basiclab@iot975248395 | — |
-| MinIO | minioadmin | basiclab@iot975248395 | http://\<IP\>:9001 |
-| EMQX | admin | basiclab@iot6874125784 | http://\<IP\>:18083 |
-| Milvus | — | — | http://\<IP\>:9091 |
+| MinIO | minioadmin | basiclab@iot975248395 | :9001 |
+| EMQX | admin | basiclab@iot6874125784 | :18083 |
+| Milvus | — | — | :9091 |
 
 > **Change all default passwords in production.**
 
@@ -468,57 +477,64 @@ SQL in `.scripts/tdengine/tdengine_super_tables.sql`; auto-initialized under ful
 
 ## Troubleshooting
 
-### Service Start Failures
+### Recommended Flow
+
+**Interactive:**
+
+```
+No args → 2 Analyze → 4 Docker check → 3 Status+health → 1 Logs → 2 Disk
+```
+
+**Direct command:**
+
+```bash
+.scripts/docker/install_linux.sh check
+.scripts/docker/install_linux.sh status
+.scripts/docker/install_linux.sh verify
+
+cd .scripts/docker
+./analyze_disk_usage.sh --save
+./analyze_merge_logs.sh --non-interactive --modules dev-iot-sink,biz-video,mw-nacos --lines 500 --save
+```
+
+### Common Issues
+
+**Service start failures**
 
 ```bash
 docker ps -a
 docker logs -f postgres-server
-docker logs -f nacos-server
-docker logs -f ai-service
-docker logs -f video-service
 .scripts/docker/install_linux.sh logs
 ```
 
-### Network Issues
+**Network (host IP changed)**
 
 ```bash
-docker network ls | grep easyaiot
-docker network inspect easyaiot-network
-
-# After host IP change
 export FORCE_NETWORK_RECREATE=true
 .scripts/docker/install_linux.sh restart
 ```
 
-### PostgreSQL / Redis
+**PostgreSQL / Redis**
 
 ```bash
 .scripts/docker/fix_postgresql.sh
 .scripts/docker/fix_redis.sh
 ```
 
-### Docker System Issues
+**Docker system**
 
 ```bash
 sudo .scripts/docker/diagnose_docker_systemd.sh diagnose
-sudo .scripts/docker/diagnose_docker_systemd.sh fix-all
 .scripts/docker/cleanup_docker_space.sh
-df -h && docker system df
 ```
 
-### Kafka Consumer Group
+**Kafka consumer group**
 
 ```bash
 cd VIDEO && ./fix_kafka_consumer_group.sh
 ```
 
-### Port Conflicts
-
-Edit port mappings in the module's `docker-compose.yml`, or stop the conflicting process.
-
-### WEB Issues After Profile Change
-
-The frontend bakes in the deploy profile at build time—rebuild WEB after switching:
+**WEB after profile change**
 
 ```bash
 cd WEB && ./install_linux.sh build
@@ -530,17 +546,22 @@ cd WEB && ./install_linux.sh build
 
 | Location | Description |
 |----------|-------------|
-| `.scripts/docker/logs/` | Unified install / middleware script logs |
-| `DEVICE/logs/` | DEVICE service logs |
-| `AI/data/logs/` | AI service logs |
-| `VIDEO/data/logs/` | VIDEO service logs |
-| `docker logs <container>` | Live container logs |
+| `.scripts/docker/logs/` | Install script logs; `merged_logs_*`, `disk_usage_*` reports |
+| `.scripts/docker/standalone-logs/` | Nacos and other middleware on-disk logs |
+| `.build-cache/device/logs/` | DEVICE microservice Spring logs |
+| `~/easyaiot/data/srs.log` | SRS streaming |
+| `WEB/logs/runtime.log` | WEB runtime log |
+| `docker logs <container>` | Container stdout (common for AI/VIDEO) |
+
+| Need | Interactive | Direct command |
+|------|-------------|----------------|
+| Last 500 lines, multi-service | Analyze → 1 | `analyze-logs` or `analyze_merge_logs.sh --modules ...` |
+| Single module, live tail | Deploy → 6 | `logs VIDEO` or `docker compose logs -f` |
+| Install failure | — | `tail .scripts/docker/logs/install_linux_*.log` |
 
 ---
 
 ## Update & Uninstall
-
-### Update Code & Services
 
 ```bash
 git pull origin main
@@ -548,21 +569,12 @@ sudo .scripts/docker/install_linux.sh update
 .scripts/docker/install_linux.sh verify
 ```
 
-Single module update:
+Single module: `cd AI && ./install_linux.sh update`
+
+Uninstall:
 
 ```bash
-cd AI && ./install_linux.sh update
-```
-
-### Uninstall
-
-```bash
-sudo .scripts/docker/install_linux.sh clean
-
-# Optional: remove data volume directories
-rm -rf .scripts/docker/db_data .scripts/docker/redis_data \
-       .scripts/docker/minio_data .scripts/docker/mq_data \
-       .scripts/docker/taos_data .scripts/docker/milvus_data
+sudo .scripts/docker/install_linux.sh clean   # ⚠️ Removes containers, images, volumes
 ```
 
 ---
@@ -572,19 +584,14 @@ rm -rf .scripts/docker/db_data .scripts/docker/redis_data \
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    WEB Frontend (:8888)                          │
-│              Vue 3 + Ant Design Vue + Vite                       │
 ├─────────────────────────────────────────────────────────────────┤
 │                 API Gateway (:48080)                              │
-│              Spring Cloud Gateway + Nacos                        │
 ├───────────┬───────────┬───────────┬───────────┬─────────────────┤
 │ iot-system│ iot-infra │ iot-device│ iot-dataset│  iot-message   │
 │ iot-file  │ iot-sink  │ iot-gb28181                        │
-│           Java 21 + Spring Boot 2.7 + MyBatis-Plus              │
 ├───────────┴───────────┴───────────┴───────────┴─────────────────┤
 │  AI (:5000)              │  VIDEO (:6000)    │  APP H5 (:9010) │
-│  Flask + PyTorch         │  Flask + OpenCV   │  Mobile         │
 ├──────────────────────────┴───────────────────┴─────────────────┤
-│                     Middleware Layer                             │
 │  Nacos │ PostgreSQL │ Redis │ Kafka │ MinIO │ TDengine          │
 │  Milvus │ SRS │ EMQX │ ZLMediaKit │ Node-RED                     │
 └─────────────────────────────────────────────────────────────────┘
@@ -592,4 +599,4 @@ rm -rf .scripts/docker/db_data .scripts/docker/redis_data \
 
 ---
 
-*Doc version: 2026-07-07 | Script entry: `.scripts/docker/install_linux.sh`*
+*Doc version: 3.1 | 2026-07-08 | Script entry: `.scripts/docker/install_linux.sh` (no args=interactive; `<command>`=direct)*
