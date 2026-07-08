@@ -5,7 +5,7 @@
 # 多架构支持：由 .scripts/docker/runtime_image.sh 的 docker wrapper 注入 --platform 实现
 FROM node:22-alpine3.21 AS builder
 
-ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+ARG NPM_REGISTRY=https://registry.npmmirror.com/
 
 ENV CI=true
 
@@ -60,7 +60,7 @@ RUN test -d dist/build/h5 || (echo "=== dist/build/h5 missing after build ===" &
 
 FROM nginx:1.29.2-alpine
 
-ARG APK_MIRROR=mirrors.cloud.tencent.com
+ARG APK_MIRROR=mirrors.tuna.tsinghua.edu.cn
 
 RUN if [ -n "${APK_MIRROR}" ]; then \
         sed -i "s/dl-cdn.alpinelinux.org/${APK_MIRROR}/g" /etc/apk/repositories; \

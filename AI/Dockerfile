@@ -18,7 +18,7 @@ WORKDIR /app
 FROM base AS dependencies
 
 # 镜像源配置（通过 --build-arg 传入，默认腾讯云）
-ARG APT_MIRROR_URL=https://mirrors.cloud.tencent.com
+ARG APT_MIRROR_URL=https://mirrors.tuna.tsinghua.edu.cn
 
 # 配置镜像源和时区
 RUN set -ex && \
@@ -67,7 +67,7 @@ FROM dependencies AS python-deps
 COPY requirements-docker.txt requirements-base.txt ./
 COPY --from=pip-wheels . /opt/offline-pip
 ARG OFFLINE_MODE=0
-ARG PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 # http 缓存落盘宿主机 pip-cache；wheels 构建目录须可写（BuildKit cache）

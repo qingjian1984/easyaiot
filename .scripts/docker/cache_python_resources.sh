@@ -107,7 +107,7 @@ prepare_flattened_requirements() {
     out_dir="$(easyaiot_build_cache_base "$EASYAIOT_ROOT")/tmp"
     mkdir -p "$out_dir"
     out_file="${out_dir}/requirements-${module}-docker-flat.txt"
-    echo "--index-url https://mirrors.cloud.tencent.com/pypi/simple" > "$out_file"
+    echo "--index-url https://pypi.tuna.tsinghua.edu.cn/simple" > "$out_file"
     if [ ! -f "$req_file" ]; then
         print_error "requirements-docker 不存在: $req_file"
         rm -f "$out_file"
@@ -136,12 +136,12 @@ build_required_sdist_wheels() {
             -v "${wheels_dir}:/wheels" \
             "$build_image" \
             /bin/bash -lc "set -e
-pip install -q --upgrade pip wheel setuptools -i https://mirrors.cloud.tencent.com/pypi/simple
+pip install -q --upgrade pip wheel setuptools -i https://pypi.tuna.tsinghua.edu.cn/simple
 find_links=''
 if compgen -G '/wheels/${pkg_name}-*.tar.gz' >/dev/null; then
   find_links='--find-links /wheels'
 fi
-pip wheel '${spec}' -w /wheels --no-deps \${find_links} -i https://mirrors.cloud.tencent.com/pypi/simple"
+pip wheel '${spec}' -w /wheels --no-deps \${find_links} -i https://pypi.tuna.tsinghua.edu.cn/simple"
         if ! compgen -G "${wheels_dir}/${pkg_name}-"*.whl >/dev/null 2>&1; then
             print_error "[sdist] 未生成 ${pkg_name} wheel"
             return 1
@@ -197,7 +197,7 @@ download_module_wheels() {
         -v "${flat_req}:/tmp/requirements-docker.flat:ro" \
         -v "${wheels_dir}:/wheels" \
         "$base_image" \
-        /bin/bash -lc 'pip install --upgrade pip -i https://mirrors.cloud.tencent.com/pypi/simple && pip download -r /tmp/requirements-docker.flat -d /wheels --timeout 120 --retries 3 -i https://mirrors.cloud.tencent.com/pypi/simple'
+        /bin/bash -lc 'pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple && pip download -r /tmp/requirements-docker.flat -d /wheels --timeout 120 --retries 3 -i https://pypi.tuna.tsinghua.edu.cn/simple'
     status=$?
     set -e
 
@@ -209,7 +209,7 @@ download_module_wheels() {
         print_warning "[${module}] 容器内下载失败，使用本机 python3 回退..."
         export PIP_ROOT_USER_ACTION=ignore
         python3 -m pip download -r "$flat_req" -d "$wheels_dir" --timeout 120 --retries 3 \
-            -i https://mirrors.cloud.tencent.com/pypi/simple
+            -i https://pypi.tuna.tsinghua.edu.cn/simple
     fi
 
     build_required_sdist_wheels "$wheels_dir"

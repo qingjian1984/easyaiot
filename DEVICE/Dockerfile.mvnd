@@ -9,7 +9,7 @@ FROM ${MVND_BASE_IMAGE}
 
 # 可经 --build-arg 覆盖：mvnd 版本与下载源（默认腾讯云）
 ARG MVND_VERSION=1.0.6
-ARG MVND_BASE_URL=https://mirrors.cloud.tencent.com/apache/maven/mvnd
+ARG MVND_BASE_URL=https://mirrors.tuna.tsinghua.edu.cn/apache/maven/mvnd
 
 # 下载并安装 mvnd 到 /opt/mvnd（ADD 远程 tar 不自动解压，需手动 tar）
 ADD ${MVND_BASE_URL}/${MVND_VERSION}/maven-mvnd-${MVND_VERSION}-linux-amd64.tar.gz /tmp/mvnd.tgz

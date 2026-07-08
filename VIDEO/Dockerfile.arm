@@ -194,7 +194,7 @@ FROM python-env AS python-deps
 COPY requirements.txt requirements-base.txt ./
 COPY --from=pip-wheels . /opt/offline-pip
 ARG OFFLINE_MODE=0
-ARG PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 RUN --mount=type=bind,from=pip-cache,source=.,target=/mnt/pip-cache,rw \

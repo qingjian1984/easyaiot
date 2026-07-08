@@ -544,7 +544,7 @@ store_module_hashes() {
 # 注意：如果 settings.xml 已存在但 mirror URL 与当前期望不一致，会重新生成
 ensure_maven_settings() {
     local s="$1"
-    local maven_mirror="${MAVEN_MIRROR_URL:-https://mirrors.cloud.tencent.com/nexus/repository/maven-public/}"
+    local maven_mirror="${MAVEN_MIRROR_URL:-https://mirrors.tuna.tsinghua.edu.cn/repository/maven-public/}"
     # 若已存在，检查 mirror URL 是否匹配当前配置
     if [ -f "$s" ]; then
         if grep -qF "${maven_mirror}" "$s" 2>/dev/null; then
@@ -641,7 +641,7 @@ ensure_mvnd_image() {
     if docker image inspect "$MVND_IMAGE" >/dev/null 2>&1; then
         return 0
     fi
-    local mvnd_url="${MVND_BASE_URL:-https://mirrors.cloud.tencent.com/apache/maven/mvnd}"
+    local mvnd_url="${MVND_BASE_URL:-https://mirrors.tuna.tsinghua.edu.cn/apache/maven/mvnd}"
     print_info "首次构建 mvnd 镜像 $MVND_IMAGE（mvnd $MVND_VERSION）..."
     docker build -f "${SCRIPT_DIR}/Dockerfile.mvnd" \
         --build-arg "MVND_BASE_IMAGE=${MVND_BASE_IMAGE}" \

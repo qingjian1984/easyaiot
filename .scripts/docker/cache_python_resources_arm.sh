@@ -2,6 +2,7 @@
 # ============================================
 # EasyAIoT ARM Python 离线 wheel（按模块隔离）
 # 目录: .build-cache/arm/{ai,video}/pip-wheels
+# 下载方式: ARM 容器内 pip download + 清华 PyPI 源（与 build-runtime 一致）
 # ============================================
 
 set -e
@@ -33,6 +34,12 @@ VIDEO_DIR="${EASYAIOT_ROOT}/VIDEO"
 
 ARM_BASE_IMAGE="${ARM_BASE_IMAGE:-pytorch/manylinuxaarch64-builder:cuda12.9}"
 DOCKER_IMAGES_DIR="$(arm_docker_images_dir "$EASYAIOT_ROOT")"
+PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
+PIP_DOWNLOAD_TIMEOUT="${PIP_DOWNLOAD_TIMEOUT:-600}"
+PIP_DOWNLOAD_RETRIES="${PIP_DOWNLOAD_RETRIES:-15}"
+PIP_RESUME_RETRIES="${PIP_RESUME_RETRIES:-30}"
+CACHE_DOWNLOAD_MAX_ATTEMPTS="${CACHE_DOWNLOAD_MAX_ATTEMPTS:-5}"
+CACHE_DOWNLOAD_RETRY_DELAY="${CACHE_DOWNLOAD_RETRY_DELAY:-15}"
 
 # 参数: AI | VIDEO（模块名，映射到 ai / video 缓存目录）
 MODULE_ARG="${1:-AI}"
@@ -59,7 +66,7 @@ download_docker_image() {
     local tar_file="${DOCKER_IMAGES_DIR}/$(image_to_tar_name "$image").tar"
 
     print_info "拉取镜像: $image"
-    docker pull "$image"
+    docker pull --platform linux/arm64 "$image"
     print_info "保存镜像到: $tar_file"
     docker save -o "$tar_file" "$image"
     print_success "镜像已保存: $image"
@@ -72,8 +79,7 @@ else
     print_info "跳过 Docker 镜像缓存（启用: CACHE_DOCKER_IMAGE=1 $0）"
 fi
 
-# 展开 -r includes，避免合并文件中出现无法解析的相对引用（与 x86 版本逻辑一致）
-# 第三参数 include_base_dir：解析 -r 相对路径的基准目录（默认同 req_file 所在目录）
+# 展开 -r includes；-r 相对路径按原 requirements 所在目录解析
 append_requirements_file() {
     local req_file="$1"
     local out_file="$2"
@@ -100,7 +106,7 @@ append_requirements_file() {
                 if [[ "$include_path" != /* ]]; then
                     include_path="${req_dir}/${include_path}"
                 fi
-                append_requirements_file "$include_path" "$out_file"
+                append_requirements_file "$include_path" "$out_file" "$req_dir"
                 ;;
             *)
                 echo "$line" >> "$out_file"
@@ -110,24 +116,23 @@ append_requirements_file() {
 }
 
 prepare_flattened_requirements_arm() {
-    local req_file="$1"  # requirements.txt (ARM 版含 torch)
+    local req_file="$1"
     local out_file out_dir tmp_req req_dir line_count
-    # ★ 使用确定性文件名（按模块），避免 mktemp 随机后缀在 Docker 挂载时产生隐式竞态
     out_dir="$(easyaiot_build_cache_base "$EASYAIOT_ROOT")/tmp"
     mkdir -p "$out_dir"
     out_file="${out_dir}/requirements-${CACHE_MODULE}-arm-flat.txt"
     tmp_req="${out_dir}/requirements-${CACHE_MODULE}-arm-src.txt"
     req_dir="$(cd "$(dirname "$req_file")" && pwd)"
-    echo "--index-url https://mirrors.cloud.tencent.com/pypi/simple" > "$out_file"
+    echo "--index-url ${PIP_INDEX_URL}" > "$out_file"
     if [ ! -f "$req_file" ]; then
         print_error "requirements 不存在: $req_file"
         rm -f "$out_file"
         return 1
     fi
-    # onnxruntime 替换写入 tmp；-r 相对路径仍按原 requirements.txt 所在目录解析
-    sed 's/onnxruntime-gpu>=/onnxruntime>=/g' "$req_file" > "$tmp_req"
+    sed 's/onnxruntime-gpu/onnxruntime/g' "$req_file" > "$tmp_req"
     append_requirements_file "$tmp_req" "$out_file" "$req_dir"
     rm -f "$tmp_req"
+    sed -i 's/onnxruntime-gpu/onnxruntime/g' "$out_file"
     line_count=$(grep -cve '^[[:space:]]*$' -- "$out_file" || echo 0)
     if [ "$line_count" -lt 8 ]; then
         print_error "requirements 扁平化结果异常（仅 ${line_count} 行），-r 引用可能未展开: ${req_file}"
@@ -144,26 +149,30 @@ if [ "${CLEAR_PIP_WHEELS:-0}" = "1" ]; then
     rm -f "$(arm_pip_wheels_stamp_file_for "$EASYAIOT_ROOT" "$CACHE_MODULE")"
 fi
 
-download_pip_packages() {
-    local flat_req
-    flat_req="$(prepare_flattened_requirements_arm "$REQ_SOURCE")"
+count_arm_wheels() {
+    find "$PIP_WHEELS_DIR" -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" -o -name "*.zip" \) 2>/dev/null | wc -l
+}
 
-    print_info "[${CACHE_MODULE}] ARM pip wheel → ${PIP_WHEELS_DIR}"
-    print_info "[${CACHE_MODULE}] requirements 扁平化: $(wc -l < "$flat_req") 行"
+cleanup_broken_arm_wheels() {
+    find "$PIP_WHEELS_DIR" -maxdepth 1 -type f -empty -delete 2>/dev/null || true
+}
 
-    # ★ 挂载前双重校验：确保 flat_req 是普通文件（非目录/空文件），防止 Docker 创建空目录
-    if [ ! -f "$flat_req" ]; then
-        print_error "[${CACHE_MODULE}] 扁平化 requirements 文件无效或为目录: ${flat_req}"
-        return 1
-    fi
-    if [ ! -s "$flat_req" ]; then
-        print_error "[${CACHE_MODULE}] 扁平化 requirements 文件为空: ${flat_req}"
-        return 1
-    fi
-    print_info "[${CACHE_MODULE}] 挂载 requirements: ${flat_req} (size=$(stat -c%s "$flat_req" 2>/dev/null || wc -c < "$flat_req") bytes)"
-
-    set +e
+run_docker_pip_download() {
+    local flat_req="$1"
+    print_info "[${CACHE_MODULE}] ARM 容器内下载（清华源，当前 $(count_arm_wheels) 个 wheel）..."
     docker run --rm \
+        --platform linux/arm64 \
+        -e "PIP_INDEX_URL=${PIP_INDEX_URL}" \
+        -e "PIP_DOWNLOAD_TIMEOUT=${PIP_DOWNLOAD_TIMEOUT}" \
+        -e "PIP_DOWNLOAD_RETRIES=${PIP_DOWNLOAD_RETRIES}" \
+        -e "PIP_RESUME_RETRIES=${PIP_RESUME_RETRIES}" \
+        -e "http_proxy=" \
+        -e "https_proxy=" \
+        -e "HTTP_PROXY=" \
+        -e "HTTPS_PROXY=" \
+        -e "ALL_PROXY=" \
+        -e "no_proxy=*" \
+        -e "NO_PROXY=*" \
         -v "${flat_req}:/tmp/requirements-arm.flat:ro" \
         -v "${PIP_WHEELS_DIR}:/wheels" \
         "$ARM_BASE_IMAGE" \
@@ -180,29 +189,59 @@ else
     exit 1
 fi
 "$PIP_BIN" --version
-"$PIP_BIN" download -r /tmp/requirements-arm.flat -d /wheels --timeout 120 --retries 3 -i https://mirrors.cloud.tencent.com/pypi/simple
+"$PIP_BIN" download -r /tmp/requirements-arm.flat -d /wheels \
+    --timeout "${PIP_DOWNLOAD_TIMEOUT}" \
+    --retries "${PIP_DOWNLOAD_RETRIES}" \
+    --resume-retries "${PIP_RESUME_RETRIES}" \
+    -i "${PIP_INDEX_URL}"
 '
-    local docker_download_status=$?
-    set -e
+}
 
-    if [ $docker_download_status -eq 0 ]; then
-        grep -cve '^[[:space:]]*$' -- "$flat_req" > "$(arm_pip_wheels_stamp_file_for "$EASYAIOT_ROOT" "$CACHE_MODULE")"
-        print_success "[${CACHE_MODULE}] pip wheel 下载完成（与目标容器 ABI 一致）"
-        return 0
-    fi
+download_pip_packages() {
+    local flat_req attempt existing_count
+    flat_req="$(prepare_flattened_requirements_arm "$REQ_SOURCE")"
 
-    if [ "${ALLOW_HOST_PIP_FALLBACK:-0}" != "1" ]; then
-        print_error "[${CACHE_MODULE}] 容器内下载失败（默认禁用本机回退，避免 ABI 不匹配）"
-        print_info "如确需回退: ALLOW_HOST_PIP_FALLBACK=1 $0 $MODULE_ARG"
+    print_info "[${CACHE_MODULE}] ARM pip wheel → ${PIP_WHEELS_DIR}"
+    print_info "[${CACHE_MODULE}] requirements 扁平化: $(wc -l < "$flat_req") 行"
+    print_info "[${CACHE_MODULE}] PyPI 源: ${PIP_INDEX_URL}"
+
+    if [ ! -f "$flat_req" ] || [ ! -s "$flat_req" ]; then
+        print_error "[${CACHE_MODULE}] 扁平化 requirements 无效: ${flat_req}"
         return 1
     fi
 
-    print_warning "[${CACHE_MODULE}] 容器内下载失败，使用本机 python3 回退..."
-    python3 -m pip download -r "$flat_req" -d "$PIP_WHEELS_DIR" --timeout 120 --retries 3 \
-        -i https://mirrors.cloud.tencent.com/pypi/simple
-    grep -cve '^[[:space:]]*$' -- "$flat_req" > "$(arm_pip_wheels_stamp_file_for "$EASYAIOT_ROOT" "$CACHE_MODULE")"
-    print_warning "已使用本机环境回退下载，可能与目标容器 ABI 不一致"
-    return 0
+    existing_count=$(count_arm_wheels)
+    if [ "$existing_count" -gt 0 ]; then
+        print_info "[${CACHE_MODULE}] 已有 ${existing_count} 个 wheel，断点续传（已下载的自动跳过）"
+        print_info "[${CACHE_MODULE}] 全量重下请加 CLEAR_PIP_WHEELS=1"
+    fi
+
+    attempt=1
+    while [ "$attempt" -le "$CACHE_DOWNLOAD_MAX_ATTEMPTS" ]; do
+        cleanup_broken_arm_wheels
+        print_info "[${CACHE_MODULE}] 下载尝试 ${attempt}/${CACHE_DOWNLOAD_MAX_ATTEMPTS}..."
+
+        set +e
+        run_docker_pip_download "$flat_req"
+        local status=$?
+        set -e
+
+        if [ $status -eq 0 ]; then
+            grep -cve '^[[:space:]]*$' -- "$flat_req" > "$(arm_pip_wheels_stamp_file_for "$EASYAIOT_ROOT" "$CACHE_MODULE")"
+            print_success "[${CACHE_MODULE}] pip wheel 下载完成（共 $(count_arm_wheels) 个）"
+            return 0
+        fi
+
+        if [ "$attempt" -lt "$CACHE_DOWNLOAD_MAX_ATTEMPTS" ]; then
+            print_warning "[${CACHE_MODULE}] 下载失败，${CACHE_DOWNLOAD_RETRY_DELAY}s 后重试（已下载的 wheel 会保留）..."
+            sleep "$CACHE_DOWNLOAD_RETRY_DELAY"
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    print_error "[${CACHE_MODULE}] 下载失败（已重试 ${CACHE_DOWNLOAD_MAX_ATTEMPTS} 次）"
+    print_info "断点续传: bash ${EASYAIOT_ROOT}/$(echo "$CACHE_MODULE" | tr '[:lower:]' '[:upper:]')/cache_resources_arm.sh"
+    return 1
 }
 
 download_pip_packages

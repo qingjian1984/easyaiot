@@ -236,8 +236,8 @@ docker_build_image() {
         --build-arg "CACHE_BUST=${cache_bust}" \
         --build-arg "VITE_GLOB_DEPLOY_PROFILE=${deploy_profile}" \
         --build-arg "SKIP_VITE_BUILD=${SKIP_VITE_BUILD:-0}" \
-        --build-arg NPM_REGISTRY="${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}" \
-        --build-arg APK_MIRROR="${APK_MIRROR:-mirrors.cloud.tencent.com}" \
+        --build-arg NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com/}" \
+        --build-arg APK_MIRROR="${APK_MIRROR:-mirrors.tuna.tsinghua.edu.cn}" \
         $platform_opts \
         "$@" 2>&1 | tee "$log_new" | tee -a "$pnpm_log"
     ec=$?

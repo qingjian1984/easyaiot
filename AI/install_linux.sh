@@ -113,8 +113,8 @@ build_with_cache() {
         -t ai-service:latest \
         --pull=false \
         --build-arg OFFLINE_MODE=${OFFLINE_MODE:-0} \
-        --build-arg APT_MIRROR_URL="${APT_MIRROR_URL:-https://mirrors.cloud.tencent.com}" \
-        --build-arg PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}" \
+        --build-arg APT_MIRROR_URL="${APT_MIRROR_URL:-https://mirrors.tuna.tsinghua.edu.cn}" \
+        --build-arg PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}" \
         $no_cache_flag \
         . 2>&1 | tee "$build_log"
     build_status=${PIPESTATUS[0]}

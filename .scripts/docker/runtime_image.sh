@@ -245,14 +245,14 @@ if [ -n "${_EXPLICIT_PROFILE:-}" ]; then
 fi
 
 # ============================================================================
-# 国内镜像源配置（默认开启，腾讯云优先）
+# 国内镜像源配置（默认开启，清华源优先）
 # ============================================================================
-APT_MIRROR_URL="${APT_MIRROR_URL:-https://mirrors.cloud.tencent.com}"
-PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}"
-NPM_REGISTRY="${NPM_REGISTRY:-https://mirrors.cloud.tencent.com/npm/}"
-APK_MIRROR="${APK_MIRROR:-mirrors.cloud.tencent.com}"
-YUM_MIRROR_URL="${YUM_MIRROR_URL:-https://mirrors.cloud.tencent.com}"
-MAVEN_MIRROR_URL="${MAVEN_MIRROR_URL:-https://mirrors.cloud.tencent.com/nexus/repository/maven-public/}"
+APT_MIRROR_URL="${APT_MIRROR_URL:-https://mirrors.tuna.tsinghua.edu.cn}"
+PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com/}"
+APK_MIRROR="${APK_MIRROR:-mirrors.tuna.tsinghua.edu.cn}"
+YUM_MIRROR_URL="${YUM_MIRROR_URL:-https://mirrors.tuna.tsinghua.edu.cn}"
+MAVEN_MIRROR_URL="${MAVEN_MIRROR_URL:-https://mirrors.tuna.tsinghua.edu.cn/repository/maven-public/}"
 
 if $NATIVE_SOURCE; then
     APT_MIRROR_URL=""

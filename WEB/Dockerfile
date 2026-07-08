@@ -7,7 +7,7 @@
 FROM node:22-alpine3.21 AS builder
 
 # 镜像源配置（通过 --build-arg 传入，默认腾讯云）
-ARG NPM_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+ARG NPM_REGISTRY=https://registry.npmmirror.com/
 
 ENV CI=true
 
@@ -77,7 +77,7 @@ RUN test -d dist || (echo "=== dist missing after build ===" && cat /tmp/web-bui
 FROM nginx:1.29.2-alpine
 
 # 镜像源配置（通过 --build-arg 传入，默认腾讯云）
-ARG APK_MIRROR=mirrors.cloud.tencent.com
+ARG APK_MIRROR=mirrors.tuna.tsinghua.edu.cn
 
 RUN if [ -n "${APK_MIRROR}" ]; then \
         sed -i "s/dl-cdn.alpinelinux.org/${APK_MIRROR}/g" /etc/apk/repositories; \

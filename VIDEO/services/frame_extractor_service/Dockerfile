@@ -6,8 +6,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 镜像源配置（通过 --build-arg 传入，默认腾讯云）
-ARG APT_MIRROR_URL=https://mirrors.cloud.tencent.com
-ARG PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple
+ARG APT_MIRROR_URL=https://mirrors.tuna.tsinghua.edu.cn
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 设置工作目录
 WORKDIR /app

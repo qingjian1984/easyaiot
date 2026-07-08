@@ -3,7 +3,7 @@
 FROM maven:3.9.11-eclipse-temurin-21-alpine AS builder
 
 # 镜像源配置（通过 --build-arg 传入，默认腾讯云）
-ARG MAVEN_MIRROR_URL=https://mirrors.cloud.tencent.com/nexus/repository/maven-public/
+ARG MAVEN_MIRROR_URL=https://mirrors.tuna.tsinghua.edu.cn/repository/maven-public/
 
 RUN mkdir -p /m2/repository && \
     cat > /m2/settings.xml <<EOF
