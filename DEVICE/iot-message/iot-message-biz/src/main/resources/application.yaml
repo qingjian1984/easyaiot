@@ -155,6 +155,15 @@ iot:
     base-package: ${iot.info.base-package}
   captcha:
     enable: true # 验证码的开关，默认为 true；
+  security:
+    permit-all-urls:
+      # VIDEO 告警通知链路内网读取（模板 / 用户组 / 用户），无需 Token
+      - /admin-api/message/template/get
+      - /admin-api/message/preview/user/group/query
+      - /admin-api/message/preview/user/query
+      - /message/template/get
+      - /message/preview/user/group/query
+      - /message/preview/user/query
   tenant: # 多租户相关配置项
     enable: true
     ignore-urls:
@@ -167,6 +176,13 @@ iot:
       - /rpc-api/system/tenant/valid # 防止递归。避免调用 /rpc-api/system/tenant/valid 接口时，又去触发 /rpc-api/system/tenant/valid 去校验
       - /rpc-api/system/tenant/id-list # 获得租户列表的时候，无需传递租户编号
       - /rpc-api/system/oauth2/token/check # 访问令牌校验时，无需传递租户编号；主要解决上传文件的场景，前端不会传递 tenant-id！
+      # VIDEO 告警通知链路内网调用（经网关或直连 message 服务）
+      - /admin-api/message/template/get
+      - /admin-api/message/preview/user/group/query
+      - /admin-api/message/preview/user/query
+      - /message/template/get
+      - /message/preview/user/group/query
+      - /message/preview/user/query
     ignore-tables:
       - system_tenant
       - system_tenant_package
