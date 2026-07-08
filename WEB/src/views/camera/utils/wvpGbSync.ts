@@ -1,3 +1,4 @@
+import { syncGb28181Devices } from '@/api/device/camera';
 import { getDeviceChannels, queryAllVideoList } from '@/api/device/gb28181';
 import { resolveGbChannelPlayIds } from './gb28181Channel';
 import { isGb28181Enabled } from '@/utils/deployProfile';
@@ -54,4 +55,32 @@ export async function collectWvpGbChannelsForSync(): Promise<{
   }
 
   return { channels, wvpDeviceCount: sipList.length };
+}
+
+/**
+ * 后台静默同步 WVP 国标通道到 VIDEO 默认分组（首页等场景自动入库，无需用户手动点「刷新」）。
+ */
+export async function syncGb28181DevicesInBackground(): Promise<{
+  created: number;
+  totalGbDevices: number;
+  wvpDeviceCount: number;
+}> {
+  if (!isGb28181Enabled()) {
+    return { created: 0, totalGbDevices: 0, wvpDeviceCount: 0 };
+  }
+  try {
+    const { channels, wvpDeviceCount } = await collectWvpGbChannelsForSync();
+    if (wvpDeviceCount === 0 || channels.length === 0) {
+      return { created: 0, totalGbDevices: 0, wvpDeviceCount };
+    }
+    const payload = await syncGb28181Devices(channels);
+    return {
+      created: payload?.created ?? 0,
+      totalGbDevices: payload?.total_gb_devices ?? 0,
+      wvpDeviceCount,
+    };
+  } catch (e) {
+    console.warn('后台同步国标设备失败', e);
+    return { created: 0, totalGbDevices: 0, wvpDeviceCount: 0 };
+  }
 }

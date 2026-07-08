@@ -95,8 +95,10 @@ import {
 } from '@/views/camera/utils/monitorDeviceTree'
 import { buildWvpChannelTreeNodes, parseGbChannelKey, type GbChannelRef } from '@/views/camera/utils/gb28181Tree'
 import { getDeviceChannels } from '@/api/device/gb28181'
-import { getCachedMonitorDirectoryTreeBundle } from '@/views/camera/utils/monitorDirectoryTreeCache'
+import { getCachedMonitorDirectoryTreeBundle, invalidateMonitorDirectoryTreeCache } from '@/views/camera/utils/monitorDirectoryTreeCache'
 import { loadMonitorDirectoryTreeWithCache } from '@/views/camera/utils/monitorDirectoryTreeLoad'
+import { syncGb28181DevicesInBackground } from '@/views/camera/utils/wvpGbSync'
+import { isGb28181Enabled } from '@/utils/deployProfile'
 import {
   enrichWvpChannelTreeNodes,
   resolveMonitorGbChannelDisplayName,
@@ -167,15 +169,20 @@ const onLoadGbDeviceChannels: TreeProps['loadData'] = (treeNode) => {
   })
 }
 
-const loadTreeData = async () => {
+const applyMonitorTreeBundle = (bundle: { treeItems: TreeItem[] }) => {
+  treeData.value = bundle.treeItems
+  expandedKeys.value = collectMonitorTreeExpandedKeys(treeData.value)
+}
+
+const loadTreeData = async (options?: { force?: boolean }) => {
   const hasCache = !!getCachedMonitorDirectoryTreeBundle()?.treeItems?.length
   if (!hasCache) loading.value = true
 
   await loadMonitorDirectoryTreeWithCache({
+    force: options?.force,
     skipSync: true,
     onBundle: (bundle) => {
-      treeData.value = bundle.treeItems
-      expandedKeys.value = collectMonitorTreeExpandedKeys(treeData.value)
+      applyMonitorTreeBundle(bundle)
     },
     onError: (error) => {
       console.error('加载设备目录失败', error)
@@ -189,6 +196,16 @@ const loadTreeData = async () => {
     },
   })
   loading.value = false
+}
+
+/** 首页进入时后台同步 WVP 国标设备，避免必须先打开分屏监控点「刷新」 */
+const syncGbDevicesInBackground = async () => {
+  if (!isGb28181Enabled()) return
+  const { created } = await syncGb28181DevicesInBackground()
+  if (created > 0) {
+    invalidateMonitorDirectoryTreeCache()
+    await loadTreeData({ force: true })
+  }
 }
 
 // 加载统计数据
@@ -349,6 +366,7 @@ onMounted(() => {
   isMounted = true
   
   loadTreeData()
+  syncGbDevicesInBackground()
   // 初始加载统计数据
   loadStatistics()
   

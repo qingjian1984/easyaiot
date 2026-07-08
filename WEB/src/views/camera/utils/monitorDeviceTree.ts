@@ -1,6 +1,6 @@
 import type { TreeItem } from '@/components/Tree';
 import type { MonitorTreeDeviceNode, MonitorTreeDirectoryNode } from '@/api/device/camera';
-import { formatCameraDeviceLabel, isGb28181Device, isNvrChannelDevice } from './deviceLabel';
+import { formatCameraDeviceLabel, isGb28181Device, isNvrChannelDevice, parseGb28181Source } from './deviceLabel';
 import { resolveWvpSipDeviceId } from './gb28181DeviceGroup';
 import {
   buildGbChannelNodesFromSynced,
@@ -104,6 +104,31 @@ export function appendDevicesToMonitorTreeChildren(
   }
 }
 
+/** 默认分组标题计数：未入库的 WVP 国标 SIP 也计入展示 */
+function resolveDirectoryDisplayDeviceCount(
+  dir: MonitorTreeDirectoryNode,
+  wvpDevices?: Record<string, any>[],
+): number {
+  const base = dir.device_count ?? dir.devices?.length ?? 0;
+  if (!dir.is_default || !wvpDevices?.length) return base;
+
+  const syncedSips = new Set<string>();
+  for (const d of dir.devices || []) {
+    if (!isGb28181Device(d.source, d.device_kind)) continue;
+    const parsed = parseGb28181Source(d.source);
+    if (parsed?.deviceId) syncedSips.add(parsed.deviceId);
+  }
+
+  let unsyncedSipCount = 0;
+  for (const wvp of wvpDevices) {
+    const sipId = resolveWvpSipDeviceId(wvp);
+    if (sipId && !syncedSips.has(sipId)) unsyncedSipCount++;
+  }
+
+  if (base === 0 && unsyncedSipCount > 0) return unsyncedSipCount;
+  return base;
+}
+
 export function buildMonitorDirectoryTreeNodes(
   directories: MonitorTreeDirectoryNode[],
   options?: MonitorTreeBuildOptions,
@@ -119,26 +144,27 @@ export function buildMonitorDirectoryTreeNodes(
     if (dir.children?.length) {
       children.push(...dir.children.map(mapDirectory));
     }
+    const appendUnsyncedWvpGb = !!dir.is_default;
     if (dir.devices?.length) {
       appendDevicesToMonitorTreeChildren(children, dir.devices, {
         sipNameMap,
         nvrNameMap,
         nvrs,
         wvpDevices,
-        appendUnsyncedWvpGb: false,
+        appendUnsyncedWvpGb,
         appendAllNvrs: !!dir.is_default,
       });
-    } else if (dir.is_default && nvrs?.length) {
+    } else if (dir.is_default && (nvrs?.length || wvpDevices?.length)) {
       appendDevicesToMonitorTreeChildren(children, [], {
         sipNameMap,
         nvrNameMap,
         nvrs,
         wvpDevices,
-        appendUnsyncedWvpGb: false,
-        appendAllNvrs: true,
+        appendUnsyncedWvpGb,
+        appendAllNvrs: !!nvrs?.length,
       });
     }
-    const deviceCount = dir.device_count ?? dir.devices?.length ?? 0;
+    const deviceCount = resolveDirectoryDisplayDeviceCount(dir, wvpDevices);
     return {
       key: `dir_${dir.id}`,
       title: showCount ? `${dir.name}（${deviceCount}）` : dir.name,

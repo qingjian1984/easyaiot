@@ -304,7 +304,8 @@ public class SnapshotAlertConsumer {
                         "hasNotificationConfig={}", 
                         message.getDeviceId(), alertIdRef[0], shouldNotify, hasNotificationConfig);
                 
-                if (shouldNotify && hasNotificationConfig) {
+                // 告警未落库（如不在布防时段内）时不发送通知，与布防时段限制保持一致
+                if (shouldNotify && hasNotificationConfig && alertIdRef[0] != null) {
                     // 发送到抓拍算法任务通知主题供iot-message消费
                     if (iotKafkaTemplate != null) {
                         try {
@@ -347,6 +348,12 @@ public class SnapshotAlertConsumer {
                         log.warn("⚠️  KafkaTemplate不可用，无法发送抓拍算法任务通知消息: alertId={}, deviceId={}", 
                                 alertIdRef[0], message.getDeviceId());
                     }
+                } else if (shouldNotify && hasNotificationConfig && alertIdRef[0] == null) {
+                    log.info("ℹ️  抓拍算法任务告警未落库（可能不在布防时段内），跳过发送通知: " +
+                            "deviceId={}, shouldNotify={}, channels数量={}, notifyUsers数量={}",
+                            message.getDeviceId(), shouldNotify,
+                            (channels != null ? channels.size() : 0),
+                            (notifyUsers != null ? notifyUsers.size() : 0));
                 } else {
                     log.info("ℹ️  抓拍算法任务告警消息中没有通知配置或shouldNotify=false，跳过发送通知: " +
                             "deviceId={}, alertId={}, shouldNotify={}, channels数量={}, notifyUsers数量={}", 
