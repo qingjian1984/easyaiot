@@ -98,6 +98,7 @@ class PatrolRuntimeConfig:
     alert_class_names: List[str]
     face_detection_enabled: bool
     plate_detection_enabled: bool
+    detect_conf: float = 0.5
     session_id: Optional[int] = None
     task_id: Optional[int] = None
 
@@ -123,7 +124,29 @@ def _parse_json_list(raw) -> List:
 
 
 def _get_detect_conf() -> float:
-    return float(os.getenv('PATROL_DETECT_CONF', '0.25'))
+    if session_config is not None:
+        task_conf = getattr(session_config, 'detect_conf', None)
+        if task_conf is not None:
+            try:
+                return float(task_conf)
+            except (TypeError, ValueError):
+                pass
+    try:
+        return float(os.getenv('PATROL_DETECT_CONF', os.getenv('YOLO_DETECT_CONF', '0.5')))
+    except ValueError:
+        return 0.5
+
+
+def _load_detect_conf_from_task(task_id: Optional[int]) -> float:
+    if not task_id:
+        return 0.5
+    task = db_session.query(AlgorithmTask).filter_by(id=int(task_id)).first()
+    if not task or task.detect_conf is None:
+        return 0.5
+    try:
+        return float(task.detect_conf)
+    except (TypeError, ValueError):
+        return 0.5
 
 
 def _config_from_session(session: PatrolSession) -> PatrolRuntimeConfig:
@@ -139,6 +162,7 @@ def _config_from_session(session: PatrolSession) -> PatrolRuntimeConfig:
         alert_class_names=_load_alert_class_names_from_task(session.algorithm_task_id),
         face_detection_enabled=bool(session.face_detection_enabled),
         plate_detection_enabled=bool(session.plate_detection_enabled),
+        detect_conf=_load_detect_conf_from_task(session.algorithm_task_id),
         session_id=session.id,
     )
 
@@ -163,6 +187,7 @@ def _config_from_task(task: AlgorithmTask) -> PatrolRuntimeConfig:
         alert_class_names=parse_alert_class_names(task.alert_class_names),
         face_detection_enabled=bool(task.face_detection_enabled),
         plate_detection_enabled=bool(task.plate_detection_enabled),
+        detect_conf=float(task.detect_conf) if task.detect_conf is not None else 0.5,
         task_id=task.id,
     )
 

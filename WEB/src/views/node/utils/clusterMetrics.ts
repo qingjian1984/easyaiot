@@ -280,9 +280,20 @@ export function buildNodeDiskList(nodes: ComputeNodeVO[]): NodeDiskItem[] {
     .sort((a, b) => b.disk - a.disk || a.name.localeCompare(b.name));
 }
 
+function hasMemCapacity(node: ComputeNodeVO): boolean {
+  return num(node.memTotalBytes) > 0;
+}
+
+function hasDiskCapacity(node: ComputeNodeVO): boolean {
+  return num(node.diskTotalBytes) > 0;
+}
+
 export function buildClusterSnapshot(nodes: ComputeNodeVO[]): ClusterSnapshot {
   const onlineNodes = nodes.filter((n) => n.status === 'online');
+  const computeNodes = nodes.filter(isComputeNode);
   const computeOnline = onlineNodes.filter(isComputeNode);
+  const computeWithMem = computeNodes.filter(hasMemCapacity);
+  const computeWithDisk = computeNodes.filter(hasDiskCapacity);
   const mediaOnline = onlineNodes.filter((n) => n.nodeRole === 'media' || n.nodeRole === 'hybrid');
   const gpuCards = collectGpuCards(nodes);
 
@@ -297,19 +308,19 @@ export function buildClusterSnapshot(nodes: ComputeNodeVO[]): ClusterSnapshot {
     activeTasks: computeOnline.reduce((sum, n) => sum + num(n.activeTasks), 0),
     maxTasks: computeOnline.reduce((sum, n) => sum + num(n.maxTaskCount || 0), 0),
     gpuCount: gpuCards.length,
-    avgCpu: avg(computeOnline.map((n) => num(n.cpuPercent))),
-    avgMem: avg(computeOnline.map((n) => num(n.memPercent))),
-    avgDisk: avg(computeOnline.map((n) => num(n.diskPercent))),
+    avgCpu: avg(computeNodes.map((n) => num(n.cpuPercent))),
+    avgMem: avg(computeWithMem.map((n) => num(n.memPercent))),
+    avgDisk: avg(computeWithDisk.map((n) => num(n.diskPercent))),
     avgGpuUtil: avg(gpuCards.map((g) => g.util)),
     avgGpuMem: avg(gpuCards.map((g) => g.memPercent)),
     availability: nodes.length
       ? Math.round((onlineNodes.length / nodes.length) * 100)
       : 0,
-    diskWarningCount: computeOnline.filter((n) => num(n.diskPercent) >= 85).length,
-    memUsedBytes: computeOnline.reduce((sum, n) => sum + num(n.memUsedBytes), 0),
-    memTotalBytes: computeOnline.reduce((sum, n) => sum + num(n.memTotalBytes), 0),
-    diskUsedBytes: computeOnline.reduce((sum, n) => sum + num(n.diskUsedBytes), 0),
-    diskTotalBytes: computeOnline.reduce((sum, n) => sum + num(n.diskTotalBytes), 0),
+    diskWarningCount: computeWithDisk.filter((n) => num(n.diskPercent) >= 85).length,
+    memUsedBytes: computeWithMem.reduce((sum, n) => sum + num(n.memUsedBytes), 0),
+    memTotalBytes: computeWithMem.reduce((sum, n) => sum + num(n.memTotalBytes), 0),
+    diskUsedBytes: computeWithDisk.reduce((sum, n) => sum + num(n.diskUsedBytes), 0),
+    diskTotalBytes: computeWithDisk.reduce((sum, n) => sum + num(n.diskTotalBytes), 0),
     gpuMemUsedBytes: gpuCards.reduce((sum, g) => sum + g.memUsedMb * MB_BYTES, 0),
     gpuMemTotalBytes: gpuCards.reduce((sum, g) => sum + g.memTotalMb * MB_BYTES, 0),
   };

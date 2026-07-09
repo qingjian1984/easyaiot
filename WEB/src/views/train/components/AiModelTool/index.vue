@@ -131,6 +131,26 @@
           </div>
         </div>
 
+        <!-- 检测置信度 -->
+        <div class="config-section">
+          <div class="section-title">
+            <ExperimentOutlined class="icon" />
+            <span>检测置信度</span>
+          </div>
+          <div class="config-options">
+            <InputNumber
+              v-model:value="state.detectConf"
+              class="detect-conf-input"
+              :min="0.1"
+              :max="0.95"
+              :step="0.05"
+            />
+            <div class="class-tags-hint">
+              默认 0.5；值越高误检越少，但可能增加漏检
+            </div>
+          </div>
+        </div>
+
         <!-- 输入源选择 -->
         <div class="config-section">
           <div class="section-title">
@@ -526,7 +546,7 @@ import Jessibuca from '@/components/Player/module/jessibuca.vue';
 import { useMessage } from '@/hooks/web/useMessage';
 import { ApiSelect } from '@/components/Form';
 import { BasicHelp } from '@/components/Basic';
-import { Tooltip } from 'ant-design-vue';
+import { InputNumber, Tooltip } from 'ant-design-vue';
 import {
   SettingOutlined,
   AppstoreOutlined,
@@ -591,7 +611,7 @@ interface DeployService {
 
 interface AppState {
   activeSource: string;
-  confidenceThreshold: number;
+  detectConf: number;
   cooldownTime: number;
   showOriginal: boolean;
   detectionStatus: string;
@@ -645,7 +665,7 @@ interface AppState {
 // 状态管理
 const state = reactive<AppState>({
   activeSource: 'image',
-  confidenceThreshold: 35,
+  detectConf: 0.5,
   cooldownTime: 5,
   showOriginal: true,
   detectionStatus: 'idle',
@@ -945,13 +965,13 @@ const loadDetectionParams = async () => {
   try {
     // 模拟API调用
     const params = await new Promise<any>(resolve => setTimeout(() => resolve({
-      confidenceThreshold: 35,
+      detectConf: 0.5,
       cooldownTime: 5,
       showOriginal: true
     }), 300));
 
     // 更新状态
-    state.confidenceThreshold = params.confidenceThreshold;
+    state.detectConf = params.detectConf ?? 0.5;
     state.cooldownTime = params.cooldownTime;
     state.showOriginal = params.showOriginal;
   } catch (error) {
@@ -1045,10 +1065,9 @@ const startDetection = async () => {
     
     // 设置推理参数
     const parameters: Record<string, any> = {
-      conf_thres: state.confidenceThreshold / 100,
+      conf_thres: state.detectConf,
       iou_thres: 0.45,
-      // 实时流检测参数走后端算法任务默认值（YOLO26=0.10，其余=0.25）
-      use_stream_algorithm_defaults: state.activeSource === 'camera',
+      use_stream_algorithm_defaults: false,
       stream_imgsz: 640,
       // 与 VIDEO OVERLAY_EXTRACT_INTERVAL 一致：每 5 帧检测一次，推流不阻塞
       stream_extract_interval: 5,
@@ -2565,6 +2584,10 @@ body {
       overflow: hidden;
       flex: 1;
       min-height: 0;
+
+      .detect-conf-input {
+        width: 100%;
+      }
 
       .model-select-tip {
         font-size: 12px;

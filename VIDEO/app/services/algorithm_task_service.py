@@ -134,6 +134,18 @@ def _serialize_motion_gate_config(config) -> Optional[str]:
     return None
 
 
+def _normalize_detect_conf(value) -> float:
+    if value is None:
+        return 0.5
+    try:
+        conf = float(value)
+    except (TypeError, ValueError):
+        raise ValueError('检测置信度格式无效')
+    if conf < 0.01 or conf > 0.99:
+        raise ValueError('检测置信度必须在 1% ~ 99% 之间')
+    return conf
+
+
 def _has_library_matching_scope(library_ids) -> bool:
     return bool(_normalize_library_ids(library_ids))
 
@@ -725,6 +737,7 @@ def create_algorithm_task(task_name: str,
                          sam_supplement_config=None,
                          motion_gate_enabled: bool = False,
                          motion_gate_config=None,
+                         detect_conf: float = 0.5,
                          post_process_enabled: bool = False,
                          post_process_replicas: int = 1) -> AlgorithmTask:
     """创建算法任务"""
@@ -939,6 +952,7 @@ def create_algorithm_task(task_name: str,
             task_type=task_type,
             model_ids=model_ids_json,
             model_names=model_names,
+            detect_conf=_normalize_detect_conf(detect_conf),
             extract_interval=extract_interval if task_type == 'realtime' else None,
             rtmp_input_url=None,  # 不再使用，从摄像头列表获取RTSP流地址
             rtmp_output_url=None,  # 不再使用，从摄像头列表获取RTMP流地址
@@ -1136,6 +1150,7 @@ def update_algorithm_task(task_id: int, **kwargs) -> AlgorithmTask:
         updatable_fields = [
             'task_name', 'task_type', 'pusher_id',
             'model_ids', 'model_names',  # 模型配置
+            'detect_conf',
             'extract_interval',  # 实时算法任务配置（rtmp_input_url和rtmp_output_url不再使用，从摄像头列表获取）
             'tracking_enabled', 'tracking_similarity_threshold', 'tracking_max_age', 'tracking_smooth_alpha',  # 追踪配置
             'alert_event_enabled', 'alert_event_suppress_time', 'alert_class_names',
@@ -1164,6 +1179,9 @@ def update_algorithm_task(task_id: int, **kwargs) -> AlgorithmTask:
             kwargs['motion_gate_config'] = _serialize_motion_gate_config(
                 kwargs['motion_gate_config']
             )
+
+        if 'detect_conf' in kwargs:
+            kwargs['detect_conf'] = _normalize_detect_conf(kwargs.get('detect_conf'))
         
         # 验证布防模式
         if 'defense_mode' in kwargs:

@@ -6,6 +6,7 @@ import {
   findLaneByKey,
   flattenLaneNodes,
   laneLabel,
+  mergeLaneNodesWithLive,
   readActiveLaneKey,
   writeActiveLaneKey,
 } from './clusterLanes';
@@ -13,6 +14,7 @@ import { isPlatformNode } from './platformNode';
 import { NODE_DASHBOARD } from './constants';
 
 const lanes = ref<ClusterLaneVO[]>([]);
+const lanesReady = ref(false);
 const activeLaneKey = ref(readActiveLaneKey());
 let loadPromise: Promise<void> | null = null;
 
@@ -31,7 +33,7 @@ export function scopeNodesByLane(allNodes: ComputeNodeVO[], laneList: ClusterLan
   if (lane.isLocal) {
     return filterNodesByLane(allNodes, lane);
   }
-  return flattenLaneNodes(lane);
+  return mergeLaneNodesWithLive(flattenLaneNodes(lane), allNodes);
 }
 
 export function useClusterNodeScope() {
@@ -74,6 +76,7 @@ export function useClusterNodeScope() {
         lanes.value = [];
         rebuildCentralLaneOptions();
       } finally {
+        lanesReady.value = true;
         loadPromise = null;
       }
     })();
@@ -87,6 +90,7 @@ export function useClusterNodeScope() {
 
   return {
     lanes,
+    lanesReady,
     activeLaneKey,
     centralLaneOptions,
     rebuildCentralLaneOptions,

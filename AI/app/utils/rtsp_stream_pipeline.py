@@ -71,7 +71,7 @@ class RtspStreamPipeline:
             'RTSP 异步管道启动: output_fps=%s overlay_interval=%s conf=%.2f imgsz=%s',
             self.output_fps,
             self.extract_interval,
-            float(self.detect_config.get('conf', 0.25)),
+            float(self.detect_config.get('conf', 0.5)),
             self.detect_config.get('imgsz'),
         )
         try:

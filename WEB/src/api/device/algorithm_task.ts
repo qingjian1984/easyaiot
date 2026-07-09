@@ -40,6 +40,8 @@ export interface AlgorithmTask {
   // 模型配置（直接选择模型列表，不再依赖模型服务接口）
   model_ids?: number[]; // 关联的模型ID列表
   model_names?: string; // 关联的模型名称列表（逗号分隔，冗余字段，用于快速显示）
+  /** YOLO 检测置信度阈值（0~1，默认 0.5） */
+  detect_conf?: number;
   // 实时算法任务配置
   extract_interval?: number; // 抽帧间隔（每N帧抽一次）
   motion_gate_enabled?: boolean;
@@ -151,6 +153,8 @@ export const createAlgorithmTask = (data: {
   device_ids?: string[];
   // 模型配置
   model_ids?: number[];
+  /** YOLO 检测置信度阈值（0~1，默认 0.5） */
+  detect_conf?: number;
   // 实时算法任务配置
   extract_interval?: number;
   // 追踪配置

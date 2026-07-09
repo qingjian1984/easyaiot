@@ -993,7 +993,7 @@ class InferenceService:
                     original_temp_path = temp_path
 
             # 执行推理
-            conf_thres = parameters.get('conf_thres', 0.25)
+            conf_thres = parameters.get('conf_thres', 0.5)
             iou_thres = parameters.get('iou_thres', 0.45)
             class_ids = self._resolve_class_ids(model, parameters)
             
@@ -1070,7 +1070,7 @@ class InferenceService:
 
         model = self.get_model()
         is_onnx = isinstance(model, ONNXInference)
-        conf_thres = parameters.get('conf_thres', 0.25)
+        conf_thres = parameters.get('conf_thres', 0.5)
         iou_thres = parameters.get('iou_thres', 0.45)
         class_ids = self._resolve_class_ids(model, parameters)
 
@@ -1352,7 +1352,7 @@ class InferenceService:
                 is_onnx = isinstance(model, ONNXInference)
                 
                 # 构建推理参数
-                conf_thres = parameters.get('conf_thres', 0.25) if parameters else 0.25
+                conf_thres = parameters.get('conf_thres', 0.5) if parameters else 0.5
                 iou_thres = parameters.get('iou_thres', 0.45) if parameters else 0.45
                 class_ids = self._resolve_class_ids(model, parameters)
                 

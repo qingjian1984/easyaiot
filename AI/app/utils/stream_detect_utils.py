@@ -76,23 +76,19 @@ def resolve_stream_detect_conf(
     model_id: Optional[int] = None,
     parameters: Optional[dict] = None,
 ) -> float:
-    """流推理置信度：默认与 VIDEO 算法任务一致（YOLO26=0.10，其余=0.25）。"""
+    """流推理置信度：默认与 VIDEO 算法任务一致（0.5）。"""
     params = parameters or {}
     if params.get('stream_conf_thres') is not None:
         return float(params['stream_conf_thres'])
     if params.get('use_stream_algorithm_defaults') is False:
-        return float(params.get('conf_thres', 0.25))
+        return float(params.get('conf_thres', 0.5))
     raw = os.getenv('YOLO_DETECT_CONF', '').strip()
     if raw:
         try:
             return float(raw)
         except ValueError:
             pass
-    yolo26 = is_yolo26_model(model, model_path=model_path, model_id=model_id)
-    end2end = is_end2end_ultralytics_model(model) or yolo26
-    if yolo26 or end2end:
-        return 0.10
-    return 0.25
+    return 0.5
 
 
 def resolve_stream_detect_imgsz(

@@ -127,6 +127,7 @@ def create_task():
             sam_supplement_config=data.get('sam_supplement_config'),
             motion_gate_enabled=data.get('motion_gate_enabled', False),
             motion_gate_config=data.get('motion_gate_config'),
+            detect_conf=data.get('detect_conf', 0.5),
             post_process_enabled=data.get('post_process_enabled', False),
             post_process_replicas=data.get('post_process_replicas', 1),
         )

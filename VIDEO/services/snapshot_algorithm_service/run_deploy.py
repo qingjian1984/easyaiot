@@ -583,10 +583,17 @@ def upload_frame_to_snap_space(device_id: str, frame: np.ndarray) -> bool:
 
 
 def _get_detect_conf() -> float:
+    if task_config is not None:
+        task_conf = getattr(task_config, 'detect_conf', None)
+        if task_conf is not None:
+            try:
+                return float(task_conf)
+            except (TypeError, ValueError):
+                pass
     try:
-        return float(os.getenv('YOLO_DETECT_CONF', '0.25'))
+        return float(os.getenv('YOLO_DETECT_CONF', '0.5'))
     except ValueError:
-        return 0.25
+        return 0.5
 
 
 def _get_device_name(device_id: str) -> str:

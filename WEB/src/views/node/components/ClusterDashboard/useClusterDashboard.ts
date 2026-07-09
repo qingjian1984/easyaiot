@@ -36,6 +36,17 @@ export type { TrendViewMode };
 
 const MAX_TREND_POINTS = 120;
 
+function mergeComputeNode(existing: ComputeNodeVO, patch: ComputeNodeVO): ComputeNodeVO {
+  const merged: ComputeNodeVO = { ...existing };
+  (Object.keys(patch) as Array<keyof ComputeNodeVO>).forEach((key) => {
+    const value = patch[key];
+    if (value !== undefined && value !== null) {
+      (merged as Record<string, unknown>)[key as string] = value;
+    }
+  });
+  return merged;
+}
+
 const shared = {
   trendHistory: [] as ClusterTrendPoint[],
   nodeTrendSeries: [] as NodeTrendSeries[],
@@ -65,11 +76,17 @@ export function useClusterDashboard() {
     activeLaneKey,
     centralLaneOptions,
     scopeNodes,
+    lanesReady,
     loadLanes,
     setActiveLaneKey: setScopeLaneKey,
   } = useClusterNodeScope();
 
-  const scopedNodes = computed(() => scopeNodes(nodes.value));
+  const scopedNodes = computed(() => {
+    if (!lanesReady.value && activeLaneKey.value !== 'all') {
+      return nodes.value;
+    }
+    return scopeNodes(nodes.value);
+  });
 
   const focusNodes = computed(() => {
     if (!overviewFocusNodeId.value) {
@@ -133,7 +150,7 @@ export function useClusterDashboard() {
     if (!update.id) return;
     const index = nodes.value.findIndex((node) => node.id === update.id);
     if (index >= 0) {
-      nodes.value[index] = { ...nodes.value[index], ...update };
+      nodes.value[index] = mergeComputeNode(nodes.value[index], update);
     } else {
       nodes.value.push(update);
     }
@@ -169,10 +186,10 @@ export function useClusterDashboard() {
   async function loadInitialData() {
     loading.value = nodes.value.length === 0;
     try {
+      await loadLanes();
       const [pageRes] = await Promise.all([
         getNodePage({ pageNo: 1, pageSize: 200 }),
         loadMetricHistory(),
-        loadLanes(),
       ]);
       if (!nodes.value.length) {
         applySnapshot(pageRes?.data?.list ?? []);

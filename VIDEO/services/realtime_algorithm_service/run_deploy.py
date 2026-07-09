@@ -501,16 +501,21 @@ YOLO_DETECT_IOU = float(os.getenv('YOLO_DETECT_IOU', '0.45'))
 
 
 def _get_detect_conf(*, end2end: bool = False, yolo26: bool = False) -> float:
-    """检测置信度阈值；YOLO26 默认更低以提升 1080p 监控场景中人等小目标召回。"""
+    """检测置信度阈值；优先使用任务配置，其次环境变量，默认 0.5。"""
+    if task_config is not None:
+        task_conf = getattr(task_config, 'detect_conf', None)
+        if task_conf is not None:
+            try:
+                return float(task_conf)
+            except (TypeError, ValueError):
+                pass
     raw = os.getenv('YOLO_DETECT_CONF', '').strip()
     if raw:
         try:
             return float(raw)
         except ValueError:
             pass
-    if yolo26 or end2end:
-        return 0.10
-    return 0.25
+    return 0.5
 
 
 def _any_loaded_model_is_end2end() -> bool:
@@ -1680,7 +1685,7 @@ def load_yolo_models(model_ids: List[int]) -> Dict[int, Any]:
                     logger.info(f"正在加载ONNX模型: model_id={model_id}, path={model_path}, gpu_id={gpu_id}")
                     onnx_model = ONNXInference(
                         model_path_str,
-                        conf_threshold=0.25,
+                        conf_threshold=_get_detect_conf(),
                         iou_threshold=0.45,
                         device_id=gpu_id,
                         api_class_names=model_api_class_names,

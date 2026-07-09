@@ -903,6 +903,7 @@ class AlgorithmTask(db.Model):
     # 模型配置（直接选择模型列表，不再依赖模型服务接口）
     model_ids = db.Column(db.Text, nullable=True, comment='关联的模型ID列表（JSON格式，如[1,2,3]）')
     model_names = db.Column(db.Text, nullable=True, comment='关联的模型名称列表（逗号分隔，冗余字段，用于快速显示）')
+    detect_conf = db.Column(db.Float, default=0.5, nullable=False, comment='YOLO检测置信度阈值（0~1，默认0.5）')
     
     # 实时算法任务配置
     extract_interval = db.Column(db.Integer, default=12, nullable=True,
@@ -1076,6 +1077,7 @@ class AlgorithmTask(db.Model):
             'device_names': device_names,
             'model_ids': model_ids_list,
             'model_names': self.model_names,
+            'detect_conf': self.detect_conf if self.detect_conf is not None else 0.5,
             'extract_interval': self.extract_interval,
             'rtmp_input_url': self.rtmp_input_url,
             'rtmp_output_url': self.rtmp_output_url,
@@ -2172,6 +2174,30 @@ def ensure_algorithm_task_post_process_columns(engine):
             log.info('已为 algorithm_task 表添加 %s 列', col)
     except Exception as e:
         log.warning('ensure_algorithm_task_post_process_columns: %s', e)
+
+
+def ensure_algorithm_task_detect_conf_column(engine):
+    """老库 algorithm_task 表补 YOLO 检测置信度列。"""
+    import logging
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    columns = {
+        'detect_conf': 'DOUBLE PRECISION DEFAULT 0.5',
+    }
+    try:
+        inspector = inspect(engine)
+        if 'algorithm_task' not in inspector.get_table_names():
+            return
+        col_names = {c['name'] for c in inspector.get_columns('algorithm_task')}
+        for col, ddl in columns.items():
+            if col in col_names:
+                continue
+            with engine.begin() as conn:
+                conn.execute(text(f'ALTER TABLE algorithm_task ADD COLUMN {col} {ddl}'))
+            log.info('已为 algorithm_task 表添加 %s 列', col)
+    except Exception as e:
+        log.warning('ensure_algorithm_task_detect_conf_column: %s', e)
 
 
 def ensure_algorithm_task_alert_class_columns(engine):

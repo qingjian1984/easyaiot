@@ -35,6 +35,20 @@ export function filterNodesByLane(nodes: ComputeNodeVO[], lane: ClusterLaneVO | 
   return nodes.filter((node) => node.id != null && allowedIds.has(node.id));
 }
 
+/** 将泳道节点定义与 WebSocket 实时节点合并，优先使用实时指标 */
+export function mergeLaneNodesWithLive(laneNodes: ComputeNodeVO[], liveNodes: ComputeNodeVO[]): ComputeNodeVO[] {
+  const liveById = new Map(
+    liveNodes
+      .filter((node) => node.id != null)
+      .map((node) => [node.id!, node] as const),
+  );
+  return laneNodes.map((laneNode) => {
+    if (laneNode.id == null) return laneNode;
+    const live = liveById.get(laneNode.id);
+    return live ? { ...laneNode, ...live } : laneNode;
+  });
+}
+
 export function findLaneByKey(lanes: ClusterLaneVO[], laneKey?: string | null): ClusterLaneVO | undefined {
   const key = laneKey || LOCAL_LANE_KEY;
   return lanes.find((lane) => lane.laneKey === key) || lanes.find((lane) => lane.isLocal) || lanes[0];
