@@ -44,6 +44,9 @@ source "${SCRIPT_DIR}/runtime_image_common.sh"
 # shellcheck source=docker_mirror_common.sh
 source "${SCRIPT_DIR}/docker_mirror_common.sh"
 
+# shellcheck source=docker_compose_bundled.sh
+source "${SCRIPT_DIR}/docker_compose_bundled.sh"
+
 # shellcheck source=node/ensure_platform_agent_invoke.sh
 source "${PROJECT_ROOT}/.scripts/node/ensure_platform_agent_invoke.sh"
 
@@ -153,14 +156,33 @@ check_docker() {
 }
 
 check_docker_compose() {
-    if check_command docker-compose; then
-        return 0
+    local _need_fix=false
+    if ! check_command docker-compose && ! docker compose version &>/dev/null 2>&1; then
+        _need_fix=true
+    elif ! compose_version_meets_requirement_quiet; then
+        _need_fix=true
     fi
-    if docker compose version &>/dev/null 2>&1; then
-        return 0
+
+    if [ "$_need_fix" = true ]; then
+        if bundled_compose_available; then
+            local _bundled_ver
+            _bundled_ver=$(get_bundled_compose_version 2>/dev/null || echo "未知")
+            print_warning "Docker Compose 未安装或版本过低（需要 v${COMPOSE_MIN_VERSION}+）"
+            print_info "将使用项目内置 Docker Compose v${_bundled_ver} 离线安装/升级（架构: $(uname -m)）"
+            if [ "$EUID" -ne 0 ]; then
+                print_error "请使用 sudo 运行以自动安装/升级 Docker Compose"
+                exit 1
+            fi
+            if ! install_bundled_docker_compose || ! compose_version_meets_requirement_quiet; then
+                print_error "内置 Docker Compose 安装/升级失败"
+                exit 1
+            fi
+            print_success "Docker Compose 已就绪: $(docker compose version 2>/dev/null || docker-compose --version)"
+            return 0
+        fi
+        print_error "未安装 Docker Compose 或版本过低，且当前架构无内置离线包"
+        exit 1
     fi
-    print_error "未安装 Docker Compose"
-    exit 1
 }
 
 create_network() {

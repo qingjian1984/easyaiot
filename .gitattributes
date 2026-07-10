@@ -21,6 +21,9 @@ WEB/docker-build-logs/** -diff
 # ZLMediaKit 运行时配置：不参与 diff
 .scripts/zlmediakit/conf/config.ini -diff
 
+# Docker Compose 离线二进制（体积大，按架构内置，不参与 diff）
+.scripts/docker-compose/** binary -diff
+
 # ── Linux 部署相关文本文件强制 LF ──
 # 这些文件在 Linux 上被执行 / 解析，带 \r(CRLF) 会出问题（即使在 Windows 上编辑提交也会被规范化为 LF）：
 #   *.sh           脚本：#!/bin/bash\r 会“无法执行：找不到需要的文件”；

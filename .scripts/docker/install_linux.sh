@@ -368,6 +368,9 @@ check_command() {
     return 0
 }
 
+# shellcheck source=docker_compose_bundled.sh
+source "${SCRIPT_DIR}/docker_compose_bundled.sh"
+
 # 检查 Docker 权限
 check_docker_permission() {
     if ! docker info &> /dev/null; then
@@ -438,14 +441,42 @@ detect_compose() {
     [ -n "$COMPOSE_CMD" ]
 }
 
-# 检查 Docker Compose 是否安装（进程内幂等）
+# 检查 Docker Compose 是否安装（进程内幂等；版本不足时自动用内置离线包覆盖升级）
 check_docker_compose() {
     [ "${_COMPOSE_CHECKED:-0}" = "1" ] && return 0
     print_info "检查 Docker Compose..."
 
+    local _need_fix=false _reason=""
     if ! detect_compose; then
-        print_error "Docker Compose 未安装，请执行: sudo apt install docker-compose-plugin"
-        exit 1
+        _need_fix=true
+        _reason="未安装"
+    elif ! compose_version_meets_requirement_quiet; then
+        _need_fix=true
+        _reason="版本过低（需要 v${COMPOSE_MIN_VERSION}+）"
+    fi
+
+    if [ "$_need_fix" = true ]; then
+        if bundled_compose_available; then
+            local _bundled_ver
+            _bundled_ver=$(get_bundled_compose_version 2>/dev/null || echo "未知")
+            print_warning "Docker Compose ${_reason}"
+            print_info "将使用项目内置 Docker Compose v${_bundled_ver} 离线安装/升级（架构: $(uname -m)）"
+            if [ "$EUID" -ne 0 ]; then
+                print_error "请使用 sudo 运行以自动安装/升级 Docker Compose"
+                echo ""
+                echo "或手动执行："
+                bundled_compose_manual_hint
+                exit 1
+            fi
+            if ! install_bundled_docker_compose || ! compose_version_meets_requirement_quiet; then
+                print_error "内置 Docker Compose 安装/升级失败或版本仍不符合要求"
+                exit 1
+            fi
+            detect_compose
+        else
+            print_error "Docker Compose ${_reason}，且当前架构 $(uname -m) 无内置离线包"
+            exit 1
+        fi
     fi
 
     local _ver_display=""

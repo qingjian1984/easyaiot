@@ -164,6 +164,9 @@ check_command() {
     return 0
 }
 
+# shellcheck source=docker_compose_bundled.sh
+source "${SCRIPT_DIR}/docker_compose_bundled.sh"
+
 # 检查是否为 macOS
 check_macos() {
     if [[ "$OSTYPE" != "darwin"* ]]; then
@@ -234,7 +237,7 @@ check_docker() {
     check_docker_permission "$@"
 }
 
-# 检查 Docker Compose 是否安装
+# 检查 Docker Compose 是否安装（macOS 无内置离线包，版本不足时需升级 Docker Desktop）
 check_docker_compose() {
     local version_output=""
     
@@ -243,32 +246,38 @@ check_docker_compose() {
         COMPOSE_CMD="docker-compose"
         version_output=$(docker-compose --version 2>/dev/null || echo "")
         if [ -n "$version_output" ]; then
-            print_success "Docker Compose 已安装: $version_output"
-            return 0
+            if compose_version_meets_requirement "$(parse_compose_version "$version_output")"; then
+                print_success "Docker Compose 已安装: $version_output"
+                return 0
+            fi
+            print_error "Docker Compose 版本过低: $(parse_compose_version "$version_output")，需要 v${COMPOSE_MIN_VERSION}+"
+            echo "请升级 Docker Desktop 至最新版本: https://www.docker.com/products/docker-desktop"
+            exit 1
         fi
     fi
     
     # 检查 docker compose (v2)
     if docker compose version &> /dev/null; then
         COMPOSE_CMD="docker compose"
-        # 尝试多种方式获取版本信息
         version_output=$(docker compose version --short 2>/dev/null || echo "")
         
         if [ -z "$version_output" ]; then
             version_output=$(docker compose version 2>&1 | grep -E "version|Docker Compose" | head -1 | sed 's/^[[:space:]]*//' || echo "")
         fi
         
-        if [ -z "$version_output" ] || echo "$version_output" | grep -qiE "usage|command|options"; then
-            version_output=$(docker compose --version 2>/dev/null || docker compose version 2>&1 | head -1 || echo "")
-            if echo "$version_output" | grep -qiE "usage|command|options"; then
-                print_success "Docker Compose 已安装 (docker compose 命令可用)"
-            else
+        if [ -n "$version_output" ] && ! echo "$version_output" | grep -qiE "usage|command|options"; then
+            if compose_version_meets_requirement "$(parse_compose_version "$version_output")"; then
                 print_success "Docker Compose 已安装: $version_output"
+                return 0
             fi
-        else
-            print_success "Docker Compose 已安装: $version_output"
+            print_error "Docker Compose 版本过低: $(parse_compose_version "$version_output")，需要 v${COMPOSE_MIN_VERSION}+"
+            echo "请升级 Docker Desktop 至最新版本: https://www.docker.com/products/docker-desktop"
+            exit 1
         fi
-        return 0
+        if compose_version_meets_requirement_quiet; then
+            print_success "Docker Compose 已安装 (docker compose 命令可用)"
+            return 0
+        fi
     fi
     
     # 如果都不存在，报错
