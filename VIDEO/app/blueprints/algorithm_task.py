@@ -128,6 +128,12 @@ def create_task():
             motion_gate_enabled=data.get('motion_gate_enabled', False),
             motion_gate_config=data.get('motion_gate_config'),
             detect_conf=data.get('detect_conf', 0.5),
+            pose_analysis_enabled=data.get('pose_analysis_enabled', False),
+            pose_analysis_config=data.get('pose_analysis_config'),
+            pose_intent_enabled=data.get('pose_intent_enabled', False),
+            pose_library_ids=data.get('pose_library_ids'),
+            pose_intent_threshold=data.get('pose_intent_threshold'),
+            pose_intent_config=data.get('pose_intent_config'),
             post_process_enabled=data.get('post_process_enabled', False),
             post_process_replicas=data.get('post_process_replicas', 1),
         )

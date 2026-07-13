@@ -59,4 +59,10 @@ public class PostProcessRequestMessage {
 
     @JsonAlias("alert_class_names")
     private List<String> alertClassNames;
+
+    @JsonAlias("pose_analysis_enabled")
+    private Boolean poseAnalysisEnabled;
+
+    @JsonAlias("pose_intent_enabled")
+    private Boolean poseIntentEnabled;
 }

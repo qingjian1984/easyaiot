@@ -4275,10 +4275,9 @@ def alert_detection_worker(worker_id: int):
                     stream_info = task_config.device_streams.get(device_id_from_data, {})
                     device_name = stream_info.get('device_name', device_id_from_data)
 
-                post_process_enabled = bool(
-                    task_config and getattr(task_config, 'post_process_enabled', False)
-                )
-                if post_process_enabled:
+                from app.utils.post_process_runner import task_needs_sink_processing
+                sink_enabled = task_needs_sink_processing(task_config)
+                if sink_enabled:
                     alert_image_path = None
                     if detections:
                         alert_image_path = save_alert_image(

@@ -58,6 +58,8 @@ def build_post_process_request_message(
         'regions': ctx.get('regions') or [],
         'modelIds': ctx.get('model_ids') or [],
         'alertClassNames': ctx.get('alert_class_names') or [],
+        'poseAnalysisEnabled': bool(ctx.get('pose_analysis_enabled')),
+        'poseIntentEnabled': bool(ctx.get('pose_intent_enabled')),
         'alertImagePath': alert_image_path or ctx.get('alert_image_path'),
         'correlationId': correlation_id or ctx.get('correlation_id') or str(uuid.uuid4()),
     }

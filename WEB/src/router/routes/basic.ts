@@ -119,6 +119,31 @@ export const PLATE_MANAGE_ROUTE: AppRouteRecordRaw = {
   ],
 }
 
+/** 场景姿态管理独立页 */
+export const SCENARIO_POSE_MANAGE_ROUTE: AppRouteRecordRaw = {
+  path: '/scenario-pose-manage',
+  component: LAYOUT,
+  name: 'ScenarioPoseManageLayout',
+  meta: {
+    title: '场景姿态管理',
+    hideMenu: true,
+    hideBreadcrumb: true,
+  },
+  children: [
+    {
+      path: ':libraryId',
+      name: 'ScenarioPoseManage',
+      component: () => import('@/views/scenario-pose-manage/index.vue'),
+      meta: {
+        title: '场景姿态管理',
+        hideMenu: true,
+        canTo: true,
+        activeMenu: 'camera/index',
+      },
+    },
+  ],
+}
+
 /** 录像空间回放独立页（从录像空间列表跳转） */
 export const RECORD_SPACE_MANAGE_ROUTE: AppRouteRecordRaw = {
   path: '/record-space-manage',

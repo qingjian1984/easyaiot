@@ -163,16 +163,19 @@ function addTagsFromLibraryIds(
   }
 }
 
-/** 从已选人脸/车牌库合并业务标签（写入任务 matching_business_tags 并透传子任务） */
+/** 从已选人脸/车牌/场景姿态库合并业务标签 */
 export function collectMatchingTagsFromLibraries(
   faceLibraries: LibraryWithTags[],
   plateLibraries: LibraryWithTags[],
   faceLibraryIds?: number[] | null,
   plateLibraryIds?: number[] | null,
+  poseLibraries?: LibraryWithTags[],
+  poseLibraryIds?: number[] | null,
 ): string[] {
   const tagSet = new Set<string>();
   addTagsFromLibraryIds(faceLibraries, faceLibraryIds ?? undefined, tagSet);
   addTagsFromLibraryIds(plateLibraries, plateLibraryIds ?? undefined, tagSet);
+  addTagsFromLibraryIds(poseLibraries ?? [], poseLibraryIds ?? undefined, tagSet);
   return Array.from(tagSet);
 }
 

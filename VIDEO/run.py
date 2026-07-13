@@ -223,11 +223,15 @@ def create_app(start_background_tasks=None):
             db.create_all()
             from models import (
                 ensure_algorithm_task_sam_columns,
+                ensure_algorithm_task_pose_columns,
+                ensure_algorithm_task_pose_intent_columns,
                 ensure_algorithm_task_post_process_columns,
                 ensure_algorithm_task_alert_class_columns,
                 ensure_algorithm_task_detect_conf_column,
             )
             ensure_algorithm_task_sam_columns(db.engine)
+            ensure_algorithm_task_pose_columns(db.engine)
+            ensure_algorithm_task_pose_intent_columns(db.engine)
             ensure_algorithm_task_post_process_columns(db.engine)
             ensure_algorithm_task_alert_class_columns(db.engine)
             ensure_algorithm_task_detect_conf_column(db.engine)
@@ -922,6 +926,15 @@ def create_app(start_background_tasks=None):
         print(f"✅ Plate Blueprint 注册成功")
     except Exception as e:
         print(f"❌ Plate Blueprint 注册失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+    try:
+        from app.blueprints import scenario_pose
+        app.register_blueprint(scenario_pose.scenario_pose_bp, url_prefix='/video/scenario-pose')
+        print(f"✅ Scenario Pose Blueprint 注册成功")
+    except Exception as e:
+        print(f"❌ Scenario Pose Blueprint 注册失败: {str(e)}")
         import traceback
         traceback.print_exc()
 

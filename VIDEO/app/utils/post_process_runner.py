@@ -1,6 +1,7 @@
 """
 算法任务 AI 后处理脚本加载与执行。
 用户在工作区编写 post_process.py，实现 process(ctx) 函数。
+人体姿态分析在 iot-sink Worker 内异步执行，不占用算法任务进程算力。
 """
 from __future__ import annotations
 
@@ -37,6 +38,15 @@ def get_task_script_path(task_id: int, script_name: str = 'post_process.py') -> 
     return get_task_workspace_dir(task_id) / script_name
 
 
+def task_needs_sink_processing(task_config: Any) -> bool:
+    """任务是否需要投递 iot-sink（AI 后处理脚本和/或人体姿态分析/姿态意图分析）。"""
+    if not task_config:
+        return False
+    return bool(getattr(task_config, 'post_process_enabled', False)) or bool(
+        getattr(task_config, 'pose_analysis_enabled', False)
+    ) or bool(getattr(task_config, 'pose_intent_enabled', False))
+
+
 def _serialize_detection(det: Dict[str, Any]) -> Dict[str, Any]:
     return {
         'class_id': det.get('class_id'),
@@ -61,13 +71,16 @@ def build_task_context(
     tracked_detections: Optional[List[Dict[str, Any]]] = None,
     regions: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """构建算法任务通用入参，供用户后处理脚本使用。"""
+    """构建算法任务通用入参，供 iot-sink Worker 后处理使用。"""
     task_id = getattr(task_config, 'id', None)
     state_key = f'task_{task_id}' if task_id is not None else 'unknown'
     state = _STATE.setdefault(state_key, {})
 
     tracked = tracked_detections if tracked_detections is not None else detections
     from app.utils.alert_class_filter import parse_alert_class_names
+    pose_enabled = bool(getattr(task_config, 'pose_analysis_enabled', False)) or bool(
+        getattr(task_config, 'pose_intent_enabled', False)
+    )
     return {
         'task_id': task_id,
         'task_name': getattr(task_config, 'task_name', ''),
@@ -84,6 +97,11 @@ def build_task_context(
         'state': state,
         'model_ids': _parse_model_ids(getattr(task_config, 'model_ids', None)),
         'alert_class_names': parse_alert_class_names(getattr(task_config, 'alert_class_names', None)),
+        'pose_analysis_enabled': pose_enabled,
+        'pose_intent_enabled': bool(getattr(task_config, 'pose_intent_enabled', False)),
+        'pose_persons': [],
+        'pose_result': None,
+        'pose_intent_matches': [],
     }
 
 
@@ -137,12 +155,52 @@ def _load_process_module(task_id: int, script_name: str):
     return module
 
 
-def run_post_process(
+def apply_pose_analysis_in_worker(
     task_config: Any,
     ctx: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    """执行用户后处理脚本，返回 process(ctx) 的结果。"""
-    if not task_config or not bool(getattr(task_config, 'post_process_enabled', False)):
+    """在 iot-sink Worker 内对告警图执行人体姿态分析，结果写入 ctx。"""
+    if not task_config or not (
+        bool(getattr(task_config, 'pose_analysis_enabled', False))
+        or bool(getattr(task_config, 'pose_intent_enabled', False))
+    ):
+        return None
+
+    from app.utils.pose_analysis import (
+        build_pose_result_payload,
+        load_pose_config_from_task,
+        run_pose_analysis_from_image_path,
+        serialize_pose_persons,
+        should_run_pose_analysis,
+    )
+
+    cfg = load_pose_config_from_task(task_config)
+    frame_number = int(ctx.get('frame_number') or 0)
+    detections = ctx.get('detections') or []
+    if not should_run_pose_analysis(cfg, frame_number=frame_number, detections=detections):
+        return None
+
+    image_path = ctx.get('alert_image_path')
+    if not image_path:
+        logger.warning('任务 %s 姿态分析跳过：无 alert_image_path', getattr(task_config, 'id', None))
+        return None
+
+    started = time.time()
+    persons = run_pose_analysis_from_image_path(image_path, cfg)
+    elapsed_ms = (time.time() - started) * 1000
+    if elapsed_ms > 200:
+        logger.info('任务 %s 姿态分析耗时 %.1fms', getattr(task_config, 'id', None), elapsed_ms)
+
+    ctx['pose_persons'] = serialize_pose_persons(persons)
+    ctx['pose_result'] = build_pose_result_payload(persons)
+    return {
+        'pose_count': len(persons),
+        'pose_result': ctx['pose_result'],
+    }
+
+
+def _run_user_post_process_script(task_config: Any, ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not bool(getattr(task_config, 'post_process_enabled', False)):
         return None
 
     task_id = getattr(task_config, 'id', None)
@@ -178,6 +236,94 @@ def run_post_process(
     return result
 
 
+def apply_pose_intent_matching(
+    task_config: Any,
+    ctx: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """场景姿态库意图匹配，命中后构造 alerts。"""
+    if not task_config or not bool(getattr(task_config, 'pose_intent_enabled', False)):
+        return None
+
+    from app.services.pose_intent_matching_service import (
+        build_intent_alerts,
+        run_intent_matching,
+    )
+    from app.utils.pose_intent_visual import maybe_draw_skeleton_on_alert_image
+
+    matches = run_intent_matching(task_config, ctx)
+    if not matches:
+        return None
+
+    ctx['pose_intent_matches'] = matches
+    maybe_draw_skeleton_on_alert_image(task_config, ctx)
+    alerts = build_intent_alerts(task_config, ctx, matches)
+    result: Dict[str, Any] = {
+        'pose_intent_matches': matches,
+        'publish_sink': True,
+    }
+    if alerts:
+        result['alerts'] = alerts
+        result['suppress_default_alert'] = True
+    return result
+
+
+def run_post_process(
+    task_config: Any,
+    ctx: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """iot-sink Worker 入口：先异步姿态分析，再意图匹配，再执行用户后处理脚本。"""
+    if not task_config:
+        return None
+
+    pose_enabled = bool(getattr(task_config, 'pose_analysis_enabled', False)) or bool(
+        getattr(task_config, 'pose_intent_enabled', False)
+    )
+    intent_enabled = bool(getattr(task_config, 'pose_intent_enabled', False))
+    pp_enabled = bool(getattr(task_config, 'post_process_enabled', False))
+    if not pose_enabled and not pp_enabled and not intent_enabled:
+        return None
+
+    merged: Dict[str, Any] = {}
+
+    if pose_enabled:
+        pose_part = apply_pose_analysis_in_worker(task_config, ctx)
+        if pose_part:
+            merged.update(pose_part)
+
+    if intent_enabled:
+        intent_part = apply_pose_intent_matching(task_config, ctx)
+        if intent_part:
+            for key, value in intent_part.items():
+                if key == 'alerts' and 'alerts' in merged:
+                    existing = merged.get('alerts') or []
+                    if isinstance(existing, list) and isinstance(value, list):
+                        merged['alerts'] = existing + value
+                    else:
+                        merged['alerts'] = value
+                else:
+                    merged[key] = value
+
+    if pp_enabled:
+        user_result = _run_user_post_process_script(task_config, ctx)
+        if user_result:
+            for key, value in user_result.items():
+                if key == 'alerts' and 'alerts' in merged:
+                    existing = merged.get('alerts') or []
+                    if isinstance(existing, list) and isinstance(value, list):
+                        merged['alerts'] = existing + value
+                    else:
+                        merged['alerts'] = value
+                else:
+                    merged[key] = value
+
+    if not merged:
+        return None
+
+    if (pose_enabled or intent_enabled) and not pp_enabled:
+        merged.setdefault('publish_sink', True)
+    return merged
+
+
 def enqueue_post_process_request(
     task_config: Any,
     *,
@@ -189,8 +335,8 @@ def enqueue_post_process_request(
     tracked_detections: Optional[List[Dict[str, Any]]] = None,
     alert_image_path: Optional[str] = None,
 ) -> None:
-    """将检测结果 HTTP 投递至 iot-sink 入队，由 iot-sink 对接 Kafka 并分发 Worker。"""
-    if not task_config or not bool(getattr(task_config, 'post_process_enabled', False)):
+    """将检测结果 HTTP 投递至 iot-sink 入队，姿态分析在 Worker 内异步执行。"""
+    if not task_needs_sink_processing(task_config):
         return
     regions = load_regions_for_device(device_id)
     ctx = build_task_context(
@@ -222,7 +368,7 @@ def apply_post_process(
     detections: List[Dict[str, Any]],
     tracked_detections: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """兼容旧调用：仅投递 Kafka 请求，不在算法进程内执行后处理。"""
+    """兼容旧调用：仅投递 iot-sink 请求，不在算法进程内执行后处理。"""
     enqueue_post_process_request(
         task_config,
         device_id=device_id,

@@ -170,6 +170,9 @@
         <TabPane key="11" v-if="facePlateLibraryEnabled" tab="车牌库">
           <PlateLibrary ref="plateLibraryRef"/>
         </TabPane>
+        <TabPane key="13" v-if="scenarioPoseLibraryEnabled" tab="场景姿态库">
+          <ScenarioPoseLibrary ref="scenarioPoseLibraryRef"/>
+        </TabPane>
       </Tabs>
     </div>
     <DeviceLocationDrawer @register="registerLocationDrawer" @success="handleLocationDrawerSuccess" />
@@ -203,6 +206,7 @@ import StorageSpace from "./components/StorageSpace/index.vue";
 import AlgorithmTask from "./components/AlgorithmTask/index.vue";
 import FaceLibrary from "./components/FaceLibrary/index.vue";
 import PlateLibrary from "./components/PlateLibrary/index.vue";
+import ScenarioPoseLibrary from "./components/ScenarioPoseLibrary/index.vue";
 import DeviceMixedCardList from './components/DeviceMixedCardList/index.vue';
 import Gb28181DeviceDetail from './components/Gb28181DeviceDetail/index.vue';
 import NvrDeviceDetail from './components/NvrDeviceDetail/index.vue';
@@ -238,12 +242,13 @@ import {
   type CreateMethod,
   type DeviceKind,
 } from './utils/deviceCreateOptions';
-import { isFacePlateLibraryEnabled, isGb28181Enabled } from '@/utils/deployProfile';
+import { isFacePlateLibraryEnabled, isGb28181Enabled, isScenarioPoseLibraryEnabled } from '@/utils/deployProfile';
 
 defineOptions({name: 'CAMERA'})
 
 const gb28181Enabled = isGb28181Enabled();
 const facePlateLibraryEnabled = isFacePlateLibraryEnabled();
+const scenarioPoseLibraryEnabled = isScenarioPoseLibraryEnabled();
 
 const route = useRoute();
 
@@ -316,6 +321,7 @@ const storageSpaceRef = ref();
 const algorithmTaskRef = ref();
 const faceLibraryRef = ref();
 const plateLibraryRef = ref();
+const scenarioPoseLibraryRef = ref();
 
 // 推流转发组件引用
 const streamForwardRef = ref();
@@ -334,6 +340,7 @@ const CAMERA_TAB_KEYS = {
   GB_NODE: '9',
   FACE_LIBRARY: '10',
   PLATE_LIBRARY: '11',
+  SCENARIO_POSE_LIBRARY: '13',
 } as const;
 
 const CAMERA_TAB_ID_SET = new Set<string>(Object.values(CAMERA_TAB_KEYS));
@@ -354,6 +361,9 @@ function normalizeCameraRouteTab(tab: string): string {
     !facePlateLibraryEnabled
     && (tab === CAMERA_TAB_KEYS.FACE_LIBRARY || tab === CAMERA_TAB_KEYS.PLATE_LIBRARY)
   ) {
+    return CAMERA_TAB_KEYS.CAMERA_MAP;
+  }
+  if (!scenarioPoseLibraryEnabled && tab === CAMERA_TAB_KEYS.SCENARIO_POSE_LIBRARY) {
     return CAMERA_TAB_KEYS.CAMERA_MAP;
   }
   if (CAMERA_TAB_ID_SET.has(tab)) return tab;
@@ -383,6 +393,9 @@ const handleTabClick = (activeKey: string) => {
   }
   if (activeKey === CAMERA_TAB_KEYS.PLATE_LIBRARY && plateLibraryRef.value) {
     plateLibraryRef.value.refresh?.();
+  }
+  if (activeKey === CAMERA_TAB_KEYS.SCENARIO_POSE_LIBRARY && scenarioPoseLibraryRef.value) {
+    scenarioPoseLibraryRef.value.refresh?.();
   }
   // 切换到推流转发标签页时，刷新数据
   if (activeKey === CAMERA_TAB_KEYS.STREAM_FORWARD && streamForwardRef.value) {

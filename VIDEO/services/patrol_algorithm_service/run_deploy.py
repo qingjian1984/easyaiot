@@ -414,6 +414,20 @@ def _update_device_progress(device_id: str, *, result: str, detection_count: int
         })
 
 
+def _get_patrol_algorithm_task() -> Optional[AlgorithmTask]:
+    """获取巡检关联的算法任务（用于 iot-sink 后处理/姿态分析）。"""
+    task_id = TASK_ID
+    if not task_id and PATROL_SESSION_ID:
+        session = db_session.query(PatrolSession).filter_by(id=PATROL_SESSION_ID).first()
+        if session and session.algorithm_task_id:
+            task_id = session.algorithm_task_id
+    elif not task_id and session_config and session_config.task_id:
+        task_id = session_config.task_id
+    if not task_id:
+        return None
+    return db_session.query(AlgorithmTask).filter_by(id=int(task_id)).first()
+
+
 def _save_alert_image(frame: np.ndarray, device_id: str, detection: dict) -> Optional[str]:
     try:
         root = resolve_alert_images_root()
@@ -511,7 +525,25 @@ def _process_patrol_device(device_id: str):
     detections = _run_detection(frame)
     _update_device_progress(device_id, result='ok', detection_count=len(detections))
     if detections:
-        _send_alert(device_id, device_name, frame, detections)
+        task = _get_patrol_algorithm_task()
+        from app.utils.post_process_runner import enqueue_post_process_request, task_needs_sink_processing
+        if task and task_needs_sink_processing(task):
+            alert_image_path = _save_alert_image(frame, device_id, detections[0])
+            try:
+                enqueue_post_process_request(
+                    task,
+                    device_id=device_id,
+                    device_name=device_name,
+                    frame_number=int(time.time()),
+                    timestamp=time.time(),
+                    detections=detections,
+                    tracked_detections=detections,
+                    alert_image_path=alert_image_path,
+                )
+            except Exception as exc:
+                logger.warning('巡检后处理入队失败 device=%s: %s', device_id, exc)
+        else:
+            _send_alert(device_id, device_name, frame, detections)
 
 
 def _devices_due(now: float, interval: float, device_ids: Optional[List[str]] = None) -> List[str]:

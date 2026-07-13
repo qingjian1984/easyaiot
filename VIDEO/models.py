@@ -990,6 +990,16 @@ class AlgorithmTask(db.Model):
                                     comment='是否启用运动检测门控（仅实时算法任务）')
     motion_gate_config = db.Column(db.Text, nullable=True, comment='运动门控配置 JSON')
 
+    # 人体姿态分析（YOLO Pose，参照 AI 模块）
+    pose_analysis_enabled = db.Column(db.Boolean, default=False, nullable=False, comment='是否启用人体姿态分析')
+    pose_analysis_config = db.Column(db.Text, nullable=True, comment='人体姿态分析配置 JSON')
+
+    # 姿态意图分析（场景姿态库匹配告警）
+    pose_intent_enabled = db.Column(db.Boolean, default=False, nullable=False, comment='是否启用姿态意图分析告警')
+    pose_library_ids = db.Column(db.Text, nullable=True, comment='关联场景姿态库ID列表（JSON数组）')
+    pose_intent_threshold = db.Column(db.Float, nullable=True, comment='姿态意图匹配阈值（为空则使用库默认值）')
+    pose_intent_config = db.Column(db.Text, nullable=True, comment='姿态意图分析配置 JSON')
+
     # AI 后处理（用户 Python 脚本）
     post_process_enabled = db.Column(db.Boolean, default=False, nullable=False, comment='是否启用 AI 后处理脚本')
     post_process_script = db.Column(db.String(255), nullable=True, comment='后处理脚本文件名，默认 post_process.py')
@@ -1143,6 +1153,16 @@ class AlgorithmTask(db.Model):
             'sam_supplement_config': json.loads(self.sam_supplement_config) if self.sam_supplement_config else None,
             'motion_gate_enabled': bool(getattr(self, 'motion_gate_enabled', False)),
             'motion_gate_config': json.loads(self.motion_gate_config) if getattr(self, 'motion_gate_config', None) else None,
+            'pose_analysis_enabled': bool(getattr(self, 'pose_analysis_enabled', False)),
+            'pose_analysis_config': json.loads(self.pose_analysis_config) if getattr(self, 'pose_analysis_config', None) else None,
+            'pose_intent_enabled': bool(getattr(self, 'pose_intent_enabled', False)),
+            'pose_library_ids': self._parse_library_ids(getattr(self, 'pose_library_ids', None)),
+            'pose_library_names': self._resolve_library_names(
+                self._parse_library_ids(getattr(self, 'pose_library_ids', None)),
+                ScenarioPoseLibrary,
+            ),
+            'pose_intent_threshold': getattr(self, 'pose_intent_threshold', None),
+            'pose_intent_config': json.loads(self.pose_intent_config) if getattr(self, 'pose_intent_config', None) else None,
             'post_process_enabled': bool(self.post_process_enabled),
             'post_process_script': self.post_process_script,
             'post_process_replicas': int(self.post_process_replicas or 1),
@@ -1593,6 +1613,171 @@ class PlateMatchRecord(db.Model):
             'task_type': self.task_type,
             'status': self.status,
             'error_message': self.error_message,
+            'created_at': utc_isoformat_z(self.created_at),
+        }
+
+
+class ScenarioPoseLibrary(db.Model):
+    """场景姿态库（供算法任务姿态意图分析使用）"""
+    __tablename__ = 'scenario_pose_library'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(255), nullable=False, comment='场景姿态库名称')
+    code = db.Column(db.String(100), nullable=False, unique=True, comment='库编码（唯一）')
+    scene_category = db.Column(db.String(50), nullable=True, comment='场景类别 fall/climb/squat/hands_up/custom')
+    business_tags = db.Column(db.Text, nullable=True, comment='业务标签 JSON 数组')
+    description = db.Column(db.String(500), nullable=True, comment='描述')
+    similarity_threshold = db.Column(db.Float, default=0.72, nullable=False, comment='默认匹配阈值')
+    match_mode = db.Column(db.String(30), default='angle', nullable=False, comment='匹配模式 angle/ratio/combined')
+    intent_event = db.Column(db.String(100), nullable=True, comment='命中告警 event')
+    intent_object = db.Column(db.String(100), nullable=True, comment='命中告警 object')
+    alert_level = db.Column(db.String(20), default='warning', nullable=False, comment='告警级别')
+    is_enabled = db.Column(db.Boolean, default=True, nullable=False, comment='是否启用')
+    entry_count = db.Column(db.Integer, default=0, nullable=False, comment='条目数量')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.utcnow())
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
+
+    entries = db.relationship(
+        'ScenarioPoseEntry', backref='library', lazy=True, cascade='all, delete-orphan',
+    )
+
+    def to_dict(self, include_entries: bool = False):
+        import json
+        tags = []
+        if self.business_tags:
+            try:
+                tags = json.loads(self.business_tags) if isinstance(self.business_tags, str) else self.business_tags
+            except Exception:
+                tags = []
+        data = {
+            'id': self.id,
+            'name': self.name,
+            'code': self.code,
+            'scene_category': self.scene_category,
+            'business_tags': tags,
+            'description': self.description,
+            'similarity_threshold': self.similarity_threshold,
+            'match_mode': self.match_mode,
+            'intent_event': self.intent_event,
+            'intent_object': self.intent_object,
+            'alert_level': self.alert_level,
+            'is_enabled': self.is_enabled,
+            'entry_count': self.entry_count,
+            'created_at': utc_isoformat_z(self.created_at),
+            'updated_at': utc_isoformat_z(self.updated_at),
+        }
+        if include_entries:
+            data['entries'] = [e.to_dict() for e in (self.entries or [])]
+        return data
+
+
+class ScenarioPoseEntry(db.Model):
+    """场景姿态库条目（参考姿态模板）"""
+    __tablename__ = 'scenario_pose_entry'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    library_id = db.Column(
+        db.Integer, db.ForeignKey('scenario_pose_library.id', ondelete='CASCADE'),
+        nullable=False, comment='所属场景姿态库ID',
+    )
+    name = db.Column(db.String(255), nullable=False, comment='条目名称')
+    source_type = db.Column(db.String(20), default='image', nullable=False, comment='来源 image/rule/manual')
+    image_path = db.Column(db.String(500), nullable=True, comment='参考图本地路径')
+    image_url = db.Column(db.String(500), nullable=True, comment='参考图 URL')
+    keypoints = db.Column(db.Text, nullable=True, comment='COCO-17 关键点 JSON')
+    feature_vector = db.Column(db.Text, nullable=True, comment='归一化特征向量 JSON')
+    keypoint_visibility_min = db.Column(db.Float, default=0.3, nullable=False)
+    extra_rules = db.Column(db.Text, nullable=True, comment='附加规则 JSON')
+    remark = db.Column(db.String(500), nullable=True, comment='备注')
+    is_enabled = db.Column(db.Boolean, default=True, nullable=False, comment='是否启用')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.utcnow())
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
+
+    def to_dict(self):
+        import json
+        kps = None
+        if self.keypoints:
+            try:
+                kps = json.loads(self.keypoints) if isinstance(self.keypoints, str) else self.keypoints
+            except Exception:
+                kps = None
+        rules = None
+        if self.extra_rules:
+            try:
+                rules = json.loads(self.extra_rules) if isinstance(self.extra_rules, str) else self.extra_rules
+            except Exception:
+                rules = None
+        feat = None
+        if self.feature_vector:
+            try:
+                feat = json.loads(self.feature_vector) if isinstance(self.feature_vector, str) else self.feature_vector
+            except Exception:
+                feat = None
+        return {
+            'id': self.id,
+            'library_id': self.library_id,
+            'name': self.name,
+            'source_type': self.source_type,
+            'image_path': self.image_path,
+            'image_url': self.image_url,
+            'keypoints': kps,
+            'feature_vector': feat,
+            'keypoint_visibility_min': self.keypoint_visibility_min,
+            'extra_rules': rules,
+            'remark': self.remark,
+            'is_enabled': self.is_enabled,
+            'created_at': utc_isoformat_z(self.created_at),
+            'updated_at': utc_isoformat_z(self.updated_at),
+        }
+
+
+class PoseIntentMatchRecord(db.Model):
+    """姿态意图匹配记录"""
+    __tablename__ = 'pose_intent_match_record'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    task_id = db.Column(db.Integer, nullable=True, comment='算法任务ID')
+    task_name = db.Column(db.String(255), nullable=True)
+    device_id = db.Column(db.String(100), nullable=False, index=True)
+    device_name = db.Column(db.String(255), nullable=True)
+    library_id = db.Column(db.Integer, nullable=True)
+    library_name = db.Column(db.String(255), nullable=True)
+    entry_id = db.Column(db.Integer, nullable=True)
+    entry_name = db.Column(db.String(255), nullable=True)
+    similarity = db.Column(db.Float, nullable=True)
+    intent_event = db.Column(db.String(100), nullable=True)
+    matched = db.Column(db.Boolean, default=False, nullable=False)
+    pose_snapshot = db.Column(db.Text, nullable=True, comment='命中时关键点 JSON')
+    alert_id = db.Column(db.Integer, nullable=True)
+    correlation_id = db.Column(db.String(36), nullable=True, index=True)
+    task_type = db.Column(db.String(20), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.utcnow())
+
+    def to_dict(self):
+        import json
+        snapshot = None
+        if self.pose_snapshot:
+            try:
+                snapshot = json.loads(self.pose_snapshot) if isinstance(self.pose_snapshot, str) else self.pose_snapshot
+            except Exception:
+                snapshot = None
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'task_name': self.task_name,
+            'device_id': self.device_id,
+            'device_name': self.device_name,
+            'library_id': self.library_id,
+            'library_name': self.library_name,
+            'entry_id': self.entry_id,
+            'entry_name': self.entry_name,
+            'similarity': self.similarity,
+            'intent_event': self.intent_event,
+            'matched': self.matched,
+            'pose_snapshot': snapshot,
+            'alert_id': self.alert_id,
+            'correlation_id': self.correlation_id,
+            'task_type': self.task_type,
             'created_at': utc_isoformat_z(self.created_at),
         }
 
@@ -2152,6 +2337,31 @@ def ensure_algorithm_task_sam_columns(engine):
         log.warning('ensure_algorithm_task_sam_columns: %s', e)
 
 
+def ensure_algorithm_task_pose_columns(engine):
+    """老库 algorithm_task 表补人体姿态分析列。"""
+    import logging
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    columns = {
+        'pose_analysis_enabled': 'BOOLEAN DEFAULT FALSE',
+        'pose_analysis_config': 'TEXT',
+    }
+    try:
+        inspector = inspect(engine)
+        if 'algorithm_task' not in inspector.get_table_names():
+            return
+        col_names = {c['name'] for c in inspector.get_columns('algorithm_task')}
+        for col, ddl in columns.items():
+            if col in col_names:
+                continue
+            with engine.begin() as conn:
+                conn.execute(text(f'ALTER TABLE algorithm_task ADD COLUMN {col} {ddl}'))
+            log.info('已为 algorithm_task 表添加 %s 列', col)
+    except Exception as e:
+        log.warning('ensure_algorithm_task_pose_columns: %s', e)
+
+
 def ensure_algorithm_task_post_process_columns(engine):
     """老库 algorithm_task 表补 AI 后处理列。"""
     import logging
@@ -2200,6 +2410,33 @@ def ensure_algorithm_task_detect_conf_column(engine):
             log.info('已为 algorithm_task 表添加 %s 列', col)
     except Exception as e:
         log.warning('ensure_algorithm_task_detect_conf_column: %s', e)
+
+
+def ensure_algorithm_task_pose_intent_columns(engine):
+    """老库 algorithm_task 表补姿态意图分析列。"""
+    import logging
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    columns = {
+        'pose_intent_enabled': 'BOOLEAN DEFAULT FALSE',
+        'pose_library_ids': 'TEXT',
+        'pose_intent_threshold': 'DOUBLE PRECISION',
+        'pose_intent_config': 'TEXT',
+    }
+    try:
+        inspector = inspect(engine)
+        if 'algorithm_task' not in inspector.get_table_names():
+            return
+        col_names = {c['name'] for c in inspector.get_columns('algorithm_task')}
+        for col, ddl in columns.items():
+            if col in col_names:
+                continue
+            with engine.begin() as conn:
+                conn.execute(text(f'ALTER TABLE algorithm_task ADD COLUMN {col} {ddl}'))
+            log.info('已为 algorithm_task 表添加 %s 列', col)
+    except Exception as e:
+        log.warning('ensure_algorithm_task_pose_intent_columns: %s', e)
 
 
 def ensure_algorithm_task_alert_class_columns(engine):

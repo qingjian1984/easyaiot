@@ -52,6 +52,9 @@ def _message_to_ctx(message: dict) -> dict:
         'alert_class_names': message.get('alertClassNames') or message.get('alert_class_names') or [],
         'alert_image_path': message.get('alertImagePath') or message.get('alert_image_path'),
         'correlation_id': message.get('correlationId') or message.get('correlation_id'),
+        'pose_analysis_enabled': bool(
+            message.get('poseAnalysisEnabled') or message.get('pose_analysis_enabled')
+        ),
     }
 
 

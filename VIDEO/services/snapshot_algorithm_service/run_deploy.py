@@ -721,10 +721,9 @@ def _finish_snapshot_detection(
     _untrack_pending_snapshot(device_id, frame_number)
     device_name = _get_device_name(device_id)
     has_detections = bool(detections)
-    post_process_enabled = bool(
-        task_config and getattr(task_config, 'post_process_enabled', False)
-    )
-    if has_detections and post_process_enabled:
+    from app.utils.post_process_runner import task_needs_sink_processing
+    sink_enabled = task_needs_sink_processing(task_config)
+    if has_detections and sink_enabled:
         alert_image_path = save_alert_image(
             processed_frame,
             device_id,
@@ -2423,22 +2422,6 @@ def yolo_detection_worker(worker_id: int):
                         dict(det, track_id=0, is_cached=False, first_seen_time=timestamp, duration=0.0) for det in
                         all_detections]
 
-                # 在帧上绘制检测结果（告警/抓拍展示均使用带框图）
-                processed_frame = draw_detections(
-                    frame,
-                    tracked_detections,
-                    frame_number,
-                    tracking_enabled=task_config.tracking_enabled if task_config else False,
-                ) if tracked_detections else frame.copy()
-
-                if tracked_detections:
-                    names = [d.get('class_name') for d in tracked_detections]
-                    logger.info(
-                        f"🎨 [Worker {worker_id}] 帧 {frame_number} 检测到 {len(tracked_detections)} 个目标: {names}"
-                    )
-                else:
-                    logger.info(f"🔍 [Worker {worker_id}] 帧 {frame_number} 未检测到目标")
-
                 # 构建检测结果列表（用于后续处理）
                 detections = []
                 for tracked_det in tracked_detections:
@@ -2455,6 +2438,22 @@ def yolo_detection_worker(worker_id: int):
                         'first_seen_time': tracked_det.get('first_seen_time', timestamp),
                         'duration': tracked_det.get('duration', 0.0)
                     })
+
+                # 在帧上绘制检测结果（告警/抓拍展示均使用带框图）
+                processed_frame = draw_detections(
+                    frame,
+                    tracked_detections,
+                    frame_number,
+                    tracking_enabled=task_config.tracking_enabled if task_config else False,
+                ) if tracked_detections else frame.copy()
+
+                if tracked_detections:
+                    names = [d.get('class_name') for d in tracked_detections]
+                    logger.info(
+                        f"🎨 [Worker {worker_id}] 帧 {frame_number} 检测到 {len(tracked_detections)} 个目标: {names}"
+                    )
+                else:
+                    logger.info(f"🔍 [Worker {worker_id}] 帧 {frame_number} 未检测到目标")
 
                 # 检测完成：直接发告警或入库（不经 push_queue 回写）
                 _finish_snapshot_detection(

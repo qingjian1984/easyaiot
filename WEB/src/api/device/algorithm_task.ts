@@ -100,6 +100,15 @@ export interface AlgorithmTask {
     merge_iou?: number;
     return_masks?: boolean;
   };
+  /** 是否启用人体姿态分析 */
+  pose_analysis_enabled?: boolean;
+  /** 人体姿态分析配置 */
+  pose_analysis_config?: {
+    model_file_path?: string;
+    conf?: number;
+    trigger?: 'always' | 'on_interval' | 'on_person';
+    interval_frames?: number;
+  };
   service_names?: string; // 关联的算法服务名称列表（逗号分隔，冗余字段，用于快速显示）
   defense_mode?: string; // 布防模式: full(全防), half(半防), day(白天), night(夜间)
   defense_schedule?: string | number[][]; // 布防时段: JSON字符串或二维数组，7天×24小时
@@ -190,6 +199,14 @@ export const createAlgorithmTask = (data: {
   is_enabled?: boolean;
   defense_mode?: string;
   defense_schedule?: string;
+  /** 是否启用人体姿态分析 */
+  pose_analysis_enabled?: boolean;
+  pose_analysis_config?: {
+    model_file_path?: string;
+    conf?: number;
+    trigger?: 'always' | 'on_interval' | 'on_person';
+    interval_frames?: number;
+  };
   /** 是否启用 AI 后处理脚本，默认关闭 */
   post_process_enabled?: boolean;
   /** 后处理 Worker 副本数 */

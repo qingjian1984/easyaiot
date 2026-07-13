@@ -39,6 +39,7 @@ import {
 } from '@/api/device/algorithm_task';
 import { listFaceLibraries } from '@/api/device/face_library';
 import { listPlateLibraries } from '@/api/device/plate_library';
+import { listScenarioPoseLibraries } from '@/api/device/scenario_pose_library';
 import { getDeviceList, getDeviceInfo, registerDevice, updateDevice } from '@/api/device/camera';
 import { getModelPage } from '@/api/device/model';
 import { getNodePage } from '@/api/device/node';
@@ -70,6 +71,7 @@ const emit = defineEmits(['success', 'register']);
 
 const faceLibraries = ref<LibraryWithTags[]>([]);
 const plateLibraries = ref<LibraryWithTags[]>([]);
+const poseLibraries = ref<LibraryWithTags[]>([]);
 
 const activeTab = ref('basic');
 const taskId = ref<number | null>(null);
@@ -116,6 +118,7 @@ const modelMap = ref<Map<number, any>>(new Map()); // 存储完整的模型信�
 const alertClassOptions = ref<Array<{ label: string; value: string }>>([]);
 const faceLibraryOptions = ref<Array<{ label: string; value: number }>>([]);
 const plateLibraryOptions = ref<Array<{ label: string; value: number }>>([]);
+const poseLibraryOptions = ref<Array<{ label: string; value: number }>>([]);
 
 function normalizeLibraryIds(ids: unknown): number[] {
   if (Array.isArray(ids)) {
@@ -463,6 +466,22 @@ const loadPlateLibraries = async () => {
     console.error('加载车牌库列表失败', error);
     plateLibraries.value = [];
     plateLibraryOptions.value = [];
+  }
+};
+
+const loadScenarioPoseLibraries = async () => {
+  try {
+    const res = await listScenarioPoseLibraries({ is_enabled: true });
+    const rows = Array.isArray(res?.data) ? res.data : (res as any) || [];
+    poseLibraries.value = rows;
+    poseLibraryOptions.value = rows.map((item: LibraryWithTags) => ({
+      label: item.name,
+      value: item.id,
+    }));
+  } catch (error) {
+    console.error('加载场景姿态库列表失败', error);
+    poseLibraries.value = [];
+    poseLibraryOptions.value = [];
   }
 };
 
@@ -975,6 +994,128 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getF
       ifShow: ({ values }) => !!values.sam_supplement_enabled,
     },
     {
+      field: 'pose_analysis_enabled',
+      label: '人体姿态分析',
+      component: 'Switch',
+      defaultValue: false,
+      componentProps: { checkedChildren: '开', unCheckedChildren: '关' },
+      helpMessage: '开启后由 iot-sink Worker 异步分析人体骨骼（COCO-17），不占用算法任务算力；默认关闭',
+      ifShow: ({ values }) =>
+        values.task_type === 'realtime' || values.task_type === 'snap' || values.task_type === 'patrol',
+    },
+    {
+      field: 'pose_model_file_path',
+      label: '姿态模型',
+      component: 'Input',
+      defaultValue: 'yolo26n-pose.pt',
+      componentProps: { placeholder: '如 yolo26n-pose.pt' },
+      ifShow: ({ values }) => !!values.pose_analysis_enabled,
+    },
+    {
+      field: 'pose_trigger',
+      label: '姿态触发策略',
+      component: 'Select',
+      defaultValue: 'on_interval',
+      componentProps: {
+        options: [
+          { label: '按间隔帧', value: 'on_interval' },
+          { label: '检测到人体时', value: 'on_person' },
+          { label: '每帧', value: 'always' },
+        ],
+      },
+      ifShow: ({ values }) => !!values.pose_analysis_enabled,
+    },
+    {
+      field: 'pose_interval_frames',
+      label: '姿态间隔帧数',
+      component: 'InputNumber',
+      defaultValue: 12,
+      componentProps: { min: 1, max: 300, style: { width: '100%' } },
+      ifShow: ({ values }) => !!values.pose_analysis_enabled && values.pose_trigger === 'on_interval',
+    },
+    {
+      field: 'pose_conf',
+      label: '姿态置信度',
+      component: 'InputNumber',
+      defaultValue: 0.25,
+      componentProps: { min: 0.1, max: 0.95, step: 0.05, style: { width: '100%' } },
+      ifShow: ({ values }) => !!values.pose_analysis_enabled,
+    },
+    {
+      field: 'pose_intent_enabled',
+      label: '姿态意图分析告警',
+      component: 'Switch',
+      defaultValue: false,
+      componentProps: { checkedChildren: '开', unCheckedChildren: '关' },
+      helpMessage: '开启后自动启用 YOLO Pose，并将检测姿态与场景姿态库匹配产生意图告警',
+      ifShow: ({ values }) =>
+        values.task_type === 'realtime' || values.task_type === 'snap' || values.task_type === 'patrol',
+    },
+    {
+      field: 'pose_library_ids',
+      label: '场景姿态库',
+      component: 'Select',
+      componentProps: {
+        placeholder: '请选择场景姿态库（可多选）',
+        options: poseLibraryOptions,
+        mode: 'multiple',
+        showSearch: true,
+        allowClear: true,
+        filterOption: (input: string, option: any) =>
+          (option?.label || '').toLowerCase().includes(input.toLowerCase()),
+      },
+      dynamicRules: ({ values }) => {
+        if (!values.pose_intent_enabled) return [];
+        const ids = normalizeLibraryIds(values.pose_library_ids);
+        if (!ids.length) {
+          return [{ required: true, message: '启用姿态意图分析时必须选择至少一个场景姿态库' }];
+        }
+        return [];
+      },
+      ifShow: ({ values }) =>
+        (values.task_type === 'realtime' || values.task_type === 'snap' || values.task_type === 'patrol') &&
+        !!values.pose_intent_enabled,
+    },
+    {
+      field: 'pose_intent_threshold',
+      label: '意图匹配阈值',
+      component: 'InputNumber',
+      componentProps: { min: 0.1, max: 0.99, step: 0.01, placeholder: '空=库默认', style: { width: '100%' } },
+      ifShow: ({ values }) => !!values.pose_intent_enabled,
+    },
+    {
+      field: 'pose_intent_suppress_sec',
+      label: '同意图抑制(秒)',
+      component: 'InputNumber',
+      defaultValue: 10,
+      componentProps: { min: 0, max: 3600, style: { width: '100%' } },
+      ifShow: ({ values }) => !!values.pose_intent_enabled,
+    },
+    {
+      field: 'pose_intent_draw_skeleton',
+      label: '告警图叠骨架',
+      component: 'Switch',
+      defaultValue: true,
+      componentProps: { checkedChildren: '开', unCheckedChildren: '关' },
+      ifShow: ({ values }) => !!values.pose_intent_enabled,
+    },
+    {
+      field: 'pose_intent_temporal_dtw',
+      label: '多帧 DTW 匹配',
+      component: 'Switch',
+      defaultValue: false,
+      helpMessage: '开启后累积连续帧特征，与条目中 sequence_features 参考序列做 DTW 时序匹配',
+      ifShow: ({ values }) => !!values.pose_intent_enabled,
+    },
+    {
+      field: 'pose_intent_temporal_window',
+      label: 'DTW 窗口帧数',
+      component: 'InputNumber',
+      defaultValue: 6,
+      componentProps: { min: 3, max: 30, style: { width: '100%' } },
+      ifShow: ({ values }) => !!values.pose_intent_enabled && !!values.pose_intent_temporal_dtw,
+    },
+    {
       field: 'post_process_enabled',
       label: '启用 AI 后处理',
       component: 'Switch',
@@ -1151,7 +1292,7 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
   initDefaultModels();
 
   // 加载选项数据
-  await Promise.all([loadDevices(), loadModels(), loadFaceLibraries(), loadPlateLibraries(), loadNodes()]);
+  await Promise.all([loadDevices(), loadModels(), loadFaceLibraries(), loadPlateLibraries(), loadScenarioPoseLibraries(), loadNodes()]);
 
   if (modalData.value.record) {
     const record = modalData.value.record;
@@ -1279,6 +1420,18 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
       sam_trigger: record.sam_supplement_config?.trigger || 'on_interval',
       sam_interval_frames: record.sam_supplement_config?.interval_frames ?? 25,
       sam_conf: record.sam_supplement_config?.conf ?? 0.45,
+      pose_analysis_enabled: record.pose_analysis_enabled === true,
+      pose_model_file_path: record.pose_analysis_config?.model_file_path || 'yolo26n-pose.pt',
+      pose_trigger: record.pose_analysis_config?.trigger || 'on_interval',
+      pose_interval_frames: record.pose_analysis_config?.interval_frames ?? 12,
+      pose_conf: record.pose_analysis_config?.conf ?? 0.25,
+      pose_intent_enabled: record.pose_intent_enabled === true,
+      pose_library_ids: normalizeLibraryIds(record.pose_library_ids),
+      pose_intent_threshold: record.pose_intent_threshold ?? undefined,
+      pose_intent_suppress_sec: record.pose_intent_config?.suppress_same_intent_sec ?? 10,
+      pose_intent_draw_skeleton: record.pose_intent_config?.draw_skeleton_on_alert !== false,
+      pose_intent_temporal_dtw: record.pose_intent_config?.temporal_dtw_enabled === true,
+      pose_intent_temporal_window: record.pose_intent_config?.temporal_window_frames ?? 6,
       post_process_enabled: record.post_process_enabled === true,
       post_process_replicas: record.post_process_replicas ?? 1,
       alarm_suppress_time: record.alarm_suppress_time ?? 300,
@@ -1405,6 +1558,18 @@ const [register, { setDrawerProps, closeDrawer }] = useDrawerInner(async (data) 
       alert_class_names: [],
       face_matching_enabled: false,
       plate_matching_enabled: false,
+      pose_analysis_enabled: false,
+      pose_intent_enabled: false,
+      pose_library_ids: [],
+      pose_intent_threshold: undefined,
+      pose_intent_suppress_sec: 10,
+      pose_intent_draw_skeleton: true,
+      pose_intent_temporal_dtw: false,
+      pose_intent_temporal_window: 6,
+      pose_model_file_path: 'yolo26n-pose.pt',
+      pose_trigger: 'on_interval',
+      pose_interval_frames: 12,
+      pose_conf: 0.25,
       post_process_enabled: false,
       post_process_replicas: 1,
       alarm_suppress_time: 300,
@@ -1482,6 +1647,12 @@ const handleFieldValueChange = async (key: string, value: any) => {
     await setFieldsValue({ face_library_ids: [] });
   } else if (key === 'plate_matching_enabled' && !value) {
     await setFieldsValue({ plate_library_ids: [] });
+  } else if (key === 'pose_intent_enabled' && value) {
+    await setFieldsValue({ pose_analysis_enabled: true, pose_trigger: 'on_person' });
+  } else if (key === 'pose_intent_enabled' && !value) {
+    await setFieldsValue({ pose_library_ids: [] });
+  } else if (key === 'pose_analysis_enabled' && !value) {
+    await setFieldsValue({ pose_intent_enabled: false, pose_library_ids: [] });
   } else if (key === 'model_ids') {
     const currentValues = await getFieldsValue();
     await refreshAlertClassOptions(value, currentValues.alert_class_names);
@@ -1631,14 +1802,30 @@ const handleSubmit = async () => {
       values.plate_library_ids = [];
     }
 
+    values.pose_library_ids = normalizeLibraryIds(values.pose_library_ids);
+    if (values.pose_intent_enabled) {
+      values.pose_analysis_enabled = true;
+      if (!values.pose_library_ids.length) {
+        createMessage.error('启用姿态意图分析时必须选择至少一个场景姿态库');
+        confirmLoading.value = false;
+        setDrawerProps({ confirmLoading: false });
+        return;
+      }
+    } else {
+      values.pose_library_ids = [];
+      values.pose_intent_threshold = null;
+    }
+
     const propagatedTags = collectMatchingTagsFromLibraries(
       faceLibraries.value,
       plateLibraries.value,
       values.face_library_ids,
       values.plate_library_ids,
+      poseLibraries.value,
+      values.pose_library_ids,
     );
     values.matching_business_tags = propagatedTags.length ? propagatedTags : undefined;
-    if (!values.face_matching_enabled && !values.plate_matching_enabled) {
+    if (!values.face_matching_enabled && !values.plate_matching_enabled && !values.pose_intent_enabled) {
       values.matching_business_tags = undefined;
     }
     // 确保 model_ids 是数组格式
@@ -1683,6 +1870,35 @@ const handleSubmit = async () => {
     delete values.sam_trigger;
     delete values.sam_interval_frames;
     delete values.sam_conf;
+
+    values.pose_analysis_config = values.pose_analysis_enabled || values.pose_intent_enabled
+      ? {
+          model_file_path: values.pose_model_file_path || 'yolo26n-pose.pt',
+          trigger: values.pose_trigger || (values.pose_intent_enabled ? 'on_person' : 'on_interval'),
+          interval_frames: values.pose_interval_frames ?? 12,
+          conf: values.pose_conf ?? 0.25,
+        }
+      : null;
+    delete values.pose_model_file_path;
+    delete values.pose_trigger;
+    delete values.pose_interval_frames;
+    delete values.pose_conf;
+
+    values.pose_intent_config = values.pose_intent_enabled
+      ? {
+          require_person_detection: true,
+          suppress_same_intent_sec: values.pose_intent_suppress_sec ?? 10,
+          match_top_k: 1,
+          draw_skeleton_on_alert: values.pose_intent_draw_skeleton !== false,
+          temporal_dtw_enabled: values.pose_intent_temporal_dtw === true,
+          temporal_window_frames: values.pose_intent_temporal_window ?? 6,
+          temporal_dtw_threshold: 0.65,
+        }
+      : null;
+    delete values.pose_intent_suppress_sec;
+    delete values.pose_intent_draw_skeleton;
+    delete values.pose_intent_temporal_dtw;
+    delete values.pose_intent_temporal_window;
 
     if (values.task_type === 'realtime') {
       values.motion_gate_enabled = values.motion_gate_enabled === true;
@@ -1792,6 +2008,18 @@ const handleReset = () => {
       alert_class_names: [],
       face_matching_enabled: false,
       plate_matching_enabled: false,
+      pose_analysis_enabled: false,
+      pose_intent_enabled: false,
+      pose_library_ids: [],
+      pose_intent_threshold: undefined,
+      pose_intent_suppress_sec: 10,
+      pose_intent_draw_skeleton: true,
+      pose_intent_temporal_dtw: false,
+      pose_intent_temporal_window: 6,
+      pose_model_file_path: 'yolo26n-pose.pt',
+      pose_trigger: 'on_interval',
+      pose_interval_frames: 12,
+      pose_conf: 0.25,
       post_process_enabled: false,
       post_process_replicas: 1,
       alarm_suppress_time: 300,

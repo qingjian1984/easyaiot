@@ -47,6 +47,10 @@ def process(ctx: Dict[str, Any]) -> Dict[str, Any]:
   regions = ctx.get("regions") or []
   state = ctx.setdefault("state", {})
 
+  # 人体姿态（启用 pose_analysis_enabled 时可用）
+  pose_persons = ctx.get("pose_persons") or []
+  pose_count = len(pose_persons)
+
   # 示例：按类别计数
   counts: Dict[str, int] = {}
   for det in detections:
@@ -66,9 +70,11 @@ def process(ctx: Dict[str, Any]) -> Dict[str, Any]:
       })
 
   state["last_counts"] = counts
+  state["last_pose_count"] = pose_count
   return {
     "counts": counts,
     "events": dwell_events,
+    "pose_count": pose_count,
     # "suppress_default_alert": False,
     # "alerts": [],
   }
@@ -93,6 +99,9 @@ README_TEMPLATE = '''# 算法任务后处理工作区
 | regions | 设备检测区域（多边形/越线） |
 | state | 跨帧状态字典，可在脚本内读写 |
 | alert_class_names | 任务配置的告警触发标签；默认告警仅匹配这些类别 |
+| pose_analysis_enabled | 是否启用人体姿态分析（由 iot-sink Worker 异步执行，算法任务仅投递请求） |
+| pose_persons | Worker 执行后的 COCO-17 关键点列表 |
+| pose_result | 姿态汇总：count / persons / poseType(body17) |
 
 ## 启用
 

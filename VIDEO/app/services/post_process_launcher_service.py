@@ -197,8 +197,10 @@ def _stop_worker_remote(task_id: int, replica: int) -> None:
 def start_post_process_workers(task: AlgorithmTask) -> Tuple[bool, str]:
     if not _post_process_workers_globally_enabled():
         return True, '后处理 Worker 全局未启用（EASYAIOT_ENABLE_POST_PROCESS_WORKER=1 可开启）'
-    if not bool(getattr(task, 'post_process_enabled', False)):
-        return True, '后处理未启用'
+    if not bool(getattr(task, 'post_process_enabled', False)) and not bool(
+        getattr(task, 'pose_analysis_enabled', False)
+    ) and not bool(getattr(task, 'pose_intent_enabled', False)):
+        return True, '后处理/姿态分析/姿态意图未启用'
     replicas = _task_replicas(task)
     assigned_nodes: List[int] = []
     try:
@@ -211,7 +213,7 @@ def start_post_process_workers(task: AlgorithmTask) -> Tuple[bool, str]:
                     assigned_nodes.append(int(node_id))
             else:
                 _deploy_worker_local(task, replica)
-        return True, f'已启动 {replicas} 个后处理 Worker'
+        return True, f'已启动 {replicas} 个后处理/姿态 Worker'
     except Exception as exc:
         logger.error('启动后处理 Worker 失败 task=%s: %s', task.id, exc, exc_info=True)
         return False, str(exc)

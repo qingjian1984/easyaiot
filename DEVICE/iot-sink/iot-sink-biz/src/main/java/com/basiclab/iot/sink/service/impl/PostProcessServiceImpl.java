@@ -161,6 +161,12 @@ public class PostProcessServiceImpl implements PostProcessService {
         if (result.get("detections") != null) {
             message.put("detections", result.get("detections"));
         }
+        if (result.get("pose_count") != null) {
+            message.put("poseCount", result.get("pose_count"));
+        }
+        if (result.get("pose_result") != null) {
+            message.put("poseResult", result.get("pose_result"));
+        }
         if (result.get("suppress_default_alert") != null) {
             message.put("suppressDefaultAlert", result.get("suppress_default_alert"));
         }
@@ -180,7 +186,7 @@ public class PostProcessServiceImpl implements PostProcessService {
         if (Boolean.TRUE.equals(result.get("publish_kafka")) || Boolean.TRUE.equals(result.get("publish_sink"))) {
             return true;
         }
-        for (String key : new String[]{"counts", "events", "alerts", "payload", "detections"}) {
+        for (String key : new String[]{"counts", "events", "alerts", "payload", "detections", "pose_count", "pose_result", "pose_intent_matches"}) {
             Object value = result.get(key);
             if (value != null) {
                 if (value instanceof Map && ((Map<?, ?>) value).isEmpty()) {
@@ -241,7 +247,7 @@ public class PostProcessServiceImpl implements PostProcessService {
             payload = cast;
         } else {
             payload = new LinkedHashMap<>();
-            for (String key : new String[]{"counts", "events", "alerts", "detections", "suppress_default_alert"}) {
+            for (String key : new String[]{"counts", "events", "alerts", "detections", "suppress_default_alert", "pose_count", "pose_result"}) {
                 if (message.get(key) != null) {
                     payload.put(key, message.get(key));
                 }
@@ -295,7 +301,7 @@ public class PostProcessServiceImpl implements PostProcessService {
         }
         List<Map<String, Object>> alertDetections = AlertClassFilter.filterDetectionsForAlert(
                 detections, alertClassNames);
-        Map<String, Object> defaultAlert = buildDefaultAlert(message, alertDetections);
+        Map<String, Object> defaultAlert = buildDefaultAlert(message, alertDetections, payload);
         if (defaultAlert != null) {
             postAlertHook(defaultAlert);
         }
@@ -327,9 +333,15 @@ public class PostProcessServiceImpl implements PostProcessService {
         }
     }
 
-    private Map<String, Object> buildDefaultAlert(Map<String, Object> message, List<Map<String, Object>> detections) {
+    private Map<String, Object> buildDefaultAlert(
+            Map<String, Object> message,
+            List<Map<String, Object>> detections,
+            Map<String, Object> payload) {
         if (detections == null || detections.isEmpty()) {
             return null;
+        }
+        if (payload == null) {
+            payload = extractPayload(message);
         }
         Map<String, Integer> objectCounts = new HashMap<>();
         String primary = "unknown";
@@ -353,6 +365,20 @@ public class PostProcessServiceImpl implements PostProcessService {
         information.put("frame_number", intValue(message.get("frameNumber"), message.get("frame_number")));
         information.put("correlation_id", stringValue(message.get("correlationId"), message.get("correlation_id")));
         information.put("source", "post_process_sink");
+        Object poseResult = payload.get("pose_result");
+        if (poseResult == null) {
+            poseResult = message.get("poseResult");
+        }
+        if (poseResult != null) {
+            information.put("pose_result", poseResult);
+        }
+        Object poseIntentMatches = payload.get("pose_intent_matches");
+        if (poseIntentMatches == null) {
+            poseIntentMatches = message.get("poseIntentMatches");
+        }
+        if (poseIntentMatches != null) {
+            information.put("pose_intent_matches", poseIntentMatches);
+        }
 
         Map<String, Object> alert = new HashMap<>();
         alert.put("object", primary);
