@@ -192,6 +192,8 @@ services:
       - EASYAIOT_AGENT_CONTROL_PLANE_URL=${EASYAIOT_AGENT_CONTROL_PLANE_URL:-}
     volumes:
       - ../.build-cache/device/node-logs:/root/logs/
+      # Agent 源码目录（含 run_agent.py、install.sh 等，供控制面远程部署 Agent 使用）
+      - ../../NODE:/opt/easyaiot/NODE
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:48094/actuator/health"]
       interval: 30s
