@@ -933,8 +933,8 @@ const playCameraStream = (stream: CameraStreamInfo) => {
     return;
   }
 
-  // 将流地址的 IP+端口改写为当前浏览器地址，便于不同环境下直接拉流
-  httpStream = rewriteStreamHostToPageHost(httpStream);
+  // 算法任务播放由当前 WEB nginx 代理 /ai、/live，禁止浏览器直连服务端返回的媒体节点地址
+  httpStream = rewriteStreamHostToPageHost(httpStream, { forcePageProxy: true });
 
   // 打开播放器
   openPlayerModal(true, {
@@ -1197,4 +1197,3 @@ onMounted(() => {
   }
 }
 </style>
-

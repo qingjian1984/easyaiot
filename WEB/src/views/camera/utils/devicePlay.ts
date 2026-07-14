@@ -104,8 +104,13 @@ export function rewriteStreamUrlForBrowser(url: string): string {
  * 例如页面在 http://localhost:8888 打开时，
  * http://33.150.1.104:8080/ai/xxx.flv -> http://localhost:8888/ai/xxx.flv
  * 仅替换 host，协议与路径保持不变。
+ * forcePageProxy 用于明确知道当前页面 nginx 已代理媒体路径的入口，避免反向代理页面
+ * 仍按服务端返回的远端 host:port 直连媒体服务。
  */
-export function rewriteStreamHostToPageHost(url: string): string {
+export function rewriteStreamHostToPageHost(
+  url: string,
+  options?: { forcePageProxy?: boolean },
+): string {
   const trimmed = url?.trim();
   if (!trimmed || typeof window === 'undefined') return trimmed;
 
@@ -115,7 +120,7 @@ export function rewriteStreamHostToPageHost(url: string): string {
     if (!pageHostname) return trimmed;
 
     // 集群模式：流在远端 SRS/ZLM 节点，nginx 仅代理本机 srs-host，不应改写为页面 host
-    if (isRemoteClusterStreamHost(parsed.hostname, pageHostname)) {
+    if (!options?.forcePageProxy && isRemoteClusterStreamHost(parsed.hostname, pageHostname)) {
       return trimmed;
     }
 

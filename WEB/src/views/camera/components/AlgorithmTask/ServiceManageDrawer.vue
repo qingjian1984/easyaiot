@@ -1156,8 +1156,8 @@ const playCameraStream = (stream: CameraStreamInfo) => {
     return;
   }
 
-  // 流地址统一走当前页面 host:port，便于不同环境下浏览器直接拉流
-  httpStream = rewriteStreamHostToPageHost(httpStream);
+  // 帧管道管理器由当前 WEB nginx 代理 /ai、/live，禁止浏览器直连服务端返回的媒体节点地址
+  httpStream = rewriteStreamHostToPageHost(httpStream, { forcePageProxy: true });
 
   // 打开播放器
   openPlayerModal(true, {
@@ -1351,4 +1351,3 @@ const [register] = useDrawerInner(async (data) => {
   }
 }
 </style>
-

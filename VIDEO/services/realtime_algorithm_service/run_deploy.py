@@ -1762,6 +1762,11 @@ def load_task_config():
 
     try:
         logger.info(f"🔄 正在从数据库重新加载任务配置: task_id={TASK_ID}")
+        # PostgreSQL 任意一条 SQL 失败后，当前事务会一直处于 aborted 状态，
+        # 必须先 rollback 才能继续查询。启动阶段数据库自动迁移可能与本进程
+        # 并行执行，因此每次重试前都先结束上一次事务，确保迁移完成后可恢复。
+        db_session.rollback()
+
         # 刷新数据库会话，确保获取最新数据
         db_session.expire_all()
 
@@ -1899,6 +1904,11 @@ def load_task_config():
         return True
     except Exception as e:
         logger.error(f"加载任务配置失败: {str(e)}", exc_info=True)
+        try:
+            db_session.rollback()
+        except Exception as rollback_error:
+            logger.error(f"任务配置加载失败后回滚数据库事务失败: {rollback_error}", exc_info=True)
+            db_session.remove()
         return False
 
 
