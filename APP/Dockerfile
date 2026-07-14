@@ -27,10 +27,57 @@ RUN --mount=type=cache,target=/pnpm/store,id=app-pnpm-store \
     pnpm config set store-dir /pnpm/store && \
     pnpm fetch --frozen-lockfile 2>&1 | tee /tmp/app-build-logs/pnpm-fetch.log || true
 
+# pnpm 偶发 "Done" 后不退出（https://github.com/pnpm/pnpm/issues/12297），监督并强制收尾
 RUN --mount=type=cache,target=/pnpm/store,id=app-pnpm-store \
     pnpm config set store-dir /pnpm/store && \
-    pnpm install --frozen-lockfile --ignore-scripts 2>&1 | tee /tmp/app-build-logs/pnpm-install.log && \
-    test -x node_modules/.bin/cross-env || (echo "=== pnpm install 未生成 node_modules/.bin/cross-env ===" && exit 1)
+    sh -ec '\
+      log=/tmp/app-build-logs/pnpm-install.log; \
+      rcfile=/tmp/pnpm-install.rc; \
+      : > "$log"; rm -f "$rcfile"; \
+      setsid sh -c "set -o pipefail; pnpm install --frozen-lockfile --ignore-scripts 2>&1 | tee \"$log\"; echo \$? > \"$rcfile\"" & \
+      pid=$!; \
+      hung=0; \
+      for i in $(seq 1 1800); do \
+        if [ -f "$rcfile" ]; then wait "$pid" || true; break; fi; \
+        if grep -q "Done in " "$log" 2>/dev/null; then \
+          for j in $(seq 1 20); do \
+            [ -f "$rcfile" ] && break; \
+            sleep 1; \
+          done; \
+          if [ ! -f "$rcfile" ]; then \
+            echo "=== pnpm 打印 Done 后 20s 未退出，强制结束（pnpm#12297）==="; \
+            kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; \
+            sleep 5; \
+            kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true; \
+            wait "$pid" 2>/dev/null || true; \
+            hung=1; \
+          else \
+            wait "$pid" || true; \
+          fi; \
+          break; \
+        fi; \
+        if [ $((i % 60)) -eq 0 ]; then echo "=== pnpm install 仍在运行 (${i}s) ==="; fi; \
+        sleep 1; \
+      done; \
+      if [ ! -f "$rcfile" ] && [ "$hung" -eq 0 ]; then \
+        echo "=== pnpm install 超过 1800s 未完成，终止 ==="; \
+        kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; \
+        sleep 5; \
+        kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true; \
+        wait "$pid" 2>/dev/null || true; \
+      fi; \
+      if [ -f "$rcfile" ]; then \
+        rc=$(cat "$rcfile"); \
+        if [ "$rc" != "0" ]; then echo "=== pnpm install 失败 rc=$rc ==="; cat "$log"; exit "$rc"; fi; \
+      elif [ "$hung" -eq 1 ]; then \
+        test -x node_modules/.bin/cross-env || { echo "=== 强制结束后依赖不完整 ==="; cat "$log"; exit 1; }; \
+        echo "=== 依赖完整，忽略 pnpm 挂起继续 ==="; \
+      else \
+        echo "=== pnpm install 状态未知 ==="; cat "$log"; exit 1; \
+      fi; \
+      echo "=== pnpm install 完成，校验 cross-env ==="; \
+      test -x node_modules/.bin/cross-env || { echo "=== pnpm install 未生成 node_modules/.bin/cross-env ==="; exit 1; }; \
+    '
 
 ARG CACHE_BUST=0
 RUN echo "cache-bust=${CACHE_BUST}" > /tmp/.app-cache-bust

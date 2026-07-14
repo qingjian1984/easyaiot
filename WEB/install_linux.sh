@@ -874,8 +874,9 @@ build_image() {
     # 注意：前端构建现在在Docker容器内完成，构建镜像时会自动完成
     print_info "前端构建将在Docker容器内自动完成"
     
-    # 勿用 --no-cache：会强制重跑 pnpm fetch/install（数分钟），且 hoisted+store cache mount 下
-    # 可能出现 install 打印 Done 后进程仍挂起。源码变更由 CACHE_BUST 触发 vite 重编；全量重建请先 clean。
+    # 勿用 --no-cache：会强制重跑 pnpm fetch/install（数分钟）。
+    # pnpm 11 偶发 Done 后不退出（#12297），Dockerfile 已监督收尾；仍应尽量命中层缓存。
+    # 源码变更由 CACHE_BUST 触发 vite 重编；全量重建请先 clean。
     local build_rc=0
     docker_build_image -t "$profile_ref" . || build_rc=$?
     record_web_deploy_profile_built "${EASYAIOT_ROOT}"
