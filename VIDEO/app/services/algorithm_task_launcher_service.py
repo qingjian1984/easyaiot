@@ -345,11 +345,6 @@ def _deploy_task_on_remote_node(task_id: int, task: AlgorithmTask) -> Tuple[bool
     task.service_process_id = result.get('pid')
     task.service_log_path = log_dir
     task.run_status = 'running'
-    # 若该 compute_node 已登记为边缘节点，回填 edge 维度（供告警/列表区分）
-    try:
-        _fill_task_edge_dimension(task, node_id, host)
-    except Exception as edge_exc:
-        logger.debug('回填 edge_node 维度跳过 task_id=%s: %s', task_id, edge_exc)
     db.session.commit()
 
     logger.info(
@@ -357,35 +352,6 @@ def _deploy_task_on_remote_node(task_id: int, task: AlgorithmTask) -> Tuple[bool
         task_id, node_id, host, result.get('pid'),
     )
     return (True, f'已下发到节点 {host}', False)
-
-
-def _fill_task_edge_dimension(task: AlgorithmTask, compute_node_id: int, host: str) -> None:
-    """通过 iot-node 边缘列表匹配 compute_node_id，写入 algorithm_task.edge_*。"""
-    from app.utils import node_client
-    # 轻量：GET /edge/page 检索（前端同源 API）；失败则只写 host 冗余
-    try:
-        import requests
-        base = node_client.JAVA_BACKEND_URL.rstrip('/')
-        url = f'{base}/admin-api/node/edge/page'
-        resp = requests.get(
-            url,
-            params={'pageNo': 1, 'pageSize': 200, 'host': host},
-            headers=node_client._headers(),
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            body = resp.json() or {}
-            data = body.get('data') or {}
-            for item in data.get('list') or []:
-                if int(item.get('computeNodeId') or 0) == int(compute_node_id):
-                    task.edge_node_id = item.get('id')
-                    task.edge_node_name = item.get('name')
-                    task.edge_node_host = item.get('host') or host
-                    return
-    except Exception:
-        pass
-    if not getattr(task, 'edge_node_host', None):
-        task.edge_node_host = host
 
 
 def _stop_remote_task(task_id: int, node_id: Optional[int]) -> None:

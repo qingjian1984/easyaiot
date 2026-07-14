@@ -519,9 +519,6 @@ def create_app(start_background_tasks=None):
                         ('prefer_gpu', 'BOOLEAN NOT NULL DEFAULT TRUE'),
                         ('target_node_id', 'BIGINT'),
                         ('node_id', 'BIGINT'),
-                        ('edge_node_id', 'BIGINT'),
-                        ('edge_node_name', 'VARCHAR(128)'),
-                        ('edge_node_host', 'VARCHAR(128)'),
                     ]:
                         result = db.session.execute(text(f"""
                             SELECT EXISTS (
@@ -541,7 +538,25 @@ def create_app(start_background_tasks=None):
                             """))
                             db.session.commit()
                             print(f"✅ algorithm_task.{col_name} 列添加成功")
-                    
+
+                    # 与边缘节点字段级隔离：algorithm_task 不再持有 edge_node_*
+                    for drop_col in ('edge_node_id', 'edge_node_name', 'edge_node_host'):
+                        result = db.session.execute(text(f"""
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.columns
+                                WHERE table_schema = 'public'
+                                AND table_name = 'algorithm_task'
+                                AND column_name = '{drop_col}'
+                            );
+                        """))
+                        if result.scalar():
+                            print(f"⚠️  移除 algorithm_task.{drop_col}（与边缘节点隔离）...")
+                            db.session.execute(text(
+                                f'ALTER TABLE algorithm_task DROP COLUMN IF EXISTS {drop_col};'
+                            ))
+                            db.session.commit()
+                            print(f"✅ algorithm_task.{drop_col} 已删除")
+
                     print("✅ algorithm_task 表迁移检查完成")
                 except Exception as e:
                     print(f"⚠️  algorithm_task 表迁移检查失败: {str(e)}")
@@ -645,9 +660,6 @@ def create_app(start_background_tasks=None):
                         ('task_id', 'INTEGER'),
                         ('task_name', 'VARCHAR(255)'),
                         ('business_tags', 'TEXT'),
-                        ('edge_node_id', 'BIGINT'),
-                        ('edge_node_name', 'VARCHAR(128)'),
-                        ('edge_node_host', 'VARCHAR(128)'),
                         ('node_id', 'BIGINT'),
                     ]:
                         result = db.session.execute(text(f"""
@@ -666,7 +678,25 @@ def create_app(start_background_tasks=None):
                             """))
                             db.session.commit()
                             print(f"✅ alert.{col_name} 列添加成功")
-                    
+
+                    # VIDEO 告警表与边缘节点隔离（边缘告警仅经 iot-sink，不写 VIDEO.alert.edge_*）
+                    for drop_col in ('edge_node_id', 'edge_node_name', 'edge_node_host'):
+                        result = db.session.execute(text(f"""
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.columns
+                                WHERE table_schema = 'public'
+                                AND table_name = 'alert'
+                                AND column_name = '{drop_col}'
+                            );
+                        """))
+                        if result.scalar():
+                            print(f"⚠️  移除 alert.{drop_col}（与边缘节点隔离）...")
+                            db.session.execute(text(
+                                f'ALTER TABLE alert DROP COLUMN IF EXISTS {drop_col};'
+                            ))
+                            db.session.commit()
+                            print(f"✅ alert.{drop_col} 已删除")
+
                     print("✅ alert 表迁移检查完成")
                 except Exception as e:
                     print(f"⚠️  alert 表迁移检查失败: {str(e)}")

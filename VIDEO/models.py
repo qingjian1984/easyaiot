@@ -286,10 +286,6 @@ class Alert(db.Model):
     notification_sent_time = db.Column(db.DateTime, nullable=True, comment='通知发送时间')
     business_tags = db.Column(db.Text, nullable=True, comment='业务标签（JSON数组，库匹配告警携带匹配库标签）')
     correlation_id = db.Column(db.String(36), nullable=True, index=True, comment='关联事件ID（同一帧算法告警/人脸/车牌）')
-    # 边缘节点维度（区分多 EDGE 集群数据）
-    edge_node_id = db.Column(db.BigInteger, nullable=True, index=True, comment='边缘节点 edge_node.id')
-    edge_node_name = db.Column(db.String(128), nullable=True, comment='边缘节点名称（冗余）')
-    edge_node_host = db.Column(db.String(128), nullable=True, comment='边缘节点主机（冗余）')
     node_id = db.Column(db.BigInteger, nullable=True, comment='运行 compute_node.id（可选）')
 
 
@@ -968,9 +964,6 @@ class AlgorithmTask(db.Model):
                            comment='自动调度时是否优先 GPU 节点')
     target_node_id = db.Column(db.BigInteger, nullable=True, comment='指定部署节点ID')
     node_id = db.Column(db.BigInteger, nullable=True, comment='实际运行节点ID')
-    edge_node_id = db.Column(db.BigInteger, nullable=True, index=True, comment='边缘节点 edge_node.id')
-    edge_node_name = db.Column(db.String(128), nullable=True, comment='边缘节点名称（冗余展示）')
-    edge_node_host = db.Column(db.String(128), nullable=True, comment='边缘节点主机（冗余展示）')
 
     # 服务状态信息（仅实时算法任务使用）
     service_server_ip = db.Column(db.String(512), nullable=True, comment='服务运行服务器IP（多节点时为逗号分隔）')
@@ -1151,9 +1144,6 @@ class AlgorithmTask(db.Model):
             'prefer_gpu': self.prefer_gpu if self.prefer_gpu is not None else True,
             'target_node_id': self.target_node_id,
             'node_id': self.node_id,
-            'edge_node_id': self.edge_node_id,
-            'edge_node_name': self.edge_node_name,
-            'edge_node_host': self.edge_node_host,
             'service_server_ip': self.service_server_ip,
             'service_port': self.service_port,
             'service_process_id': self.service_process_id,

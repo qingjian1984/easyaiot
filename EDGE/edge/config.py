@@ -33,10 +33,82 @@ def load_env() -> Dict[str, str]:
         'EDGE_JOIN_TOKEN',
         'EDGE_NODE_ID',
         'EDGE_AGENT_TOKEN',
+        'EDGE_SRS_HOST',
+        'EDGE_SRS_RTMP_PORT',
+        'EDGE_SRS_HTTP_PORT',
+        'EDGE_SRS_API_PORT',
+        'SRS_RTMP_PORT',
+        'SRS_HTTP_PORT',
+        'SRS_API_PORT',
     ):
         if os.environ.get(key):
             data[key] = os.environ[key].strip()
     return data
+
+
+def save_srs_config(
+    host: str,
+    *,
+    rtmp_port: int = 1935,
+    http_port: int = 8080,
+    api_port: int = 1985,
+) -> Dict[str, str]:
+    """写入边缘选定的 SRS 推流/播放目标（多媒体节点时由现场指定）。"""
+    host = (host or '').strip()
+    if '://' in host:
+        # 兼容误传 rtmp://host:port 或 http://host:port
+        from urllib.parse import urlparse
+
+        parsed = urlparse(host if '://' in host else f'//{host}', scheme='rtmp')
+        host = (parsed.hostname or host).strip()
+        if parsed.port and rtmp_port == 1935 and parsed.scheme in ('rtmp', 'http', 'https'):
+            # 仅当调用方未显式改端口、且 URL 自带端口时采用 URL 端口
+            if parsed.scheme == 'rtmp':
+                rtmp_port = int(parsed.port)
+            elif parsed.scheme in ('http', 'https') and http_port == 8080:
+                http_port = int(parsed.port)
+    host = host.strip().rstrip('/')
+    if not host:
+        raise ValueError('EDGE_SRS_HOST 不能为空')
+    if ':' in host and host.count(':') == 1 and not host.startswith('['):
+        # host:rtmp_port 简写
+        h, _, p = host.partition(':')
+        if p.isdigit():
+            host, rtmp_port = h, int(p)
+
+    save_env_value('EDGE_SRS_HOST', host)
+    save_env_value('EDGE_SRS_RTMP_PORT', str(int(rtmp_port)))
+    save_env_value('EDGE_SRS_HTTP_PORT', str(int(http_port)))
+    save_env_value('EDGE_SRS_API_PORT', str(int(api_port)))
+    # 与 VIDEO run_deploy 对齐的端口别名
+    save_env_value('SRS_RTMP_PORT', str(int(rtmp_port)))
+    save_env_value('SRS_HTTP_PORT', str(int(http_port)))
+    save_env_value('SRS_API_PORT', str(int(api_port)))
+    return {
+        'EDGE_SRS_HOST': host,
+        'EDGE_SRS_RTMP_PORT': str(int(rtmp_port)),
+        'EDGE_SRS_HTTP_PORT': str(int(http_port)),
+        'EDGE_SRS_API_PORT': str(int(api_port)),
+    }
+
+
+def srs_env_from_local() -> Dict[str, str]:
+    """供 MQTT runtime / workload 注入：仅返回已配置的 SRS 相关键。"""
+    env = load_env()
+    out: Dict[str, str] = {}
+    for key in (
+        'EDGE_SRS_HOST',
+        'EDGE_SRS_RTMP_PORT',
+        'EDGE_SRS_HTTP_PORT',
+        'EDGE_SRS_API_PORT',
+        'SRS_RTMP_PORT',
+        'SRS_HTTP_PORT',
+        'SRS_API_PORT',
+    ):
+        val = env.get(key)
+        if val is not None and str(val).strip():
+            out[key] = str(val).strip()
+    return out
 
 
 def save_env_value(key: str, value: str) -> None:

@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import paho.mqtt.client as mqtt
 
 from edge import workload_runner
+from edge.config import srs_env_from_local
 
 logger = logging.getLogger('edge.mqtt')
 
@@ -74,7 +75,7 @@ class EdgeMqttRuntime:
             broker_s = ','.join(str(x) for x in brokers)
         else:
             broker_s = str(brokers)
-        return {
+        env = {
             'MQTT_BROKER_URLS': broker_s,
             'MQTT_ALGO_TENANT': str(rt.get('mqttAlgoTenant') or 'default'),
             'MQTT_ALGO_USERNAME': str(rt.get('mqttUsername') or ''),
@@ -91,6 +92,9 @@ class EdgeMqttRuntime:
             'ALGO_UPLOAD_MINIO_SYNC': 'false',
             'ALGO_BUS_TRANSPORT': 'mqtt',
         }
+        # 现场 set-srs 选定的推流目标（多 SRS 时手动指定，不依赖 POD_IP 本机约定）
+        env.update(srs_env_from_local())
+        return env
 
     def _try_connect_ordered(self) -> bool:
         """每一轮探测都从 brokers[0] 开始。"""

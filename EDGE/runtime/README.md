@@ -1,21 +1,44 @@
-# EDGE/runtime — 算法执行包
+# EDGE/runtime — 边缘算法执行包（EDGE 自有）
 
-此处承接从 `VIDEO/services/{realtime,snapshot,patrol}_algorithm_service` 抽离的边缘推理运行时。
+本目录是边缘侧 **唯一** 推理入口，由 `edge.workload_runner` 拉起。  
+**与 VIDEO 源码树运行时解耦**：VIDEO 不包含 `EDGE_*` 推流逻辑；边缘推流/解析只维护在此处。
 
-## 当前策略
+## 目录
 
-首期可用同步脚本从 VIDEO 最小包对齐（或软链），避免阻塞 EDGE 纳管/MQTT 主链路落地：
-
-```bash
-# 示例：将 VIDEO 算法最小集同步到本目录（在仓库根执行）
-rsync -a --relative \
-  VIDEO/./services/realtime_algorithm_service \
-  VIDEO/./services/snapshot_algorithm_service \
-  VIDEO/./services/patrol_algorithm_service \
-  EDGE/runtime/
+```
+runtime/
+  services/
+    realtime_algorithm_service/run_deploy.py   # 含 EDGE_SRS_HOST 推流解析（EDGE overlay）
+    snapshot_algorithm_service/
+    patrol_algorithm_service/
+  overlays/
+    resolve_ai_rtmp_push_url.py.snippet         # EDGE 自有补丁片段
+    apply_overlays.py                          # 同步后重新打补丁
 ```
 
-控制面 `task.cmd.deploy` 也可直接携带 `command` + `workDir`（远程已同步的 VIDEO 路径），EDGE `workload_runner` 会优先使用。
+## 可选：从 VIDEO 种子刷新
+
+仅在需要对齐算法主体时执行（会覆盖 `services/` 后再自动应用 overlays）：
+
+```bash
+# 仓库根目录
+bash EDGE/scripts/sync_runtime_from_video.sh
+```
+
+脚本流程：拷贝 VIDEO/services → `EDGE/runtime/services` → 运行 `overlays/apply_overlays.py`。  
+**不会修改 VIDEO 源码。** 日常演进以本目录为准；VIDEO 只是可选种子源，不是运行时依赖。
+
+## 推流目标（set-srs）
+
+边缘现场：
+
+```bash
+python -m edge config set-srs --host <SRS主机> --rtmp-port 1935 --http-port 8080 --api-port 1985
+```
+
+写入 `EDGE_SRS_*` 后，由 MQTT runtime 注入任务进程；`realtime` 的 `_resolve_ai_rtmp_push_url`（EDGE overlay）拼出：
+
+`rtmp://{EDGE_SRS_HOST}:{port}/ai/{deviceId}`
 
 ## 约束
 

@@ -44,9 +44,9 @@
           <Button
             v-else
             type="primary"
-            @click="handleGoAlgorithm"
+            @click="emitSuccessAndClose"
           >
-            去创建算法任务
+            完成
           </Button>
         </div>
       </div>
@@ -100,6 +100,7 @@
               <li>Ceph 边缘 0 硬盘占用：告警图写共享路径，不落本地业务盘</li>
               <li>节点登记至边缘管理表（<code>edge_node</code>），由中心统一调度</li>
               <li>通过 MQTT 接收算法启停指令，在本地执行推理并将告警汇聚上云</li>
+              <li>AI 预览推流到中心选定的 SRS（边缘不装流媒体）；多节点时在指引中手动指定</li>
             </ul>
           </CollapseContainer>
         </div>
@@ -154,7 +155,7 @@
             :message="
               isLocalControlPlaneUrl(controlPlaneUrl)
                 ? '当前为 localhost，边缘设备无法通过回环地址访问中心，请改为局域网可达 IP（端口 48080）。'
-                : '请确认下方地址为边缘设备可访问的 iot-node Gateway 根地址。'
+                : '请确认控制面地址可达；多媒体节点时请在下方下拉选定本台边缘要推流的 SRS。'
             "
           />
           <CollapseContainer title="控制面地址" :can-expan="false">
@@ -178,12 +179,6 @@
               <code>/admin-api/node/agent</code> 等路径；Gateway 默认端口
               <code>48080</code>。
             </p>
-            <div class="script-toolbar" style="margin-top: 12px">
-              <Button size="small" preIcon="ant-design:copy-outlined" @click="copyText(setNodeCmd, '配置命令已复制')">
-                复制配置命令
-              </Button>
-            </div>
-            <pre class="script-block">{{ setNodeCmd }}</pre>
             <div class="join-token-block">
               <div class="join-token-block__label">Join Token（生产可选）</div>
               <a-input
@@ -191,18 +186,82 @@
                 placeholder="与控制面 easyaiot.edge.join-token 一致"
                 allow-clear
               />
-              <div class="script-toolbar" style="margin-top: 8px">
-                <Button
-                  size="small"
-                  preIcon="ant-design:copy-outlined"
-                  :disabled="!joinToken.trim()"
-                  @click="copyText(setJoinTokenCmd, 'Join Token 命令已复制')"
-                >
-                  复制 set-join-token
-                </Button>
-              </div>
-              <pre v-if="joinToken.trim()" class="script-block">{{ setJoinTokenCmd }}</pre>
             </div>
+          </CollapseContainer>
+
+          <CollapseContainer title="SRS 流媒体节点（AI 预览推流）" :can-expan="false">
+            <Alert
+              v-if="!mediaNodes.length && !loadingMedia"
+              type="warning"
+              show-icon
+              style="margin-bottom: 12px"
+              message="暂无在线 media/hybrid 节点。请先在「节点管理 → 流媒体引擎」部署 SRS，或确认节点在线后再刷新。"
+            />
+            <div class="url-row">
+              <a-select
+                v-model:value="selectedSrsNodeId"
+                class="srs-select"
+                allow-clear
+                show-search
+                option-filter-prop="label"
+                placeholder="选择可用的 SRS 节点（media / hybrid）"
+                :options="srsSelectOptions"
+                :loading="loadingMedia"
+              />
+              <Button @click="loadMediaNodes" :loading="loadingMedia">刷新节点</Button>
+            </div>
+            <p class="form-hint">
+              边缘不在本机安装 SRS；从中心媒体节点中<strong>手动指定</strong>本台要推流的目标。
+              选定后下方命令会自动拼接 <code>set-srs</code>，写入
+              <code>EDGE_SRS_HOST</code> 等环境变量。
+            </p>
+            <div v-if="selectedSrsSummary" class="srs-summary">
+              <div class="srs-summary__row">
+                <span class="srs-summary__label">节点</span>
+                <span>{{ selectedSrsSummary.name }} · {{ selectedSrsSummary.host }} · {{ selectedSrsSummary.role }}</span>
+              </div>
+              <div class="srs-summary__row">
+                <span class="srs-summary__label">推流</span>
+                <code>{{ selectedSrsSummary.rtmpBase }}</code>
+              </div>
+              <div class="srs-summary__row">
+                <span class="srs-summary__label">播放</span>
+                <code>{{ selectedSrsSummary.httpBase }}</code>
+              </div>
+            </div>
+          </CollapseContainer>
+
+          <CollapseContainer title="一键配置命令（自动拼接）" :can-expan="false">
+            <div class="script-toolbar">
+              <Button
+                size="small"
+                type="primary"
+                preIcon="ant-design:copy-outlined"
+                @click="copyText(configBundleCmd, '配置命令已复制')"
+              >
+                复制全部配置命令
+              </Button>
+              <Button size="small" preIcon="ant-design:copy-outlined" @click="copyText(setNodeCmd, 'set-node 已复制')">
+                仅 set-node
+              </Button>
+              <Button
+                size="small"
+                preIcon="ant-design:copy-outlined"
+                :disabled="!setSrsCmd"
+                @click="copyText(setSrsCmd, 'set-srs 已复制')"
+              >
+                仅 set-srs
+              </Button>
+              <Button
+                v-if="joinToken.trim()"
+                size="small"
+                preIcon="ant-design:copy-outlined"
+                @click="copyText(setJoinTokenCmd, 'Join Token 命令已复制')"
+              >
+                仅 set-join-token
+              </Button>
+            </div>
+            <pre class="script-block">{{ configBundleCmd }}</pre>
           </CollapseContainer>
         </div>
 
@@ -211,9 +270,9 @@
           <Alert
             type="info"
             show-icon
-            message="执行 python -m edge run：未登记时会自动 enroll，随后订阅 MQTT 任务指令。"
+            message="先常驻 edge run 订阅 MQTT；再用独立命令 task start/stop 完成负载启停（不在本 Tab 内建任务下发 UI）。"
           />
-          <CollapseContainer title="启动 Agent" :can-expan="false">
+          <CollapseContainer title="① 启动 Agent（常驻订阅）" :can-expan="false">
             <div class="script-toolbar">
               <Button size="small" preIcon="ant-design:copy-outlined" @click="copyText(runCmd, '启动命令已复制')">
                 复制
@@ -221,7 +280,67 @@
             </div>
             <pre class="script-block">{{ runCmd }}</pre>
           </CollapseContainer>
-          <CollapseContainer title="分步执行" :can-expan="false">
+          <CollapseContainer title="② 命令下发负载（另一终端）" :can-expan="false">
+            <Alert
+              type="warning"
+              show-icon
+              style="margin-bottom: 12px"
+              message="与「算法任务」Tab 互不影响。targetNodeId 为本机 enroll 的 compute 节点 ID；taskId 写入进程 TASK_ID。"
+            />
+            <div class="url-row" style="margin-bottom: 12px">
+              <a-input-number
+                v-model:value="guideTaskId"
+                :min="1"
+                :precision="0"
+                placeholder="taskId"
+                style="width: 160px"
+              />
+              <a-select
+                v-model:value="guideTaskType"
+                style="width: 140px"
+                :options="taskTypeOptions"
+              />
+              <Button
+                size="small"
+                type="primary"
+                preIcon="ant-design:copy-outlined"
+                @click="copyText(taskStartCmd, 'task start 已复制')"
+              >
+                复制 start
+              </Button>
+              <Button
+                size="small"
+                preIcon="ant-design:copy-outlined"
+                @click="copyText(taskStopCmd, 'task stop 已复制')"
+              >
+                复制 stop
+              </Button>
+            </div>
+            <p class="form-hint">
+              节点 computeNodeId：
+              <code>{{ guideTargetNodeIdLabel }}</code>
+              ；默认发到本机 enroll ID（命令省略 --target-node-id）。预览推流依赖上一步
+              <code>set-srs</code>。
+            </p>
+            <pre class="script-block">{{ taskDispatchBundleCmd }}</pre>
+            <div class="script-toolbar" style="margin-top: 8px">
+              <Button
+                size="small"
+                preIcon="ant-design:copy-outlined"
+                @click="copyText(taskDispatchBundleCmd, '下发命令已复制')"
+              >
+                复制全部下发命令
+              </Button>
+              <Button
+                size="small"
+                preIcon="ant-design:copy-outlined"
+                @click="copyText(taskLocalSmokeCmd, '本机冒烟命令已复制')"
+              >
+                复制 --local 冒烟
+              </Button>
+            </div>
+          </CollapseContainer>
+          <CollapseContainer title="分步执行（配置 → enroll → run）" :can-expan="false">
             <div class="script-toolbar">
               <Button size="small" preIcon="ant-design:copy-outlined" @click="copyText(stepRunCmd, '分步命令已复制')">
                 复制
@@ -241,7 +360,7 @@
             show-icon
             :message="
               verifiedOnline
-                ? '已检测到在线边缘节点，可调整容量或创建算法任务。'
+                ? '已检测到在线边缘节点，可调整容量或返回列表。'
                 : '请保持边缘侧 agent 运行，点击「刷新验收」确认节点出现并处于在线状态。'
             "
           />
@@ -310,33 +429,33 @@
           <Alert
             type="success"
             show-icon
-            message="节点已加入无限联邦边缘集群。可在算法任务中指定该节点，现场推理结果将汇聚上云。"
+            message="节点已加入无限联邦边缘集群。边缘节点与「算法任务」Tab 相互独立，互不影响。"
           />
           <div class="finish-grid">
             <div class="finish-card">
-              <div class="finish-card__title">联邦调度</div>
+              <div class="finish-card__title">联邦纳管</div>
               <div class="finish-card__desc">
-                新建算法任务时可指定边缘节点，或使用 auto / random 由平台选择在线且 Ceph 就绪的节点。
+                节点已登记至边缘管理表，可在本 Tab 调整最大任务数、启停与备注。
               </div>
             </div>
             <div class="finish-card">
               <div class="finish-card__title">铺开扩容</div>
               <div class="finish-card__desc">
-                约 512MB 即可再接入一台开发板；调整最大任务数控制容量，停用后不再参与调度。
+                约 512MB 即可再接入一台开发板；调整最大任务数控制容量，停用后不再参与边缘侧调度。
               </div>
             </div>
             <div class="finish-card">
-              <div class="finish-card__title">汇聚上云</div>
+              <div class="finish-card__title">命令启停</div>
               <div class="finish-card__desc">
-                将 <code>python -m edge run</code> 配为 systemd 常驻；告警写共享 Ceph（边缘 0 硬盘），经 MQTT 回中心归档。
+                常驻 <code>edge run</code>，再用
+                <code>python -m edge task start/stop</code> 经 MQTT 启停负载；告警写共享 Ceph，经总线回中心归档。
               </div>
             </div>
           </div>
           <div class="finish-actions">
-            <Button type="primary" size="large" preIcon="ant-design:rocket-outlined" @click="handleGoAlgorithm">
-              创建算法任务
+            <Button type="primary" size="large" @click="emitSuccessAndClose">
+              返回边缘节点列表
             </Button>
-            <Button size="large" @click="emitSuccessAndClose">返回列表</Button>
           </div>
         </div>
       </div>
@@ -346,7 +465,6 @@
 
 <script lang="ts" setup>
 import { computed, reactive, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import {
   Alert,
   Col as ACol,
@@ -355,6 +473,7 @@ import {
   Input as AInput,
   InputNumber as AInputNumber,
   Row as ARow,
+  Select as ASelect,
   Switch as ASwitch,
   Table as ATable,
   Tag as ATag,
@@ -375,9 +494,11 @@ import {
   updateEdgeNode,
   type EdgeNodeVO,
 } from '@/api/device/edge';
+import { listMediaNodes, type ComputeNodeVO } from '@/api/device/node';
 import {
   getControlPlaneHookEndpoint,
   isLocalControlPlaneUrl,
+  readMediaPortsFromTags,
   resolveControlPlaneAgentUrl,
 } from '@/views/node/utils/constants';
 import NODE_COMPUTE_IMAGE from '@/assets/images/node/node-compute.svg';
@@ -385,12 +506,12 @@ import { statusColor, statusText } from './Data';
 
 defineOptions({ name: 'EdgeSetupGuideDrawer' });
 
-const emit = defineEmits(['register', 'success', 'goto-algorithm']);
+const emit = defineEmits(['register', 'success']);
 
 const EDGE_NODE_URL_KEY = 'easyaiot_edge_node_url';
+const EDGE_SRS_NODE_ID_KEY = 'easyaiot_edge_srs_node_id';
 const NODE_IMAGE = NODE_COMPUTE_IMAGE;
 const { createMessage } = useMessage();
-const router = useRouter();
 
 type StepKey = 'overview' | 'prepare' | 'install' | 'config' | 'run' | 'verify' | 'finish';
 
@@ -404,10 +525,10 @@ const STEPS: StepDef[] = [
   { key: 'overview', title: '概述', description: '接入方式说明' },
   { key: 'prepare', title: '中心准备', description: '服务与凭证' },
   { key: 'install', title: '安装依赖', description: '边缘侧环境' },
-  { key: 'config', title: '配置地址', description: '控制面 URL' },
-  { key: 'run', title: '启动', description: '登记与订阅' },
+  { key: 'config', title: '配置地址', description: 'NODE 与 SRS' },
+  { key: 'run', title: '启动', description: '订阅与命令下发' },
   { key: 'verify', title: '验收', description: '在线与 Ceph' },
-  { key: 'finish', title: '完成', description: '任务调度' },
+  { key: 'finish', title: '完成', description: '常驻与命令启停' },
 ];
 
 const currentStep = ref(0);
@@ -420,6 +541,9 @@ const lastVerifyAt = ref('');
 const focusNode = ref<EdgeNodeVO | null>(null);
 const recentNodes = ref<EdgeNodeVO[]>([]);
 const saving = ref(false);
+const mediaNodes = ref<ComputeNodeVO[]>([]);
+const selectedSrsNodeId = ref<number | undefined>(undefined);
+const loadingMedia = ref(false);
 
 const editForm = reactive({
   id: 0,
@@ -432,10 +556,10 @@ const editForm = reactive({
 const heroTags = ['内存约 512MB', 'Ceph 边缘 0 硬盘', '一行命令上线', '算力铺开部署', '汇聚上云', '无限联邦扩容'];
 
 const journeyCards = [
-  { index: '01', title: '中心就绪', desc: '确认 Gateway、MQTT、Ceph 可用；按需配置 Join Token' },
-  { index: '02', title: '安装配置', desc: '约 512MB 即可起步，安装依赖并写入控制面地址' },
-  { index: '03', title: '一行命令启动', desc: '运行 agent，开发板自动登记并加入联邦集群' },
-  { index: '04', title: '验收上云', desc: '确认在线后创建算法任务，告警事件汇聚上云' },
+  { index: '01', title: '中心就绪', desc: '确认 Gateway、MQTT、Ceph、流媒体节点可用；按需配置 Join Token' },
+  { index: '02', title: '安装配置', desc: '写入控制面地址，并下拉选定可用的 SRS 节点' },
+  { index: '03', title: '常驻 + 命令下发', desc: 'edge run 订阅总线；另开终端用 edge task start/stop 启停负载' },
+  { index: '04', title: '验收上云', desc: '确认在线与 Ceph 就绪；预览推流走已选定的 SRS' },
 ];
 
 const installCmd = `cd EDGE
@@ -444,7 +568,16 @@ pip install -r requirements.txt`;
 
 const opsCmd = `python -m edge status
 python -m edge pull-config
+python -m edge task stop --task-id <TASK_ID>
 python -m edge stop`;
+
+const guideTaskId = ref<number>(900001);
+const guideTaskType = ref<'realtime' | 'snap' | 'patrol'>('realtime');
+const taskTypeOptions = [
+  { value: 'realtime', label: 'realtime' },
+  { value: 'snap', label: 'snap' },
+  { value: 'patrol', label: 'patrol' },
+];
 
 const activeStepKey = computed(() => STEPS[currentStep.value]?.key ?? 'overview');
 const isFirstStep = computed(() => currentStep.value === 0);
@@ -468,14 +601,82 @@ const setJoinTokenCmd = computed(
   () => `python -m edge config set-join-token ${joinToken.value.trim()}`,
 );
 
-const runCmd = computed(() => {
-  const url = controlPlaneUrl.value || 'http://<控制面主机>:48080';
+const selectedSrsNode = computed(() => {
+  if (selectedSrsNodeId.value == null) return null;
+  return mediaNodes.value.find((n) => n.id === selectedSrsNodeId.value) || null;
+});
+
+const selectedSrsPorts = computed(() => {
+  const node = selectedSrsNode.value;
+  if (!node) return null;
+  return readMediaPortsFromTags(node.tags);
+});
+
+const selectedSrsSummary = computed(() => {
+  const node = selectedSrsNode.value;
+  const ports = selectedSrsPorts.value;
+  if (!node?.host || !ports) return null;
+  return {
+    name: node.name || '未命名',
+    host: node.host,
+    role: node.nodeRole || '-',
+    rtmpBase: `rtmp://${node.host}:${ports.srsRtmpPort}/ai/<deviceId>`,
+    httpBase: `http://${node.host}:${ports.srsHttpPort}/ai/<deviceId>.flv`,
+  };
+});
+
+const srsSelectOptions = computed(() =>
+  mediaNodes.value
+    .filter((n) => n.id != null && !!n.host)
+    .map((n) => {
+      const ports = readMediaPortsFromTags(n.tags);
+      return {
+        value: n.id as number,
+        label: `${n.name || '未命名'} (${n.host}) · ${n.nodeRole} · RTMP ${ports.srsRtmpPort}`,
+      };
+    }),
+);
+
+const setSrsCmd = computed(() => {
+  const node = selectedSrsNode.value;
+  const ports = selectedSrsPorts.value;
+  if (!node?.host || !ports) return '';
+  return [
+    'python -m edge config set-srs',
+    `--host ${node.host}`,
+    `--rtmp-port ${ports.srsRtmpPort}`,
+    `--http-port ${ports.srsHttpPort}`,
+    `--api-port ${ports.srsApiPort}`,
+  ].join(' ');
+});
+
+/** 控制面 + SRS + Join Token 自动拼接，供现场一键复制 */
+const configBundleCmd = computed(() => {
   const lines = [
-    `# 尚未配置控制面地址时先执行：`,
-    `python -m edge config set-node ${url}`,
+    '# EasyAIoT EDGE 现场配置（控制面 + 选定的 SRS）',
+    setNodeCmd.value,
   ];
+  if (setSrsCmd.value) {
+    lines.push(setSrsCmd.value);
+  } else {
+    lines.push('# （未选择 SRS）建议先在上方下拉选定 media/hybrid 节点后再复制');
+  }
   if (joinToken.value.trim()) {
-    lines.push(`python -m edge config set-join-token ${joinToken.value.trim()}`);
+    lines.push(setJoinTokenCmd.value);
+  }
+  return lines.join('\n');
+});
+
+const runCmd = computed(() => {
+  const lines = [
+    '# 尚未配置时先执行：',
+    setNodeCmd.value,
+  ];
+  if (setSrsCmd.value) {
+    lines.push(setSrsCmd.value);
+  }
+  if (joinToken.value.trim()) {
+    lines.push(setJoinTokenCmd.value);
   }
   lines.push(`python -m edge run`);
   return lines.join('\n');
@@ -483,9 +684,64 @@ const runCmd = computed(() => {
 
 const stepRunCmd = computed(() => {
   const lines = [setNodeCmd.value];
+  if (setSrsCmd.value) lines.push(setSrsCmd.value);
   if (joinToken.value.trim()) lines.push(setJoinTokenCmd.value);
   lines.push('python -m edge enroll', 'python -m edge run');
   return lines.join('\n');
+});
+
+const guideTargetNodeId = computed(() => focusNode.value?.computeNodeId ?? undefined);
+
+const guideTargetNodeIdLabel = computed(() => {
+  if (guideTargetNodeId.value != null) {
+    return `${guideTargetNodeId.value}（来自当前选中边缘节点）`;
+  }
+  return '执行 edge status / enroll 后的 nodeId（命令默认用本机）';
+});
+
+const taskStartCmd = computed(() => {
+  const parts = [
+    'python -m edge task start',
+    `--task-id ${guideTaskId.value}`,
+    `--type ${guideTaskType.value}`,
+  ];
+  if (guideTargetNodeId.value != null) {
+    parts.push(`--target-node-id ${guideTargetNodeId.value}`);
+  }
+  return parts.join(' ');
+});
+
+const taskStopCmd = computed(() => {
+  const parts = ['python -m edge task stop', `--task-id ${guideTaskId.value}`];
+  if (guideTargetNodeId.value != null) {
+    parts.push(`--target-node-id ${guideTargetNodeId.value}`);
+  }
+  return parts.join(' ');
+});
+
+const taskDispatchBundleCmd = computed(() => {
+  const srsHint = setSrsCmd.value
+    ? '# 已选定 SRS，推流目标来自 edge.env 中 EDGE_SRS_*'
+    : '# 未选定 SRS 时，推流可能回落到默认逻辑；建议先在「配置地址」下拉选定';
+  return [
+    '# 终端 A：常驻（已在上方复制）',
+    '# python -m edge run',
+    '',
+    '# 终端 B：命令下发（不经算法任务 Tab）',
+    srsHint,
+    taskStartCmd.value,
+    '',
+    '# 停止',
+    taskStopCmd.value,
+  ].join('\n');
+});
+
+const taskLocalSmokeCmd = computed(() => {
+  return [
+    '# 本机冒烟（不经 MQTT，直接拉起 EDGE/runtime；适合单机验收）',
+    `${taskStartCmd.value} --local`,
+    `${taskStopCmd.value} --local`,
+  ].join('\n');
 });
 
 const prepareChecklist = computed(() => [
@@ -494,6 +750,16 @@ const prepareChecklist = computed(() => [
     label: 'iot-node Gateway 可达（:48080）',
     ok: !!controlPlaneUrl.value && !isLocalControlPlaneUrl(controlPlaneUrl.value) ? true : false,
     hint: controlPlaneUrl.value || '在「配置地址」步骤确认',
+  },
+  {
+    key: 'srs',
+    label: '在线 SRS / 媒体节点可用',
+    ok: mediaNodes.value.length > 0 ? (selectedSrsNodeId.value != null ? true : false) : false,
+    hint: mediaNodes.value.length
+      ? selectedSrsNodeId.value != null
+        ? `已选定：${selectedSrsSummary.value?.name || selectedSrsNodeId.value}`
+        : `发现 ${mediaNodes.value.length} 个媒体节点，请在「配置地址」下拉选定`
+      : '请先部署/上线 media 或 hybrid 节点',
   },
   {
     key: 'mqtt',
@@ -505,7 +771,7 @@ const prepareChecklist = computed(() => [
     key: 'ceph',
     label: 'CephFS 与中心路径一致',
     ok: null as boolean | null,
-    hint: '边缘需挂载同一 Ceph 路径，否则 cephMountReady=false，任务不会调度到该节点',
+    hint: '边缘需挂载同一 Ceph 路径，否则 cephMountReady=false',
   },
   {
     key: 'token',
@@ -538,7 +804,7 @@ const verifyChecklist = computed(() => {
       key: 'ceph',
       label: 'Ceph 挂载就绪',
       ok: !!node?.cephMountReady,
-      hint: node?.cephMountReady ? '已挂载' : '未就绪时算法任务可能不会调度到该节点',
+      hint: node?.cephMountReady ? '已挂载' : '未就绪时部分边缘能力受限',
     },
     {
       key: 'heartbeat',
@@ -577,6 +843,15 @@ watch(controlPlaneUrl, (url) => {
   }
 });
 
+watch(selectedSrsNodeId, (id) => {
+  try {
+    if (id != null) localStorage.setItem(EDGE_SRS_NODE_ID_KEY, String(id));
+    else localStorage.removeItem(EDGE_SRS_NODE_ID_KEY);
+  } catch {
+    /* ignore */
+  }
+});
+
 const [registerDrawer, { closeDrawer }] = useDrawerInner(async (data?: { nodeId?: number; step?: StepKey }) => {
   currentStep.value = data?.step ? Math.max(0, STEPS.findIndex((s) => s.key === data.step)) : 0;
   if (currentStep.value < 0) currentStep.value = 0;
@@ -584,13 +859,45 @@ const [registerDrawer, { closeDrawer }] = useDrawerInner(async (data?: { nodeId?
   lastVerifyAt.value = '';
   focusNode.value = null;
   recentNodes.value = [];
-  await refreshControlPlaneUrl();
+  await Promise.all([refreshControlPlaneUrl(), loadMediaNodes()]);
   if (data?.nodeId) {
     await loadFocusNode(data.nodeId);
     currentStep.value = STEPS.findIndex((s) => s.key === 'verify');
     await runVerify();
   }
 });
+
+async function loadMediaNodes() {
+  loadingMedia.value = true;
+  try {
+    mediaNodes.value = await listMediaNodes();
+    let savedId: number | undefined;
+    try {
+      const raw = localStorage.getItem(EDGE_SRS_NODE_ID_KEY);
+      if (raw) {
+        const n = Number(raw);
+        if (Number.isFinite(n)) savedId = n;
+      }
+    } catch {
+      /* ignore */
+    }
+    if (savedId != null && mediaNodes.value.some((n) => n.id === savedId)) {
+      selectedSrsNodeId.value = savedId;
+    } else if (
+      selectedSrsNodeId.value != null &&
+      !mediaNodes.value.some((n) => n.id === selectedSrsNodeId.value)
+    ) {
+      selectedSrsNodeId.value = mediaNodes.value[0]?.id;
+    } else if (selectedSrsNodeId.value == null && mediaNodes.value.length === 1) {
+      selectedSrsNodeId.value = mediaNodes.value[0]?.id;
+    }
+  } catch (e: any) {
+    mediaNodes.value = [];
+    createMessage.warning(e?.message || '加载媒体节点失败');
+  } finally {
+    loadingMedia.value = false;
+  }
+}
 
 async function refreshControlPlaneUrl() {
   resolvingUrl.value = true;
@@ -703,13 +1010,6 @@ function handleClose() {
 
 function handleOpenChange(open: boolean) {
   if (!open) emit('success');
-}
-
-function handleGoAlgorithm() {
-  emit('goto-algorithm');
-  const { path, query } = router.currentRoute.value;
-  router.push({ path, query: { ...query, tab: '7' } });
-  closeDrawer();
 }
 
 function emitSuccessAndClose() {
@@ -958,11 +1258,46 @@ function emitSuccessAndClose() {
   display: flex;
   gap: 8px;
   align-items: center;
+
+  .srs-select {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.srs-summary {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fafbfd;
+  border: 1px solid #f0f0f0;
+}
+
+.srs-summary__row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(0, 0, 0, 0.75);
+
+  code {
+    font-size: 12px;
+    word-break: break-all;
+  }
+}
+
+.srs-summary__label {
+  flex: 0 0 36px;
+  color: rgba(0, 0, 0, 0.45);
+  font-weight: 600;
 }
 
 .script-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
   margin-bottom: 8px;
 }
 

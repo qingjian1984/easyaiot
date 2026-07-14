@@ -115,21 +115,26 @@ edgectl run             # MQTT 常驻
 
 1. 连接 `mqttBrokerUrls`（**有序、每次探测从头开始**，见总线设计 §5.3）  
 2. 订阅 `mqtt/iot-algo-task-cmd`，仅处理 `payload.targetNodeId == 本节点`  
-3. `start`：拉起 `runtime` 内对应 `run_deploy`（env 已注入 MQTT/Ceph，无 MinIO 同步上传）  
-4. 发布 heartbeat / ack / status；告警图写 Ceph 路径后 publish  
-5. **不**直连 Kafka、**不**提供 HTTP 管理面  
+3. **命令下发**：现场/运维执行 `python -m edge task start|stop|restart`（默认 MQTT publish；`--local` 本机直拉）——**不**经 WEB「算法任务」Tab  
+4. `start`：拉起 `runtime` 内对应 `run_deploy`（env 已注入 MQTT/Ceph/`EDGE_SRS_*`，无 MinIO 同步上传）  
+5. 发布 heartbeat / ack / status；告警图写 Ceph 路径后 publish  
+6. **不**直连 Kafka、**不**提供 HTTP 管理面；`python -m edge stop` 结束本机 `edge run`  
 
 ---
 
-## 6. 与 VIDEO 抽离边界
+## 6. 与 VIDEO 解耦边界
 
-| 留在 VIDEO | 进入 EDGE/runtime |
-|------------|-------------------|
-| Flask `/video/algorithm` CRUD | `services/*/run_deploy.py` 推理主循环 |
-| 调度策略 UI/API | MQTT 客户端与 workload 拉起 |
-| 日志/流查询 HTTP | 最小 `app/utils` 推理依赖 |
+| 留在 VIDEO（控制面） | EDGE 自有（边缘执行面） |
+|----------------------|-------------------------|
+| Flask `/video/algorithm` CRUD、调度策略 | `EDGE/runtime/services/*/run_deploy.py` |
+| 日志/流查询 HTTP、任务表展示字段 | CLI / MQTT / `set-srs` / workload 拉起 |
+| **不含** `EDGE_SRS_*` 等边缘推流逻辑 | overlays 维护 `EDGE_SRS_HOST` 推流解析 |
 
-首期：`runtime/` 可与 VIDEO 算法包 **路径对接 / 软链 / 同步脚本**，避免一次性巨型搬迁；稳定后物理迁入 EDGE。
+- 边缘进程 **只** 执行 `EDGE/runtime` 内入口；`cmd.deploy.workDir` 若指向 VIDEO 路径将被忽略。
+- 可选种子：`EDGE/scripts/sync_runtime_from_video.sh` 从 VIDEO 拷贝后 **自动打 overlays**，不修改 VIDEO 源码。
+- 日常维护以 `EDGE/runtime` + `EDGE/runtime/overlays` 为准。
+- **与 WEB「算法任务」Tab / VIDEO 算法任务表字段级隔离**：`algorithm_task` 与 VIDEO `alert` 不含 `edge_node_*`；边缘维度仅存在于 iot-node `edge_node`、EDGE runtime 与 iot-sink 告警。
+- 告警：若边缘侧开启 `ALGO_BUS_TRANSPORT=mqtt`，发 `mqtt/iot-alert-notification` → **iot-sink**（非 VIDEO 告警表）。
 
 ---
 

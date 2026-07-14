@@ -47,9 +47,6 @@ def _alert_to_dict(alert: Alert) -> dict:
         'record_path': alert.record_path,
         'task_id': alert.task_id if hasattr(alert, 'task_id') else None,
         'task_name': alert.task_name if hasattr(alert, 'task_name') else None,
-        'edge_node_id': getattr(alert, 'edge_node_id', None),
-        'edge_node_name': getattr(alert, 'edge_node_name', None),
-        'edge_node_host': getattr(alert, 'edge_node_host', None),
         'node_id': getattr(alert, 'node_id', None),
     }
     
@@ -548,9 +545,6 @@ def create_alert(alert_data: dict) -> dict:
             channels=channels,
             business_tags=business_tags,
             correlation_id=correlation_id,
-            edge_node_id=alert_data.get('edge_node_id') or alert_data.get('edgeNodeId'),
-            edge_node_name=alert_data.get('edge_node_name') or alert_data.get('edgeNodeName'),
-            edge_node_host=alert_data.get('edge_node_host') or alert_data.get('edgeNodeHost'),
             node_id=alert_data.get('node_id') or alert_data.get('nodeId'),
         )
         
