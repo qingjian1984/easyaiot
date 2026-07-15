@@ -90,6 +90,55 @@ device_compose_service_enabled() {
     return 0
 }
 
+# 收集当前形态不应运行的 DEVICE 服务（相对 compose 中全部服务 + 跳过列表）
+collect_device_disabled_services() {
+    local -a disabled=()
+    local svc already
+    refresh_device_compose_profile_args
+    while IFS= read -r svc; do
+        [ -z "$svc" ] && continue
+        if ! device_compose_service_enabled "$svc"; then
+            disabled+=("$svc")
+        fi
+    done < <(device_compose config --services 2>/dev/null)
+    # compose profile 未激活时 config --services 可能不含跳过项（如 iot-tdengine），补齐跳过列表
+    for svc in $(device_skipped_services); do
+        [ -z "$svc" ] && continue
+        already=0
+        for d in "${disabled[@]}"; do
+            [ "$d" = "$svc" ] && already=1 && break
+        done
+        [ "$already" -eq 0 ] && disabled+=("$svc")
+    done
+    echo "${disabled[@]}"
+}
+
+# 停止并删除形态外残留容器。
+# docker compose up 仅指定部分服务时，不会停止 compose 文件中仍定义、但未列入本次 up 的旧容器；
+# 从 full/standard 切到 mini 时 iot-device/iot-node/iot-sink 等会残留并持续报 Nacos 不可达。
+stop_device_disabled_services() {
+    local -a disabled=()
+    local -a lingering=()
+    local svc
+    read -r -a disabled <<< "$(collect_device_disabled_services)"
+    [ ${#disabled[@]} -eq 0 ] && return 0
+
+    for svc in "${disabled[@]}"; do
+        [ -z "$svc" ] && continue
+        if docker ps -a --filter "name=^${svc}$" --format '{{.Names}}' 2>/dev/null | grep -qx "$svc"; then
+            lingering+=("$svc")
+        fi
+    done
+    [ ${#lingering[@]} -eq 0 ] && return 0
+
+    print_info "停止并移除当前形态不部署的 DEVICE 服务: ${lingering[*]}"
+    device_compose stop "${lingering[@]}" >/dev/null 2>&1 || true
+    device_compose rm -f "${lingering[@]}" >/dev/null 2>&1 || true
+    for svc in "${lingering[@]}"; do
+        docker rm -f "$svc" >/dev/null 2>&1 || true
+    done
+}
+
 # 检查docker-compose是否存在
 if ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null; then
     echo -e "${RED}错误: 未找到docker或docker-compose命令${NC}"
@@ -150,6 +199,11 @@ restart_unhealthy_containers() {
     names=$(docker ps --filter "health=unhealthy" --format '{{.Names}}' 2>/dev/null | grep -E '^iot-' || true)
     [ -z "$names" ] && return 0
     for n in $names; do
+        if ! device_compose_service_enabled "$n"; then
+            print_warning "容器 $n 属于当前形态之外且 unhealthy，停止并移除（避免反复连 Nacos 等依赖）..."
+            docker rm -f "$n" >/dev/null 2>&1 || true
+            continue
+        fi
         print_warning "容器 $n 处于 unhealthy，自动重启以重新连接依赖..."
         docker restart "$n" >/dev/null 2>&1 || true
     done
@@ -178,14 +232,19 @@ compose_up_detached() {
         print_info "正在启动服务（部署形态: ${EASYAIOT_DEPLOY_PROFILE:-full}）..."
     fi
     cleanup_renamed_containers
-    restart_unhealthy_containers
 
     local -a up_targets=()
+    local explicit_targets=0
     if [ $# -gt 0 ]; then
         up_targets=("$@")
+        explicit_targets=1
     else
         read -r -a up_targets <<< "$(collect_device_up_services)"
+        # 按形态启动时清理 full/standard 残留（mini 不应再有 iot-device/iot-node/iot-sink 等）
+        stop_device_disabled_services
     fi
+
+    restart_unhealthy_containers
 
     if [ ${#up_targets[@]} -eq 0 ]; then
         print_error "当前部署形态没有可启动的 DEVICE 服务"
@@ -194,7 +253,7 @@ compose_up_detached() {
 
     local -a skip_services=()
     read -r -a skip_services <<< "$(device_skipped_services)"
-    if [ ${#skip_services[@]} -gt 0 ] && [ $# -eq 0 ]; then
+    if [ ${#skip_services[@]} -gt 0 ] && [ "$explicit_targets" -eq 0 ]; then
         print_info "DEVICE 跳过: ${skip_services[*]}"
     fi
     print_info "DEVICE 启动: ${up_targets[*]}"
@@ -243,6 +302,12 @@ _repair_created_iot_containers() {
     for _n in $_created; do
         _status=$(docker inspect --format '{{.State.Status}}' "$_n" 2>/dev/null || echo "")
         [ "$_status" = "created" ] || continue
+        # 切勿把 mini/standard 形态外的 Created 容器 compose up 回来
+        if ! device_compose_service_enabled "$_n"; then
+            print_warning "容器 $_n 属于当前形态之外且处于 Created，直接移除..."
+            docker rm -f "$_n" >/dev/null 2>&1 || true
+            continue
+        fi
         print_warning "DEVICE 容器 $_n 处于 Created 状态（OCI 启动失败，如 /dev/null 错误），尝试修复..."
 
         # 策略1：直接 docker start（简单重试，/dev/null 问题可能已自愈）
@@ -1105,19 +1170,25 @@ build_and_start() {
         exit 1
     fi
     
-    # 验证容器是否真的创建了
+    # 验证当前形态启用的容器是否真的创建了
     local container_count
-    container_count=$($DOCKER_COMPOSE ps -q 2>/dev/null | wc -l)
+    local -a enabled_targets=()
+    read -r -a enabled_targets <<< "$(collect_device_up_services)"
+    if [ ${#enabled_targets[@]} -gt 0 ]; then
+        container_count=$(device_compose ps -q "${enabled_targets[@]}" 2>/dev/null | wc -l | tr -d '[:space:]')
+    else
+        container_count=0
+    fi
     if [ "$container_count" -eq 0 ]; then
-        print_error "警告：没有检测到运行的容器"
-        print_info "请检查 docker-compose.yml 配置和依赖服务（如 Nacos、PostgreSQL、Redis 等）"
+        print_error "警告：没有检测到当前形态应运行的容器"
+        print_info "请检查 docker-compose.yml 配置和依赖服务（PostgreSQL、Redis 等）"
         print_info "尝试查看服务状态："
-        $DOCKER_COMPOSE ps
+        show_status
         exit 1
     fi
     
     print_success "========== 服务构建并启动完成 =========="
-    print_success "服务构建并启动完成（共 $container_count 个容器，总耗时 $((SECONDS - _t_all))s）"
+    print_success "服务构建并启动完成（当前形态 ${#enabled_targets[@]} 个服务 / ${container_count} 个容器，总耗时 $((SECONDS - _t_all))s）"
     echo
     ensure_platform_agent_after_device_stack
     print_info "Jar 包: $JARS_DIR"
@@ -1131,7 +1202,7 @@ build_and_start() {
 start_services() {
     print_info "启动所有服务..."
     cd "$SCRIPT_DIR"
-    compose_up_detached --quiet-pull 2>&1 | grep -E "(Creating|Starting|Started|Healthy|ERROR|WARNING|Recreate)" || true
+    compose_up_detached
     print_success "服务启动完成"
     ensure_platform_agent_after_device_stack
 }
@@ -1148,7 +1219,17 @@ stop_services() {
 restart_services() {
     print_info "重启所有服务..."
     cd "$SCRIPT_DIR"
-    $DOCKER_COMPOSE restart
+    refresh_device_compose_profile_args
+    apply_device_profile_env
+    stop_device_disabled_services
+    local -a targets=()
+    read -r -a targets <<< "$(collect_device_up_services)"
+    if [ ${#targets[@]} -eq 0 ]; then
+        print_error "当前部署形态没有可重启的 DEVICE 服务"
+        return 1
+    fi
+    print_info "DEVICE 重启: ${targets[*]}"
+    device_compose restart "${targets[@]}"
     print_success "服务重启完成"
     ensure_platform_agent_after_device_stack
 }
@@ -1157,34 +1238,53 @@ restart_services() {
 show_status() {
     print_info "服务状态:"
     cd "$SCRIPT_DIR"
-    $DOCKER_COMPOSE ps
+    refresh_device_compose_profile_args
+    local -a targets=()
+    read -r -a targets <<< "$(collect_device_up_services)"
+    if [ ${#targets[@]} -eq 0 ]; then
+        print_warning "当前部署形态没有启用的 DEVICE 服务"
+        return 0
+    fi
+    device_compose ps "${targets[@]}"
 }
 
 # 查看日志
 show_logs() {
     local service=$1
+    cd "$SCRIPT_DIR"
+    refresh_device_compose_profile_args
     if [ -z "$service" ]; then
-        print_info "查看所有服务日志（最近50行，按Ctrl+C退出）..."
-        cd "$SCRIPT_DIR"
-        $DOCKER_COMPOSE logs -f --tail=50
+        local -a targets=()
+        read -r -a targets <<< "$(collect_device_up_services)"
+        if [ ${#targets[@]} -eq 0 ]; then
+            print_warning "当前部署形态没有启用的 DEVICE 服务"
+            return 0
+        fi
+        print_info "查看当前形态服务日志（${targets[*]}，最近50行，按Ctrl+C退出）..."
+        device_compose logs -f --tail=50 "${targets[@]}"
     else
         print_info "查看服务 $service 的日志（最近50行，按Ctrl+C退出）..."
-        cd "$SCRIPT_DIR"
-        $DOCKER_COMPOSE logs -f --tail=50 "$service"
+        device_compose logs -f --tail=50 "$service"
     fi
 }
 
 # 查看特定服务的日志（最近50行）
 show_logs_tail() {
     local service=$1
+    cd "$SCRIPT_DIR"
+    refresh_device_compose_profile_args
     if [ -z "$service" ]; then
-        print_info "查看所有服务最近50行日志..."
-        cd "$SCRIPT_DIR"
-        $DOCKER_COMPOSE logs --tail=50
+        local -a targets=()
+        read -r -a targets <<< "$(collect_device_up_services)"
+        if [ ${#targets[@]} -eq 0 ]; then
+            print_warning "当前部署形态没有启用的 DEVICE 服务"
+            return 0
+        fi
+        print_info "查看当前形态服务最近50行日志（${targets[*]}）..."
+        device_compose logs --tail=50 "${targets[@]}"
     else
         print_info "查看服务 $service 最近50行日志..."
-        cd "$SCRIPT_DIR"
-        $DOCKER_COMPOSE logs --tail=50 "$service"
+        device_compose logs --tail=50 "$service"
     fi
 }
 
@@ -1193,14 +1293,20 @@ restart_service() {
     local service=$1
     if [ -z "$service" ]; then
         print_error "请指定要重启的服务名称"
-        echo "可用服务:"
+        echo "当前形态可用服务:"
         cd "$SCRIPT_DIR"
-        $DOCKER_COMPOSE config --services
+        refresh_device_compose_profile_args
+        collect_device_up_services | tr ' ' '\n'
+        exit 1
+    fi
+    refresh_device_compose_profile_args
+    if ! device_compose_service_enabled "$service"; then
+        print_error "服务 $service 不属于当前部署形态（${EASYAIOT_DEPLOY_PROFILE:-full}），拒绝重启"
         exit 1
     fi
     print_info "重启服务: $service"
     cd "$SCRIPT_DIR"
-    $DOCKER_COMPOSE restart "$service"
+    device_compose restart "$service"
     print_success "服务 $service 重启完成"
 }
 
@@ -1225,9 +1331,16 @@ start_service() {
     local service=$1
     if [ -z "$service" ]; then
         print_error "请指定要启动的服务名称"
-        echo "可用服务:"
+        echo "当前形态可用服务:"
         cd "$SCRIPT_DIR"
-        $DOCKER_COMPOSE config --services
+        refresh_device_compose_profile_args
+        collect_device_up_services | tr ' ' '\n'
+        exit 1
+    fi
+    refresh_device_compose_profile_args
+    if ! device_compose_service_enabled "$service"; then
+        print_error "服务 $service 不属于当前部署形态（${EASYAIOT_DEPLOY_PROFILE:-full}），拒绝启动"
+        print_info "mini 形态仅部署: $(device_enabled_services)"
         exit 1
     fi
     print_info "启动服务: $service"
@@ -1591,30 +1704,33 @@ show_interactive_menu() {
                 show_logs
                 ;;
             8)
-                echo "可用服务:"
+                echo "当前形态可用服务:"
                 cd "$SCRIPT_DIR"
-                $DOCKER_COMPOSE config --services
+                refresh_device_compose_profile_args
+                collect_device_up_services | tr ' ' '\n'
                 read -p "请输入服务名称: " service_name
                 show_logs "$service_name"
                 ;;
             9)
-                echo "可用服务:"
+                echo "当前形态可用服务:"
                 cd "$SCRIPT_DIR"
-                $DOCKER_COMPOSE config --services
+                refresh_device_compose_profile_args
+                collect_device_up_services | tr ' ' '\n'
                 read -p "请输入服务名称: " service_name
                 restart_service "$service_name"
                 ;;
             10)
-                echo "可用服务:"
+                echo "当前形态可用服务:"
                 cd "$SCRIPT_DIR"
                 $DOCKER_COMPOSE config --services
                 read -p "请输入服务名称: " service_name
                 stop_service "$service_name"
                 ;;
             11)
-                echo "可用服务:"
+                echo "当前形态可用服务:"
                 cd "$SCRIPT_DIR"
-                $DOCKER_COMPOSE config --services
+                refresh_device_compose_profile_args
+                collect_device_up_services | tr ' ' '\n'
                 read -p "请输入服务名称: " service_name
                 start_service "$service_name"
                 ;;

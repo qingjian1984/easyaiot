@@ -3928,6 +3928,21 @@ compose_up_middleware() {
 
     if [ ${#skip_services[@]} -gt 0 ]; then
         print_warning "以下中间件因镜像缺失等原因暂不启动：$(_format_service_list "${skip_services[@]}")"
+        # compose up 指定服务列表不会停掉未列出但仍在 compose 中定义的旧容器；
+        # 从 full/standard 切到 mini 时需主动停掉 Nacos/Kafka/MinIO 等残留。
+        local -a lingering_skips=()
+        local skip_svc
+        for skip_svc in "${skip_services[@]}"; do
+            [ -z "$skip_svc" ] && continue
+            if mw_compose ps -q "$skip_svc" 2>/dev/null | grep -q .; then
+                lingering_skips+=("$skip_svc")
+            fi
+        done
+        if [ ${#lingering_skips[@]} -gt 0 ]; then
+            print_info "停止并移除当前形态不部署的中间件: $(_format_service_list "${lingering_skips[@]}")"
+            mw_compose stop "${lingering_skips[@]}" >/dev/null 2>&1 || true
+            mw_compose rm -f "${lingering_skips[@]}" >/dev/null 2>&1 || true
+        fi
     fi
 
     # ★ 自动检测并设置 NACOS_PLATFORM，避免 ARM/AMD64 跨架构问题
