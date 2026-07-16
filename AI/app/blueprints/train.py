@@ -257,20 +257,18 @@ def _is_cloud_dataset_path(dataset_path: str) -> bool:
 
 
 def _resolve_split_path(raw_path, split_name, yaml_dir, dataset_root):
-    if not raw_path:
-        return None
-
-    normalized_raw = str(raw_path).replace('\\', '/')
     candidate_bases = [
         dataset_root,
         yaml_dir,
         os.path.dirname(dataset_root),
     ]
 
-    for base in candidate_bases:
-        candidate = os.path.normpath(os.path.join(base, normalized_raw))
-        if os.path.exists(candidate):
-            return os.path.abspath(candidate)
+    if raw_path is not None and str(raw_path).strip():
+        normalized_raw = str(raw_path).replace('\\', '/')
+        for base in candidate_bases:
+            candidate = os.path.normpath(os.path.join(base, normalized_raw))
+            if os.path.exists(candidate):
+                return os.path.abspath(candidate)
 
     split_alias = {
         'train': ['train', 'training'],
@@ -380,10 +378,7 @@ def _normalize_dataset_yaml(dataset_root, output_dir=None):
     effective_root = _resolve_dataset_root(cfg, yaml_dir)
     train_path = _resolve_split_path(cfg.get('train'), 'train', yaml_dir, effective_root)
     val_path = _resolve_split_path(cfg.get('val'), 'val', yaml_dir, effective_root)
-    test_path = (
-        _resolve_split_path(cfg.get('test'), 'test', yaml_dir, effective_root)
-        if cfg.get('test') else None
-    )
+    test_path = _resolve_split_path(cfg.get('test'), 'test', yaml_dir, effective_root)
 
     if not train_path:
         raise ValueError('数据集 train 路径无效，请检查 YAML 配置或目录结构')

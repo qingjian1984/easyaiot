@@ -11,6 +11,7 @@ from app.blueprints.train import (
     _parse_class_names,
     _resolve_dataset_root,
 )
+from app.utils.train_dataset_layout import repair_flat_coco_yolo_layout
 
 
 class TrainDatasetYamlTest(unittest.TestCase):
@@ -63,6 +64,46 @@ class TrainDatasetYamlTest(unittest.TestCase):
             self.assertEqual(normalized['names'], ['person', 'bicycle'])
             self.assertTrue(os.path.isdir(normalized['train']))
             self.assertTrue(os.path.isdir(normalized['val']))
+
+    def test_normalize_nested_yolo_layout_without_split_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dataset_dir = os.path.join(tmp, 'crowdperson(DST1336)')
+            for split_name in ('train', 'valid', 'test'):
+                os.makedirs(os.path.join(dataset_dir, 'images', split_name))
+                os.makedirs(os.path.join(dataset_dir, 'labels', split_name))
+            with open(os.path.join(dataset_dir, 'data.yaml'), 'w', encoding='utf-8') as file_obj:
+                yaml.safe_dump({'names': ['people'], 'nc': 1}, file_obj)
+
+            out = _normalize_dataset_yaml(tmp, output_dir=tmp)
+
+            with open(out, 'r', encoding='utf-8') as file_obj:
+                normalized = yaml.safe_load(file_obj)
+            self.assertEqual(normalized['train'], os.path.join(dataset_dir, 'images', 'train'))
+            self.assertEqual(normalized['val'], os.path.join(dataset_dir, 'images', 'valid'))
+            self.assertEqual(normalized['test'], os.path.join(dataset_dir, 'images', 'test'))
+
+    def test_generate_yaml_for_split_first_yolo_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for split_name in ('train', 'val'):
+                image_dir = os.path.join(tmp, split_name, 'images')
+                label_dir = os.path.join(tmp, split_name, 'labels')
+                os.makedirs(image_dir)
+                os.makedirs(label_dir)
+                open(os.path.join(image_dir, 'sample.jpg'), 'wb').close()
+                with open(os.path.join(label_dir, 'sample.txt'), 'w', encoding='utf-8') as file_obj:
+                    file_obj.write('0 0.5 0.5 0.2 0.2\n')
+            with open(os.path.join(tmp, 'classes.txt'), 'w', encoding='utf-8') as file_obj:
+                file_obj.write('rider\nhead\nhelmet\n')
+
+            repaired = repair_flat_coco_yolo_layout(tmp)
+
+            self.assertTrue(repaired)
+            with open(os.path.join(tmp, 'data.yaml'), 'r', encoding='utf-8') as file_obj:
+                generated = yaml.safe_load(file_obj)
+            self.assertEqual(generated['train'], 'train/images')
+            self.assertEqual(generated['val'], 'val/images')
+            self.assertEqual(generated['nc'], 3)
+            self.assertEqual(generated['names'], ['rider', 'head', 'helmet'])
 
 
 if __name__ == '__main__':

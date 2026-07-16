@@ -168,14 +168,10 @@ async function handleSubmit() {
       payload.version = formState.version;
     }
 
-    const response = await publishTrainTask(Number(record.id), payload);
-    if (response && (response.code === 0 || response.success === true)) {
-      createMessage.success(response.msg || '发布成功');
-      closeModal();
-      emit('success', response.data);
-    } else {
-      createMessage.error(response?.msg || '发布失败');
-    }
+    const publishedModel = await publishTrainTask(Number(record.id), payload);
+    createMessage.success('发布成功');
+    closeModal();
+    emit('success', publishedModel);
   } catch (error: any) {
     createMessage.error(error?.response?.data?.msg || error?.message || '发布失败');
   } finally {

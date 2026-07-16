@@ -134,7 +134,9 @@ export const checkSyncCondition = (datasetId) => {
 };
 
 export const syncToMinio = (datasetId) => {
-  return commonApi('post', `${Api.DatasetImage}/${datasetId}/sync-to-minio`);
+  return commonApi('post', `${Api.DatasetImage}/${datasetId}/sync-to-minio`, {
+    timeout: 30 * 60 * 1000,
+  });
 };
 
 // 数据集标签

@@ -9,7 +9,6 @@ import os
 import re
 import shutil
 import tempfile
-import uuid
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
@@ -25,7 +24,6 @@ from app.utils.train_dataset_name import (
     is_legacy_bad_dataset_name,
     resolve_dataset_display_name,
 )
-from app.utils.image_utils import download_default_model_image
 from app.utils.model_class_utils import (
     dump_class_names_json,
     extract_class_names_from_model,
@@ -369,6 +367,22 @@ def _parse_minio_url(url: str):
         return None, None
 
 
+_GENERATED_DEFAULT_MODEL_IMAGE_RE = re.compile(
+    r'^images/default_model_[0-9a-f]{32}\.png$',
+    re.IGNORECASE,
+)
+
+
+def _resolve_publish_image_url(existing_model: Model | None) -> str | None:
+    if not existing_model or not existing_model.image_url:
+        return None
+    image_url = existing_model.image_url.strip()
+    _, object_key = _parse_minio_url(image_url)
+    if object_key and _GENERATED_DEFAULT_MODEL_IMAGE_RE.fullmatch(object_key):
+        return None
+    return image_url or None
+
+
 def _get_published_model_id(hp_text: str) -> int | None:
     published_id = _parse_train_hyperparameters(hp_text).get('published_model_id')
     if published_id is None:
@@ -462,32 +476,6 @@ def _default_publish_name(task: TrainTask) -> str:
     if ds_name and base == DEFAULT_TASK_BASE_NAME:
         return ds_name
     return base or _task_display_name(task)
-
-
-def _upload_default_model_image() -> str | None:
-    temp_dir = 'temp_uploads'
-    os.makedirs(temp_dir, exist_ok=True)
-    default_image_filename = f'default_model_{uuid.uuid4().hex}.png'
-    default_image_path = os.path.join(temp_dir, default_image_filename)
-    try:
-        if not download_default_model_image(default_image_path):
-            return None
-        bucket_name = 'models'
-        image_object_key = f'images/{default_image_filename}'
-        upload_success, _ = ModelService.upload_to_minio(
-            bucket_name, image_object_key, default_image_path
-        )
-        if upload_success:
-            return f'/api/v1/buckets/{bucket_name}/objects/download?prefix={image_object_key}'
-    except Exception as exc:
-        logger.warning('上传默认模型图片失败: %s', exc)
-    finally:
-        if os.path.exists(default_image_path):
-            try:
-                os.remove(default_image_path)
-            except OSError:
-                pass
-    return None
 
 
 def _extract_class_names_from_minio_model(model_url: str) -> list[str]:
@@ -692,11 +680,11 @@ def publish_train_task_to_model(
 
     if not class_names:
         class_names = _extract_class_names_from_minio_model(model_url)
-    image_url = _upload_default_model_image()
 
     existing_model = None
     if published_model_id:
         existing_model = Model.query.get(published_model_id)
+    image_url = _resolve_publish_image_url(existing_model)
 
     if existing_model:
         conflict = Model.query.filter(
@@ -713,8 +701,7 @@ def publish_train_task_to_model(
         existing_model.model_path = model_url
         existing_model.status = 0
         existing_model.updated_at = datetime.utcnow()
-        if image_url and not existing_model.image_url:
-            existing_model.image_url = image_url
+        existing_model.image_url = image_url
         if class_names:
             existing_model.class_names = dump_class_names_json(class_names)
             existing_model.selected_class_names = dump_class_names_json(class_names)

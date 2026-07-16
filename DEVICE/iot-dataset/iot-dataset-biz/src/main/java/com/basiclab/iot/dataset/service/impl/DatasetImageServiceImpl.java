@@ -286,35 +286,38 @@ public class DatasetImageServiceImpl implements DatasetImageService {
                 new LambdaQueryWrapper<DatasetImageDO>()
                         .eq(DatasetImageDO::getDatasetId, datasetId));
         Path tempDir = createTempDirectoryStructure(datasetId);
-        int skippedCount = 0;
-        for (DatasetImageDO image : images) {
-            String usageType = getUsageType(image);
-            String imageName = image.getName();
-            Path imagePath = tempDir.resolve("images/" + usageType + "/" + imageName);
-            String labelFileName = stripImageExtension(imageName) + ".txt";
-            Path labelPath = tempDir.resolve("labels/" + usageType + "/" + labelFileName);
-            try {
-                downloadImageToTemp(image, imagePath);
-                createLabelFile(image, labelPath, datasetId);
-            } catch (Exception e) {
-                skippedCount++;
-                logger.warn("跳过文件 {}: {}", image.getName(), e.getMessage());
+        Path zipPath = null;
+        try {
+            int skippedCount = 0;
+            for (DatasetImageDO image : images) {
+                String usageType = getUsageType(image);
+                String imageName = image.getName();
+                Path imagePath = tempDir.resolve("images/" + usageType + "/" + imageName);
+                String labelFileName = stripImageExtension(imageName) + ".txt";
+                Path labelPath = tempDir.resolve("labels/" + usageType + "/" + labelFileName);
+                try {
+                    downloadImageToTemp(image, imagePath);
+                    createLabelFile(image, labelPath, datasetId);
+                } catch (Exception e) {
+                    skippedCount++;
+                    logger.warn("跳过文件 {}: {}", image.getName(), e.getMessage());
+                }
             }
+            if (skippedCount > 0) {
+                logger.warn("数据集 {} 打包完成，跳过 {} 个缺失文件", datasetId, skippedCount);
+            }
+            generateDataYaml(datasetId, tempDir);
+            zipPath = compressDirectory(tempDir, datasetId);
+            String zipUrl = uploadZipToMinio(zipPath, datasetId);
+            DatasetDO updateDO = new DatasetDO();
+            updateDO.setId(datasetId);
+            updateDO.setZipUrl(zipUrl);
+            updateDO.setIsSyncMinio(CommonStatusEnum.YES.getStatus());
+            datasetMapper.updateById(updateDO);
+            return zipUrl;
+        } finally {
+            cleanupTempFiles(tempDir, zipPath);
         }
-        if (skippedCount > 0) {
-            logger.warn("数据集 {} 打包完成，跳过 {} 个缺失文件", datasetId, skippedCount);
-        }
-        generateDataYaml(datasetId, tempDir);
-        Path zipPath = compressDirectory(tempDir, datasetId);
-        String zipUrl = uploadZipToMinio(zipPath, datasetId);
-        cleanupTempFiles(tempDir, zipPath);
-        // 更新数据集压缩包地址
-        DatasetDO updateDO = new DatasetDO();
-        updateDO.setId(datasetId);
-        updateDO.setZipUrl(zipUrl);
-        updateDO.setIsSyncMinio(CommonStatusEnum.YES.getStatus());
-        datasetMapper.updateById(updateDO);
-        return zipUrl;
     }
 
     private Path createTempDirectoryStructure(Long datasetId) {
@@ -415,7 +418,12 @@ public class DatasetImageServiceImpl implements DatasetImageService {
     }
 
     private Path compressDirectory(Path sourceDir, Long datasetId) {
-        Path zipPath = Paths.get(sourceDir.getParent().toString(), "dataset-" + datasetId + ".zip");
+        Path zipPath;
+        try {
+            zipPath = Files.createTempFile(sourceDir.getParent(), "dataset-" + datasetId + "-", ".zip");
+        } catch (IOException e) {
+            throw new RuntimeException("创建临时ZIP失败", e);
+        }
 
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(zipPath))) {
             Files.walkFileTree(sourceDir, new SimpleFileVisitor<Path>() {
@@ -431,26 +439,35 @@ public class DatasetImageServiceImpl implements DatasetImageService {
             });
             return zipPath;
         } catch (IOException e) {
+            try {
+                Files.deleteIfExists(zipPath);
+            } catch (IOException cleanupError) {
+                logger.warn("清理压缩失败的临时ZIP失败: {}", cleanupError.getMessage());
+            }
             throw new RuntimeException("压缩目录失败", e);
         }
     }
 
     private void cleanupTempFiles(Path tempDir, Path zipPath) {
         try {
-            Files.walkFileTree(tempDir, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    Files.delete(file);
-                    return FileVisitResult.CONTINUE;
-                }
+            if (tempDir != null && Files.exists(tempDir)) {
+                Files.walkFileTree(tempDir, new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        Files.delete(file);
+                        return FileVisitResult.CONTINUE;
+                    }
 
-                @Override
-                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                    Files.delete(dir);
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-            Files.deleteIfExists(zipPath);
+                    @Override
+                    public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                        Files.delete(dir);
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+            }
+            if (zipPath != null) {
+                Files.deleteIfExists(zipPath);
+            }
         } catch (IOException e) {
             logger.error("清理临时文件失败: {}", e.getMessage());
         }

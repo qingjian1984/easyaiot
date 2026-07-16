@@ -14,6 +14,12 @@ SPLIT_JSON_NAMES = {
     'val': ('valid_coco.json', 'val_coco.json', 'validation_coco.json', 'valid.json', 'val.json'),
     'test': ('test_coco.json', 'test.json'),
 }
+SPLIT_DIR_NAMES = {
+    'train': ('train', 'training'),
+    'val': ('val', 'valid', 'validation'),
+    'test': ('test', 'testing'),
+}
+CLASS_NAME_FILES = ('classes.txt', 'obj.names', 'classes.names', 'input_class.txt')
 
 
 def _iter_files(root_dir: str, extensions: Iterable[str]):
@@ -173,6 +179,111 @@ def _write_coco_yolo_label(label_path: str, image_row: dict, annotations: list, 
             file_obj.write('\n')
 
 
+def _find_child_dir(parent: str, candidate_names: Iterable[str]) -> Optional[str]:
+    if not os.path.isdir(parent):
+        return None
+    children = {
+        name.lower(): os.path.join(parent, name)
+        for name in os.listdir(parent)
+        if os.path.isdir(os.path.join(parent, name))
+    }
+    for candidate_name in candidate_names:
+        if candidate_name.lower() in children:
+            return children[candidate_name.lower()]
+    return None
+
+
+def _split_first_layout_root(dataset_root: str) -> Optional[str]:
+    candidates = [dataset_root]
+    if os.path.isdir(dataset_root):
+        candidates.extend(
+            os.path.join(dataset_root, name)
+            for name in os.listdir(dataset_root)
+            if os.path.isdir(os.path.join(dataset_root, name))
+        )
+    for candidate in candidates:
+        train_dir = _find_child_dir(candidate, SPLIT_DIR_NAMES['train'])
+        val_dir = _find_child_dir(candidate, SPLIT_DIR_NAMES['val'])
+        if train_dir and val_dir:
+            return candidate
+    return None
+
+
+def _load_class_names_file(*roots: str) -> list[str]:
+    for root_dir in roots:
+        for file_name in CLASS_NAME_FILES:
+            file_path = os.path.join(root_dir, file_name)
+            if not os.path.isfile(file_path):
+                continue
+            with open(file_path, 'r', encoding='utf-8-sig') as file_obj:
+                content = file_obj.read().strip()
+            if not content:
+                continue
+            raw_names = content.split(',') if '\n' not in content and ',' in content else content.splitlines()
+            names = [name.strip() for name in raw_names if name.strip()]
+            if names:
+                return names
+    return []
+
+
+def _count_split_files(split_dir: str) -> tuple[int, int]:
+    image_dir = _find_child_dir(split_dir, ('images',))
+    label_dir = _find_child_dir(split_dir, ('labels',))
+    if not image_dir or not label_dir:
+        return 0, 0
+    image_count = sum(1 for _ in _iter_files(image_dir, IMAGE_EXTENSIONS))
+    label_count = sum(1 for _ in _iter_files(label_dir, {'.txt'}))
+    return image_count, label_count
+
+
+def _repair_split_first_yolo_layout(
+    dataset_root: str,
+    log_fn: Optional[Callable[[str], None]] = None,
+) -> bool:
+    layout_root = _split_first_layout_root(dataset_root)
+    if not layout_root:
+        return False
+
+    split_paths = {}
+    split_counts = {}
+    for split_name, aliases in SPLIT_DIR_NAMES.items():
+        split_dir = _find_child_dir(layout_root, aliases)
+        if not split_dir:
+            continue
+        image_dir = _find_child_dir(split_dir, ('images',))
+        image_count, label_count = _count_split_files(split_dir)
+        if not image_dir or image_count == 0 or label_count == 0:
+            continue
+        split_paths[split_name] = os.path.relpath(image_dir, layout_root).replace('\\', '/')
+        split_counts[split_name] = image_count
+
+    if 'train' not in split_paths or 'val' not in split_paths:
+        return False
+
+    names = _load_class_names_file(layout_root, dataset_root)
+    if not names:
+        return False
+
+    normalized_cfg = {
+        'train': split_paths['train'],
+        'val': split_paths['val'],
+        'nc': len(names),
+        'names': names,
+    }
+    if 'test' in split_paths:
+        normalized_cfg['test'] = split_paths['test']
+    with open(os.path.join(layout_root, 'data.yaml'), 'w', encoding='utf-8') as file_obj:
+        yaml.safe_dump(normalized_cfg, file_obj, allow_unicode=True, sort_keys=False)
+
+    if log_fn:
+        log_fn(
+            '已根据 YOLO train/val 目录生成 data.yaml: '
+            f'train={split_counts["train"]}, val={split_counts["val"]}, '
+            f'test={split_counts.get("test", 0)}'
+        )
+    return True
+
+
 def repair_flat_coco_yolo_layout(
     dataset_root: str,
     log_fn: Optional[Callable[[str], None]] = None,
@@ -180,7 +291,7 @@ def repair_flat_coco_yolo_layout(
     image_root = os.path.join(dataset_root, 'images')
     label_root = os.path.join(dataset_root, 'labels')
     if not os.path.isdir(image_root):
-        return False
+        return _repair_split_first_yolo_layout(dataset_root, log_fn)
 
     split_data = {}
     for split_name, candidate_names in SPLIT_JSON_NAMES.items():
@@ -188,7 +299,7 @@ def repair_flat_coco_yolo_layout(
         if json_path:
             split_data[split_name] = _load_json(json_path)
     if 'train' not in split_data or 'val' not in split_data:
-        return False
+        return _repair_split_first_yolo_layout(dataset_root, log_fn)
 
     image_index = _build_file_index(image_root, IMAGE_EXTENSIONS)
     label_index = _build_file_index(label_root, {'.txt'})
