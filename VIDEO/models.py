@@ -287,6 +287,10 @@ class Alert(db.Model):
     notification_sent_time = db.Column(db.DateTime, nullable=True, comment='通知发送时间')
     business_tags = db.Column(db.Text, nullable=True, comment='业务标签（JSON数组，库匹配告警携带匹配库标签）')
     correlation_id = db.Column(db.String(36), nullable=True, index=True, comment='关联事件ID（同一帧算法告警/人脸/车牌）')
+    # 边缘节点维度（区分多 EDGE 集群数据）
+    edge_node_id = db.Column(db.BigInteger, nullable=True, index=True, comment='边缘节点 edge_node.id')
+    edge_node_name = db.Column(db.String(128), nullable=True, comment='边缘节点名称（冗余）')
+    edge_node_host = db.Column(db.String(128), nullable=True, comment='边缘节点主机（冗余）')
     node_id = db.Column(db.BigInteger, nullable=True, comment='运行 compute_node.id（可选）')
 
 

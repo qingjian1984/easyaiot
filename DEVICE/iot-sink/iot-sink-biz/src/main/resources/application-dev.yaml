@@ -293,9 +293,6 @@ basiclab:
           mqtt-topics: # MQTT 订阅的主题列表（含算法总线 mqtt/iot-*）
             - "iot/#"
             - "shadow/#"
-            - "mqtt/iot-alert-notification"
-            - "mqtt/iot-snapshot-alert"
-            - "mqtt/iot-post-process-request"
             - "$share/algo-sink/mqtt/iot-alert-notification"
             - "$share/algo-sink/mqtt/iot-snapshot-alert"
             - "$share/algo-sink/mqtt/iot-post-process-request"
