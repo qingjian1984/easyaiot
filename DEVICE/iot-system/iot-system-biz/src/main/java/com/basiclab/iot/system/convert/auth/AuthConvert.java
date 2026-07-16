@@ -67,7 +67,9 @@ default List<AuthPermissionInfoRespVO.MenuVO> buildMenuTree(List<MenuDO> menuLis
             AuthPermissionInfoRespVO.MenuVO parentNode = treeNodeMap.get(childNode.getParentId());
             if (parentNode == null) {
                 LoggerFactory.getLogger(getClass()).error("[buildRouterTree][resource({}) 找不到父资源({})]",
-                        childNode.getId(), childNode.getParentId());
+                        childNode.getId(), childNode.getParentId());                        
+                // 兜底：将找不到父节点的菜单挂到根节点下，确保菜单可见
+                childNode.setParentId(MenuDO.ID_ROOT);
                 return;
             }
             // 将自己添加到父节点中
