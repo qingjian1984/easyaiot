@@ -478,6 +478,10 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
      */
     @Override
     public int deleteDeviceByIds(Long[] ids) {
+        if (ids != null && ids.length > 0) {
+            // 级联清理摄像头关联，避免设备删除后摄像头仍被判定为「已绑定」而无法再次关联
+            deviceCameraLinkMapper.deleteByIotDeviceIds(ids);
+        }
         return deviceMapper.deleteDeviceByIds(ids);
     }
 
@@ -489,6 +493,9 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
      */
     @Override
     public int deleteDeviceById(Long id) {
+        if (id != null) {
+            deviceCameraLinkMapper.deleteByIotDeviceIds(new Long[]{id});
+        }
         return deviceMapper.deleteDeviceById(id);
     }
 
@@ -1675,7 +1682,13 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
                 if (iotDeviceId.equals(existing.getIotDeviceId())) {
                     continue;
                 }
-                throw new RuntimeException("摄像头已被其他设备关联: " + cameraDeviceId);
+                // 关联设备已删除时，清理孤儿记录，允许重新关联
+                Device linkedDevice = deviceMapper.selectDeviceById(existing.getIotDeviceId());
+                if (linkedDevice == null) {
+                    deviceCameraLinkMapper.deleteById(existing.getId());
+                } else {
+                    throw new RuntimeException("摄像头已被其他设备关联: " + cameraDeviceId);
+                }
             }
             DeviceCameraLink link = DeviceCameraLink.builder()
                     .iotDeviceId(iotDeviceId)

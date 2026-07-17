@@ -19,8 +19,9 @@
     </select>
 
     <select id="selectAllBoundCameraIds" resultType="java.lang.String">
-        SELECT camera_device_id
-        FROM device_camera_link
+        SELECT dcl.camera_device_id
+        FROM device_camera_link dcl
+        INNER JOIN device d ON d.id = dcl.iot_device_id
     </select>
 
     <select id="selectByCameraDeviceId" resultMap="BaseResultMap">
@@ -29,5 +30,13 @@
         WHERE camera_device_id = #{cameraDeviceId}
         LIMIT 1
     </select>
+
+    <delete id="deleteByIotDeviceIds">
+        DELETE FROM device_camera_link
+        WHERE iot_device_id IN
+        <foreach item="iotDeviceId" collection="iotDeviceIds" open="(" separator="," close=")">
+            #{iotDeviceId}
+        </foreach>
+    </delete>
 
 </mapper>

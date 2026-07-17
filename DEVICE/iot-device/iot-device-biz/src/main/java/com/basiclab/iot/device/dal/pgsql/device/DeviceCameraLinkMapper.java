@@ -15,4 +15,6 @@ public interface DeviceCameraLinkMapper extends BaseMapper<DeviceCameraLink> {
     List<String> selectAllBoundCameraIds();
 
     DeviceCameraLink selectByCameraDeviceId(@Param("cameraDeviceId") String cameraDeviceId);
+
+    int deleteByIotDeviceIds(@Param("iotDeviceIds") Long[] iotDeviceIds);
 }

@@ -434,8 +434,12 @@ async function loadDirectoryDevices() {
       search: bindKeyword.value || undefined,
     });
     const rows: DeviceInfo[] = Array.isArray(res?.data) ? res.data : [];
-    candidateList.value = rows.filter((item) => !boundCameraIdSet.value.has(String(item.id)));
-    bindPagination.total = res?.total ?? rows.length;
+    const filtered = rows.filter((item) => !boundCameraIdSet.value.has(String(item.id)));
+    candidateList.value = filtered;
+    // total 需与过滤后可见条数对齐，避免「共 N 条」与空表矛盾
+    const rawTotal = res?.total ?? rows.length;
+    const filteredOut = rows.length - filtered.length;
+    bindPagination.total = Math.max(0, rawTotal - filteredOut);
     bindSelectedKeys.value = [];
   } catch (e) {
     console.error(e);
