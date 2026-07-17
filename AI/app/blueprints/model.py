@@ -10,10 +10,10 @@ import uuid
 import tempfile
 import json
 from datetime import datetime
-from operator import or_
 from urllib.parse import urlparse, parse_qs
 from flask import Blueprint, request, jsonify, send_file
 from flask import redirect, url_for, flash, render_template
+from sqlalchemy import or_
 from app.services.minio_service import ModelService
 from app.utils.yolo_validator import validate_yolo_model
 from app.utils.image_utils import download_default_model_image

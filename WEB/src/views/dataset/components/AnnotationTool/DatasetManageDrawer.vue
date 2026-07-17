@@ -29,7 +29,11 @@
         :dataset-id="datasetId"
         @changed="emit('tags-changed')"
       />
-      <DatasetSourcePanel v-show="activeTab === 'source'" @open-unattended="emit('open-unattended')"/>
+      <DatasetSourcePanel
+        v-show="activeTab === 'source'"
+        @open-unattended="emit('open-unattended')"
+        @frame-tasks-changed="emit('frame-tasks-changed')"
+      />
     </div>
   </Drawer>
 </template>
@@ -57,6 +61,7 @@ const emit = defineEmits<{
   (e: 'update:open', value: boolean): void;
   (e: 'tags-changed'): void;
   (e: 'open-unattended'): void;
+  (e: 'frame-tasks-changed'): void;
 }>();
 
 const route = useRoute();

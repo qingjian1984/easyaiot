@@ -18,7 +18,7 @@
           </span>
         </template>
         <p class="panel-tip">创建任务后，系统按间隔从实时流抓取帧并写入当前数据集，适合监控场景持续采标。</p>
-        <DatasetFrameTask/>
+        <DatasetFrameTask @changed="emit('frame-tasks-changed')"/>
       </CollapsePanel>
 
       <CollapsePanel key="unattended">
@@ -67,6 +67,7 @@ defineOptions({name: 'DatasetSourcePanel'});
 
 const emit = defineEmits<{
   'open-unattended': [];
+  'frame-tasks-changed': [];
 }>();
 
 const activeKeys = ref(['frame', 'unattended']);

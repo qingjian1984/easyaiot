@@ -71,6 +71,10 @@ import {useRoute} from "vue-router";
 import { Button } from '@/components/Button'
 defineOptions({name: 'DatasetFrameTask'})
 
+const emit = defineEmits<{
+  changed: [];
+}>();
+
 const {createMessage} = useMessage();
 
 const checkedKeys = ref<Array<string | number>>([]);
@@ -88,6 +92,10 @@ const [registerTable, {reload}] = useTable({
   title: '视频流帧捕获列表',
   api: getDatasetFrameTaskPage,
   columns: getBasicColumns(),
+  beforeFetch: (params) => ({
+    ...params,
+    datasetId: route.params['id'],
+  }),
   useSearchForm: true,
   formConfig: getFormConfig(),
   showTableSetting: false,
@@ -108,6 +116,7 @@ const deleteJob = async (record) => {
     deleteDatasetFrameTask(record['id']).then(() => {
       createMessage.success('删除成功');
       reload();
+      emit('changed');
     });
   } catch (error) {
     console.error(error)
@@ -121,6 +130,7 @@ function handleSuccess() {
   reload({
     page: 0,
   });
+  emit('changed');
 }
 
 //搜索局域网摄像头

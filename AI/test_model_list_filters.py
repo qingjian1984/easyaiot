@@ -18,8 +18,8 @@ class ModelListFilterTest(unittest.TestCase):
         with self.app.app_context():
             db.create_all()
             db.session.add_all([
-                Model(name='crowd-detector', version='1.0.0'),
-                Model(name='crowd-counter', version='1.0.7'),
+                Model(name='crowd-detector', version='1.0.0', model_path='/models/crowd.pt'),
+                Model(name='crowd-counter', version='1.0.7', onnx_model_path='/models/counter.onnx'),
                 Model(name='vehicle-detector', version='1.0.7'),
             ])
             db.session.commit()
@@ -47,6 +47,15 @@ class ModelListFilterTest(unittest.TestCase):
 
         self.assertEqual(payload['total'], 1)
         self.assertEqual(payload['data'][0]['name'], 'crowd-counter')
+
+    def test_filters_models_with_any_available_weights(self):
+        payload = self._get_payload('has_weights=true')
+
+        self.assertEqual(payload['total'], 2)
+        self.assertEqual(
+            {row['name'] for row in payload['data']},
+            {'crowd-detector', 'crowd-counter'},
+        )
 
 
 if __name__ == '__main__':

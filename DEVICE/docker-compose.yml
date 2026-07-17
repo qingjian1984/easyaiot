@@ -188,7 +188,7 @@ services:
       - SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_URL=jdbc:postgresql://PostgresSQL:5432/iot-node20?autoReconnect=true&autoReconnectForPools=true&useUnicode=true&characterEncoding=utf8&createDatabaseIfNotExist=true&allowMultiQueries=true&zeroDateTimeBehavior=convertToNull&stringtype=unspecified
       - SPRING_REDIS_HOST=Redis
       # 容器内 iot-node 纳管控制面节点时使用宿主机 IP（避免探测到容器网桥地址）
-      - EASYAIOT_PLATFORM_HOST=${EASYAIOT_PLATFORM_HOST:-}
+      - EASYAIOT_PLATFORM_HOST=${EASYAIOT_PLATFORM_HOST:-${HOST_IP:-}}
       - EASYAIOT_AGENT_CONTROL_PLANE_URL=${EASYAIOT_AGENT_CONTROL_PLANE_URL:-}
     volumes:
       - ../.build-cache/device/node-logs:/root/logs/
@@ -352,7 +352,7 @@ services:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=Kafka:9092 # Kafka地址（使用Docker服务名，用于标准配置）
       - SPRING_KAFKA_IOT_PRODUCER_BOOTSTRAP_SERVERS=Kafka:9092 # Kafka生产者地址（使用Docker服务名，用于自定义iot配置）
       - SPRING_KAFKA_IOT_CONSUMER_BOOTSTRAP_SERVERS=Kafka:9092 # Kafka消费者地址（使用Docker服务名，用于自定义iot配置）
-      - BASICLAB_IOT_SINK_PROTOCOL_EMQX_MQTT_HOST=emqx-server # EMQX Broker 地址（使用Docker容器名）
+      - BASICLAB_IOT_SINK_PROTOCOL_EMQX_MQTT_HOST=${IOT_SINK_EMQX_MQTT_HOST:-emqx-server} # EMQX Broker 地址（默认使用Docker容器名，可按服务器覆盖）
       - BASICLAB_IOT_SINK_PROTOCOL_EMQX_MQTT_TOPICS=/iot/#,/shadow/#,$$share/algo-sink/mqtt/iot-alert-notification,$$share/algo-sink/mqtt/iot-snapshot-alert,$$share/algo-sink/mqtt/iot-post-process-request # 算法总线仅使用共享订阅，避免重复消费
       - MINIO_URL=http://MinIO:9000 # Minio地址（使用Docker服务名）
       - MINIO_DOWNLOAD_URL=http://MinIO:9001 # Minio下载地址（使用Docker服务名）
