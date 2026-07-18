@@ -14,12 +14,13 @@ import time
 import io
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import timedelta
+from urllib.parse import quote
 import requests
 from flask import Blueprint, request, jsonify, Response
 from sqlalchemy import text
 
-from db_models import db, AutoLabelTask, AutoLabelResult, AIService, Model
+from db_models import db, AutoLabelTask, AutoLabelResult, AIService, Model, beijing_now
 from app.services.inference_service import InferenceService
 from app.services.minio_service import ModelService
 from app.services.sam_service import get_sam_service
@@ -116,7 +117,7 @@ def _save_pipeline_config(task: AutoLabelTask, updates: dict) -> dict:
 def _pipeline_log(task: AutoLabelTask, message: str) -> None:
     cfg = _parse_pipeline_config(task)
     logs = cfg.get('logs') if isinstance(cfg.get('logs'), list) else []
-    logs.append({'time': datetime.now().isoformat(timespec='seconds'), 'message': message})
+    logs.append({'time': beijing_now().isoformat(timespec='seconds'), 'message': message})
     _save_pipeline_config(task, {'logs': logs})
     logger.info(f'[pipeline task={task.id}] {message}')
 
@@ -367,18 +368,34 @@ def start_pipeline_auto_label(dataset_id):
         queue_priority = int(data.get('queue_priority', 0))
 
         java_url = _dataset_java_base()
-        all_frame_tasks = _fetch_frame_tasks(java_url, dataset_id)
-        if frame_task_ids:
-            id_set = {int(x) for x in frame_task_ids}
-            selected_tasks = [ft for ft in all_frame_tasks if int(ft.get('id', 0)) in id_set]
-        else:
-            selected_tasks = all_frame_tasks
+        selected_tasks = _fetch_frame_tasks(
+            java_url,
+            dataset_id,
+            frame_task_ids=frame_task_ids if frame_task_ids else None,
+        )
 
         if execution_mode == 'cluster' and not selected_tasks:
             return jsonify({
                 'code': 400,
                 'msg': '集群模式需至少选择一个摄像头（帧捕获任务），请先在数据来源中配置',
             }), 400
+
+        if execution_mode == 'cluster':
+            unavailable_streams = []
+            for frame_task in selected_tasks:
+                stream_url, stream_error = _resolve_frame_task_stream(java_url, frame_task)
+                if stream_url:
+                    frame_task['rtmpUrl'] = stream_url
+                else:
+                    unavailable_streams.append(
+                        f'{frame_task.get("taskName") or frame_task.get("id")}: '
+                        f'{stream_error or "无可用视频流地址"}'
+                    )
+            if unavailable_streams:
+                return jsonify({
+                    'code': 400,
+                    'msg': f'摄像头流解析失败：{"；".join(unavailable_streams[:3])}',
+                }), 400
 
         from app.services.auto_label_orchestrator import init_pipeline_strategy
         strategy_raw = data.get('strategy') or {
@@ -1145,7 +1162,56 @@ def _parse_text_prompts(task) -> list:
         return []
 
 
-def _fetch_frame_tasks(java_backend_url: str, dataset_id: int) -> list:
+def _resolve_frame_task_stream(java_backend_url: str, frame_task: dict) -> tuple[str | None, str | None]:
+    stream_url = str(frame_task.get('rtmpUrl') or '').strip()
+    if stream_url:
+        return stream_url, None
+
+    try:
+        task_type = int(frame_task.get('taskType') or 0)
+    except (TypeError, ValueError):
+        task_type = 0
+    if task_type != 1:
+        return None, '未配置 RTMP/RTSP 流地址'
+
+    device_id = str(frame_task.get('deviceId') or '').strip()
+    channel_id = str(frame_task.get('channelId') or '').strip()
+    if not device_id or not channel_id:
+        return None, 'GB28181 任务缺少设备 ID 或通道 ID'
+
+    virtual_device_id = quote(f'gb28181_{device_id}_{channel_id}', safe='')
+    resolve_url = (
+        f'{java_backend_url}/admin-api/video/camera/device/'
+        f'{virtual_device_id}/inference-input'
+    )
+    try:
+        timeout_sec = int(os.getenv('AUTO_LABEL_STREAM_RESOLVE_TIMEOUT_SEC', '130'))
+    except (TypeError, ValueError):
+        timeout_sec = 130
+    timeout_sec = max(10, min(300, timeout_sec))
+    try:
+        response = requests.get(resolve_url, timeout=timeout_sec)
+        if response.status_code != 200:
+            return None, f'视频服务解析失败: HTTP {response.status_code}'
+        body = response.json()
+        if body.get('code') != 0:
+            return None, f'视频服务解析失败: {body.get("msg") or "未知错误"}'
+        data = body.get('data') or {}
+        for key in ('resolved_source', 'rtsp_direct', 'rtmp_stream', 'http_stream'):
+            candidate = str(data.get(key) or '').strip()
+            if candidate:
+                return candidate, None
+        return None, 'GB28181 点播未返回可用流地址，请先在摄像头页面验证该通道可正常播放'
+    except Exception as e:
+        return None, f'GB28181 流解析异常: {e}'
+
+
+def _fetch_frame_tasks(
+    java_backend_url: str,
+    dataset_id: int,
+    frame_task_ids: list | None = None,
+    resolve_streams: bool = False,
+) -> list:
     """拉取数据集下已配置的视频流帧捕获任务。"""
     try:
         resp = requests.get(
@@ -1159,7 +1225,30 @@ def _fetch_frame_tasks(java_backend_url: str, dataset_id: int) -> list:
         body = resp.json()
         if body.get('code') != 0:
             return []
-        return (body.get('data') or {}).get('list') or []
+        frame_tasks = (body.get('data') or {}).get('list') or []
+        if frame_task_ids is not None:
+            selected_ids = set()
+            for value in frame_task_ids:
+                try:
+                    selected_ids.add(int(value))
+                except (TypeError, ValueError):
+                    continue
+            frame_tasks = [
+                frame_task for frame_task in frame_tasks
+                if int(frame_task.get('id') or 0) in selected_ids
+            ]
+
+        result = []
+        for frame_task in frame_tasks:
+            item = dict(frame_task)
+            if resolve_streams:
+                stream_url, stream_error = _resolve_frame_task_stream(java_backend_url, item)
+                if stream_url:
+                    item['rtmpUrl'] = stream_url
+                elif stream_error:
+                    item['_streamError'] = stream_error
+            result.append(item)
+        return result
     except Exception as e:
         logger.warning(f'获取帧捕获任务异常: {e}')
         return []
@@ -1315,14 +1404,14 @@ def execute_pipeline_task(app, task_id: int):
             duration_hours = int(cfg.get('duration_hours', 8))
             capture_interval = int(cfg.get('capture_interval_sec', 30))
             auto_export = bool(cfg.get('auto_export', True))
-            deadline = datetime.now() + timedelta(hours=duration_hours)
+            deadline = beijing_now() + timedelta(hours=duration_hours)
 
             java_backend_url = _dataset_java_base()
             sam_service = get_sam_service()
             sam_service.warmup_if_needed()
 
             task.status = 'PROCESSING'
-            task.started_at = datetime.now()
+            task.started_at = beijing_now()
             _save_pipeline_config(task, {'pipeline_status': 'collecting'})
             _pipeline_log(task, f'流水线已启动，计划运行 {duration_hours} 小时')
             db.session.commit()
@@ -1331,7 +1420,16 @@ def execute_pipeline_task(app, task_id: int):
             labeled_total = 0
             cycle = 0
 
-            while datetime.now() < deadline:
+            selected_frame_task_ids = None
+            if task.selected_frame_task_ids:
+                try:
+                    parsed_ids = json.loads(task.selected_frame_task_ids)
+                    if isinstance(parsed_ids, list) and parsed_ids:
+                        selected_frame_task_ids = parsed_ids
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    selected_frame_task_ids = None
+
+            while beijing_now() < deadline:
                 db.session.refresh(task)
                 from app.services.auto_label_orchestrator import is_task_paused_or_cancelled
                 if is_task_paused_or_cancelled(task):
@@ -1340,10 +1438,15 @@ def execute_pipeline_task(app, task_id: int):
                     return
 
                 cycle += 1
-                remaining_min = int((deadline - datetime.now()).total_seconds() / 60)
+                remaining_min = int((deadline - beijing_now()).total_seconds() / 60)
                 _pipeline_log(task, f'第 {cycle} 轮采集开始（剩余约 {remaining_min} 分钟）')
 
-                frame_tasks = _fetch_frame_tasks(java_backend_url, task.dataset_id)
+                frame_tasks = _fetch_frame_tasks(
+                    java_backend_url,
+                    task.dataset_id,
+                    frame_task_ids=selected_frame_task_ids,
+                    resolve_streams=True,
+                )
                 if not frame_tasks:
                     _pipeline_log(
                         task,
@@ -1353,12 +1456,15 @@ def execute_pipeline_task(app, task_id: int):
                     for ft in frame_tasks:
                         stream_url = (ft.get('rtmpUrl') or '').strip()
                         if not stream_url:
+                            task_name = ft.get('taskName') or f'任务 {ft.get("id")}'
+                            stream_error = ft.get('_streamError') or '未配置可用流地址'
+                            _pipeline_log(task, f'无法抽帧: {task_name}，{stream_error}')
                             continue
                         img_bytes = _capture_stream_frame(stream_url)
                         if not img_bytes:
                             _pipeline_log(task, f'抽帧失败: {ft.get("taskName") or stream_url[:40]}')
                             continue
-                        fname = f'cap_{datetime.now().strftime("%Y%m%d%H%M%S%f")}.jpg'
+                        fname = f'cap_{beijing_now().strftime("%Y%m%d%H%M%S%f")}.jpg'
                         if _upload_frame_to_dataset(java_backend_url, task.dataset_id, img_bytes, fname):
                             captured_total += 1
                             _save_pipeline_config(task, {'captured_count': captured_total})
@@ -1387,7 +1493,7 @@ def execute_pipeline_task(app, task_id: int):
                     _pipeline_log(task, f'本轮标注完成：成功 {ok}，失败 {fail}')
                     db.session.commit()
 
-                if datetime.now() >= deadline:
+                if beijing_now() >= deadline:
                     break
                 time.sleep(capture_interval)
 
@@ -1435,7 +1541,7 @@ def execute_pipeline_task(app, task_id: int):
                     _pipeline_log(task, f'自动打包异常: {e}')
 
             task.status = 'COMPLETED'
-            task.completed_at = datetime.now()
+            task.completed_at = beijing_now()
             _save_pipeline_config(task, {'pipeline_status': 'done'})
             _pipeline_log(task, f'流水线完成：采集 {captured_total} 张，标注 {labeled_total} 张')
             db.session.commit()
@@ -1445,7 +1551,7 @@ def execute_pipeline_task(app, task_id: int):
             if task:
                 task.status = 'FAILED'
                 task.error_message = str(e)
-                task.completed_at = datetime.now()
+                task.completed_at = beijing_now()
                 _save_pipeline_config(task, {'pipeline_status': 'failed'})
                 _pipeline_log(task, f'流水线失败: {e}')
                 db.session.commit()
@@ -1482,7 +1588,7 @@ def execute_auto_label_task(app, task_id):
                 inference_service.get_model()
 
             task.status = 'PROCESSING'
-            task.started_at = datetime.now()
+            task.started_at = beijing_now()
             db.session.commit()
 
             java_backend_url = _dataset_java_base()
@@ -1509,7 +1615,7 @@ def execute_auto_label_task(app, task_id):
                     )
                 logger.info(f'数据集 {task.dataset_id} 无待处理图片，任务直接完成')
                 task.status = 'COMPLETED'
-                task.completed_at = datetime.now()
+                task.completed_at = beijing_now()
                 db.session.commit()
                 return
 
@@ -1618,7 +1724,7 @@ def execute_auto_label_task(app, task_id):
                     db.session.commit()
 
             task.status = 'COMPLETED'
-            task.completed_at = datetime.now()
+            task.completed_at = beijing_now()
             if label_mode == 'sam' and (sam_hit_count + sam_empty_count) > 0:
                 from app.services.sam_bootstrap_quality import assess_sam_bootstrap_quality
 
@@ -1648,7 +1754,7 @@ def execute_auto_label_task(app, task_id):
             if task:
                 task.status = 'FAILED'
                 task.error_message = str(e)
-                task.completed_at = datetime.now()
+                task.completed_at = beijing_now()
                 db.session.commit()
 
 

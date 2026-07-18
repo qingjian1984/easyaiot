@@ -205,7 +205,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onUnmounted, reactive, ref } from 'vue';
+import { computed, onDeactivated, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   Alert,
@@ -285,6 +285,16 @@ const activeTask = ref<Record<string, any> | null>(null);
 const taskStatus = ref('');
 const subtasks = ref<Record<string, any>[]>([]);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+function resolveDatasetId(): number | null {
+  const datasetId = Number(props.datasetId);
+  return Number.isInteger(datasetId) && datasetId > 0 ? datasetId : null;
+}
+
+function stopPolling(): void {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+}
 
 const form = reactive({
   model_id: undefined as number | undefined,
@@ -481,14 +491,21 @@ async function loadModels(): Promise<void> {
 }
 
 async function loadFrameTasks(): Promise<void> {
+  const datasetId = resolveDatasetId();
+  if (!datasetId) {
+    frameTasks.value = [];
+    return;
+  }
   try {
     const res = await getDatasetFrameTaskPage({
-      datasetId: props.datasetId,
+      datasetId,
       pageNo: 1,
       pageSize: 200,
     });
     const list = res?.data?.list ?? res?.list ?? [];
     frameTasks.value = list;
+    const availableIds = new Set(list.map((ft: { id: number }) => ft.id));
+    form.frame_task_ids = form.frame_task_ids.filter((id) => availableIds.has(id));
     if (!form.frame_task_ids.length && list.length) {
       form.frame_task_ids = list.map((ft: { id: number }) => ft.id);
     }
@@ -497,10 +514,12 @@ async function loadFrameTasks(): Promise<void> {
   }
 }
 
-async function loadSubtasks(): Promise<void> {
-  if (!taskId.value) return;
+defineExpose({ reloadFrameTasks: loadFrameTasks });
+
+async function loadSubtasks(datasetId = resolveDatasetId()): Promise<void> {
+  if (!taskId.value || !datasetId) return;
   try {
-    const res = await getAutoLabelSubtasks(props.datasetId, taskId.value);
+    const res = await getAutoLabelSubtasks(datasetId, taskId.value);
     const data = res?.data ?? res;
     subtasks.value = data?.subtasks ?? [];
   } catch {
@@ -509,9 +528,11 @@ async function loadSubtasks(): Promise<void> {
 }
 
 async function resumeActivePipeline(): Promise<void> {
+  const datasetId = resolveDatasetId();
+  if (!datasetId) return;
   loading.value = true;
   try {
-    const res = await listAutoLabelTasks(props.datasetId, { page: 1, page_size: 10 });
+    const res = await listAutoLabelTasks(datasetId, { page: 1, page_size: 10 });
     const list = res?.data?.list ?? res?.list ?? [];
     const running = list.find(
       (t: { status?: string; phase?: string }) =>
@@ -522,7 +543,7 @@ async function resumeActivePipeline(): Promise<void> {
       activeTask.value = running;
       taskStatus.value = running.status || '';
       activeTab.value = 'monitor';
-      await loadSubtasks();
+      await loadSubtasks(datasetId);
       startPolling();
     }
   } catch {
@@ -532,7 +553,8 @@ async function resumeActivePipeline(): Promise<void> {
   }
 }
 
-const [register, { closeDrawer }] = useDrawerInner(async () => {
+const [register, { closeDrawer, getOpen }] = useDrawerInner(async () => {
+  stopPolling();
   activeTab.value = 'config';
   configStep.value = 0;
   form.model_id = undefined;
@@ -551,11 +573,22 @@ const [register, { closeDrawer }] = useDrawerInner(async () => {
   await resumeActivePipeline();
 });
 
+if (getOpen) {
+  watch(getOpen, (open) => {
+    if (!open) stopPolling();
+  });
+}
+
 async function handleSubmit(): Promise<void> {
   if (!canSubmit.value || submitting.value) return;
+  const datasetId = resolveDatasetId();
+  if (!datasetId) {
+    createMessage.error('数据集ID无效，请重新进入数据集详情页');
+    return;
+  }
   submitting.value = true;
   try {
-    const res = await startSamPipeline(props.datasetId, {
+    const res = await startSamPipeline(datasetId, {
       text_prompts: form.text_prompts,
       model_id: form.model_id,
       duration_hours: form.duration_hours,
@@ -598,39 +631,62 @@ async function handleSubmit(): Promise<void> {
 }
 
 function startPolling(): void {
-  if (pollTimer) clearInterval(pollTimer);
+  stopPolling();
+  const pollingDatasetId = resolveDatasetId();
+  if (!pollingDatasetId || !taskId.value) {
+    if (!pollingDatasetId) {
+      createMessage.warning('数据集ID无效，已停止任务状态查询');
+    }
+    return;
+  }
+  let consecutiveFailures = 0;
+  let pollInFlight = false;
   const poll = async () => {
-    if (!taskId.value) return;
+    if (pollInFlight || !taskId.value) return;
+    if (resolveDatasetId() !== pollingDatasetId) {
+      stopPolling();
+      return;
+    }
+    pollInFlight = true;
     try {
-      const res = await getAutoLabelTask(props.datasetId, taskId.value);
+      const res = await getAutoLabelTask(pollingDatasetId, taskId.value);
+      consecutiveFailures = 0;
       const task = res?.data ?? res;
       activeTask.value = task;
       taskStatus.value = task?.status || '';
-      if (task?.execution_mode === 'cluster') await loadSubtasks();
+      if (task?.execution_mode === 'cluster') await loadSubtasks(pollingDatasetId);
       if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(taskStatus.value)) {
-        if (pollTimer) clearInterval(pollTimer);
-        pollTimer = null;
+        stopPolling();
         if (taskStatus.value === 'COMPLETED') {
           createMessage.success(COPY.monitor.completed);
           emit('success', { taskId: taskId.value });
         }
       }
     } catch {
-      /* keep polling */
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 5) {
+        stopPolling();
+        createMessage.warning('任务状态查询连续失败，已停止自动刷新');
+      }
+    } finally {
+      pollInFlight = false;
     }
   };
-  poll();
+  void poll();
   pollTimer = setInterval(poll, 3000);
 }
 
 function handleClose(): void {
+  stopPolling();
   closeDrawer();
 }
 
 async function handlePause(): Promise<void> {
   if (!taskId.value) return;
+  const datasetId = resolveDatasetId();
+  if (!datasetId) return;
   try {
-    await pauseAutoLabelTask(props.datasetId, taskId.value);
+    await pauseAutoLabelTask(datasetId, taskId.value);
     taskStatus.value = 'PAUSED';
     createMessage.success('任务已暂停');
   } catch (e: any) {
@@ -640,8 +696,10 @@ async function handlePause(): Promise<void> {
 
 async function handleResume(): Promise<void> {
   if (!taskId.value) return;
+  const datasetId = resolveDatasetId();
+  if (!datasetId) return;
   try {
-    await resumeAutoLabelTask(props.datasetId, taskId.value);
+    await resumeAutoLabelTask(datasetId, taskId.value);
     taskStatus.value = 'PROCESSING';
     createMessage.success('任务已恢复');
     startPolling();
@@ -652,19 +710,20 @@ async function handleResume(): Promise<void> {
 
 async function handleCancel(): Promise<void> {
   if (!taskId.value) return;
+  const datasetId = resolveDatasetId();
+  if (!datasetId) return;
   try {
-    await cancelAutoLabelTask(props.datasetId, taskId.value);
+    await cancelAutoLabelTask(datasetId, taskId.value);
     taskStatus.value = 'CANCELLED';
-    if (pollTimer) clearInterval(pollTimer);
+    stopPolling();
     createMessage.success('任务已取消');
   } catch (e: any) {
     createMessage.error(e?.message || '取消失败');
   }
 }
 
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer);
-});
+onDeactivated(stopPolling);
+onUnmounted(stopPolling);
 </script>
 
 <style scoped lang="less">

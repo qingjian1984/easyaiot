@@ -172,6 +172,32 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+prepare_platform_host_env() {
+    if [ -n "${EASYAIOT_PLATFORM_HOST:-}" ]; then
+        export HOST_IP="${HOST_IP:-$EASYAIOT_PLATFORM_HOST}"
+        print_info "使用已设置的控制面宿主机 IP: $EASYAIOT_PLATFORM_HOST"
+        return 0
+    fi
+
+    if [ -z "${HOST_IP:-}" ]; then
+        HOST_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
+    fi
+    if [ -z "${HOST_IP:-}" ]; then
+        HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+    if [ -z "${HOST_IP:-}" ]; then
+        HOST_IP=$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -n 1)
+    fi
+    if [ -z "${HOST_IP:-}" ]; then
+        print_error "无法自动检测控制面宿主机 IP，请通过 HOST_IP 或 EASYAIOT_PLATFORM_HOST 指定"
+        return 1
+    fi
+
+    export HOST_IP
+    export EASYAIOT_PLATFORM_HOST="$HOST_IP"
+    print_info "控制面宿主机 IP: $EASYAIOT_PLATFORM_HOST"
+}
+
 # compose 文件中定义的服务数量（用于启动前提示）
 compose_service_count() {
     $DOCKER_COMPOSE -f "$COMPOSE_FILE" config --services 2>/dev/null | wc -l | tr -d '[:space:]'
@@ -1551,6 +1577,7 @@ main() {
 
     case "$cmd" in
         install|build-and-start)
+            prepare_platform_host_env
             select_deploy_profile_for_install
             refresh_device_compose_profile_args
 
@@ -1589,6 +1616,7 @@ main() {
             build_and_start
             ;;
         start|restart|update)
+            prepare_platform_host_env
             ensure_deploy_profile
             refresh_device_compose_profile_args
             print_info "部署形态: $(_deploy_profile_desc) (EASYAIOT_DEPLOY_PROFILE=${EASYAIOT_DEPLOY_PROFILE})"

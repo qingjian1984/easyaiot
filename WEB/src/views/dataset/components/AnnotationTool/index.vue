@@ -468,6 +468,7 @@
       @open-auto-label="openAiBatchModal"
     />
     <UnattendedLabelDrawer
+      ref="unattendedDrawerRef"
       @register="registerUnattendedDrawer"
       :dataset-id="datasetId"
       @success="onUnattendedLabelSuccess"
@@ -492,6 +493,7 @@
       :get-container="getModalContainer"
       @tags-changed="fetchLabels"
       @open-unattended="openUnattendedLabelDrawer"
+      @frame-tasks-changed="reloadUnattendedFrameTasks"
     />
   </div>
   </ConfigProvider>
@@ -596,6 +598,7 @@ async function refreshSyncCheck() {
   }
 }
 const aiLabelModalRef = ref<InstanceType<typeof AILabelModal> | null>(null);
+const unattendedDrawerRef = ref<InstanceType<typeof UnattendedLabelDrawer> | null>(null);
 const [registerSamDrawer, { openDrawer: openSamDrawer }] = useDrawer();
 const [registerUnattendedDrawer, { openDrawer: openUnattendedDrawer }] = useDrawer();
 const samModelChecked = ref(false);
@@ -2151,7 +2154,11 @@ async function openSamAutoLabelDrawer(): Promise<void> {
 }
 
 function openUnattendedLabelDrawer(): void {
-  openUnattendedDrawer(true);
+  openUnattendedDrawer(true, {});
+}
+
+async function reloadUnattendedFrameTasks(): Promise<void> {
+  await unattendedDrawerRef.value?.reloadFrameTasks();
 }
 
 async function onUnattendedLabelSuccess(): Promise<void> {

@@ -165,7 +165,7 @@ async function fetch(p = {}) {
 }
 
 const page = ref(1);
-const pageSize = ref(18);
+const pageSize = ref(12);
 const total = ref(0);
 const paginationProp = ref({
   showSizeChanger: false,

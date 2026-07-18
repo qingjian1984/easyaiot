@@ -7,11 +7,10 @@ import os
 import socket
 import threading
 import time
-from datetime import datetime
 from typing import Any
 
-from db_models import db, AutoLabelTask, AutoLabelSubTask
-from app.utils.node_remote_python import resolve_ai_bundle_python
+from db_models import db, AutoLabelTask, AutoLabelSubTask, beijing_now
+from app.utils.node_remote_python import is_platform_node, resolve_ai_bundle_python
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +34,27 @@ def _control_plane_base_url() -> str:
     return os.getenv('AI_CONTROL_URL', f'http://{host}:{port}').rstrip('/')
 
 
+def _platform_worker_command(env: dict[str, str], gpu_ids: str | None = None) -> tuple[list[str], dict[str, str]]:
+    """控制面节点由 Agent 管理进程，但 Worker 在现有 AI 容器内运行。"""
+    container_name = os.getenv('PLATFORM_AI_CONTAINER_NAME', 'ai-service').strip() or 'ai-service'
+    container_root = os.getenv('PLATFORM_AI_CONTAINER_ROOT', '/app').rstrip('/') or '/app'
+    container_python = os.getenv('PLATFORM_AI_CONTAINER_PYTHON', '/opt/conda/bin/python').strip()
+    worker_dir = os.path.join(container_root, 'services', 'auto_label_worker')
+    worker_script = os.path.join(worker_dir, 'run_worker.py')
+
+    deploy_env = {key: str(value) for key, value in env.items() if value is not None}
+    deploy_env['AI_ROOT'] = container_root
+    if gpu_ids:
+        deploy_env['CUDA_VISIBLE_DEVICES'] = str(gpu_ids)
+        deploy_env['GPU_IDS'] = str(gpu_ids)
+
+    command = ['docker', 'exec', '-w', worker_dir]
+    for key in sorted(deploy_env):
+        command.extend(['-e', key])
+    command.extend([container_name, container_python, worker_script])
+    return command, deploy_env
+
+
 def create_camera_subtasks(
     parent_task: AutoLabelTask,
     frame_tasks: list[dict],
@@ -46,6 +66,8 @@ def create_camera_subtasks(
     for idx, ft in enumerate(frame_tasks):
         ft_id = ft.get('id')
         stream_url = (ft.get('rtmpUrl') or '').strip()
+        if not stream_url:
+            raise ValueError(f'帧捕获任务 {ft.get("taskName") or ft_id} 无可用视频流地址')
         sub_cfg = {
             'duration_hours': pipeline_config.get('duration_hours', 8),
             'capture_interval_sec': pipeline_config.get('capture_interval_sec', 30),
@@ -96,6 +118,7 @@ def dispatch_subtask_to_node(subtask: AutoLabelSubTask, exclude_node_ids: list[i
             sticky=True,
             exclude_node_ids=exclude_node_ids or None,
         )
+        node = node_client.get_node(allocation['nodeId'])
     except Exception as e:
         subtask.status = 'QUEUED'
         subtask.error_message = f'节点调度失败: {e}'
@@ -109,13 +132,6 @@ def dispatch_subtask_to_node(subtask: AutoLabelSubTask, exclude_node_ids: list[i
 
     subtask.assigned_node_id = node_id
     subtask.assigned_node_host = host
-
-    ai_root_remote = os.getenv('NODE_REMOTE_AI_ROOT', '/opt/easyaiot/AI')
-    work_dir = os.path.join(ai_root_remote, 'services', 'auto_label_worker')
-    log_dir = os.path.join(ai_root_remote, 'logs', 'auto_label', str(subtask.id))
-    python_exec = resolve_ai_bundle_python(ai_root_remote)
-    worker_script = os.path.join(ai_root_remote, 'services', 'auto_label_worker', 'run_worker.py')
-    command = [python_exec, worker_script]
 
     cfg = {}
     if subtask.config_json:
@@ -131,6 +147,7 @@ def dispatch_subtask_to_node(subtask: AutoLabelSubTask, exclude_node_ids: list[i
         except Exception:
             text_prompts = []
 
+    ai_root_remote = os.getenv('NODE_REMOTE_AI_ROOT', '/opt/easyaiot/AI')
     env = {
         'SUBTASK_ID': str(subtask.id),
         'PARENT_TASK_ID': str(parent.id),
@@ -151,6 +168,17 @@ def dispatch_subtask_to_node(subtask: AutoLabelSubTask, exclude_node_ids: list[i
         'JWT_TOKEN': os.getenv('JWT_TOKEN', ''),
     }
 
+    log_dir = os.path.join(ai_root_remote, 'logs', 'auto_label', str(subtask.id))
+    if is_platform_node(node):
+        command, env = _platform_worker_command(env, gpu_ids=gpu_ids)
+        work_dir = os.getenv('PLATFORM_AGENT_WORK_DIR', '/tmp')
+        logger.info('子任务 %s 命中控制面节点，将在 AI 容器内运行', subtask.id)
+    else:
+        work_dir = os.path.join(ai_root_remote, 'services', 'auto_label_worker')
+        python_exec = resolve_ai_bundle_python(ai_root_remote)
+        worker_script = os.path.join(ai_root_remote, 'services', 'auto_label_worker', 'run_worker.py')
+        command = [python_exec, worker_script]
+
     try:
         result = node_client.deploy_workload(
             node_id=node_id,
@@ -163,7 +191,7 @@ def dispatch_subtask_to_node(subtask: AutoLabelSubTask, exclude_node_ids: list[i
             gpu_ids=gpu_ids,
         )
         subtask.status = 'RUNNING'
-        subtask.started_at = datetime.now()
+        subtask.started_at = beijing_now()
         subtask.error_message = None
         db.session.commit()
         logger.info(
@@ -206,7 +234,7 @@ def process_queue_once(app) -> int:
                 continue
             if parent.status == 'PENDING':
                 parent.status = 'PROCESSING'
-                parent.started_at = parent.started_at or datetime.now()
+                parent.started_at = parent.started_at or beijing_now()
 
             ok = dispatch_subtask_to_node(st, exclude_node_ids=assigned_nodes)
             if ok and st.assigned_node_id:
@@ -232,10 +260,10 @@ def update_subtask_progress(subtask_id: int, payload: dict[str, Any], app=None) 
     if status in ('RUNNING', 'COMPLETED', 'FAILED'):
         st.status = status
     if status == 'COMPLETED':
-        st.completed_at = datetime.now()
+        st.completed_at = beijing_now()
     if status == 'FAILED':
         st.error_message = payload.get('error_message') or st.error_message
-        st.completed_at = datetime.now()
+        st.completed_at = beijing_now()
         _release_subtask_binding(st)
 
     if payload.get('log'):
@@ -265,7 +293,7 @@ def _append_parent_log(task_id: int, message: str) -> None:
     except Exception:
         cfg = {}
     logs = cfg.get('logs') if isinstance(cfg.get('logs'), list) else []
-    logs.append({'time': datetime.now().isoformat(timespec='seconds'), 'message': message})
+    logs.append({'time': beijing_now().isoformat(timespec='seconds'), 'message': message})
     cfg['logs'] = logs[-80:]
     task.pipeline_config = json.dumps(cfg, ensure_ascii=False)
 
@@ -321,7 +349,7 @@ def _aggregate_parent_tasks(app=None) -> None:
                 parent.status = 'COMPLETED'
                 if cfg.get('auto_export'):
                     _trigger_parent_export(parent)
-            parent.completed_at = datetime.now()
+            parent.completed_at = beijing_now()
             cfg['pipeline_status'] = 'done' if parent.status == 'COMPLETED' else 'failed'
             parent.pipeline_config = json.dumps(cfg, ensure_ascii=False)
 

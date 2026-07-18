@@ -897,14 +897,42 @@ export const getTree = (params?: {
  * 获取设备的通道列表（用于树形结构）
  * @param deviceId 设备国标编号
  */
-export const getDeviceChannels = async (deviceId: string) => {
+const queryDeviceChannelsPage = async (deviceId: string, page: number, count: number) => {
   const res = await commonApi('get', `${GB28181_PREFIX}/devices/${deviceId}/channels`, {
-    page: 1,
-    count: 10000,
+    page,
+    count,
   }, false);
+  const body = res?.data ?? res;
+  const payload = body?.data ?? body;
+  if (payload?.code != null && Number(payload.code) !== 0) {
+    throw new Error(payload.msg || '查询国标设备通道失败');
+  }
   const { data, total } = normalizePageResponse(res);
   const list = (data || []).map((item: any) => normalizeWvpChannelItem(item, deviceId));
   return { data: list, list, total };
+};
+
+export const getDeviceChannels = async (deviceId: string) => {
+  return queryDeviceChannelsPage(deviceId, 1, 10000);
+};
+
+/** 拉取指定国标设备的全部通道（自动分页，供通道选择等完整列表场景使用） */
+export const queryAllDeviceChannels = async (deviceId: string) => {
+  const pageSize = 500;
+  const maxPages = 200;
+  let page = 1;
+  let all: Record<string, any>[] = [];
+  let total = 0;
+  do {
+    const res = await queryDeviceChannelsPage(deviceId, page, pageSize);
+    const batch = res.data ?? [];
+    if (!batch.length) break;
+    total = res.total ?? all.length + batch.length;
+    all = all.concat(batch);
+    if (batch.length < pageSize || all.length >= total) break;
+    page += 1;
+  } while (page <= maxPages);
+  return { data: all, list: all, total: all.length };
 };
 
 // ====================== 其他工具接口 ======================
