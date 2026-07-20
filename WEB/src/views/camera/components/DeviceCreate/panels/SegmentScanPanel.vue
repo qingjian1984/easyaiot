@@ -193,6 +193,20 @@ const [registerForm, { validate, getFieldsValue, setFieldsValue, updateSchema }]
       slot: 'credentials',
       itemProps: { autoLink: false },
       rules: [],
+      dynamicRules: () => {
+        if (state.mode === 'nvr') {
+          const validCreds = credentials
+            .map((c) => ({ username: (c.username || '').trim(), password: c.password || '' }))
+            .filter((c) => c.username);
+          if (validCreds.length === 0) {
+            return [{ required: true, message: '请至少填写一组登录凭证' }];
+          }
+          if (!validCreds.some((c) => !!c.password)) {
+            return [{ required: true, message: '登记 NVR 须填写 Web 登录密码' }];
+          }
+        }
+        return [];
+      },
     },
     {
       field: 'concurrency',
@@ -236,7 +250,6 @@ watch(
         {
           field: '_credentials',
           label: state.mode === 'nvr' ? 'Web 登录凭证' : '登录凭证',
-          required: state.mode === 'nvr',
           helpMessage:
             state.mode === 'nvr'
               ? '登记 NVR 及枚举通道须填写正确密码；按列表顺序依次尝试'

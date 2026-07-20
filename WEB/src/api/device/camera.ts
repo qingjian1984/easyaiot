@@ -100,6 +100,8 @@ export interface NvrInfo {
   mac?: string;
   rtsp_url?: string;
   source?: string;
+  rtsp_template?: string;
+  rtsp_port?: number;
   camera_count?: number;
   cameras?: Array<{
     id: string;
@@ -259,6 +261,9 @@ export const registerNvrWithChannels = (data: {
   rtsp_url?: string;
   scheme?: string;
   channels?: NvrChannelRow[];
+  rtsp_template?: string;
+  rtsp_port?: number;
+  channel_count?: number;
 }): Promise<NvrRegisterChannelsResult> => {
   defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
   return defHttp

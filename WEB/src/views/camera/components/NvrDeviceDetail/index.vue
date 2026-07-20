@@ -161,6 +161,8 @@ async function handleSyncChannels() {
       model: nvr.model,
       serial_number: nvr.serial_number,
       scheme: nvr.scheme,
+      ...(nvr.rtsp_template ? { rtsp_template: nvr.rtsp_template } : {}),
+      ...(nvr.rtsp_port ? { rtsp_port: nvr.rtsp_port } : {}),
     });
     nvrInfo.value = { ...(res || nvr), has_password: true };
     cameras.value = mapCameras(res || null);

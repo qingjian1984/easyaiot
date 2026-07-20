@@ -255,6 +255,8 @@ class Nvr(db.Model):
     scheme = db.Column(db.String(8), nullable=True, default='http', comment='http/https')
     rtsp_url = db.Column(db.Text, nullable=True, comment='NVR 预览/取流 RTSP（对齐 hiktools）')
     source = db.Column(db.String(32), nullable=True, comment='探测来源 isapi/dahua_cgi 等')
+    rtsp_template = db.Column(db.Text, nullable=True, comment='自定义 RTSP 路径模板')
+    rtsp_port = db.Column(db.SmallInteger, nullable=True, comment='RTSP 端口，默认 554')
     created_at = db.Column(db.DateTime, default=lambda: datetime.utcnow())
     updated_at = db.Column(db.DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
 

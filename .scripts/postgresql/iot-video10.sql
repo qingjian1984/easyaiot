@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict wXM60PrMhNIuXawq89Q2VJdEfHBE41nfQov51aS8IymDHEIt1K8QLFPwECJgoGi
+\restrict BUJ0b6OsGwccB9i0XKq3q6YZ9R9y7YTnYp39VDN8piFdiSwLhDVCoH5W560gKc7
 
 -- Dumped from database version 18.4 (Debian 18.4-1.pgdg13+1)
 -- Dumped by pg_dump version 18.4 (Debian 18.4-1.pgdg13+1)
@@ -27,10 +27,10 @@ DROP DATABASE IF EXISTS "iot-video20";
 CREATE DATABASE "iot-video20" WITH TEMPLATE = template0 ENCODING = 'UTF8' LOCALE_PROVIDER = libc LOCALE = 'en_US.utf8';
 
 
-\unrestrict wXM60PrMhNIuXawq89Q2VJdEfHBE41nfQov51aS8IymDHEIt1K8QLFPwECJgoGi
+\unrestrict BUJ0b6OsGwccB9i0XKq3q6YZ9R9y7YTnYp39VDN8piFdiSwLhDVCoH5W560gKc7
 \encoding SQL_ASCII
 \connect -reuse-previous=on "dbname='iot-video20'"
-\restrict wXM60PrMhNIuXawq89Q2VJdEfHBE41nfQov51aS8IymDHEIt1K8QLFPwECJgoGi
+\restrict BUJ0b6OsGwccB9i0XKq3q6YZ9R9y7YTnYp39VDN8piFdiSwLhDVCoH5W560gKc7
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -72,7 +72,11 @@ CREATE TABLE public.alert (
     notification_sent boolean NOT NULL,
     notification_sent_time timestamp without time zone,
     business_tags text,
-    correlation_id character varying(36)
+    correlation_id character varying(36),
+    edge_node_id bigint,
+    edge_node_name character varying(128),
+    edge_node_host character varying(128),
+    node_id bigint
 );
 
 
@@ -158,6 +162,34 @@ COMMENT ON COLUMN public.alert.business_tags IS '业务标签（JSON数组，库
 --
 
 COMMENT ON COLUMN public.alert.correlation_id IS '关联事件ID（同一帧算法告警/人脸/车牌）';
+
+
+--
+-- Name: COLUMN alert.edge_node_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.alert.edge_node_id IS '边缘节点 edge_node.id';
+
+
+--
+-- Name: COLUMN alert.edge_node_name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.alert.edge_node_name IS '边缘节点名称（冗余）';
+
+
+--
+-- Name: COLUMN alert.edge_node_host; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.alert.edge_node_host IS '边缘节点主机（冗余）';
+
+
+--
+-- Name: COLUMN alert.node_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.alert.node_id IS '运行 compute_node.id（可选）';
 
 
 --
@@ -452,6 +484,7 @@ CREATE TABLE public.algorithm_task (
     task_type character varying(20) NOT NULL,
     model_ids text,
     model_names text,
+    detect_conf double precision NOT NULL,
     extract_interval integer,
     rtmp_input_url character varying(500),
     rtmp_output_url character varying(500),
@@ -505,6 +538,12 @@ CREATE TABLE public.algorithm_task (
     sam_supplement_config text,
     motion_gate_enabled boolean NOT NULL,
     motion_gate_config text,
+    pose_analysis_enabled boolean NOT NULL,
+    pose_analysis_config text,
+    pose_intent_enabled boolean NOT NULL,
+    pose_library_ids text,
+    pose_intent_threshold double precision,
+    pose_intent_config text,
     post_process_enabled boolean NOT NULL,
     post_process_script character varying(255),
     post_process_replicas integer NOT NULL,
@@ -553,10 +592,17 @@ COMMENT ON COLUMN public.algorithm_task.model_names IS '关联的模型名称列
 
 
 --
+-- Name: COLUMN algorithm_task.detect_conf; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.algorithm_task.detect_conf IS 'YOLO检测置信度阈值（0~1，默认0.5）';
+
+
+--
 -- Name: COLUMN algorithm_task.extract_interval; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.algorithm_task.extract_interval IS '抽帧间隔（每N帧抽一次；NULL 表示沿用环境变量 EXTRACT_INTERVAL）';
+COMMENT ON COLUMN public.algorithm_task.extract_interval IS 'AI检测间隔（每N帧推理一次；12≈25fps下每秒2次；NULL时沿用EXTRACT_INTERVAL，默认12）';
 
 
 --
@@ -924,6 +970,48 @@ COMMENT ON COLUMN public.algorithm_task.motion_gate_config IS '运动门控配�
 
 
 --
+-- Name: COLUMN algorithm_task.pose_analysis_enabled; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.algorithm_task.pose_analysis_enabled IS '是否启用人体姿态分析';
+
+
+--
+-- Name: COLUMN algorithm_task.pose_analysis_config; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.algorithm_task.pose_analysis_config IS '人体姿态分析配置 JSON';
+
+
+--
+-- Name: COLUMN algorithm_task.pose_intent_enabled; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.algorithm_task.pose_intent_enabled IS '是否启用姿态意图分析告警';
+
+
+--
+-- Name: COLUMN algorithm_task.pose_library_ids; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.algorithm_task.pose_library_ids IS '关联场景姿态库ID列表（JSON数组）';
+
+
+--
+-- Name: COLUMN algorithm_task.pose_intent_threshold; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.algorithm_task.pose_intent_threshold IS '姿态意图匹配阈值（为空则使用库默认值）';
+
+
+--
+-- Name: COLUMN algorithm_task.pose_intent_config; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.algorithm_task.pose_intent_config IS '姿态意图分析配置 JSON';
+
+
+--
 -- Name: COLUMN algorithm_task.post_process_enabled; Type: COMMENT; Schema: public; Owner: -
 --
 
@@ -1162,6 +1250,7 @@ CREATE TABLE public.device (
     port smallint,
     username character varying(100),
     password character varying(100),
+    skylink_token text,
     mac character varying(17),
     manufacturer character varying(100) NOT NULL,
     model character varying(100) NOT NULL,
@@ -1210,6 +1299,13 @@ COMMENT ON COLUMN public.device.ai_rtmp_stream IS 'AI推流地址（用于算法
 --
 
 COMMENT ON COLUMN public.device.ai_http_stream IS 'AI HTTP地址（用于算法任务）';
+
+
+--
+-- Name: COLUMN device.skylink_token; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.device.skylink_token IS '大疆司空 X-User-Token（机场/无人机共用）';
 
 
 --
@@ -2672,6 +2768,8 @@ CREATE TABLE public.nvr (
     scheme character varying(8),
     rtsp_url text,
     source character varying(32),
+    rtsp_template text,
+    rtsp_port smallint,
     created_at timestamp without time zone,
     updated_at timestamp without time zone
 );
@@ -2703,6 +2801,20 @@ COMMENT ON COLUMN public.nvr.rtsp_url IS 'NVR 预览/取流 RTSP（对齐 hiktoo
 --
 
 COMMENT ON COLUMN public.nvr.source IS '探测来源 isapi/dahua_cgi 等';
+
+
+--
+-- Name: COLUMN nvr.rtsp_template; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.nvr.rtsp_template IS '自定义 RTSP 路径模板';
+
+
+--
+-- Name: COLUMN nvr.rtsp_port; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.nvr.rtsp_port IS 'RTSP 端口，默认 554';
 
 
 --
@@ -3390,6 +3502,65 @@ ALTER SEQUENCE public.playback_id_seq OWNED BY public.playback.id;
 
 
 --
+-- Name: pose_intent_match_record; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pose_intent_match_record (
+    id integer NOT NULL,
+    task_id integer,
+    task_name character varying(255),
+    device_id character varying(100) NOT NULL,
+    device_name character varying(255),
+    library_id integer,
+    library_name character varying(255),
+    entry_id integer,
+    entry_name character varying(255),
+    similarity double precision,
+    intent_event character varying(100),
+    matched boolean NOT NULL,
+    pose_snapshot text,
+    alert_id integer,
+    correlation_id character varying(36),
+    task_type character varying(20),
+    created_at timestamp without time zone
+);
+
+
+--
+-- Name: COLUMN pose_intent_match_record.task_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.pose_intent_match_record.task_id IS '算法任务ID';
+
+
+--
+-- Name: COLUMN pose_intent_match_record.pose_snapshot; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.pose_intent_match_record.pose_snapshot IS '命中时关键点 JSON';
+
+
+--
+-- Name: pose_intent_match_record_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.pose_intent_match_record_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: pose_intent_match_record_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.pose_intent_match_record_id_seq OWNED BY public.pose_intent_match_record.id;
+
+
+--
 -- Name: pusher; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3944,6 +4115,245 @@ CREATE SEQUENCE public.region_model_service_id_seq
 --
 
 ALTER SEQUENCE public.region_model_service_id_seq OWNED BY public.region_model_service.id;
+
+
+--
+-- Name: scenario_pose_entry; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.scenario_pose_entry (
+    id integer NOT NULL,
+    library_id integer NOT NULL,
+    name character varying(255) NOT NULL,
+    source_type character varying(20) NOT NULL,
+    image_path character varying(500),
+    image_url character varying(500),
+    keypoints text,
+    feature_vector text,
+    keypoint_visibility_min double precision NOT NULL,
+    extra_rules text,
+    remark character varying(500),
+    is_enabled boolean NOT NULL,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone
+);
+
+
+--
+-- Name: COLUMN scenario_pose_entry.library_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.library_id IS '所属场景姿态库ID';
+
+
+--
+-- Name: COLUMN scenario_pose_entry.name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.name IS '条目名称';
+
+
+--
+-- Name: COLUMN scenario_pose_entry.source_type; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.source_type IS '来源 image/rule/manual';
+
+
+--
+-- Name: COLUMN scenario_pose_entry.image_path; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.image_path IS '参考图本地路径';
+
+
+--
+-- Name: COLUMN scenario_pose_entry.image_url; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.image_url IS '参考图 URL';
+
+
+--
+-- Name: COLUMN scenario_pose_entry.keypoints; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.keypoints IS 'COCO-17 关键点 JSON';
+
+
+--
+-- Name: COLUMN scenario_pose_entry.feature_vector; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.feature_vector IS '归一化特征向量 JSON';
+
+
+--
+-- Name: COLUMN scenario_pose_entry.extra_rules; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.extra_rules IS '附加规则 JSON';
+
+
+--
+-- Name: COLUMN scenario_pose_entry.remark; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.remark IS '备注';
+
+
+--
+-- Name: COLUMN scenario_pose_entry.is_enabled; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_entry.is_enabled IS '是否启用';
+
+
+--
+-- Name: scenario_pose_entry_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.scenario_pose_entry_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: scenario_pose_entry_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.scenario_pose_entry_id_seq OWNED BY public.scenario_pose_entry.id;
+
+
+--
+-- Name: scenario_pose_library; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.scenario_pose_library (
+    id integer NOT NULL,
+    name character varying(255) NOT NULL,
+    code character varying(100) NOT NULL,
+    scene_category character varying(50),
+    business_tags text,
+    description character varying(500),
+    similarity_threshold double precision NOT NULL,
+    match_mode character varying(30) NOT NULL,
+    intent_event character varying(100),
+    intent_object character varying(100),
+    alert_level character varying(20) NOT NULL,
+    is_enabled boolean NOT NULL,
+    entry_count integer NOT NULL,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone
+);
+
+
+--
+-- Name: COLUMN scenario_pose_library.name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.name IS '场景姿态库名称';
+
+
+--
+-- Name: COLUMN scenario_pose_library.code; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.code IS '库编码（唯一）';
+
+
+--
+-- Name: COLUMN scenario_pose_library.scene_category; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.scene_category IS '场景类别 fall/climb/squat/hands_up/custom';
+
+
+--
+-- Name: COLUMN scenario_pose_library.business_tags; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.business_tags IS '业务标签 JSON 数组';
+
+
+--
+-- Name: COLUMN scenario_pose_library.description; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.description IS '描述';
+
+
+--
+-- Name: COLUMN scenario_pose_library.similarity_threshold; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.similarity_threshold IS '默认匹配阈值';
+
+
+--
+-- Name: COLUMN scenario_pose_library.match_mode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.match_mode IS '匹配模式 angle/ratio/combined';
+
+
+--
+-- Name: COLUMN scenario_pose_library.intent_event; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.intent_event IS '命中告警 event';
+
+
+--
+-- Name: COLUMN scenario_pose_library.intent_object; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.intent_object IS '命中告警 object';
+
+
+--
+-- Name: COLUMN scenario_pose_library.alert_level; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.alert_level IS '告警级别';
+
+
+--
+-- Name: COLUMN scenario_pose_library.is_enabled; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.is_enabled IS '是否启用';
+
+
+--
+-- Name: COLUMN scenario_pose_library.entry_count; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.scenario_pose_library.entry_count IS '条目数量';
+
+
+--
+-- Name: scenario_pose_library_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.scenario_pose_library_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: scenario_pose_library_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.scenario_pose_library_id_seq OWNED BY public.scenario_pose_library.id;
 
 
 --
@@ -5180,6 +5590,13 @@ ALTER TABLE ONLY public.playback ALTER COLUMN id SET DEFAULT nextval('public.pla
 
 
 --
+-- Name: pose_intent_match_record id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pose_intent_match_record ALTER COLUMN id SET DEFAULT nextval('public.pose_intent_match_record_id_seq'::regclass);
+
+
+--
 -- Name: pusher id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -5205,6 +5622,20 @@ ALTER TABLE ONLY public.record_space ALTER COLUMN id SET DEFAULT nextval('public
 --
 
 ALTER TABLE ONLY public.region_model_service ALTER COLUMN id SET DEFAULT nextval('public.region_model_service_id_seq'::regclass);
+
+
+--
+-- Name: scenario_pose_entry id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scenario_pose_entry ALTER COLUMN id SET DEFAULT nextval('public.scenario_pose_entry_id_seq'::regclass);
+
+
+--
+-- Name: scenario_pose_library id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scenario_pose_library ALTER COLUMN id SET DEFAULT nextval('public.scenario_pose_library_id_seq'::regclass);
 
 
 --
@@ -5260,7 +5691,7 @@ ALTER TABLE ONLY public.tracking_target ALTER COLUMN id SET DEFAULT nextval('pub
 -- Data for Name: alert; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.alert (id, object, event, region, information, "time", device_id, device_name, image_path, image_url, record_path, task_type, task_id, task_name, notify_users, channels, notification_sent, notification_sent_time, business_tags, correlation_id) FROM stdin;
+COPY public.alert (id, object, event, region, information, "time", device_id, device_name, image_path, image_url, record_path, task_type, task_id, task_name, notify_users, channels, notification_sent, notification_sent_time, business_tags, correlation_id, edge_node_id, edge_node_name, edge_node_host, node_id) FROM stdin;
 \.
 
 
@@ -5284,7 +5715,7 @@ COPY public.algorithm_post_process_result (id, task_id, task_name, task_code, ta
 -- Data for Name: algorithm_task; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.algorithm_task (id, task_name, task_code, task_type, model_ids, model_names, extract_interval, rtmp_input_url, rtmp_output_url, tracking_enabled, tracking_similarity_threshold, tracking_max_age, tracking_smooth_alpha, alert_event_enabled, alert_event_suppress_time, alert_class_names, face_detection_enabled, plate_detection_enabled, face_matching_enabled, face_library_ids, face_matching_threshold, plate_matching_enabled, plate_library_ids, matching_business_tags, alert_notification_enabled, alert_notification_config, alarm_suppress_time, last_notify_time, space_id, cron_expression, frame_skip, patrol_mode, patrol_interval_sec, patrol_pool_size, focus_device_id, status, is_enabled, run_status, exception_reason, schedule_policy, prefer_gpu, target_node_id, node_id, service_server_ip, service_port, service_process_id, service_last_heartbeat, service_log_path, total_frames, total_detections, total_captures, last_process_time, last_success_time, last_capture_time, description, sam_supplement_enabled, sam_supplement_config, motion_gate_enabled, motion_gate_config, post_process_enabled, post_process_script, post_process_replicas, defense_mode, defense_schedule, created_at, updated_at, face_library_id, plate_library_id) FROM stdin;
+COPY public.algorithm_task (id, task_name, task_code, task_type, model_ids, model_names, detect_conf, extract_interval, rtmp_input_url, rtmp_output_url, tracking_enabled, tracking_similarity_threshold, tracking_max_age, tracking_smooth_alpha, alert_event_enabled, alert_event_suppress_time, alert_class_names, face_detection_enabled, plate_detection_enabled, face_matching_enabled, face_library_ids, face_matching_threshold, plate_matching_enabled, plate_library_ids, matching_business_tags, alert_notification_enabled, alert_notification_config, alarm_suppress_time, last_notify_time, space_id, cron_expression, frame_skip, patrol_mode, patrol_interval_sec, patrol_pool_size, focus_device_id, status, is_enabled, run_status, exception_reason, schedule_policy, prefer_gpu, target_node_id, node_id, service_server_ip, service_port, service_process_id, service_last_heartbeat, service_log_path, total_frames, total_detections, total_captures, last_process_time, last_success_time, last_capture_time, description, sam_supplement_enabled, sam_supplement_config, motion_gate_enabled, motion_gate_config, pose_analysis_enabled, pose_analysis_config, pose_intent_enabled, pose_library_ids, pose_intent_threshold, pose_intent_config, post_process_enabled, post_process_script, post_process_replicas, defense_mode, defense_schedule, created_at, updated_at, face_library_id, plate_library_id) FROM stdin;
 \.
 
 
@@ -5308,7 +5739,7 @@ COPY public.detection_region (id, task_id, region_name, region_type, points, ima
 -- Data for Name: device; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.device (id, name, source, rtmp_stream, http_stream, ai_rtmp_stream, ai_http_stream, stream, ip, port, username, password, mac, manufacturer, model, firmware_version, serial_number, hardware_id, support_move, support_zoom, nvr_id, nvr_channel, rtsp_direct, channel_online, connection_status, enable_forward, auto_snap_enabled, directory_id, cover_image_path, longitude, latitude, altitude, address, location_source, location_updated_at, heading, ptz_type, direction_type, position_type, room_type, use_type, supply_light_type, resolution, created_at, updated_at) FROM stdin;
+COPY public.device (id, name, source, rtmp_stream, http_stream, ai_rtmp_stream, ai_http_stream, stream, ip, port, username, password, skylink_token, mac, manufacturer, model, firmware_version, serial_number, hardware_id, support_move, support_zoom, nvr_id, nvr_channel, rtsp_direct, channel_online, connection_status, enable_forward, auto_snap_enabled, directory_id, cover_image_path, longitude, latitude, altitude, address, location_source, location_updated_at, heading, ptz_type, direction_type, position_type, room_type, use_type, supply_light_type, resolution, created_at, updated_at) FROM stdin;
 \.
 
 
@@ -5325,7 +5756,7 @@ COPY public.device_detection_region (id, device_id, region_name, region_type, po
 --
 
 COPY public.device_directory (id, name, parent_id, description, sort_order, snap_save_time, record_save_time, created_at, updated_at) FROM stdin;
-1	默认分组	\N	未手动分组的摄像头（含直连与国标）	-1000	1	1	2026-06-30 06:37:32.777755	2026-06-30 06:37:32.777757
+1	默认分组	\N	未手动分组的摄像头（含直连与国标）	-1000	1	1	2026-07-20 02:02:38.950451	2026-07-20 02:02:38.95046
 \.
 
 
@@ -5413,7 +5844,7 @@ COPY public.image (id, filename, original_filename, path, width, height, created
 -- Data for Name: nvr; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.nvr (id, ip, port, username, password, name, model, vendor, serial_number, firmware_version, device_type, mac, scheme, rtsp_url, source, created_at, updated_at) FROM stdin;
+COPY public.nvr (id, ip, port, username, password, name, model, vendor, serial_number, firmware_version, device_type, mac, scheme, rtsp_url, source, rtsp_template, rtsp_port, created_at, updated_at) FROM stdin;
 \.
 
 
@@ -5466,6 +5897,14 @@ COPY public.playback (id, file_path, event_time, device_id, device_name, duratio
 
 
 --
+-- Data for Name: pose_intent_match_record; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.pose_intent_match_record (id, task_id, task_name, device_id, device_name, library_id, library_name, entry_id, entry_name, similarity, intent_event, matched, pose_snapshot, alert_id, correlation_id, task_type, created_at) FROM stdin;
+\.
+
+
+--
 -- Data for Name: pusher; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -5494,6 +5933,22 @@ COPY public.record_space (id, space_name, space_code, bucket_name, save_mode, sa
 --
 
 COPY public.region_model_service (id, region_id, service_name, service_url, service_type, model_id, threshold, request_method, request_headers, request_body_template, timeout, is_enabled, sort_order, created_at, updated_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: scenario_pose_entry; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.scenario_pose_entry (id, library_id, name, source_type, image_path, image_url, keypoints, feature_vector, keypoint_visibility_min, extra_rules, remark, is_enabled, created_at, updated_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: scenario_pose_library; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.scenario_pose_library (id, name, code, scene_category, business_tags, description, similarity_threshold, match_mode, intent_event, intent_object, alert_level, is_enabled, entry_count, created_at, updated_at) FROM stdin;
 \.
 
 
@@ -5730,6 +6185,13 @@ SELECT pg_catalog.setval('public.playback_id_seq', 1, false);
 
 
 --
+-- Name: pose_intent_match_record_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.pose_intent_match_record_id_seq', 1, false);
+
+
+--
 -- Name: pusher_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
@@ -5755,6 +6217,20 @@ SELECT pg_catalog.setval('public.record_space_id_seq', 1, false);
 --
 
 SELECT pg_catalog.setval('public.region_model_service_id_seq', 1, false);
+
+
+--
+-- Name: scenario_pose_entry_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.scenario_pose_entry_id_seq', 1, false);
+
+
+--
+-- Name: scenario_pose_library_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.scenario_pose_library_id_seq', 1, false);
 
 
 --
@@ -6087,6 +6563,14 @@ ALTER TABLE ONLY public.playback
 
 
 --
+-- Name: pose_intent_match_record pose_intent_match_record_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pose_intent_match_record
+    ADD CONSTRAINT pose_intent_match_record_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: pusher pusher_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6140,6 +6624,30 @@ ALTER TABLE ONLY public.record_space
 
 ALTER TABLE ONLY public.region_model_service
     ADD CONSTRAINT region_model_service_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: scenario_pose_entry scenario_pose_entry_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scenario_pose_entry
+    ADD CONSTRAINT scenario_pose_entry_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: scenario_pose_library scenario_pose_library_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scenario_pose_library
+    ADD CONSTRAINT scenario_pose_library_code_key UNIQUE (code);
+
+
+--
+-- Name: scenario_pose_library scenario_pose_library_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scenario_pose_library
+    ADD CONSTRAINT scenario_pose_library_pkey PRIMARY KEY (id);
 
 
 --
@@ -6278,6 +6786,13 @@ CREATE INDEX idx_alert_correlation_id ON public.alert USING btree (correlation_i
 
 
 --
+-- Name: idx_alert_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_alert_time ON public.alert USING btree ("time" DESC);
+
+
+--
 -- Name: idx_face_match_record_correlation_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6296,6 +6811,20 @@ CREATE INDEX idx_plate_match_record_correlation_id ON public.plate_match_record 
 --
 
 CREATE INDEX ix_alert_correlation_id ON public.alert USING btree (correlation_id);
+
+
+--
+-- Name: ix_alert_edge_node_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_alert_edge_node_id ON public.alert USING btree (edge_node_id);
+
+
+--
+-- Name: ix_alert_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_alert_time ON public.alert USING btree ("time");
 
 
 --
@@ -6380,6 +6909,20 @@ CREATE INDEX ix_nvr_ip ON public.nvr USING btree (ip);
 --
 
 CREATE INDEX ix_plate_match_record_correlation_id ON public.plate_match_record USING btree (correlation_id);
+
+
+--
+-- Name: ix_pose_intent_match_record_correlation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_pose_intent_match_record_correlation_id ON public.pose_intent_match_record USING btree (correlation_id);
+
+
+--
+-- Name: ix_pose_intent_match_record_device_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_pose_intent_match_record_device_id ON public.pose_intent_match_record USING btree (device_id);
 
 
 --
@@ -6647,6 +7190,14 @@ ALTER TABLE ONLY public.region_model_service
 
 
 --
+-- Name: scenario_pose_entry scenario_pose_entry_library_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scenario_pose_entry
+    ADD CONSTRAINT scenario_pose_entry_library_id_fkey FOREIGN KEY (library_id) REFERENCES public.scenario_pose_library(id) ON DELETE CASCADE;
+
+
+--
 -- Name: snap_image snap_image_space_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6714,5 +7265,5 @@ ALTER TABLE ONLY public.tracking_target
 -- PostgreSQL database dump complete
 --
 
-\unrestrict wXM60PrMhNIuXawq89Q2VJdEfHBE41nfQov51aS8IymDHEIt1K8QLFPwECJgoGi
+\unrestrict BUJ0b6OsGwccB9i0XKq3q6YZ9R9y7YTnYp39VDN8piFdiSwLhDVCoH5W560gKc7
 

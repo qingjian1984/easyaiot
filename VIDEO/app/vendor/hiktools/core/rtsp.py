@@ -4,9 +4,22 @@ from urllib.parse import quote
 
 from .device_role import ROLE_NVR_DAHUA, ROLE_NVR_HIK, is_nvr_role
 from .models import Credential, Device
-from .vendors import VENDOR_DAHUA, VENDOR_EZVIZ, VENDOR_HIKVISION
+from .vendors import (
+    VENDOR_DAHUA,
+    VENDOR_EZVIZ,
+    VENDOR_HIKVISION,
+    VENDOR_HUAWEI,
+    VENDOR_LANPARTIX,
+    VENDOR_JOVISION,
+    VENDOR_TIANDY,
+    VENDOR_TP_LINK,
+    VENDOR_TVT,
+    VENDOR_UNIVIEW,
+    normalize_vendor,
+)
 
 RTSP_PORT = 554
+JOVISION_RTSP_PORT = 8554
 
 
 def _quote_userinfo(value: str) -> str:
@@ -69,6 +82,94 @@ def build_dahua_rtsp(
     )
 
 
+def build_huawei_rtsp(
+    host: str,
+    *,
+    channel: int = 1,
+    subtype: int = 0,
+    port: int = RTSP_PORT,
+    username: str | None = None,
+    password: str | None = None,
+) -> str:
+    auth = _auth_prefix(username, password)
+    return (
+        f"rtsp://{auth}{host}:{port}/rtsp/streaming"
+        f"?channel={channel}&subtype={subtype}"
+    )
+
+
+def build_tiandy_rtsp(
+    host: str,
+    *,
+    channel: int = 1,
+    subtype: int = 0,
+    port: int = RTSP_PORT,
+    username: str | None = None,
+    password: str | None = None,
+) -> str:
+    stream = 1 if subtype == 0 else 2
+    auth = _auth_prefix(username, password)
+    return f"rtsp://{auth}{host}:{port}/{channel}/{stream}"
+
+
+def build_uniview_rtsp(
+    host: str,
+    *,
+    channel: int = 1,
+    subtype: int = 0,
+    port: int = RTSP_PORT,
+    username: str | None = None,
+    password: str | None = None,
+) -> str:
+    stream = 1 if subtype == 0 else 2
+    auth = _auth_prefix(username, password)
+    return f"rtsp://{auth}{host}:{port}/media/video{stream}"
+
+
+def build_tp_link_rtsp(
+    host: str,
+    *,
+    channel: int = 1,
+    subtype: int = 0,
+    port: int = RTSP_PORT,
+    username: str | None = None,
+    password: str | None = None,
+) -> str:
+    stream = 1 if subtype == 0 else 2
+    auth = _auth_prefix(username, password)
+    if channel > 1:
+        return f"rtsp://{auth}{host}:{port}/stream{stream}&channel={channel}"
+    return f"rtsp://{auth}{host}:{port}/stream{stream}"
+
+
+def build_lanpartix_rtsp(
+    host: str,
+    *,
+    channel: int = 1,
+    subtype: int = 0,
+    port: int = JOVISION_RTSP_PORT,
+    username: str | None = None,
+    password: str | None = None,
+) -> str:
+    profile = 0 if subtype == 0 else 1
+    auth = _auth_prefix(username, password)
+    return f"rtsp://{auth}{host}:{port}/profile{profile}"
+
+
+def build_tvt_rtsp(
+    host: str,
+    *,
+    channel: int = 1,
+    subtype: int = 0,
+    port: int = RTSP_PORT,
+    username: str | None = None,
+    password: str | None = None,
+) -> str:
+    path = "mpeg4" if subtype == 0 else "mpeg4cif"
+    auth = _auth_prefix(username, password)
+    return f"rtsp://{auth}{host}:{port}/{path}"
+
+
 def build_device_rtsp_url(
     device: Device,
     credentials: list[Credential] | tuple[Credential, ...] = (),
@@ -124,8 +225,9 @@ def build_nvr_channel_rtsp(
     )
     user = cred.username if cred else None
     pw = cred.password if cred else None
+    vendor_key = normalize_vendor(nvr_vendor) or nvr_vendor
 
-    if nvr_vendor == VENDOR_HIKVISION:
+    if vendor_key in (VENDOR_HIKVISION, VENDOR_EZVIZ):
         return build_hikvision_rtsp(
             nvr_host,
             channel=channel_id,
@@ -134,8 +236,62 @@ def build_nvr_channel_rtsp(
             username=user,
             password=pw,
         )
-    if nvr_vendor == VENDOR_DAHUA:
+    if vendor_key == VENDOR_DAHUA:
         return build_dahua_rtsp(
+            nvr_host,
+            channel=channel_id,
+            subtype=subtype,
+            port=port,
+            username=user,
+            password=pw,
+        )
+    if vendor_key == VENDOR_HUAWEI:
+        return build_huawei_rtsp(
+            nvr_host,
+            channel=channel_id,
+            subtype=subtype,
+            port=port,
+            username=user,
+            password=pw,
+        )
+    if vendor_key == VENDOR_TIANDY:
+        return build_tiandy_rtsp(
+            nvr_host,
+            channel=channel_id,
+            subtype=subtype,
+            port=port,
+            username=user,
+            password=pw,
+        )
+    if vendor_key == VENDOR_UNIVIEW:
+        return build_uniview_rtsp(
+            nvr_host,
+            channel=channel_id,
+            subtype=subtype,
+            port=port,
+            username=user,
+            password=pw,
+        )
+    if vendor_key == VENDOR_TP_LINK:
+        return build_tp_link_rtsp(
+            nvr_host,
+            channel=channel_id,
+            subtype=subtype,
+            port=port,
+            username=user,
+            password=pw,
+        )
+    if vendor_key in (VENDOR_LANPARTIX, VENDOR_JOVISION):
+        return build_lanpartix_rtsp(
+            nvr_host,
+            channel=channel_id,
+            subtype=subtype,
+            port=port or JOVISION_RTSP_PORT,
+            username=user,
+            password=pw,
+        )
+    if vendor_key == VENDOR_TVT:
+        return build_tvt_rtsp(
             nvr_host,
             channel=channel_id,
             subtype=subtype,
@@ -169,3 +325,40 @@ def build_camera_direct_rtsp(
             camera_ip, channel=1, subtype=subtype, port=port, username=user, password=pw
         )
     return None
+
+
+def get_rtsp_candidate_urls(
+    vendor: str | None,
+    host: str,
+    credentials: list[Credential] | tuple[Credential, ...] = (),
+    *,
+    channel: int = 1,
+    subtype: int = 0,
+    port: int | None = None,
+    username: str | None = None,
+    password: str | None = None,
+) -> list[str]:
+    """返回某通道的 RTSP 候选 URL 列表（用于 DESCRIBE 探测）。"""
+    vendor_key = normalize_vendor(vendor)
+    rtsp_port = port or (JOVISION_RTSP_PORT if vendor_key in (VENDOR_LANPARTIX, VENDOR_JOVISION) else RTSP_PORT)
+    cred = _pick_credential(list(credentials), username=username)
+    user = username or (cred.username if cred else None)
+    pw = password if password is not None else (cred.password if cred else None)
+
+    url = build_nvr_channel_rtsp(
+        vendor_key or vendor or '',
+        host,
+        channel,
+        credentials,
+        preferred=cred,
+        channel_username=user,
+        subtype=subtype,
+        port=rtsp_port,
+    )
+    if url:
+        return [url]
+
+    if user is not None or pw:
+        cred_part = _auth_prefix(user or '', pw or '')
+        return [f"rtsp://{cred_part}{host}:{rtsp_port}/"]
+    return [f"rtsp://{host}:{rtsp_port}/"]

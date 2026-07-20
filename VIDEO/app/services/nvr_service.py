@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 from models import Device, Nvr, db
 
@@ -65,6 +65,7 @@ _VENDOR_LABELS = {
     'huawei': '华为',
     'ezviz': '萤石',
     'xiaomi': '小米',
+    'custom': '自定义',
 }
 
 
@@ -125,6 +126,8 @@ def _nvr_to_dict(nvr: Nvr, *, include_cameras: bool = False) -> dict[str, Any]:
         'mac': nvr.mac,
         'rtsp_url': nvr.rtsp_url,
         'source': nvr.source,
+        'rtsp_template': getattr(nvr, 'rtsp_template', None),
+        'rtsp_port': getattr(nvr, 'rtsp_port', None),
     }
     cameras = list(nvr.cameras or [])
     if include_cameras:
@@ -159,7 +162,7 @@ def _apply_nvr_fields(nvr: Nvr, info: dict[str, Any]) -> None:
     for field in (
         'username', 'password', 'name', 'model', 'vendor',
         'serial_number', 'firmware_version', 'device_type', 'mac',
-        'scheme', 'rtsp_url', 'source',
+        'scheme', 'rtsp_url', 'source', 'rtsp_template',
     ):
         if field not in info:
             continue
@@ -169,6 +172,11 @@ def _apply_nvr_fields(nvr: Nvr, info: dict[str, Any]) -> None:
         if isinstance(val, str) and val.strip() == '':
             continue
         setattr(nvr, field, val)
+    if 'rtsp_port' in info and info.get('rtsp_port') is not None:
+        try:
+            nvr.rtsp_port = int(info.get('rtsp_port'))
+        except (TypeError, ValueError):
+            pass
 
 
 def find_nvr_by_ip_port(ip: str, port: int | None = None) -> Nvr | None:
@@ -321,6 +329,46 @@ def _vendor_to_camera_type(vendor: str | None) -> str:
     return 'custom'
 
 
+def _build_rtsp_from_template(
+    template: str,
+    *,
+    ip: str,
+    port: int,
+    username: str,
+    password: str,
+    channel: int,
+    subtype: int = 0,
+) -> str:
+    """根据自定义模板生成 RTSP URL。
+
+    支持占位符：
+      {username}  用户名
+      {password}  密码
+      {ip}        设备IP
+      {port}      RTSP端口
+      {channel}   通道号
+      {subtype}   码流类型（0主码流 1子码流）
+    """
+    result = template
+    result = result.replace('{username}', quote(username or '', safe=''))
+    result = result.replace('{password}', quote(password or '', safe=''))
+    result = result.replace('{ip}', ip)
+    result = result.replace('{port}', str(port))
+    result = result.replace('{channel}', str(channel))
+    result = result.replace('{subtype}', str(subtype))
+
+    if result.lower().startswith('rtsp://'):
+        return result
+
+    if result.startswith('/'):
+        cred = ''
+        if username or password:
+            cred = f"{quote(username or '', safe='')}:{quote(password or '', safe='')}@"
+        return f"rtsp://{cred}{ip}:{port}{result}"
+
+    return result
+
+
 def _resolve_channel_source(
     nvr: Nvr,
     ch: dict[str, Any],
@@ -328,6 +376,8 @@ def _resolve_channel_source(
     username: str,
     password: str,
     vendor: str | None,
+    rtsp_template: str | None = None,
+    rtsp_port: int | None = None,
 ) -> str | None:
     """按当前 NVR IP 生成经 NVR 取流的 RTSP，避免同步后仍残留旧 NVR 地址。"""
     try:
@@ -338,6 +388,28 @@ def _resolve_channel_source(
         return None
     if channel_id <= 0:
         return None
+
+    rtsp_tmpl = rtsp_template or ch.get('rtsp_template') or getattr(nvr, 'rtsp_template', None)
+    if rtsp_tmpl:
+        rtsp_p = rtsp_port or ch.get('rtsp_port') or getattr(nvr, 'rtsp_port', None) or 554
+        try:
+            rtsp_p = int(rtsp_p)
+        except (TypeError, ValueError):
+            rtsp_p = 554
+        return _build_rtsp_from_template(
+            rtsp_tmpl,
+            ip=nvr.ip or '',
+            port=rtsp_p,
+            username=username or nvr.username or '',
+            password=password or nvr.password or '',
+            channel=channel_id,
+            subtype=0,
+        )
+
+    ch_rtsp = ch.get('rtsp_url') or ch.get('source')
+    if ch_rtsp and isinstance(ch_rtsp, str) and ch_rtsp.strip():
+        return ch_rtsp.strip()
+
     nvr_vendor = (ch.get('vendor') or vendor or nvr.vendor or 'hikvision').strip()
     from app.vendor.hiktools.core.models import Credential
     from app.vendor.hiktools.core.rtsp import build_nvr_channel_rtsp
@@ -365,6 +437,8 @@ def _upsert_nvr_channel_device(
     username: str,
     password: str,
     vendor: str | None,
+    rtsp_template: str | None = None,
+    rtsp_port: int | None = None,
 ) -> bool:
     """将枚举通道直接关联到 NVR（仅写库，不 ONVIF、不连通性探测）。"""
     try:
@@ -376,7 +450,11 @@ def _upsert_nvr_channel_device(
     if channel_id <= 0:
         return False
 
-    source = _resolve_channel_source(nvr, ch, username=username, password=password, vendor=vendor)
+    source = _resolve_channel_source(
+        nvr, ch,
+        username=username, password=password, vendor=vendor,
+        rtsp_template=rtsp_template, rtsp_port=rtsp_port,
+    )
     if not source:
         return False
 
@@ -493,6 +571,8 @@ def bulk_register_nvr_channels(
     username: str = '',
     password: str = '',
     vendor: str | None = None,
+    rtsp_template: str | None = None,
+    rtsp_port: int | None = None,
 ) -> dict[str, Any]:
     """登记/更新 NVR，并按枚举结果批量关联通道（不逐台 ONVIF/连通性探测）。"""
     nvr_id = get_or_create_nvr(nvr_info)
@@ -504,6 +584,13 @@ def bulk_register_nvr_channels(
     user = (username or nvr_info.get('username') or nvr.username or '').strip()
     pwd = password if password is not None else (nvr_info.get('password') or nvr.password or '')
     v = vendor or nvr_info.get('vendor') or nvr.vendor
+    rtsp_tmpl = rtsp_template or nvr_info.get('rtsp_template') or getattr(nvr, 'rtsp_template', None)
+    rtsp_p = rtsp_port or nvr_info.get('rtsp_port') or getattr(nvr, 'rtsp_port', None)
+    if rtsp_p is not None:
+        try:
+            rtsp_p = int(rtsp_p)
+        except (TypeError, ValueError):
+            rtsp_p = None
 
     registered = 0
     skipped = 0
@@ -521,7 +608,11 @@ def bulk_register_nvr_channels(
                 cid = 0
             if cid > 0:
                 expected_channel_ids.add(cid)
-            if _upsert_nvr_channel_device(nvr_id, nvr, ch, username=user, password=pwd, vendor=v):
+            if _upsert_nvr_channel_device(
+                nvr_id, nvr, ch,
+                username=user, password=pwd, vendor=v,
+                rtsp_template=rtsp_tmpl, rtsp_port=rtsp_p,
+            ):
                 registered += 1
             else:
                 skipped += 1
