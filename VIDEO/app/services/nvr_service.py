@@ -271,6 +271,39 @@ def delete_nvr(nvr_id: int) -> None:
     db.session.commit()
 
 
+def batch_delete_nvrs(nvr_ids: list) -> dict:
+    """批量删除 NVR，返回 deleted / failed / errors。"""
+    if not nvr_ids:
+        return {'deleted': 0, 'failed': 0, 'errors': []}
+
+    deleted = 0
+    errors: list[dict] = []
+    seen = set()
+    for raw_id in nvr_ids:
+        try:
+            nvr_id = int(raw_id)
+        except (TypeError, ValueError):
+            errors.append({'nvr_id': raw_id, 'msg': '无效的 NVR ID'})
+            continue
+        if nvr_id in seen:
+            continue
+        seen.add(nvr_id)
+        try:
+            delete_nvr(nvr_id)
+            deleted += 1
+        except ValueError as e:
+            errors.append({'nvr_id': nvr_id, 'msg': str(e)})
+        except Exception as e:
+            logger.error(f'批量删除 NVR {nvr_id} 失败: {e}', exc_info=True)
+            errors.append({'nvr_id': nvr_id, 'msg': str(e)})
+
+    return {
+        'deleted': deleted,
+        'failed': len(errors),
+        'errors': errors,
+    }
+
+
 def upsert_nvr(info: dict[str, Any]) -> dict[str, Any]:
     nvr_id = get_or_create_nvr(info)
     db.session.commit()

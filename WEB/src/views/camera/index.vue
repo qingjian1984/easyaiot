@@ -65,6 +65,17 @@
                   <Button preIcon="ant-design:import-outlined" @click="openBatchLocationModal(true)">
                     导入坐标
                   </Button>
+                  <PopConfirmButton
+                    placement="topRight"
+                    type="primary"
+                    color="error"
+                    preIcon="ant-design:delete-outlined"
+                    :disabled="!checkedKeys.length"
+                    :title="`确定批量删除选中的 ${checkedKeys.length} 项？`"
+                    @confirm="handleBatchDelete"
+                  >
+                    批量删除{{ checkedKeys.length ? ` (${checkedKeys.length})` : '' }}
+                  </PopConfirmButton>
                   <Button type="default" @click="handleToggleViewMode">
                     <template #icon><SwapOutlined /></template>
                     切换视图
@@ -114,6 +125,8 @@
                   ref="deviceMixedCardListRef"
                   :params="{}"
                   :play-button-title="playButtonTitle"
+                  :selected-keys="checkedKeys"
+                  @toggle-select="onSelectDevice"
                   @view="handleCardView"
                   @edit="handleCardEdit"
                   @delete="handleCardDelete"
@@ -141,6 +154,17 @@
                       <Button preIcon="ant-design:import-outlined" @click="openBatchLocationModal(true)">
                         导入坐标
                       </Button>
+                      <PopConfirmButton
+                        placement="topRight"
+                        type="primary"
+                        color="error"
+                        preIcon="ant-design:delete-outlined"
+                        :disabled="!checkedKeys.length"
+                        :title="`确定批量删除选中的 ${checkedKeys.length} 项？`"
+                        @confirm="handleBatchDelete"
+                      >
+                        批量删除{{ checkedKeys.length ? ` (${checkedKeys.length})` : '' }}
+                      </PopConfirmButton>
                       <Button type="default" @click="handleToggleViewMode">
                         <template #icon><SwapOutlined /></template>
                         切换视图
@@ -205,6 +229,8 @@ import DeviceCreate from './components/DeviceCreate/index.vue';
 import {
   deleteDevice,
   deleteNvr,
+  batchDeleteDevices,
+  batchDeleteNvrs,
   DeviceInfo,
   getDeviceList,
   getStreamStatus,
@@ -212,7 +238,7 @@ import {
   StreamStatusResponse,
 } from '@/api/device/camera';
 import DialogPlayer from "@/components/VideoPlayer/DialogPlayer.vue";
-import { Button } from '@/components/Button';
+import { Button, PopConfirmButton } from '@/components/Button';
 import SplitScreenMonitor from "./components/SplitScreenMonitor/index.vue";
 import CameraMapDistribution from './components/CameraMapDistribution/index.vue';
 import StorageSpace from "./components/StorageSpace/index.vue";
@@ -290,6 +316,39 @@ const state = reactive({
 
 // 视图模式（默认卡片模式）
 const viewMode = ref<'table' | 'card'>('card');
+
+/** 表格多选 */
+const checkedKeys = ref<Array<string | number>>([]);
+const selectedRecordMap = ref<Map<string | number, DeviceInfo>>(new Map());
+
+function clearDeviceSelection() {
+  checkedKeys.value = [];
+  selectedRecordMap.value = new Map();
+}
+
+function onSelectDevice(record: DeviceInfo, selected: boolean) {
+  const id = record.id;
+  if (selected) {
+    if (!checkedKeys.value.includes(id)) {
+      checkedKeys.value = [...checkedKeys.value, id];
+    }
+    selectedRecordMap.value.set(id, record);
+  } else {
+    checkedKeys.value = checkedKeys.value.filter((key) => key !== id);
+    selectedRecordMap.value.delete(id);
+  }
+}
+
+function onSelectAllDevices(selected: boolean, _rows: DeviceInfo[], changeRows: DeviceInfo[]) {
+  const changeIds = changeRows.map((item) => item.id);
+  if (selected) {
+    checkedKeys.value = [...new Set([...checkedKeys.value, ...changeIds])];
+    changeRows.forEach((row) => selectedRecordMap.value.set(row.id, row));
+  } else {
+    checkedKeys.value = checkedKeys.value.filter((id) => !changeIds.includes(id));
+    changeIds.forEach((id) => selectedRecordMap.value.delete(id));
+  }
+}
 
 /** 播放时优先 AI 流，无 AI 则回退原始流 */
 const enableAi = ref(true);
@@ -673,6 +732,12 @@ const [registerTable, {reload}] = useTable({
     search: params.search ?? params.deviceName,
     deviceName: params.deviceName ?? params.search,
   }),
+  rowSelection: {
+    type: 'checkbox',
+    selectedRowKeys: checkedKeys,
+    onSelect: onSelectDevice,
+    onSelectAll: onSelectAllDevices,
+  },
   // 添加成功回调，获取设备流状态
   onSuccess: (data) => {
     if (data && data.data) {
@@ -809,7 +874,6 @@ const getTableActions = (record) => {
     actions.unshift({
       icon: 'ant-design:environment-outlined',
       tooltip: '设置坐标',
-      label: '坐标',
       onClick: () => openDeviceLocationDrawer(record),
     });
   }
@@ -976,6 +1040,7 @@ function handleCardSetLocation(record: DeviceInfo) {
 }
 
 function handleSuccess() {
+  clearDeviceSelection();
   if (viewMode.value === 'table') {
     reload();
   } else if (deviceMixedCardListRef.value) {
@@ -997,6 +1062,76 @@ const handleDelete = async (record) => {
     createMessage.error('删除失败');
   }
 };
+
+function resolveNvrIdFromRecord(record: DeviceInfo): number | null {
+  const num = (record as { nvr_id_num?: number }).nvr_id_num;
+  if (num != null && Number.isFinite(Number(num))) return Number(num);
+  const fromId = String(record.id || '').replace(/^nvr_/, '');
+  const parsed = Number(fromId);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function handleBatchDelete() {
+  if (!checkedKeys.value.length) return;
+
+  const records = checkedKeys.value
+    .map((id) => selectedRecordMap.value.get(id))
+    .filter(Boolean) as DeviceInfo[];
+
+  if (!records.length) {
+    createMessage.warning('请重新勾选要删除的设备');
+    clearDeviceSelection();
+    return;
+  }
+
+  const cameraIds: string[] = [];
+  const nvrIds: number[] = [];
+  const gbSipIds: string[] = [];
+
+  for (const record of records) {
+    if (isNvrListRow(record)) {
+      const nvrId = resolveNvrIdFromRecord(record);
+      if (nvrId != null) nvrIds.push(nvrId);
+      continue;
+    }
+    if (isGb28181SipListRow(record)) {
+      const sipId = gbSipIdFromRecord(record);
+      if (sipId) gbSipIds.push(sipId);
+      continue;
+    }
+    if (record.id) cameraIds.push(String(record.id));
+  }
+
+  try {
+    const tasks: Promise<unknown>[] = [];
+    if (cameraIds.length) {
+      tasks.push(batchDeleteDevices(cameraIds));
+    }
+    if (nvrIds.length) {
+      tasks.push(batchDeleteNvrs([...new Set(nvrIds)]));
+    }
+    if (gbSipIds.length) {
+      tasks.push(
+        Promise.all([...new Set(gbSipIds)].map((sipId) => deleteGb28181SipDevice(sipId))),
+      );
+    }
+    await Promise.all(tasks);
+
+    if (nvrDetailVisible.value && nvrIds.includes(nvrDetailId.value)) {
+      closeNvrDetail();
+    }
+    if (gbDetailVisible.value && gbSipIds.includes(gbDetailSipId.value)) {
+      closeGbDetail();
+    }
+
+    createMessage.success('批量删除成功');
+    handleSuccess();
+  } catch (error) {
+    console.error('批量删除失败', error);
+    createMessage.error('批量删除失败');
+    handleSuccess();
+  }
+}
 
 // 卡片视图事件处理
 const handleCardView = (record) => {

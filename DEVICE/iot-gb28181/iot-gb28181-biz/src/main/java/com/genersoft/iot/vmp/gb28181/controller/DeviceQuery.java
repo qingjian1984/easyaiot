@@ -477,7 +477,8 @@ public class DeviceQuery {
 			// 每次随机生成 10 位数字后缀，保证 20 位国标 ID 且每次请求都随机
 			String suffix = randomDigits(rng, 10);
 			String deviceId = domainPrefix + suffix;
-			String password = randomAlphanumeric(rng, 32);
+			// 多数摄像头国标 SIP 认证密码最长 16 位，超过设备侧无法录入
+			String password = randomAlphanumeric(rng, 16);
 
 			out.append("========== 设备组 #").append(i).append(" ==========\n");
 			out.append("传输协议：").append(transport).append("\n");

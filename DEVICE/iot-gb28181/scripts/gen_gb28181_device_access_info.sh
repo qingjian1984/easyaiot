@@ -100,7 +100,8 @@ main() {
     # 设备国标 ID：前缀（14 位）+ 6 位随机数字，每次运行随机
     rand_suffix=$(rand_digits 6)
     device_id="${DEVICE_ID_PREFIX}${rand_suffix}"
-    password=$(rand_str 32)
+    # 多数摄像头国标 SIP 认证密码最长 16 位
+    password=$(rand_str 16)
     print_one_group "$i" "$device_id" "$password" "$sip_addr_1" "$sip_addr_2"
   done
 

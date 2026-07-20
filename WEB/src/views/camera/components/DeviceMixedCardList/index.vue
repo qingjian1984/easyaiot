@@ -26,7 +26,15 @@
             <ListItem
               v-if="item.type === 'nvr'"
               class="product-item normal nvr-list-item"
+              :class="{ 'is-selected': isCardSelected(item.key) }"
             >
+              <div
+                class="card-checkbox"
+                :class="{ checked: isCardSelected(item.key) }"
+                @click.stop="toggleCardSelect(item)"
+              >
+                <span v-if="isCardSelected(item.key)" class="checkbox-inner">✓</span>
+              </div>
               <NvrDeviceCard
                 :item="item.nvrItem"
                 @open="handleNvrCardOpen"
@@ -37,8 +45,18 @@
             </ListItem>
             <ListItem
               v-else-if="item.type === 'gb_sip'"
-              :class="item.gbItem.onLine ? 'product-item normal' : 'product-item error'"
+              :class="[
+                item.gbItem.onLine ? 'product-item normal' : 'product-item error',
+                { 'is-selected': isCardSelected(item.key) },
+              ]"
             >
+              <div
+                class="card-checkbox"
+                :class="{ checked: isCardSelected(item.key) }"
+                @click.stop="toggleCardSelect(item)"
+              >
+                <span v-if="isCardSelected(item.key)" class="checkbox-inner">✓</span>
+              </div>
               <Gb28181DeviceCard
                 :item="item.gbItem"
                 @open="handleGbCardOpen"
@@ -55,8 +73,16 @@
                 isDjiLiveDevice(item.device) ? 'camera-item--dji' : '',
                 getDjiDeviceKind(item.device) === 'dock' ? 'camera-item--dji-dock' : '',
                 getDjiDeviceKind(item.device) === 'drone' ? 'camera-item--dji-drone' : '',
+                { 'is-selected': isCardSelected(item.key) },
               ]"
             >
+              <div
+                class="card-checkbox"
+                :class="{ checked: isCardSelected(item.key) }"
+                @click.stop="toggleCardSelect(item)"
+              >
+                <span v-if="isCardSelected(item.key)" class="checkbox-inner">✓</span>
+              </div>
               <div class="camera-info">
                 <div class="status">{{ item.device.online ? '在线' : '离线' }}</div>
                 <div v-if="isDjiLiveDevice(item.device)" class="device-kind-badge">
@@ -215,11 +241,15 @@ import { hasPlayableStream } from '@/views/camera/utils/devicePlay';
 import { canSetDeviceLocation } from '@/views/camera/utils/deviceLocation';
 import { queryAllVideoList } from '@/api/device/gb28181';
 import {
+  fetchNvrListBrief,
+  nvrToTableRow,
+  type NvrCardItem,
+} from '@/views/camera/utils/nvrDeviceGroup';
+import {
   buildMergedCardRows,
   type GbSipDeviceSummary,
+  wvpDeviceToTableRow,
 } from '@/views/camera/utils/gb28181DeviceGroup';
-import { fetchNvrListBrief } from '@/views/camera/utils/nvrDeviceGroup';
-import type { NvrCardItem } from '@/views/camera/utils/nvrDeviceGroup';
 import Gb28181DeviceCard, {
   type Gb28181CardItem,
 } from '@/views/camera/components/Gb28181DeviceCard/index.vue';
@@ -230,6 +260,10 @@ const ListItem = List.Item;
 const props = defineProps({
   params: propTypes.object.def({}),
   playButtonTitle: propTypes.string.def('播放视频流'),
+  selectedKeys: {
+    type: Array as () => Array<string | number>,
+    default: () => [],
+  },
 });
 
 const emit = defineEmits([
@@ -248,6 +282,7 @@ const emit = defineEmits([
   'viewNvrDevice',
   'editNvrDevice',
   'deleteNvrDevice',
+  'toggleSelect',
 ]);
 
 const { createMessage } = useMessage();
@@ -387,6 +422,41 @@ function getDjiDeviceKind(device: DeviceInfo): 'dock' | 'drone' {
   if (explicit === 'drone' || explicit === 'dock') return explicit;
   const text = [(device as any)?.model, (device as any)?.name].filter(Boolean).join(' ');
   return /drone|无人机|Drone\s*Live/i.test(text) ? 'drone' : 'dock';
+}
+
+function isCardSelected(key: string) {
+  return props.selectedKeys.includes(key);
+}
+
+function cardRowToRecord(row: CardRow): DeviceInfo {
+  if (row.type === 'direct') return row.device;
+  if (row.type === 'nvr') {
+    if (row.nvrItem._nvr) return nvrToTableRow(row.nvrItem._nvr);
+    return {
+      id: row.key,
+      name: row.nvrItem.name,
+      device_kind: 'nvr',
+      nvr_id_num: row.nvrItem.nvrId,
+      ip: row.nvrItem.ip,
+      port: row.nvrItem.port,
+      online: true,
+      _isNvr: true,
+    } as DeviceInfo;
+  }
+  if (row.gbItem._wvpRaw) return wvpDeviceToTableRow(row.gbItem._wvpRaw);
+  return {
+    id: row.key,
+    name: row.gbItem.name,
+    device_kind: 'gb28181_sip',
+    sip_device_id: row.gbItem.deviceIdentification,
+    deviceIdentification: row.gbItem.deviceIdentification,
+    online: row.gbItem.onLine,
+    _isGbSip: true,
+  } as DeviceInfo;
+}
+
+function toggleCardSelect(row: CardRow) {
+  emit('toggleSelect', cardRowToRecord(row), !isCardSelected(row.key));
 }
 
 onMounted(() => {
@@ -560,6 +630,42 @@ defineExpose({
 
   :deep(.ant-list-item) {
     margin: 6px;
+  }
+
+  :deep(.card-checkbox) {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 5;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d9d9d9;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+
+    &.checked {
+      border-color: #266cfb;
+      background: #266cfb;
+      color: #fff;
+    }
+
+    .checkbox-inner {
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 700;
+    }
+  }
+
+  :deep(.camera-item),
+  :deep(.product-item) {
+    &.is-selected {
+      box-shadow: 0 0 0 2px #266cfb, 0 0 4px #00000026;
+    }
   }
 
   /* 直连设备卡片（与 camera/VideoCardList 一致） */

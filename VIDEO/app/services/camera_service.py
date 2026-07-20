@@ -1788,6 +1788,35 @@ def delete_camera(id: str):
         db.session.rollback()
         raise RuntimeError(f'删除设备失败: {str(e)}')
 
+
+def batch_delete_cameras(device_ids: list) -> dict:
+    """批量删除摄像头设备，返回 deleted / failed / errors。"""
+    if not device_ids:
+        return {'deleted': 0, 'failed': 0, 'errors': []}
+
+    deleted = 0
+    errors: list[dict] = []
+    seen = set()
+    for raw_id in device_ids:
+        device_id = str(raw_id or '').strip()
+        if not device_id or device_id in seen:
+            continue
+        seen.add(device_id)
+        try:
+            delete_camera(device_id)
+            deleted += 1
+        except ValueError as e:
+            errors.append({'device_id': device_id, 'msg': str(e)})
+        except Exception as e:
+            logger.error(f'批量删除设备 {device_id} 失败: {e}', exc_info=True)
+            errors.append({'device_id': device_id, 'msg': str(e)})
+
+    return {
+        'deleted': deleted,
+        'failed': len(errors),
+        'errors': errors,
+    }
+
 def get_snapshot_uri(ip: str, port: int, username: str, password: str) -> str:
     """
     获取ONVIF设备的快照URI

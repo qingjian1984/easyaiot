@@ -29,6 +29,7 @@ from urllib.parse import quote, urlparse, parse_qs, urlencode, urlunparse
 from app.services.camera_service import *
 from app.services.camera_service import (
     register_camera, register_camera_by_onvif, get_camera_info, update_camera, delete_camera,
+    batch_delete_cameras,
     search_camera,
     get_snapshot_uri, refresh_camera, _to_dict
 )
@@ -1056,6 +1057,36 @@ def delete_device(device_id):
         return jsonify({'code': 500, 'msg': str(e)}), 500
 
 
+@camera_bp.route('/devices/batch-delete', methods=['POST'])
+def batch_delete_devices():
+    """批量删除摄像头设备。"""
+    try:
+        data = request.get_json(silent=True) or {}
+        device_ids = data.get('device_ids') or data.get('deviceIds') or []
+        if not isinstance(device_ids, list) or not device_ids:
+            return jsonify({'code': 400, 'msg': 'device_ids 不能为空'}), 400
+
+        for raw_id in device_ids:
+            device_id = str(raw_id or '').strip()
+            if not device_id:
+                continue
+            if device_id in ffmpeg_processes:
+                try:
+                    stop_ffmpeg_stream(device_id)
+                except Exception as e:
+                    logger.warning(f'批量删除前停止推流失败 {device_id}: {e}')
+
+        result = batch_delete_cameras(device_ids)
+        return jsonify({
+            'code': 0,
+            'msg': '批量删除完成',
+            'data': result,
+        })
+    except Exception as e:
+        logger.error(f'批量删除设备失败: {str(e)}', exc_info=True)
+        return jsonify({'code': 500, 'msg': f'批量删除失败: {str(e)}'}), 500
+
+
 # ------------------------- PTZ控制接口 -------------------------
 @camera_bp.route('/device/<device_id>/ptz', methods=['POST'])
 def control_ptz(device_id: str):
@@ -1849,6 +1880,28 @@ def delete_nvr_device(nvr_id: int):
     except Exception as e:
         logger.error(f'删除 NVR 失败: {e}', exc_info=True)
         return jsonify({'code': 500, 'msg': f'删除 NVR 失败: {e}'}), 500
+
+
+@camera_bp.route('/nvr/batch-delete', methods=['POST'])
+def batch_delete_nvr_devices():
+    """批量删除 NVR 记录。"""
+    try:
+        from app.services.nvr_service import batch_delete_nvrs
+
+        data = request.get_json(silent=True) or {}
+        nvr_ids = data.get('nvr_ids') or data.get('nvrIds') or []
+        if not isinstance(nvr_ids, list) or not nvr_ids:
+            return jsonify({'code': 400, 'msg': 'nvr_ids 不能为空'}), 400
+
+        result = batch_delete_nvrs(nvr_ids)
+        return jsonify({
+            'code': 0,
+            'msg': '批量删除完成',
+            'data': result,
+        })
+    except Exception as e:
+        logger.error(f'批量删除 NVR 失败: {e}', exc_info=True)
+        return jsonify({'code': 500, 'msg': f'批量删除 NVR 失败: {e}'}), 500
 
 
 # ------------------------- 网段扫描（hiktools） -------------------------

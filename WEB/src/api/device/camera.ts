@@ -288,6 +288,12 @@ export const deleteNvr = (nvrId: number) => {
   return commonApi('delete', `${CAMERA_PREFIX}/nvr/${nvrId}`);
 };
 
+export const batchDeleteNvrs = (nvrIds: number[]) => {
+  return commonApi('post', `${CAMERA_PREFIX}/nvr/batch-delete`, {
+    nvr_ids: nvrIds,
+  });
+};
+
 /**
  * 通过ONVIF搜索并自动注册摄像头
  * @param data 包含IP、端口、密码的对象
@@ -483,6 +489,12 @@ export const getDeviceTrackPoints = (params: {
 
 export const deleteDevice = (device_id: string) => {
   return commonApi('delete', `${CAMERA_PREFIX}/device/${device_id}`);
+};
+
+export const batchDeleteDevices = (deviceIds: string[]) => {
+  return commonApi('post', `${CAMERA_PREFIX}/devices/batch-delete`, {
+    device_ids: deviceIds,
+  });
 };
 
 export const getDeviceList = (params: {
