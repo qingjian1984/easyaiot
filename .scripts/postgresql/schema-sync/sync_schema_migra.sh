@@ -63,8 +63,8 @@ else
 fi
 # 产物按【模块(库名)/日期】分层归档：差异 schema_diffs/<db>/<YYYY-MM-DD>/，备份 backups/<db>/<YYYY-MM-DD>/。
 # 每次运行新建当日子目录(归当前用户所有)，不再在 schema-sync/ 下散落 *.rootbak.<时间戳> 这类目录。
-DIFF_DIR="${SCRIPT_DIR}/schema_diffs"
-BACKUP_DIR="${SCRIPT_DIR}/backups"
+DIFF_DIR="${DIFF_DIR:-${SCRIPT_DIR}/schema_diffs}"
+BACKUP_DIR="${BACKUP_DIR:-${SCRIPT_DIR}/backups}"
 
 print_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }

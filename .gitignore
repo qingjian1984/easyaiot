@@ -128,6 +128,9 @@ APP/src/types/*
 .pnpm-store/
 **/.pytest_cache/
 
+# CodeGraph 本机索引数据（仅保留忽略规则文件）
+.codegraph/
+
 # Claude Code 个人配置与本地钩子（仅本机，不随仓库分发）
 .claude/settings.local.json
 .claude/changed-files-hook.sh
@@ -137,6 +140,7 @@ APP/src/types/*
 .scripts/postgresql/schema-sync/schema_diffs/
 
 venv
+.venv/
 *.pyc
 DEVICE/iot-gb28181/iot-gb28181-biz/snap
 VIDEO/data/models

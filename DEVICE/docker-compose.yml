@@ -159,6 +159,7 @@ services:
       # - SW_AGENT_COLLECTOR_BACKEND_SERVICES=[YOUR_SKYWALKING_ADDR]
     volumes:
       - ../.build-cache/device/logs:/root/logs/
+      - /data/yolo_dataset:/data/yolo_dataset:ro
       # - /data/skywalking/skywalking-agent:/data/skywalking/skywalking-agent
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:48087/actuator/health"]
