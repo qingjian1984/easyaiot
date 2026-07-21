@@ -72,9 +72,17 @@ public class DatasetAnnotationController {
     @Operation(summary = "导入 YOLO 数据集（仅 .txt）")
     public CommonResult<DatasetImageImportTaskRespVO> importYoloPath(
             @PathVariable("datasetId") Long datasetId,
-            @Valid @RequestBody DatasetAnnotationPathImportReqVO reqVO) {
-        String taskId = datasetImageImportTaskService.submitYoloPathImport(datasetId, reqVO.getPath());
+            @Valid @RequestBody DatasetYoloImportReqVO reqVO) {
+        String taskId = datasetImageImportTaskService.submitYoloPathImport(datasetId, reqVO);
         return success(buildProcessingTask(taskId));
+    }
+
+    @PostMapping("/{datasetId}/annotation/import-yolo-path/preflight")
+    @Operation(summary = "预检服务端本地 YOLO 数据集")
+    public CommonResult<DatasetYoloPreflightRespVO> preflightYoloPath(
+            @PathVariable("datasetId") Long datasetId,
+            @Valid @RequestBody DatasetAnnotationPathImportReqVO reqVO) {
+        return success(datasetAnnotationService.preflightYoloPath(datasetId, reqVO.getPath()));
     }
 
     @PostMapping("/{datasetId}/annotation/import-coco-path")

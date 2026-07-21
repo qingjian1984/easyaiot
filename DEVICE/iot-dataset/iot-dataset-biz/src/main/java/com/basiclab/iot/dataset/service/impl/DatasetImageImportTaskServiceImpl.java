@@ -4,6 +4,7 @@ import com.basiclab.iot.dataset.domain.dataset.vo.DatasetAnnotationCocoImportReq
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetAnnotationImportResultVO;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetImageImportTaskRespVO;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetImageUploadRespVO;
+import com.basiclab.iot.dataset.domain.dataset.vo.DatasetYoloImportReqVO;
 import com.basiclab.iot.dataset.service.DatasetAnnotationService;
 import com.basiclab.iot.dataset.service.DatasetImageImportTaskService;
 import com.basiclab.iot.dataset.service.DatasetImageService;
@@ -21,6 +22,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
+import java.util.function.Function;
 
 import static com.basiclab.iot.common.exception.util.ServiceExceptionUtil.exception;
 import static com.basiclab.iot.dataset.enums.ErrorCodeConstants.FILE_UPLOAD_FAILED;
@@ -41,6 +43,7 @@ public class DatasetImageImportTaskServiceImpl implements DatasetImageImportTask
     private DatasetAnnotationService datasetAnnotationService;
 
     private final Map<String, ImportTaskState> tasks = new ConcurrentHashMap<>();
+    private final Map<Long, String> activeDatasetPathTasks = new ConcurrentHashMap<>();
 
     @Override
     public String submitZipImport(Path zipPath, Long datasetId, Runnable onFinished) {
@@ -57,27 +60,47 @@ public class DatasetImageImportTaskServiceImpl implements DatasetImageImportTask
     }
 
     @Override
-    public String submitYoloPathImport(Long datasetId, String path) {
-        ImportTaskState state = createTask();
-        uploadExecutor.execute(() -> runAnnotationImport(state, () ->
-                datasetAnnotationService.importYoloPath(datasetId, path, state.asCancelChecker(), state::setProcessedCount)));
-        return state.taskId;
+    public String submitYoloPathImport(Long datasetId, DatasetYoloImportReqVO reqVO) {
+        return submitExclusivePathImport(datasetId, state ->
+                datasetAnnotationService.importYoloPath(datasetId, reqVO, state.asCancelChecker(), state::setProgress));
     }
 
     @Override
     public String submitImageFolderPathImport(Long datasetId, String path) {
-        ImportTaskState state = createTask();
-        uploadExecutor.execute(() -> runAnnotationImport(state, () ->
-                datasetAnnotationService.importImageFolderPath(datasetId, path, state.asCancelChecker(), state::setProcessedCount)));
-        return state.taskId;
+        return submitExclusivePathImport(datasetId, state ->
+                datasetAnnotationService.importImageFolderPath(datasetId, path, state.asCancelChecker(), state::setProgress));
     }
 
     @Override
     public String submitCocoPathImport(Long datasetId, DatasetAnnotationCocoImportReqVO reqVO) {
+        return submitExclusivePathImport(datasetId, state ->
+                datasetAnnotationService.importCocoPath(datasetId, reqVO, state.asCancelChecker(), state::setProgress));
+    }
+
+    private String submitExclusivePathImport(
+            Long datasetId,
+            Function<ImportTaskState, DatasetAnnotationImportResultVO> importer) {
         ImportTaskState state = createTask();
-        uploadExecutor.execute(() -> runAnnotationImport(state, () ->
-                datasetAnnotationService.importCocoPath(datasetId, reqVO, state.asCancelChecker(), state::setProcessedCount)));
-        return state.taskId;
+        String activeTaskId = activeDatasetPathTasks.putIfAbsent(datasetId, state.taskId);
+        if (activeTaskId != null) {
+            tasks.remove(state.taskId);
+            throw exception(FILE_UPLOAD_FAILED,
+                    "该数据集已有路径导入任务正在执行，taskId=" + activeTaskId);
+        }
+        try {
+            uploadExecutor.execute(() -> {
+                try {
+                    runAnnotationImport(state, () -> importer.apply(state));
+                } finally {
+                    activeDatasetPathTasks.remove(datasetId, state.taskId);
+                }
+            });
+            return state.taskId;
+        } catch (RuntimeException e) {
+            activeDatasetPathTasks.remove(datasetId, state.taskId);
+            tasks.remove(state.taskId);
+            throw e;
+        }
     }
 
     private ImportTaskState createTask() {
@@ -141,6 +164,7 @@ public class DatasetImageImportTaskServiceImpl implements DatasetImageImportTask
         resp.setTaskId(state.taskId);
         resp.setStatus(state.status);
         resp.setProcessedCount(state.processedCount);
+        resp.setTotalCount(state.totalCount);
         resp.setResult(state.result);
         resp.setAnnotationResult(state.annotationResult);
         resp.setErrorMessage(state.errorMessage);
@@ -161,12 +185,18 @@ public class DatasetImageImportTaskServiceImpl implements DatasetImageImportTask
         private volatile String status;
         private volatile boolean cancelled;
         private volatile int processedCount;
+        private volatile int totalCount;
         private volatile DatasetImageUploadRespVO result;
         private volatile DatasetAnnotationImportResultVO annotationResult;
         private volatile String errorMessage;
 
         void setProcessedCount(int count) {
             this.processedCount = count;
+        }
+
+        void setProgress(int processedCount, int totalCount) {
+            this.processedCount = processedCount;
+            this.totalCount = totalCount;
         }
 
         ImportCancelChecker asCancelChecker() {

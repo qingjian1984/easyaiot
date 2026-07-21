@@ -3,6 +3,7 @@ package com.basiclab.iot.dataset.service;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetAnnotationCocoImportReqVO;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetAnnotationImportResultVO;
 import com.basiclab.iot.dataset.domain.dataset.vo.DatasetImageImportTaskRespVO;
+import com.basiclab.iot.dataset.domain.dataset.vo.DatasetYoloImportReqVO;
 
 import java.nio.file.Path;
 import java.util.function.Supplier;
@@ -34,7 +35,7 @@ public interface DatasetImageImportTaskService {
 
     String submitAnnotationImport(Supplier<DatasetAnnotationImportResultVO> importer);
 
-    String submitYoloPathImport(Long datasetId, String path);
+    String submitYoloPathImport(Long datasetId, DatasetYoloImportReqVO reqVO);
 
     String submitImageFolderPathImport(Long datasetId, String path);
 
