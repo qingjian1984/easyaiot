@@ -7,6 +7,7 @@ import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
 import java.io.IOException;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 /**
  * 图像数据集标注 — 导入/导出（对齐 auto-labeling V9.13.0）
@@ -21,21 +22,23 @@ public interface DatasetAnnotationService {
 
     DatasetAnnotationImportResultVO importImageFolderPath(Long datasetId, String path);
 
-    DatasetAnnotationImportResultVO importYoloPath(Long datasetId, String path);
+    DatasetYoloPreflightRespVO preflightYoloPath(Long datasetId, String path);
+
+    DatasetAnnotationImportResultVO importYoloPath(Long datasetId, @Valid DatasetYoloImportReqVO reqVO);
 
     DatasetAnnotationImportResultVO importCocoPath(Long datasetId, @Valid DatasetAnnotationCocoImportReqVO reqVO);
 
     DatasetAnnotationImportResultVO importImageFolderPath(Long datasetId, String path,
                                                           ImportCancelChecker cancelChecker,
-                                                          java.util.function.IntConsumer progressCallback);
+                                                          BiConsumer<Integer, Integer> progressCallback);
 
-    DatasetAnnotationImportResultVO importYoloPath(Long datasetId, String path,
+    DatasetAnnotationImportResultVO importYoloPath(Long datasetId, @Valid DatasetYoloImportReqVO reqVO,
                                                    ImportCancelChecker cancelChecker,
-                                                   java.util.function.IntConsumer progressCallback);
+                                                   BiConsumer<Integer, Integer> progressCallback);
 
     DatasetAnnotationImportResultVO importCocoPath(Long datasetId, @Valid DatasetAnnotationCocoImportReqVO reqVO,
                                                    ImportCancelChecker cancelChecker,
-                                                   java.util.function.IntConsumer progressCallback);
+                                                   BiConsumer<Integer, Integer> progressCallback);
 
     List<DatasetRespVO> listCloudDatasets();
 

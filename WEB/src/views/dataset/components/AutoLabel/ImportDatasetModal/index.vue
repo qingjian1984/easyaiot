@@ -111,7 +111,7 @@ uploads/
               v-if="loading && tabActive === 'path'"
               class="upload-progress-wrap"
               :percent="importProgressPercent"
-              detail="正在导入 ImageFolder，请勿关闭页面…"
+              :detail="formatTaskImportDetail('正在导入 ImageFolder')"
               :loading="importCancelling"
               cancel-text="取消导入"
               @cancel="cancelImport"
@@ -129,33 +129,133 @@ uploads/
           <div class="upload-area path-area">
             <pre class="dataset-tree-example">/data/yolo_dataset/
 ├── data.yaml
-├── classes.txt
-├── train/
-│   ├── images/
-│   │   └── img001.jpg
-│   └── labels/
-│       └── img001.txt
-├── valid/ ...
-└── test/ ...</pre>
+├── images/
+│   ├── train/ ...
+│   ├── valid/ ...
+│   └── test/ ...
+└── labels/
+    ├── train/ ...
+    ├── valid/ ...
+    └── test/ ...</pre>
             <div class="form-group">
               <label>YOLO 数据集根目录（服务端绝对路径）</label>
               <Input v-model:value="yoloPath" placeholder="/data/yolo_dataset" :disabled="loading" />
               <small class="path-hint">路径需在 iot-dataset 服务所在机器上可访问；大批量导入可能需要数分钟，请耐心等待。</small>
             </div>
+
+            <div v-if="yoloPreflight" class="yolo-preflight">
+              <div class="yolo-preflight-summary">
+                <div class="summary-item">
+                  <span>图片</span>
+                  <strong>{{ yoloPreflight.imageCount }}</strong>
+                </div>
+                <div class="summary-item">
+                  <span>匹配标注</span>
+                  <strong>{{ yoloPreflight.matchedLabelCount }}</strong>
+                </div>
+                <div class="summary-item" :class="{ warning: yoloPreflight.missingLabelCount > 0 }">
+                  <span>缺少标注</span>
+                  <strong>{{ yoloPreflight.missingLabelCount }}</strong>
+                </div>
+                <div class="summary-item" :class="{ error: yoloPreflight.invalidLabelCount > 0 }">
+                  <span>无效标注</span>
+                  <strong>{{ yoloPreflight.invalidLabelCount }}</strong>
+                </div>
+              </div>
+
+              <div v-if="yoloPreflight.splits.length" class="yolo-splits">
+                <span class="preflight-label">数据划分</span>
+                <Tag v-for="split in yoloPreflight.splits" :key="split.split">
+                  {{ formatYoloSplit(split.split) }} {{ split.imageCount }}
+                </Tag>
+              </div>
+
+              <Alert
+                v-if="yoloPreflightBlockReason"
+                type="error"
+                show-icon
+                :message="yoloPreflightBlockReason"
+                class="yolo-preflight-alert"
+              />
+              <Alert
+                v-if="yoloPreflight.warnings.length"
+                type="warning"
+                show-icon
+                message="预检提示"
+                :description="yoloPreflight.warnings.join('；')"
+                class="yolo-preflight-alert"
+              />
+
+              <div class="yolo-class-section">
+                <div class="preflight-section-title">类别映射</div>
+                <div
+                  v-for="classInfo in yoloPreflight.classes"
+                  :key="classInfo.classId"
+                  class="yolo-class-row"
+                >
+                  <div class="yolo-class-source">
+                    <span class="class-id">ID {{ classInfo.classId }}</span>
+                    <span class="detected-name">{{ classInfo.detectedName || '未命名' }}</span>
+                    <Tag v-if="classInfo.manualNameRequired" color="warning">需手动填写</Tag>
+                    <Tag v-else-if="classInfo.existingTag" color="success">复用已有标签</Tag>
+                  </div>
+                  <div class="yolo-class-target">
+                    <Input
+                      v-model:value="yoloClassMapping[classInfo.classId]"
+                      :placeholder="classInfo.suggestedName ? `建议：${classInfo.suggestedName}` : '填写标签名称'"
+                      :disabled="loading"
+                      :status="getYoloClassError(classInfo.classId) ? 'error' : undefined"
+                    />
+                    <small v-if="getYoloClassError(classInfo.classId)" class="field-error">
+                      {{ getYoloClassError(classInfo.classId) }}
+                    </small>
+                  </div>
+                </div>
+              </div>
+
+              <div class="yolo-import-options">
+                <div class="form-group compact-form-group">
+                  <label>同名图片处理</label>
+                  <Segmented v-model:value="yoloImportMode" :options="yoloImportModeOptions" :disabled="loading" />
+                  <small>保留原目录中的 train / valid / test 划分。</small>
+                </div>
+                <Checkbox
+                  v-if="yoloPreflight.missingLabelCount > 0"
+                  v-model:checked="yoloAllowMissingLabels"
+                  :disabled="loading"
+                >
+                  仍导入 {{ yoloPreflight.missingLabelCount }} 张缺少标注的图片
+                </Checkbox>
+                <Checkbox v-model:checked="yoloMappingConfirmed" :disabled="loading">
+                  已检查并确认上述类别名称
+                </Checkbox>
+              </div>
+            </div>
+
             <DatasetImportProgress
               v-if="loading && tabActive === 'yolo'"
               class="upload-progress-wrap"
               :percent="importProgressPercent"
-              detail="正在导入 YOLO 数据集，请勿关闭页面…"
+              :detail="formatTaskImportDetail('正在导入 YOLO 数据集')"
               :loading="importCancelling"
               cancel-text="取消导入"
               @cancel="cancelImport"
             />
           </div>
           <div class="upload-actions">
-            <Button type="primary" :loading="loading" :disabled="loading" @click="importYoloPath">
+            <Button :loading="yoloPreflightLoading" :disabled="loading" @click="preflightYoloPath">
+              <Icon icon="ant-design:scan-outlined" />
+              {{ yoloPreflight ? '重新检查' : '检查数据集' }}
+            </Button>
+            <Button
+              v-if="yoloPreflight"
+              type="primary"
+              :loading="loading"
+              :disabled="!canImportYolo"
+              @click="importYoloPath"
+            >
               <Icon icon="ant-design:import-outlined" />
-              导入 YOLO（仅 .txt）
+              开始导入
             </Button>
           </div>
         </TabPane>
@@ -180,7 +280,7 @@ uploads/
               v-if="loading && tabActive === 'coco'"
               class="upload-progress-wrap"
               :percent="importProgressPercent"
-              detail="正在导入 COCO 数据集，请勿关闭页面…"
+              :detail="formatTaskImportDetail('正在导入 COCO 数据集')"
               :loading="importCancelling"
               cancel-text="取消导入"
               @cancel="cancelImport"
@@ -233,26 +333,36 @@ uploads/
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { BasicModal, useModal } from '@/components/Modal';
 import { Icon } from '@/components/Icon';
-import { Tabs, TabPane, InputNumber, Input, Select } from 'ant-design-vue';
+import {
+  Alert,
+  Checkbox,
+  Input,
+  InputNumber,
+  Segmented,
+  Select,
+  TabPane,
+  Tabs,
+  Tag,
+} from 'ant-design-vue';
 import { useMessage } from '@/hooks/web/useMessage';
 import DatasetImportProgress from '@/views/dataset/components/DatasetImportProgress.vue';
 import {
   importAnnotationImageFolderPath,
   importAnnotationYoloPath,
+  preflightAnnotationYoloPath,
   importAnnotationCocoPath,
   listAnnotationCloudDatasets,
   importAnnotationFromCloud,
   extractAnnotationFrames,
   type DatasetAnnotationImportResult,
+  type DatasetYoloImportParams,
+  type DatasetYoloPreflightResult,
 } from '@/api/device/dataset';
-import { Button } from '@/components/Button'
-import {
-formatFileSize,
-  resumableUploadDatasetFiles,
-} from '@/utils/upload/resumableUpload';
+import { Button } from '@/components/Button';
+import { formatFileSize, resumableUploadDatasetFiles } from '@/utils/upload/resumableUpload';
 defineOptions({ name: 'ImportDatasetModal' });
 
 const props = defineProps<{
@@ -270,6 +380,8 @@ const uploading = ref(false);
 const cancelling = ref(false);
 const uploadPercent = ref(0);
 const importProgressPercent = ref(0);
+const importProcessedCount = ref(0);
+const importTotalCount = ref(0);
 const uploadCurrentFile = ref(0);
 const uploadTotalFiles = ref(0);
 const tabActive = ref('image');
@@ -279,6 +391,13 @@ const selectedVideo = ref<File | null>(null);
 const frameInterval = ref(30);
 const datasetPath = ref('');
 const yoloPath = ref('');
+const yoloPreflight = ref<DatasetYoloPreflightResult | null>(null);
+const yoloPreflightSourcePath = ref('');
+const yoloPreflightLoading = ref(false);
+const yoloClassMapping = ref<Record<number, string>>({});
+const yoloImportMode = ref<'annotations_only' | 'overwrite'>('annotations_only');
+const yoloAllowMissingLabels = ref(false);
+const yoloMappingConfirmed = ref(false);
 const cocoJsonPath = ref('');
 const cocoImagesRoot = ref('');
 const cloudDatasetId = ref<number | undefined>();
@@ -289,8 +408,35 @@ const folderInputRef = ref<HTMLInputElement | null>(null);
 const videoInputRef = ref<HTMLInputElement | null>(null);
 const uploadAbortController = ref<AbortController | null>(null);
 const importAbortController = ref<AbortController | null>(null);
+const yoloPreflightAbortController = ref<AbortController | null>(null);
 const importCancelling = ref(false);
 let importProgressTimer: ReturnType<typeof setInterval> | null = null;
+
+const yoloImportModeOptions = [
+  { label: '同名仅补标注', value: 'annotations_only' },
+  { label: '覆盖图片与标注', value: 'overwrite' },
+];
+
+const yoloPreflightBlockReason = computed(() => {
+  const result = yoloPreflight.value;
+  if (!result || result.importable) {
+    return '';
+  }
+  if (result.imageCount === 0) return '目录中没有可导入的图片';
+  if (result.matchedLabelCount === 0) return '没有找到与图片对应的 YOLO 标注';
+  if (result.invalidLabelCount > 0) return '存在非五列目标检测标注，当前导入已被阻止';
+  if (result.duplicateImageNameCount > 0) return '存在跨目录同名图片，无法安全导入';
+  if (result.classes.length === 0) return '没有从标注文件中发现类别 ID';
+  return '数据集预检未通过';
+});
+
+const canImportYolo = computed(() => {
+  const result = yoloPreflight.value;
+  if (!result?.importable || loading.value || yoloPreflightLoading.value) return false;
+  if (yoloPreflightSourcePath.value !== yoloPath.value.trim()) return false;
+  if (!yoloMappingConfirmed.value || hasYoloClassErrors()) return false;
+  return result.missingLabelCount === 0 || yoloAllowMissingLabels.value;
+});
 
 function isRequestAborted(error: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted) {
@@ -303,8 +449,45 @@ function isRequestAborted(error: unknown, signal?: AbortSignal): boolean {
     || err?.message === '上传已取消';
 }
 
-function startImportProgress() {
+function getYoloClassError(classId: number): string {
+  const value = yoloClassMapping.value[classId]?.trim() ?? '';
+  if (!value) return '必须填写并确认标签名称';
+  if (/^\d+$/.test(value)) return '标签名称不能是纯数字';
+  const duplicateCount = Object.values(yoloClassMapping.value)
+    .filter((name) => name?.trim().toLocaleLowerCase() === value.toLocaleLowerCase())
+    .length;
+  return duplicateCount > 1 ? '标签名称不能重复' : '';
+}
+
+function hasYoloClassErrors(): boolean {
+  return yoloPreflight.value?.classes.some((item) => Boolean(getYoloClassError(item.classId))) ?? true;
+}
+
+function formatYoloSplit(split: string): string {
+  return ({ train: '训练', validation: '验证', test: '测试', unassigned: '未划分' } as Record<string, string>)[split] ?? split;
+}
+
+function resetYoloPreflight(abortRequest = true) {
+  if (abortRequest) {
+    yoloPreflightAbortController.value?.abort();
+  }
+  yoloPreflightAbortController.value = null;
+  yoloPreflightLoading.value = false;
+  yoloPreflight.value = null;
+  yoloPreflightSourcePath.value = '';
+  yoloClassMapping.value = {};
+  yoloImportMode.value = 'annotations_only';
+  yoloAllowMissingLabels.value = false;
+  yoloMappingConfirmed.value = false;
+}
+
+function startImportProgress(useTaskProgress: boolean) {
   importProgressPercent.value = 0;
+  importProcessedCount.value = 0;
+  importTotalCount.value = 0;
+  if (useTaskProgress) {
+    return;
+  }
   importProgressTimer = setInterval(() => {
     if (importProgressPercent.value < 95) {
       importProgressPercent.value = Math.min(95, importProgressPercent.value + 1);
@@ -318,11 +501,30 @@ function stopImportProgress() {
     importProgressTimer = null;
   }
   importProgressPercent.value = 0;
+  importProcessedCount.value = 0;
+  importTotalCount.value = 0;
 }
 
-function beginImportTask(): AbortSignal {
+function updateTaskImportProgress(processed: number, total?: number) {
+  if (total == null || total <= 0) {
+    return;
+  }
+  const boundedProcessed = Math.min(Math.max(processed, 0), total);
+  importProcessedCount.value = boundedProcessed;
+  importTotalCount.value = total;
+  importProgressPercent.value = Math.floor((boundedProcessed / total) * 100);
+}
+
+function formatTaskImportDetail(label: string): string {
+  if (importTotalCount.value <= 0) {
+    return `${label}，正在扫描文件，请勿关闭页面…`;
+  }
+  return `${label}：${importProcessedCount.value}/${importTotalCount.value} 张，请勿关闭页面…`;
+}
+
+function beginImportTask(useTaskProgress: boolean): AbortSignal {
   importAbortController.value = new AbortController();
-  startImportProgress();
+  startImportProgress(useTaskProgress);
   return importAbortController.value.signal;
 }
 
@@ -334,14 +536,18 @@ function finishImportTask() {
 }
 
 async function runImportRequest<T>(
-  request: (signal: AbortSignal) => Promise<T>,
+  request: (
+    signal: AbortSignal,
+    onProgress: (processed: number, total?: number) => void,
+  ) => Promise<T>,
   onSuccess: (data: T) => void,
   errorMessage: string,
+  useTaskProgress = false,
 ) {
   loading.value = true;
-  const signal = beginImportTask();
+  const signal = beginImportTask(useTaskProgress);
   try {
-    const res = await request(signal);
+    const res = await request(signal, updateTaskImportProgress);
     const data = (res as { data?: T })?.data ?? res;
     importProgressPercent.value = 100;
     onSuccess(data as T);
@@ -365,6 +571,7 @@ function resetState() {
   uploadAbortController.value = null;
   importAbortController.value?.abort();
   importAbortController.value = null;
+  resetYoloPreflight();
   uploading.value = false;
   cancelling.value = false;
   importCancelling.value = false;
@@ -414,6 +621,16 @@ async function loadCloudDatasets() {
 watch(tabActive, (key) => {
   if (key === 'cloud') loadCloudDatasets();
 });
+
+watch(yoloPath, () => {
+  if (yoloPreflight.value || yoloPreflightLoading.value) {
+    resetYoloPreflight();
+  }
+});
+
+watch(yoloClassMapping, () => {
+  yoloMappingConfirmed.value = false;
+}, { deep: true });
 
 const openModalWithReset = () => {
   resetState();
@@ -562,14 +779,53 @@ async function importImageFolderPath() {
     return;
   }
   await runImportRequest(
-    (signal) => importAnnotationImageFolderPath(dsId, path, signal),
+    (signal, onProgress) => importAnnotationImageFolderPath(dsId, path, signal, onProgress),
     (data) => {
       createMessage.success('ImageFolder 导入成功：' + formatImportMsg(data));
       closeModal();
       emits('success', data);
     },
     '导入失败',
+    true,
   );
+}
+
+async function preflightYoloPath() {
+  const dsId = requireDatasetId();
+  const path = yoloPath.value.trim();
+  if (!dsId || !path) {
+    createMessage.warning('请填写 YOLO 数据集根目录的绝对路径');
+    return;
+  }
+
+  resetYoloPreflight();
+  const controller = new AbortController();
+  yoloPreflightAbortController.value = controller;
+  yoloPreflightLoading.value = true;
+  try {
+    const response = await preflightAnnotationYoloPath(dsId, path, controller.signal);
+    const result = (response as { data?: DatasetYoloPreflightResult })?.data ?? response;
+    yoloPreflight.value = result;
+    yoloPreflightSourcePath.value = path;
+    yoloClassMapping.value = Object.fromEntries(
+      result.classes.map((item) => [
+        item.classId,
+        item.manualNameRequired ? '' : (item.detectedName ?? ''),
+      ]),
+    );
+    if (!result.importable) {
+      createMessage.error(yoloPreflightBlockReason.value || 'YOLO 数据集预检未通过');
+    }
+  } catch (error: any) {
+    if (!isRequestAborted(error, controller.signal)) {
+      createMessage.error(error?.message || 'YOLO 数据集检查失败');
+    }
+  } finally {
+    if (yoloPreflightAbortController.value === controller) {
+      yoloPreflightAbortController.value = null;
+      yoloPreflightLoading.value = false;
+    }
+  }
 }
 
 async function importYoloPath() {
@@ -579,14 +835,29 @@ async function importYoloPath() {
     createMessage.warning('请填写 YOLO 数据集根目录的绝对路径');
     return;
   }
+  if (!canImportYolo.value || !yoloPreflight.value) {
+    createMessage.warning('请先完成数据集检查并确认所有类别名称');
+    return;
+  }
+  const params: DatasetYoloImportParams = {
+    path,
+    classMapping: Object.fromEntries(
+      yoloPreflight.value.classes.map((item) => [item.classId, yoloClassMapping.value[item.classId].trim()]),
+    ),
+    classMappingConfirmed: true,
+    importMode: yoloImportMode.value,
+    allowMissingLabels: yoloAllowMissingLabels.value,
+    preserveSplits: true,
+  };
   await runImportRequest(
-    (signal) => importAnnotationYoloPath(dsId, path, signal),
+    (signal, onProgress) => importAnnotationYoloPath(dsId, params, signal, onProgress),
     (data) => {
       createMessage.success('YOLO 导入成功：' + formatImportMsg(data));
       closeModal();
       emits('success', data);
     },
     '导入失败，请确认路径在服务端存在且 iot-dataset 服务已重启',
+    true,
   );
 }
 
@@ -599,13 +870,14 @@ async function importCocoPath() {
   }
   const imagesRoot = cocoImagesRoot.value.trim() || undefined;
   await runImportRequest(
-    (signal) => importAnnotationCocoPath(dsId, { cocoJson, imagesRoot }, signal),
+    (signal, onProgress) => importAnnotationCocoPath(dsId, { cocoJson, imagesRoot }, signal, onProgress),
     (data) => {
       createMessage.success('COCO 导入成功：' + formatImportMsg(data));
       closeModal();
       emits('success', data);
     },
     '导入失败',
+    true,
   );
 }
 
@@ -683,8 +955,116 @@ async function handleClose(): Promise<boolean> {
 }
 
 .upload-actions {
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
   margin-top: 8px;
+}
+
+.yolo-preflight {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.yolo-preflight-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+
+  .summary-item {
+    min-width: 0;
+    padding: 10px 12px;
+    border-right: 1px solid #e5e7eb;
+
+    &:last-child { border-right: 0; }
+    span { display: block; color: #6b7280; font-size: 12px; }
+    strong { display: block; margin-top: 2px; color: #111827; font-size: 18px; }
+    &.warning strong { color: #b45309; }
+    &.error strong { color: #b91c1c; }
+  }
+}
+
+.yolo-splits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.preflight-label {
+  margin-right: 4px;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.yolo-preflight-alert {
+  margin-top: 12px;
+}
+
+.yolo-class-section {
+  margin-top: 16px;
+}
+
+.preflight-section-title {
+  margin-bottom: 8px;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.yolo-class-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(260px, 1.2fr);
+  gap: 14px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: 1px solid #eef0f2;
+}
+
+.yolo-class-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+
+  .class-id { color: #6b7280; font-size: 12px; }
+  .detected-name { min-width: 0; overflow-wrap: anywhere; color: #111827; font-weight: 500; }
+}
+
+.yolo-class-target {
+  min-width: 0;
+}
+
+.field-error {
+  display: block;
+  margin-top: 4px;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.yolo-import-options {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.compact-form-group {
+  width: 100%;
+  margin-top: 0 !important;
+}
+
+@media (max-width: 720px) {
+  .yolo-preflight-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .yolo-preflight-summary .summary-item:nth-child(2) { border-right: 0; }
+  .yolo-preflight-summary .summary-item:nth-child(-n + 2) { border-bottom: 1px solid #e5e7eb; }
+  .yolo-class-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 }
 
 .selected-hint {

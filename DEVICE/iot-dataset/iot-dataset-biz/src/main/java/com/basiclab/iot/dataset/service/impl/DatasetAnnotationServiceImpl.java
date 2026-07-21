@@ -1,6 +1,7 @@
 package com.basiclab.iot.dataset.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.basiclab.iot.common.enums.CommonStatusEnum;
 import com.basiclab.iot.common.text.UUID;
 import com.basiclab.iot.common.utils.object.BeanUtils;
 import com.basiclab.iot.dataset.dal.dataobject.DatasetDO;
@@ -14,6 +15,7 @@ import com.basiclab.iot.dataset.service.DatasetImageService;
 import com.basiclab.iot.dataset.service.DatasetService;
 import com.basiclab.iot.dataset.service.DatasetTagService;
 import com.basiclab.iot.dataset.service.annotation.DatasetAnnotationParseUtil;
+import com.basiclab.iot.dataset.service.annotation.YoloDatasetInspector;
 import com.basiclab.iot.dataset.service.annotation.YoloLabelContentBuilder;
 import com.basiclab.iot.dataset.service.ImportCancelChecker;
 import com.basiclab.iot.dataset.service.ImportCancelledException;
@@ -43,6 +45,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -67,6 +70,8 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
     private DatasetImageService datasetImageService;
     @Resource
     private DatasetTagService datasetTagService;
+    @Resource
+    private YoloDatasetInspector yoloDatasetInspector;
     @Resource
     private DatasetService datasetService;
     @Resource
@@ -239,8 +244,18 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
     }
 
     @Override
-    public DatasetAnnotationImportResultVO importYoloPath(Long datasetId, String path) {
-        return importYoloPath(datasetId, path, ImportCancelChecker.NONE, null);
+    public DatasetYoloPreflightRespVO preflightYoloPath(Long datasetId, String path) {
+        validateDatasetExists(datasetId);
+        try {
+            return buildYoloPreflight(datasetId, yoloDatasetInspector.inspect(path));
+        } catch (IOException e) {
+            throw exception(FILE_UPLOAD_FAILED, "YOLO 数据集检查失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public DatasetAnnotationImportResultVO importYoloPath(Long datasetId, DatasetYoloImportReqVO reqVO) {
+        return importYoloPath(datasetId, reqVO, ImportCancelChecker.NONE, null);
     }
 
     @Override
@@ -251,21 +266,21 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
     @Override
     public DatasetAnnotationImportResultVO importImageFolderPath(Long datasetId, String path,
                                                                  ImportCancelChecker cancelChecker,
-                                                                 java.util.function.IntConsumer progressCallback) {
+                                                                 BiConsumer<Integer, Integer> progressCallback) {
         return importFromLocalRoot(datasetId, path, true, true, cancelChecker, progressCallback);
     }
 
     @Override
-    public DatasetAnnotationImportResultVO importYoloPath(Long datasetId, String path,
+    public DatasetAnnotationImportResultVO importYoloPath(Long datasetId, DatasetYoloImportReqVO reqVO,
                                                           ImportCancelChecker cancelChecker,
-                                                          java.util.function.IntConsumer progressCallback) {
-        return importFromLocalRoot(datasetId, path, false, true, cancelChecker, progressCallback);
+                                                          BiConsumer<Integer, Integer> progressCallback) {
+        return importInspectedYoloDataset(datasetId, reqVO, cancelChecker, progressCallback);
     }
 
     @Override
     public DatasetAnnotationImportResultVO importCocoPath(Long datasetId, DatasetAnnotationCocoImportReqVO reqVO,
                                                           ImportCancelChecker cancelChecker,
-                                                          java.util.function.IntConsumer progressCallback) {
+                                                          BiConsumer<Integer, Integer> progressCallback) {
         validateDatasetExists(datasetId);
         if (cancelChecker == null) {
             cancelChecker = ImportCancelChecker.NONE;
@@ -294,21 +309,28 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
             Set<String> knownTags = loadKnownTagNames(datasetId);
             int cocoImages = 0;
             int processed = 0;
+            int total = annsByImage.size();
+            if (progressCallback != null) {
+                progressCallback.accept(processed, total);
+            }
             for (Map.Entry<Long, List<JsonNode>> entry : annsByImage.entrySet()) {
                 cancelChecker.throwIfCancelled();
-                String fileName = imageFiles.get(entry.getKey());
-                if (fileName == null) continue;
-                Path imgPath = resolveUnderRoots(imagesRoot, jsonPath.getParent(), fileName);
-                if (imgPath == null || !Files.isRegularFile(imgPath)) continue;
-                byte[] bytes = Files.readAllBytes(imgPath);
-                int[] dim = readImageSize(bytes);
-                String annJson = convertCocoAnns(entry.getValue(), catMap, dim[0], dim[1]);
-                saveImageBytes(datasetId, bytes, Paths.get(fileName).getFileName().toString(), annJson, dim[0], dim[1]);
-                syncTagsFromAnnotations(datasetId, annJson, knownTags);
-                cocoImages++;
-                processed++;
-                if (progressCallback != null) {
-                    progressCallback.accept(processed);
+                try {
+                    String fileName = imageFiles.get(entry.getKey());
+                    if (fileName == null) continue;
+                    Path imgPath = resolveUnderRoots(imagesRoot, jsonPath.getParent(), fileName);
+                    if (imgPath == null || !Files.isRegularFile(imgPath)) continue;
+                    byte[] bytes = Files.readAllBytes(imgPath);
+                    int[] dim = readImageSize(bytes);
+                    String annJson = convertCocoAnns(entry.getValue(), catMap, dim[0], dim[1]);
+                    saveImageBytes(datasetId, bytes, Paths.get(fileName).getFileName().toString(), annJson, dim[0], dim[1]);
+                    syncTagsFromAnnotations(datasetId, annJson, knownTags);
+                    cocoImages++;
+                } finally {
+                    processed++;
+                    if (progressCallback != null) {
+                        progressCallback.accept(processed, total);
+                    }
                 }
             }
             return DatasetAnnotationImportResultVO.builder().imagesCopied(cocoImages).cocoImages(cocoImages).build();
@@ -436,13 +458,344 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
 
     private static final int PATH_IMPORT_BATCH_SIZE = 100;
 
+    private DatasetYoloPreflightRespVO buildYoloPreflight(Long datasetId,
+                                                           YoloDatasetInspector.Inspection inspection) {
+        DatasetYoloPreflightRespVO response = new DatasetYoloPreflightRespVO();
+        response.setRootPath(inspection.getRoot().toString());
+        response.setImportable(inspection.isImportable());
+        response.setImageCount(inspection.getImageCount());
+        response.setMatchedLabelCount(inspection.getMatchedLabelCount());
+        response.setMissingLabelCount(inspection.getMissingLabelCount());
+        response.setInvalidLabelCount(inspection.getInvalidLabelCount());
+        response.setDuplicateImageNameCount(inspection.getDuplicateImageNameCount());
+        response.setWarnings(new ArrayList<>(inspection.getWarnings()));
+
+        Set<String> existingTags = datasetTagService.listTagsByDatasetId(datasetId).stream()
+                .map(DatasetTagDO::getName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        response.setExistingTags(new ArrayList<>(existingTags));
+
+        List<DatasetYoloPreflightRespVO.ClassInfo> classes = new ArrayList<>();
+        for (YoloDatasetInspector.ClassDescriptor descriptor : inspection.getClasses()) {
+            DatasetYoloPreflightRespVO.ClassInfo item = new DatasetYoloPreflightRespVO.ClassInfo();
+            item.setClassId(descriptor.getClassId());
+            item.setDetectedName(descriptor.getDetectedName());
+            item.setSuggestedName(descriptor.getSuggestedName());
+            item.setManualNameRequired(descriptor.isManualNameRequired());
+            item.setExistingTag(descriptor.getDetectedName() != null && existingTags.contains(descriptor.getDetectedName()));
+            classes.add(item);
+        }
+        response.setClasses(classes);
+
+        List<DatasetYoloPreflightRespVO.SplitSummary> splits = new ArrayList<>();
+        for (YoloDatasetInspector.Split split : YoloDatasetInspector.Split.values()) {
+            YoloDatasetInspector.SplitStats stats = inspection.getSplitStats().get(split);
+            if (stats == null || stats.getImageCount() == 0) {
+                continue;
+            }
+            DatasetYoloPreflightRespVO.SplitSummary summary = new DatasetYoloPreflightRespVO.SplitSummary();
+            summary.setSplit(split.getApiName());
+            summary.setImageCount(stats.getImageCount());
+            summary.setMatchedLabelCount(stats.getMatchedLabelCount());
+            splits.add(summary);
+        }
+        response.setSplits(splits);
+        return response;
+    }
+
+    private DatasetAnnotationImportResultVO importInspectedYoloDataset(
+            Long datasetId,
+            DatasetYoloImportReqVO reqVO,
+            ImportCancelChecker cancelChecker,
+            BiConsumer<Integer, Integer> progressCallback) {
+        validateDatasetExists(datasetId);
+        ImportCancelChecker effectiveCancelChecker = cancelChecker != null ? cancelChecker : ImportCancelChecker.NONE;
+        try {
+            YoloDatasetInspector.Inspection inspection = yoloDatasetInspector.inspect(reqVO.getPath());
+            if (!inspection.isImportable()) {
+                throw exception(FILE_UPLOAD_FAILED, "YOLO 数据集预检未通过，请重新检查目录和标注格式");
+            }
+            if (inspection.getMissingLabelCount() > 0 && !Boolean.TRUE.equals(reqVO.getAllowMissingLabels())) {
+                throw exception(FILE_UPLOAD_FAILED,
+                        "有 " + inspection.getMissingLabelCount() + " 张图片缺少标注，请在预检后明确确认继续导入");
+            }
+
+            LinkedHashMap<Integer, String> classMapping = validateYoloClassMapping(inspection, reqVO.getClassMapping());
+            List<String> classNames = new ArrayList<>(classMapping.values());
+            int tagsCreated = datasetTagService.ensureTagsForDataset(datasetId, classNames);
+            List<DatasetTagDO> availableTagList = datasetTagService.listTagsByDatasetId(datasetId);
+            Set<String> availableTags = availableTagList.stream()
+                    .map(DatasetTagDO::getName)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            List<String> unavailableTags = classNames.stream()
+                    .filter(name -> !availableTags.contains(name))
+                    .collect(Collectors.toList());
+            if (!unavailableTags.isEmpty()) {
+                throw exception(FILE_UPLOAD_FAILED, "无法创建数据集标签: " + String.join(", ", unavailableTags));
+            }
+            Map<String, String> nameToShortcut = YoloLabelContentBuilder.buildNameToShortcut(availableTagList);
+            LinkedHashMap<Integer, String> classLabelMapping = new LinkedHashMap<>();
+            classMapping.forEach((classId, name) ->
+                    classLabelMapping.put(classId, nameToShortcut.getOrDefault(name, name)));
+
+            Map<String, DatasetImageDO> existingByName = datasetImageMapper.selectByDatasetId(datasetId).stream()
+                    .collect(Collectors.toMap(DatasetImageDO::getName, image -> image, (first, ignored) -> first,
+                            LinkedHashMap::new));
+            List<DatasetImageDO> pendingUpdates = new ArrayList<>(PATH_IMPORT_BATCH_SIZE);
+            List<DatasetImageImportItem> pendingImports = new ArrayList<>(PATH_IMPORT_BATCH_SIZE);
+            DatasetImageUploadRespVO uploadResult = new DatasetImageUploadRespVO();
+            boolean annotationsOnly = DatasetYoloImportReqVO.MODE_ANNOTATIONS_ONLY.equals(reqVO.getImportMode());
+            boolean preserveSplits = !Boolean.FALSE.equals(reqVO.getPreserveSplits());
+            int processed = 0;
+            int annotatedImages = 0;
+            int updatedExisting = 0;
+            int total = inspection.getImageCount();
+            boolean fileImportsQueued = false;
+
+            if (progressCallback != null) {
+                progressCallback.accept(0, total);
+            }
+            logger.info("YOLO 路径导入开始: datasetId={}, path={}, images={}, labels={}, mode={}",
+                    datasetId, inspection.getRoot(), total, inspection.getMatchedLabelCount(), reqVO.getImportMode());
+
+            for (YoloDatasetInspector.Sample sample : inspection.getSamples()) {
+                effectiveCancelChecker.throwIfCancelled();
+                String annotationsJson = sample.hasLabel()
+                        ? convertYoloBoxes(sample.getBoxes(), classLabelMapping)
+                        : null;
+                if (annotationsJson != null) {
+                    annotatedImages++;
+                }
+
+                String filename = sample.getImagePath().getFileName().toString();
+                DatasetImageDO existing = existingByName.get(filename);
+                if (annotationsOnly && existing != null) {
+                    boolean changed = applyExistingYoloFields(existing, sample, annotationsJson, preserveSplits);
+                    if (changed) {
+                        pendingUpdates.add(existing);
+                        updatedExisting++;
+                    }
+                } else {
+                    byte[] bytes = Files.readAllBytes(sample.getImagePath());
+                    int[] dimensions = readImageSize(bytes);
+                    DatasetImageImportItem item = buildYoloImportItem(
+                            sample, filename, bytes, dimensions, annotationsJson, preserveSplits);
+                    pendingImports.add(item);
+                    fileImportsQueued = true;
+                }
+
+                processed++;
+                if (processed % PATH_IMPORT_BATCH_SIZE == 0) {
+                    flushYoloImportBatches(datasetId, pendingUpdates, pendingImports, existingByName, uploadResult);
+                    if (progressCallback != null) {
+                        progressCallback.accept(processed, total);
+                    }
+                }
+            }
+
+            effectiveCancelChecker.throwIfCancelled();
+            flushYoloImportBatches(datasetId, pendingUpdates, pendingImports, existingByName, uploadResult);
+            if (preserveSplits && fileImportsQueued) {
+                existingByName = datasetImageMapper.selectByDatasetId(datasetId).stream()
+                        .collect(Collectors.toMap(DatasetImageDO::getName, image -> image,
+                                (first, ignored) -> first, LinkedHashMap::new));
+                restoreYoloSplits(inspection.getSamples(), existingByName);
+            }
+            updateYoloDatasetState(datasetId, inspection, existingByName, preserveSplits);
+            if (progressCallback != null) {
+                progressCallback.accept(processed, total);
+            }
+
+            int createdImages = Math.max(0, uploadResult.getSuccessCount() - uploadResult.getOverwrittenCount());
+            int updatedImages = updatedExisting + uploadResult.getOverwrittenCount();
+            String hint = uploadResult.getFailedCount() > 0
+                    ? uploadResult.getFailedCount() + " 张图片写入失败"
+                    : inspection.getMissingLabelCount() > 0
+                    ? inspection.getMissingLabelCount() + " 张图片按未标注状态导入"
+                    : null;
+            logger.info("YOLO 路径导入完成: datasetId={}, images={}, yolo={}, created={}, updated={}, failed={}",
+                    datasetId, processed, annotatedImages, createdImages, updatedImages, uploadResult.getFailedCount());
+            return DatasetAnnotationImportResultVO.builder()
+                    .imagesCopied(updatedExisting + uploadResult.getSuccessCount())
+                    .labelmeImages(0)
+                    .cocoImages(0)
+                    .yoloImages(annotatedImages)
+                    .classes(classNames)
+                    .tagsCreated(tagsCreated)
+                    .createdImages(createdImages)
+                    .updatedImages(updatedImages)
+                    .hint(hint)
+                    .build();
+        } catch (ImportCancelledException e) {
+            throw e;
+        } catch (IOException e) {
+            throw exception(FILE_UPLOAD_FAILED, "YOLO 导入失败: " + e.getMessage());
+        }
+    }
+
+    private LinkedHashMap<Integer, String> validateYoloClassMapping(
+            YoloDatasetInspector.Inspection inspection,
+            Map<Integer, String> requestedMapping) {
+        Map<Integer, String> source = requestedMapping != null ? requestedMapping : Collections.emptyMap();
+        LinkedHashMap<Integer, String> validated = new LinkedHashMap<>();
+        Set<String> normalizedNames = new HashSet<>();
+        for (YoloDatasetInspector.ClassDescriptor descriptor : inspection.getClasses()) {
+            String name = source.get(descriptor.getClassId());
+            name = name != null ? name.trim() : "";
+            if (name.isEmpty() || name.matches("\\d+")) {
+                throw exception(FILE_UPLOAD_FAILED,
+                        "类别 " + descriptor.getClassId() + " 必须手动填写非数字标签名称");
+            }
+            String normalized = name.toLowerCase(Locale.ROOT);
+            if (!normalizedNames.add(normalized)) {
+                throw exception(FILE_UPLOAD_FAILED, "多个 YOLO 类别不能映射到同一标签: " + name);
+            }
+            validated.put(descriptor.getClassId(), name);
+        }
+        return validated;
+    }
+
+    private String convertYoloBoxes(List<YoloDatasetInspector.Box> boxes, Map<Integer, String> classMapping)
+            throws IOException {
+        List<Map<String, Object>> annotations = new ArrayList<>();
+        for (YoloDatasetInspector.Box box : boxes) {
+            String label = classMapping.get(box.getClassId());
+            if (label == null) {
+                throw exception(FILE_UPLOAD_FAILED, "缺少 YOLO 类别映射: " + box.getClassId());
+            }
+            double x1 = box.getCenterX() - box.getWidth() / 2;
+            double y1 = box.getCenterY() - box.getHeight() / 2;
+            double x2 = box.getCenterX() + box.getWidth() / 2;
+            double y2 = box.getCenterY() + box.getHeight() / 2;
+            annotations.add(Map.of(
+                    "label", label,
+                    "type", "rectangle",
+                    "auto", false,
+                    "points", List.of(
+                            Map.of("x", x1, "y", y1), Map.of("x", x2, "y", y1),
+                            Map.of("x", x2, "y", y2), Map.of("x", x1, "y", y2))));
+        }
+        return annotations.isEmpty() ? null : MAPPER.writeValueAsString(annotations);
+    }
+
+    private DatasetImageImportItem buildYoloImportItem(
+            YoloDatasetInspector.Sample sample,
+            String filename,
+            byte[] bytes,
+            int[] dimensions,
+            String annotationsJson,
+            boolean preserveSplits) {
+        DatasetImageImportItem item = new DatasetImageImportItem();
+        item.setFilename(filename);
+        item.setData(bytes);
+        item.setAnnotationsJson(annotationsJson);
+        item.setWidth(dimensions[0] > 0 ? dimensions[0] : null);
+        item.setHeight(dimensions[1] > 0 ? dimensions[1] : null);
+        item.setCompleted(annotationsJson != null ? 1 : 0);
+        if (preserveSplits) {
+            applySplit(item, sample.getSplit());
+        }
+        return item;
+    }
+
+    private boolean applyExistingYoloFields(DatasetImageDO image, YoloDatasetInspector.Sample sample,
+                                            String annotationsJson, boolean preserveSplits) {
+        boolean changed = false;
+        if (sample.hasLabel()) {
+            image.setAnnotations(annotationsJson);
+            image.setCompleted(annotationsJson != null ? 1 : 0);
+            image.setModificationCount(Optional.ofNullable(image.getModificationCount()).orElse(0) + 1);
+            image.setLastModified(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            changed = true;
+        }
+        if (preserveSplits && sample.getSplit() != YoloDatasetInspector.Split.UNASSIGNED) {
+            applySplit(image, sample.getSplit());
+            changed = true;
+        }
+        return changed;
+    }
+
+    private void applySplit(DatasetImageImportItem item, YoloDatasetInspector.Split split) {
+        item.setIsTrain(split == YoloDatasetInspector.Split.TRAIN ? 1 : 0);
+        item.setIsValidation(split == YoloDatasetInspector.Split.VALIDATION ? 1 : 0);
+        item.setIsTest(split == YoloDatasetInspector.Split.TEST ? 1 : 0);
+    }
+
+    private void applySplit(DatasetImageDO image, YoloDatasetInspector.Split split) {
+        image.setIsTrain(split == YoloDatasetInspector.Split.TRAIN ? 1 : 0);
+        image.setIsValidation(split == YoloDatasetInspector.Split.VALIDATION ? 1 : 0);
+        image.setIsTest(split == YoloDatasetInspector.Split.TEST ? 1 : 0);
+    }
+
+    private void flushYoloImportBatches(
+            Long datasetId,
+            List<DatasetImageDO> pendingUpdates,
+            List<DatasetImageImportItem> pendingImports,
+            Map<String, DatasetImageDO> existingByName,
+            DatasetImageUploadRespVO totalUploadResult) {
+        if (!pendingUpdates.isEmpty()) {
+            datasetImageMapper.updateBatch(pendingUpdates, 500);
+            pendingUpdates.clear();
+        }
+        if (!pendingImports.isEmpty()) {
+            DatasetImageUploadRespVO batch = datasetImageService.batchImportImages(
+                    datasetId, pendingImports, existingByName);
+            totalUploadResult.setSuccessCount(totalUploadResult.getSuccessCount() + batch.getSuccessCount());
+            totalUploadResult.setFailedCount(totalUploadResult.getFailedCount() + batch.getFailedCount());
+            totalUploadResult.setSkippedCount(totalUploadResult.getSkippedCount() + batch.getSkippedCount());
+            totalUploadResult.setOverwrittenCount(totalUploadResult.getOverwrittenCount() + batch.getOverwrittenCount());
+            pendingImports.clear();
+        }
+    }
+
+    private void restoreYoloSplits(List<YoloDatasetInspector.Sample> samples,
+                                   Map<String, DatasetImageDO> existingByName) {
+        EnumMap<YoloDatasetInspector.Split, List<Long>> idsBySplit =
+                new EnumMap<>(YoloDatasetInspector.Split.class);
+        for (YoloDatasetInspector.Sample sample : samples) {
+            DatasetImageDO image = existingByName.get(sample.getImagePath().getFileName().toString());
+            if (image == null || image.getId() == null) {
+                continue;
+            }
+            idsBySplit.computeIfAbsent(sample.getSplit(), ignored -> new ArrayList<>()).add(image.getId());
+        }
+        for (Map.Entry<YoloDatasetInspector.Split, List<Long>> entry : idsBySplit.entrySet()) {
+            YoloDatasetInspector.Split split = entry.getKey();
+            List<Long> ids = entry.getValue();
+            for (int offset = 0; offset < ids.size(); offset += PATH_IMPORT_BATCH_SIZE) {
+                List<Long> batch = ids.subList(offset, Math.min(offset + PATH_IMPORT_BATCH_SIZE, ids.size()));
+                datasetImageMapper.batchUpdateUsage(
+                        batch,
+                        split == YoloDatasetInspector.Split.TRAIN ? 1 : 0,
+                        split == YoloDatasetInspector.Split.VALIDATION ? 1 : 0,
+                        split == YoloDatasetInspector.Split.TEST ? 1 : 0);
+            }
+        }
+    }
+
+    private void updateYoloDatasetState(Long datasetId, YoloDatasetInspector.Inspection inspection,
+                                        Map<String, DatasetImageDO> existingByName, boolean preserveSplits) {
+        boolean allImagesAssigned = preserveSplits && inspection.getSamples().stream()
+                .allMatch(sample -> sample.getSplit() != YoloDatasetInspector.Split.UNASSIGNED
+                        && existingByName.containsKey(sample.getImagePath().getFileName().toString()));
+        DatasetDO update = new DatasetDO().setId(datasetId)
+                .setIsSyncMinio(CommonStatusEnum.NO.getStatus())
+                .setZipUrl(null);
+        if (allImagesAssigned) {
+            update.setIsAllocated(CommonStatusEnum.YES.getStatus());
+        }
+        datasetMapper.updateById(update);
+    }
+
     private DatasetAnnotationImportResultVO importFromLocalRoot(Long datasetId, String path, boolean tryLabelmeCoco, boolean tryYolo) {
         return importFromLocalRoot(datasetId, path, tryLabelmeCoco, tryYolo, ImportCancelChecker.NONE, null);
     }
 
     private DatasetAnnotationImportResultVO importFromLocalRoot(Long datasetId, String path, boolean tryLabelmeCoco, boolean tryYolo,
                                                                 ImportCancelChecker cancelChecker,
-                                                                java.util.function.IntConsumer progressCallback) {
+                                                                BiConsumer<Integer, Integer> progressCallback) {
         validateDatasetExists(datasetId);
         if (cancelChecker == null) {
             cancelChecker = ImportCancelChecker.NONE;
@@ -457,6 +810,10 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
         Set<String> knownTags = loadKnownTagNames(datasetId);
         try {
             List<Path> imagePaths = collectImagePaths(root);
+            int total = imagePaths.size();
+            if (progressCallback != null) {
+                progressCallback.accept(images, total);
+            }
             logger.info("路径导入开始: datasetId={}, path={}, images={}", datasetId, root, imagePaths.size());
             for (Path imgPath : imagePaths) {
                 cancelChecker.throwIfCancelled();
@@ -490,7 +847,7 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
                     datasetImageService.batchImportImages(datasetId, batch);
                     images += batch.size();
                     if (progressCallback != null) {
-                        progressCallback.accept(images);
+                        progressCallback.accept(images, total);
                     }
                     batch.clear();
                 }
@@ -500,7 +857,7 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
                 datasetImageService.batchImportImages(datasetId, batch);
                 images += batch.size();
                 if (progressCallback != null) {
-                    progressCallback.accept(images);
+                    progressCallback.accept(images, total);
                 }
             }
             logger.info("路径导入完成: datasetId={}, images={}, yolo={}, labelme={}", datasetId, images, yolo, labelme);
@@ -787,7 +1144,9 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
             line = line.trim();
             if (line.isEmpty()) continue;
             String[] parts = line.split("\\s+");
-            if (parts.length < 5) continue;
+            if (parts.length != 5) {
+                throw new IOException("仅支持每行五列的 YOLO 目标检测标注");
+            }
             int cls = Integer.parseInt(parts[0]);
             double cx = Double.parseDouble(parts[1]);
             double cy = Double.parseDouble(parts[2]);
@@ -870,12 +1229,22 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
     private Path findYoloTxt(Path root, Path imagePath) {
         String base = stripExt(imagePath.getFileName().toString());
         Path parent = imagePath.getParent();
-        if (parent != null && "images".equals(parent.getFileName().toString())) {
-            Path labelsDir = parent.getParent().resolve("labels");
-            Path lbl = labelsDir.resolve(base + ".txt");
-            if (Files.isRegularFile(lbl)) return lbl;
+        Path cursor = parent;
+        while (cursor != null) {
+            Path name = cursor.getFileName();
+            if (name != null && "images".equalsIgnoreCase(name.toString()) && cursor.getParent() != null) {
+                Path relativeImage = cursor.relativize(imagePath);
+                Path relativeParent = relativeImage.getParent();
+                Path relativeLabel = relativeParent == null
+                        ? Paths.get(base + ".txt")
+                        : relativeParent.resolve(base + ".txt");
+                Path label = cursor.getParent().resolve("labels").resolve(relativeLabel);
+                if (Files.isRegularFile(label)) return label;
+            }
+            cursor = cursor.getParent();
         }
-        for (String sub : List.of("labels", "train/labels", "valid/labels", "val/labels", "test/labels")) {
+        for (String sub : List.of("labels", "train/labels", "valid/labels", "val/labels", "test/labels",
+                "labels/train", "labels/valid", "labels/val", "labels/test")) {
             Path p = root.resolve(sub).resolve(base + ".txt");
             if (Files.isRegularFile(p)) return p;
         }
