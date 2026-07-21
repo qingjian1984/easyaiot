@@ -1,4 +1,4 @@
-"""SAM 3.1 模型权重下载与状态查询（默认从魔塔 ModelScope 拉取 facebook/sam3.1）"""
+"""SAM 3.1 模型权重下载与状态查询（默认从魔搭 ModelScope 拉取 facebook/sam3.1）"""
 import os
 import re
 import shutil
@@ -248,7 +248,7 @@ def _download_modelscope_with_progress() -> None:
         from modelscope.hub.file_download import model_file_download
     except ImportError as exc:
         raise RuntimeError(
-            '未安装 modelscope，无法从魔塔下载 SAM 3.1。'
+            '未安装 modelscope，无法从魔搭下载 SAM 3.1。'
             '请在 AI 服务环境执行: pip install modelscope'
         ) from exc
 
@@ -454,7 +454,7 @@ def start_sam_model_download() -> Dict[str, Any]:
             _state['downloaded_bytes'] = 0
             _state['total_bytes'] = ESTIMATED_MODEL_SIZE_BYTES
             if _download_source() == 'modelscope':
-                message = f'已开始从魔塔 ModelScope 下载 {SAM_MODELSCOPE_ID}'
+                message = f'已开始从魔搭 ModelScope 下载 {SAM_MODELSCOPE_ID}'
             else:
                 message = '已开始下载'
         status = _build_status_locked()

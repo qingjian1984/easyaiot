@@ -75,12 +75,24 @@ public interface DatasetImageMapper extends BaseMapperX<DatasetImageDO> {
     void resetUsageByDatasetId(@Param("datasetId") Long datasetId);
 
     /**
-     * 根据数据集ID查询所有图片
-     *
-     * @param datasetId 数据集ID
-     * @return 图片列表
+     * 查询导入覆盖所需的轻量索引，避免把大体积 annotations 字段全部载入 JVM。
      */
-    List<DatasetImageDO> selectByDatasetId(@Param("datasetId") Long datasetId);
+    List<DatasetImageDO> selectImportIndexByDatasetId(@Param("datasetId") Long datasetId);
+
+    /**
+     * 按文件名查询导入覆盖所需的轻量索引。
+     */
+    List<DatasetImageDO> selectImportIndexByDatasetIdAndNames(
+            @Param("datasetId") Long datasetId,
+            @Param("names") Collection<String> names);
+
+    /**
+     * 按主键游标分批读取同步导出所需字段，避免大数据集一次性占满堆。
+     */
+    List<DatasetImageDO> selectSyncBatch(
+            @Param("datasetId") Long datasetId,
+            @Param("lastId") Long lastId,
+            @Param("limit") int limit);
 
     /**
      * 将 PostgreSQL 主键序列同步到当前表内最大 id，避免 COPY/手工导入数据后 nextval 与已有主键冲突。
