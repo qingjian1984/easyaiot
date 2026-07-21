@@ -140,12 +140,13 @@ FROM python-env AS python-deps
 
 # ARM 构建镜像无预装 PyTorch，使用本地全量 requirements.txt
 COPY requirements.txt requirements-base.txt ./
-COPY --from=pip-wheels . /opt/offline-pip
 ARG OFFLINE_MODE=0
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
+# pip-wheels 用 bind mount，避免离线包写入镜像层
 RUN --mount=type=bind,from=pip-cache,source=.,target=/mnt/pip-cache,rw \
+    --mount=type=bind,from=pip-wheels,source=.,target=/opt/offline-pip,ro \
     --mount=type=cache,target=/tmp/pip-wheels-build,id=pip-wheels-build-ai-arm \
     set -ex && \
     mkdir -p /mnt/pip-cache/http /tmp/pip-wheels-build && \
@@ -181,10 +182,15 @@ RUN --mount=type=bind,from=pip-cache,source=.,target=/mnt/pip-cache,rw \
 # ======================= 第四阶段：应用部署 =======================
 FROM python-deps AS runtime
 
-# 复制项目源码
-COPY . .
+# 先建用户，再用 COPY --chown，避免对大目录 chown -R 再复制一层
+RUN set -ex && \
+    groupadd -r appuser && \
+    useradd -r -m -g appuser appuser && \
+    mkdir -p /home/appuser/.paddlex/temp /home/appuser/.config/Ultralytics && \
+    chown -R appuser:appuser /home/appuser
 
-# 创建必要的目录结构
+COPY --chown=appuser:appuser . .
+
 RUN set -ex && \
     mkdir -p \
         data/uploads \
@@ -193,17 +199,9 @@ RUN set -ex && \
         data/inference_results \
         temp_uploads \
         static/models && \
-    # 设置执行权限
-    chmod +x run.py
+    chmod +x run.py && \
+    chown -R appuser:appuser data temp_uploads static
 
-# 创建非root用户和权限设置
-RUN set -ex && \
-    groupadd -r appuser && \
-    useradd -r -m -g appuser appuser && \
-    mkdir -p /home/appuser/.paddlex/temp /home/appuser/.config/Ultralytics && \
-    chown -R appuser:appuser /app /home/appuser
-
-# 切换到非root用户
 USER appuser
 
 # 暴露端口

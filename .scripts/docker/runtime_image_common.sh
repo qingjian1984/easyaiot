@@ -946,13 +946,13 @@ runtime_docker_push_is_transient_error() {
 }
 
 # 带重试执行镜像上传命令（docker push / docker manifest push 等；已推送层会自动复用）
-# 环境变量: EASYAIOT_DOCKER_PUSH_RETRIES（默认 5）, EASYAIOT_DOCKER_PUSH_RETRY_DELAY（默认 10，秒，指数退避）
+# 环境变量: EASYAIOT_DOCKER_PUSH_RETRIES（默认 8）, EASYAIOT_DOCKER_PUSH_RETRY_DELAY（默认 10，秒，指数退避）
 runtime_docker_upload_with_retry() {
     local label="$1"
     shift
-    local max_retries="${EASYAIOT_DOCKER_PUSH_RETRIES:-5}"
+    local max_retries="${EASYAIOT_DOCKER_PUSH_RETRIES:-8}"
     local base_delay="${EASYAIOT_DOCKER_PUSH_RETRY_DELAY:-10}"
-    local attempt=1 rc=0 delay=0 log_file push_out
+    local attempt=1 rc=0 delay=0 log_file push_out err_tail
 
     log_file=$(mktemp "${TMPDIR:-/tmp}/easyaiot_docker_push.XXXXXX") || return 1
 
@@ -982,13 +982,23 @@ runtime_docker_upload_with_retry() {
 
         # 认证/权限错误不可重试
         if echo "$push_out" | grep -qiE 'no basic auth credentials|unauthorized|authentication required|authorization failed|push access denied|access denied|denied: requested access'; then
+            runtime_docker_log_push_failure "$label" "$push_out"
             rm -f "$log_file"
             return "$rc"
         fi
 
         if [ "$attempt" -ge "$max_retries" ] || ! runtime_docker_push_is_transient_error "$push_out"; then
+            runtime_docker_log_push_failure "$label" "$push_out"
             rm -f "$log_file"
             return "$rc"
+        fi
+
+        # 中间失败也记一行摘要，便于对照主日志
+        err_tail=$(echo "$push_out" | grep -iE 'error|denied|timeout|EOF|reset|broken pipe|unauthorized|failed' | tail -n 3)
+        if [ -n "$err_tail" ]; then
+            while IFS= read -r line; do
+                [ -n "$line" ] && runtime_img_msg warn "  → ${line}"
+            done <<< "$err_tail"
         fi
 
         attempt=$((attempt + 1))
@@ -996,6 +1006,15 @@ runtime_docker_upload_with_retry() {
 
     rm -f "$log_file"
     return 1
+}
+
+# 将 docker push 失败摘要写入主日志（tee 输出默认不进 LOG_FILE）
+runtime_docker_log_push_failure() {
+    local label="$1" push_out="$2" line
+    runtime_img_msg error "${label} 失败，docker 输出摘要:"
+    while IFS= read -r line; do
+        [ -n "$line" ] && runtime_img_msg error "  ${line}"
+    done <<< "$(echo "$push_out" | tail -n 40)"
 }
 
 # 带重试的 docker push
@@ -1306,7 +1325,7 @@ pull 按部署形态过滤 DEVICE 镜像（与 compose 启停一致）：
   EASYAIOT_RUNTIME_FORCE_REBUILD=1       强制重建全部镜像（忽略本地缓存）
   EASYAIOT_RUNTIME_FORCE_REBUILD=0       复用本地镜像（已存在则跳过构建，直接推送）
   EASYAIOT_SKIP_REGISTRY_AUTH_CHECK=1     跳过 build-runtime 前的远程仓库登录/推送权限检查
-  EASYAIOT_DOCKER_PUSH_RETRIES=5          推送失败时的最大重试次数（默认 5，网络抖动时自动退避重试）
+  EASYAIOT_DOCKER_PUSH_RETRIES=8          推送失败时的最大重试次数（默认 8，大镜像/网络抖动时自动退避重试）
   EASYAIOT_DOCKER_PUSH_RETRY_DELAY=10     推送重试初始间隔秒数（默认 10，指数退避，上限 120s）
 
 build-runtime 会在构建开始前校验远程仓库登录与推送权限；未登录请先 docker login。

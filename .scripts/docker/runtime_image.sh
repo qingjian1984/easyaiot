@@ -505,7 +505,8 @@ check_docker() {
 }
 
 # ★ 跨架构构建前检查磁盘空间并清理 Docker
-# PyTorch devel 基础镜像约 10GB+，多架构拉取极易打满磁盘
+# PyTorch devel 基础镜像约 10GB+，多架构拉取极易打满磁盘。
+# 清理时故意不跑 docker system prune -af，以免删掉已缓存的 ARM 基础镜像。
 ensure_docker_disk_space() {
     local target_arch="${1:-}"
     local df_path="${DOCKER_DATA_ROOT:-/var/lib/docker}"
@@ -520,14 +521,16 @@ ensure_docker_disk_space() {
     print_info "Docker 数据目录: ${df_path}, 可用空间: ${avail_gb} GB"
 
     if [ "$avail_gb" -lt "$min_gb" ]; then
-        print_warning "可用磁盘空间不足 (${avail_gb} GB < ${min_gb} GB)，尝试清理 Docker 缓存..."
-        docker system prune -af 2>/dev/null || true
+        print_warning "可用磁盘空间不足 (${avail_gb} GB < ${min_gb} GB)，尝试清理容器/悬空镜像/构建缓存（保留跨架构基础镜像）..."
+        docker container prune -f 2>/dev/null || true
+        docker image prune -f 2>/dev/null || true
+        docker builder prune -af 2>/dev/null || true
         avail_kb=$(df -k "$df_path" 2>/dev/null | awk 'NR==2{print $4}' || echo "0")
         avail_gb=$((avail_kb / 1024 / 1024))
         print_info "清理后可用空间: ${avail_gb} GB"
         if [ "$avail_gb" -lt "$min_gb" ]; then
             print_warning "清理后仍不足 ${min_gb} GB，[${target_arch}] 跨架构构建可能因磁盘满而失败"
-            print_info "建议手动清理: docker system prune -af"
+            print_info "可手动清理未用运行时镜像；请勿删除 pytorch/manylinuxaarch64-builder 等 ARM 基础镜像"
         fi
     fi
 }

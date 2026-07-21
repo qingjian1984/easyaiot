@@ -5,10 +5,12 @@
 # 清理 build-runtime / runtime_image.sh 构建过程中产生的：
 #   - 本地运行时镜像（ai-service / video-service / web-service / iot-* 等）
 #   - 远程仓库标签镜像（<registry>/aiot-*:amd64|arm64|latest 等）
-#   - 跨架构构建基础镜像（pytorch/manylinuxaarch64-builder 等）
 #   - Docker 悬空镜像与 BuildKit 构建缓存
 #   - 项目 .build-cache 与 WEB/dist-prebuilt-* 中间产物（可选）
 #   - runtime_image 构建日志（可选）
+#
+# 注意: 跨架构基础镜像（pytorch/manylinuxaarch64-builder 等，约 10GB+）故意保留，
+#       避免每次 ARM 跨架构 build-runtime 都重新下载。
 #
 # 用法:
 #   bash .scripts/docker/cleanup_build_runtime.sh           # 交互菜单
@@ -54,8 +56,8 @@ DRY_RUN=false
 ASSUME_YES=false
 SHOW_HELP=false
 
-# 跨架构构建常拉取的大体积基础镜像
-CROSS_BUILD_BASE_IMAGES=(
+# 跨架构构建常拉取的大体积基础镜像（清理时故意保留，避免每次 ARM 重建都重新下载）
+PRESERVE_CROSS_BUILD_BASE_IMAGES=(
     "pytorch/manylinuxaarch64-builder:cuda12.9"
     "pytorch/pytorch:2.9.0-cuda12.8-cudnn9-devel"
     "pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime"
@@ -79,7 +81,7 @@ show_help() {
 默认（无选项）进入交互菜单。
 
 选项:
-  --images         清理 build-runtime 相关 Docker 镜像（本地 + 远程标签 + 跨架构基础镜像）
+  --images         清理 build-runtime 相关 Docker 镜像（本地 + 远程标签；保留跨架构基础镜像）
   --builder        清理 Docker BuildKit 构建缓存 (docker builder prune -af)
   --cache          清理项目 .build-cache（pip/maven/pnpm 离线缓存，下次构建会重新下载）
   --dist           清理 WEB/dist-prebuilt-* 跨架构中间产物
@@ -221,9 +223,7 @@ collect_runtime_image_refs() {
         _out+=("$(runtime_manifest_ref "$rname")")
     done
 
-    for img in "${CROSS_BUILD_BASE_IMAGES[@]}"; do
-        _out+=("$img")
-    done
+    # 不加入 PRESERVE_CROSS_BUILD_BASE_IMAGES：ARM 基础镜像体积大，保留供下次复用
 }
 
 append_unique_ref() {
@@ -292,6 +292,22 @@ show_cleanup_preview() {
         local dangling
         dangling=$(docker images -f "dangling=true" -q 2>/dev/null | wc -l | tr -d ' ')
         print_info "悬空镜像 (<none>): ${dangling} 个"
+
+        # 提示将保留的跨架构基础镜像（不删除）
+        local preserved=0 pref psize
+        for pref in "${PRESERVE_CROSS_BUILD_BASE_IMAGES[@]}"; do
+            if docker image inspect "$pref" >/dev/null 2>&1; then
+                if [ "$preserved" -eq 0 ]; then
+                    print_info "保留跨架构基础镜像（不删除，供 ARM 构建复用）:"
+                fi
+                psize=$(image_size_of "$pref")
+                printf "  %-70s %s\n" "$pref" "$(format_bytes "$psize")"
+                preserved=$((preserved + 1))
+            fi
+        done
+        if [ "$preserved" -eq 0 ]; then
+            print_info "跨架构基础镜像: （本地暂无，下次 build-runtime 会拉取并保留）"
+        fi
     fi
 
     if $DO_BUILDER && check_docker; then
@@ -511,7 +527,7 @@ interactive_menu() {
     print_info "远程仓库: $(runtime_normalize_registry "${EASYAIOT_RUNTIME_REGISTRY:-$(sed -n 's/^[[:space:]]*REGISTRY=//p' "${SCRIPT_DIR}/runtime_registry.conf" 2>/dev/null | head -1)}")"
     echo ""
     echo "请选择清理项（可多选，逗号分隔）:"
-    echo "  1) 运行时镜像 + 悬空镜像 + 跨架构基础镜像（推荐）"
+    echo "  1) 运行时镜像 + 悬空镜像（推荐；保留 pytorch/manylinux 等跨架构基础镜像）"
     echo "  2) Docker BuildKit 构建缓存"
     echo "  3) .build-cache 离线缓存（pip/maven/pnpm，下次构建会重新下载）"
     echo "  4) WEB/dist-prebuilt-* 跨架构中间产物"

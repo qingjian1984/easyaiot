@@ -37,6 +37,9 @@ model/
 
 # 独立子服务（各自有 Dockerfile / 镜像）
 services/ai_service/
+services/train_worker/
+services/auto_label_worker/
+services/llm_service/
 
 # 环境变量（运行时通过卷挂载 .env.docker）
 .env
@@ -44,9 +47,16 @@ services/ai_service/
 !.env.example
 .env.prod
 
-# 模型权重（运行时卷挂载）
+# 模型权重（运行时下载/卷挂载，勿打入镜像）
+# 注意：Docker 的 *.pt 只匹配构建上下文根目录，子目录必须显式排除
+models/
+model/
 *.pt
+**/*.pt
 yolo11n/
+test_pose/
+docs/
+person.jpg
 
 # 安装 / 缓存脚本
 *.sh

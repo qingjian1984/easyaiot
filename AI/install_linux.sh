@@ -106,7 +106,7 @@ build_with_cache() {
     print_info "docker build（.build-cache/ai pip-cache/pip-wheels）..."
     set +e
     docker build \
-        --build-arg BASE_IMAGE="${BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-devel}" \
+        --build-arg BASE_IMAGE="${BASE_IMAGE:-pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime}" \
         --build-context "pip-cache=$(pip_cache_build_context_dir_for "$EASYAIOT_ROOT" ai)" \
         --build-context "pip-wheels=$(pip_wheels_build_context_dir_for "$EASYAIOT_ROOT" ai)" \
         --target runtime \

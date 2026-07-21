@@ -1,6 +1,7 @@
 # BuildKit 内置前端，支持 RUN --mount（勿用 syntax=docker/dockerfile，避免镜像站拉取失败）
-# 使用PyTorch官方镜像作为基础镜像
-FROM pytorch/pytorch:2.9.0-cuda12.8-cudnn9-devel AS base
+# 默认 runtime；install_linux.sh 通过 --build-arg BASE_IMAGE= 覆盖（勿硬编码 devel）
+ARG BASE_IMAGE=pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime
+FROM ${BASE_IMAGE} AS base
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
@@ -64,13 +65,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked,id=apt-cache-ai-vide
 FROM dependencies AS python-deps
 
 COPY requirements-docker.txt requirements-base.txt ./
-COPY --from=pip-wheels . /opt/offline-pip
 ARG OFFLINE_MODE=0
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
-# http 缓存落盘宿主机 pip-cache；wheels 构建目录须可写（BuildKit cache）
+# http 缓存落盘宿主机 pip-cache；pip-wheels 用 bind mount，避免 3GB+ wheel 写入镜像层
 RUN --mount=type=bind,from=pip-cache,source=.,target=/mnt/pip-cache,rw \
+    --mount=type=bind,from=pip-wheels,source=.,target=/opt/offline-pip,ro \
     --mount=type=cache,target=/tmp/pip-wheels-build,id=pip-wheels-build-ai \
     set -ex && \
     mkdir -p /mnt/pip-cache/http /tmp/pip-wheels-build && \
@@ -105,8 +106,14 @@ RUN --mount=type=bind,from=pip-cache,source=.,target=/mnt/pip-cache,rw \
 # ======================= 第三阶段：应用部署 =======================
 FROM python-deps AS runtime
 
-# 复制项目源码
-COPY . .
+# 先建用户，再用 COPY --chown，避免对大目录 chown -R 再复制一层
+RUN set -ex && \
+    groupadd -r appuser && \
+    useradd -r -m -g appuser appuser && \
+    mkdir -p /home/appuser/.paddlex/temp /home/appuser/.config/Ultralytics && \
+    chown -R appuser:appuser /home/appuser
+
+COPY --chown=appuser:appuser . .
 
 # 创建必要的目录结构
 RUN set -ex && \
@@ -117,17 +124,9 @@ RUN set -ex && \
         data/inference_results \
         temp_uploads \
         static/models && \
-    # 设置执行权限
-    chmod +x run.py docker-entrypoint.sh
+    chmod +x run.py docker-entrypoint.sh && \
+    chown -R appuser:appuser data temp_uploads static
 
-# 创建非root用户和权限设置
-RUN set -ex && \
-    groupadd -r appuser && \
-    useradd -r -m -g appuser appuser && \
-    mkdir -p /home/appuser/.paddlex/temp /home/appuser/.config/Ultralytics && \
-    chown -R appuser:appuser /app /home/appuser
-
-# 切换到非root用户
 USER appuser
 
 # 暴露端口
