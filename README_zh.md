@@ -554,111 +554,126 @@ EasyAIoT是一个开源学习项目，与商业行为无关。用户在使用该
 
 #### 📺 可视化组态
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![项目](.image/banner/banner1185.png) | ![组态](.image/banner/banner1186.png) | ![编辑](.image/banner/banner1187.png) | ![预览](.image/banner/banner1188.png) |
-| ![组件](.image/banner/banner1189.png) | ![数据源](.image/banner/banner1190.png) | ![发布](.image/banner/banner1191.png) | ![运行](.image/banner/banner1192.png) |
-| ![模板](.image/banner/banner1193.png) | ![资产](.image/banner/banner1194.png) | ![大屏](.image/banner/banner1195.png) | ![展示](.image/banner/banner1196.png) |
+| | | |
+|:---:|:---:|:---:|
+| ![项目](.image/banner/banner1185.png) | ![组态](.image/banner/banner1186.png) | ![编辑](.image/banner/banner1187.png) |
+| ![预览](.image/banner/banner1188.png) | ![组件](.image/banner/banner1189.png) | ![数据源](.image/banner/banner1190.png) |
+| ![发布](.image/banner/banner1191.png) | ![运行](.image/banner/banner1192.png) | ![模板](.image/banner/banner1193.png) |
+| ![资产](.image/banner/banner1194.png) | ![大屏](.image/banner/banner1195.png) | ![展示](.image/banner/banner1196.png) |
 
 #### 🖥️ 监控大屏
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![态势](.image/banner/banner1001.png) | ![总览](.image/banner/banner1076.jpg) | ![告警](.image/banner/banner1074.jpg) | ![看板](.image/banner/banner1075.jpg) |
-| ![多维](.image/banner/banner1095.jpg) | ![综合](.image/banner/banner1096.jpg) | ![监控](.image/banner/banner1078.jpg) | ![实时](.image/banner/banner1077.jpg) |
+| | | |
+|:---:|:---:|:---:|
+| ![态势](.image/banner/banner1001.png) | ![总览](.image/banner/banner1076.jpg) | ![告警](.image/banner/banner1074.jpg) |
+| ![看板](.image/banner/banner1075.jpg) | ![多维](.image/banner/banner1095.jpg) | ![综合](.image/banner/banner1096.jpg) |
+| ![监控](.image/banner/banner1078.jpg) | ![实时](.image/banner/banner1077.jpg) |  |
 
 #### 🤖 AI 视觉
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![姿态](.image/banner/banner1147.jpg) | ![识别](.image/banner/banner1148.jpg) | ![任务](.image/banner/banner1085.jpg) | ![配置](.image/banner/banner1086.jpg) |
-| ![详情](.image/banner/banner1087.jpg) | ![运行](.image/banner/banner1088.jpg) | ![区域](.image/banner/banner1079.jpg) | ![检测框](.image/banner/banner1080.jpg) |
-| ![布防](.image/banner/banner1081.jpg) | ![预览](.image/banner/banner1082.jpg) | ![算法](.image/banner/banner1062.jpg) | ![创建](.image/banner/banner1063.png) |
-| ![画面](.image/banner/banner1064.jpg) | ![分析](.image/banner/banner1065.jpg) | ![结果](.image/banner/banner1066.jpg) | ![回看](.image/banner/banner1067.jpg) |
-| ![实况](.image/banner/banner1052.jpg) | ![智能](.image/banner/banner1054.jpg) |  |  |
+| | | |
+|:---:|:---:|:---:|
+| ![姿态](.image/banner/banner1147.jpg) | ![识别](.image/banner/banner1148.jpg) | ![任务](.image/banner/banner1085.jpg) |
+| ![配置](.image/banner/banner1086.jpg) | ![详情](.image/banner/banner1087.jpg) | ![运行](.image/banner/banner1088.jpg) |
+| ![区域](.image/banner/banner1079.jpg) | ![检测框](.image/banner/banner1080.jpg) | ![布防](.image/banner/banner1081.jpg) |
+| ![预览](.image/banner/banner1082.jpg) | ![算法](.image/banner/banner1062.jpg) | ![创建](.image/banner/banner1063.png) |
+| ![画面](.image/banner/banner1064.jpg) | ![分析](.image/banner/banner1065.jpg) | ![结果](.image/banner/banner1066.jpg) |
+| ![回看](.image/banner/banner1067.jpg) | ![实况](.image/banner/banner1052.jpg) | ![智能](.image/banner/banner1054.jpg) |
 
 #### 🧠 大模型
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![Qwen](.image/banner/banner1093.jpg) | ![视觉模型](.image/banner/banner1094.jpg) | ![列表](.image/banner/banner1099.png) | ![配置](.image/banner/banner1100.png) |
-| ![详情](.image/banner/banner1101.png) | ![调用](.image/banner/banner1102.png) | ![训练](.image/banner/banner1019.jpg) | ![任务](.image/banner/banner1020.jpg) |
-| ![列表](.image/banner/banner1023.jpg) | ![进度](.image/banner/banner1024.jpg) | ![参数](.image/banner/banner1017.jpg) | ![评估](.image/banner/banner1018.jpg) |
-| ![详情](.image/banner/banner1021.jpg) | ![日志](.image/banner/banner1022.jpg) | ![管理](.image/banner/banner1097.png) | ![仓库](.image/banner/banner1098.png) |
-| ![版本](.image/banner/banner1039.jpg) | ![资产](.image/banner/banner1061.jpg) | ![推理](.image/banner/banner1040.jpg) | ![配置](.image/banner/banner1042.jpg) |
-| ![结果](.image/banner/banner1043.jpg) | ![在线](.image/banner/banner1044.jpg) | ![批量](.image/banner/banner1047.jpg) | ![监控](.image/banner/banner1048.jpg) |
-| ![服务](.image/banner/banner1045.jpg) | ![部署](.image/banner/banner1046.jpg) | ![集群](.image/banner/banner1049.jpg) | ![调用](.image/banner/banner1050.jpg) |
-| ![权重](.image/banner/banner1111.png) | ![下载](.image/banner/banner1112.png) |  |  |
+| | | |
+|:---:|:---:|:---:|
+| ![Qwen](.image/banner/banner1093.jpg) | ![视觉模型](.image/banner/banner1094.jpg) | ![列表](.image/banner/banner1099.png) |
+| ![配置](.image/banner/banner1100.png) | ![详情](.image/banner/banner1101.png) | ![调用](.image/banner/banner1102.png) |
+| ![训练](.image/banner/banner1019.jpg) | ![任务](.image/banner/banner1020.jpg) | ![列表](.image/banner/banner1023.jpg) |
+| ![进度](.image/banner/banner1024.jpg) | ![参数](.image/banner/banner1017.jpg) | ![评估](.image/banner/banner1018.jpg) |
+| ![详情](.image/banner/banner1021.jpg) | ![日志](.image/banner/banner1022.jpg) | ![管理](.image/banner/banner1097.png) |
+| ![仓库](.image/banner/banner1098.png) | ![版本](.image/banner/banner1039.jpg) | ![资产](.image/banner/banner1061.jpg) |
+| ![推理](.image/banner/banner1040.jpg) | ![配置](.image/banner/banner1042.jpg) | ![结果](.image/banner/banner1043.jpg) |
+| ![在线](.image/banner/banner1044.jpg) | ![批量](.image/banner/banner1047.jpg) | ![监控](.image/banner/banner1048.jpg) |
+| ![服务](.image/banner/banner1045.jpg) | ![部署](.image/banner/banner1046.jpg) | ![集群](.image/banner/banner1049.jpg) |
+| ![调用](.image/banner/banner1050.jpg) | ![权重](.image/banner/banner1111.png) | ![下载](.image/banner/banner1112.png) |
 
 #### 📦 数据集
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![管理](.image/banner/banner1015.png) | ![列表](.image/banner/banner1010.jpg) | ![标注](.image/banner/banner1027.png) | ![任务](.image/banner/banner1016.jpg) |
-| ![工具](.image/banner/banner1059.jpg) | ![预览](.image/banner/banner1060.jpg) | ![详情](.image/banner/banner1107.png) | ![导入](.image/banner/banner1108.png) |
-| ![项目](.image/banner/banner1109.png) | ![审核](.image/banner/banner1110.png) | ![创建](.image/banner/banner1007.jpg) | ![样本](.image/banner/banner1008.jpg) |
+| | | |
+|:---:|:---:|:---:|
+| ![管理](.image/banner/banner1015.png) | ![列表](.image/banner/banner1010.jpg) | ![标注](.image/banner/banner1027.png) |
+| ![任务](.image/banner/banner1016.jpg) | ![工具](.image/banner/banner1059.jpg) | ![预览](.image/banner/banner1060.jpg) |
+| ![详情](.image/banner/banner1107.png) | ![导入](.image/banner/banner1108.png) | ![项目](.image/banner/banner1109.png) |
+| ![审核](.image/banner/banner1110.png) | ![创建](.image/banner/banner1007.jpg) | ![样本](.image/banner/banner1008.jpg) |
 
 #### 📹 视频监控
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![直播](.image/banner/banner1145.jpg) | ![预览](.image/banner/banner1146.jpg) | ![摄像头](.image/banner/banner1051.jpg) | ![列表](.image/banner/banner1053.jpg) |
-| ![推流](.image/banner/banner1083.jpg) | ![转发](.image/banner/banner1084.jpg) | ![存储](.image/banner/banner1121.png) | ![抓拍](.image/banner/banner1122.png) |
-| ![录像](.image/banner/banner1123.png) | ![配置](.image/banner/banner1124.png) | ![容量](.image/banner/banner1125.png) | ![回放](.image/banner/banner1126.png) |
-| ![抓拍](.image/banner/banner1117.png) | ![文件](.image/banner/banner1118.png) | ![策略](.image/banner/banner1119.png) | ![配额](.image/banner/banner1120.png) |
-| ![图库](.image/banner/banner1057.jpg) | ![归档](.image/banner/banner1058.jpg) | ![监控](.image/banner/banner1068.jpg) | ![统计](.image/banner/banner1069.jpg) |
-| ![地图](.image/banner/banner1113.png) | ![定位](.image/banner/banner1114.png) | ![分布](.image/banner/banner1115.png) | ![点位](.image/banner/banner1116.png) |
-| ![实况](.image/banner/banner1026.jpg) | ![多路](.image/banner/banner1028.jpg) | ![推流](.image/banner/banner1103.png) | ![预览](.image/banner/banner1104.png) |
-| ![接入](.image/banner/banner1105.png) | ![NVR](.image/banner/banner1106.png) | ![实况](.image/banner/banner1183.jpg) | ![地图](.image/banner/banner1184.jpg) |
+| | | |
+|:---:|:---:|:---:|
+| ![直播](.image/banner/banner1145.jpg) | ![预览](.image/banner/banner1146.jpg) | ![摄像头](.image/banner/banner1051.jpg) |
+| ![列表](.image/banner/banner1053.jpg) | ![推流](.image/banner/banner1083.jpg) | ![转发](.image/banner/banner1084.jpg) |
+| ![存储](.image/banner/banner1121.png) | ![抓拍](.image/banner/banner1122.png) | ![录像](.image/banner/banner1123.png) |
+| ![配置](.image/banner/banner1124.png) | ![容量](.image/banner/banner1125.png) | ![回放](.image/banner/banner1126.png) |
+| ![抓拍](.image/banner/banner1117.png) | ![文件](.image/banner/banner1118.png) | ![策略](.image/banner/banner1119.png) |
+| ![配额](.image/banner/banner1120.png) | ![图库](.image/banner/banner1057.jpg) | ![归档](.image/banner/banner1058.jpg) |
+| ![监控](.image/banner/banner1068.jpg) | ![统计](.image/banner/banner1069.jpg) | ![地图](.image/banner/banner1113.png) |
+| ![定位](.image/banner/banner1114.png) | ![分布](.image/banner/banner1115.png) | ![点位](.image/banner/banner1116.png) |
+| ![实况](.image/banner/banner1026.jpg) | ![多路](.image/banner/banner1028.jpg) | ![推流](.image/banner/banner1103.png) |
+| ![预览](.image/banner/banner1104.png) | ![接入](.image/banner/banner1105.png) | ![NVR](.image/banner/banner1106.png) |
+| ![实况](.image/banner/banner1183.jpg) | ![地图](.image/banner/banner1184.jpg) |  |
 
 #### 🔌 IoT
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![物模型](.image/banner/banner1149.jpg) | ![定义](.image/banner/banner1150.jpg) | ![产品](.image/banner/banner1151.jpg) | ![详情](.image/banner/banner1152.jpg) |
-| ![设备](.image/banner/banner1153.jpg) | ![详情](.image/banner/banner1154.jpg) | ![状态](.image/banner/banner1155.jpg) | ![属性](.image/banner/banner1156.jpg) |
-| ![服务](.image/banner/banner1157.jpg) | ![事件](.image/banner/banner1158.jpg) | ![影子](.image/banner/banner1159.jpg) | ![拓扑](.image/banner/banner1160.jpg) |
-| ![子设备](.image/banner/banner1161.jpg) | ![分组](.image/banner/banner1162.jpg) | ![控制](.image/banner/banner1163.jpg) | ![遥测](.image/banner/banner1164.jpg) |
-| ![历史](.image/banner/banner1165.jpg) | ![协议](.image/banner/banner1166.jpg) | ![连接](.image/banner/banner1167.jpg) | ![认证](.image/banner/banner1168.jpg) |
-| ![调试](.image/banner/banner1169.jpg) | ![功能](.image/banner/banner1170.jpg) | ![读写](.image/banner/banner1171.jpg) | ![服务](.image/banner/banner1172.jpg) |
-| ![订阅](.image/banner/banner1173.jpg) | ![日志](.image/banner/banner1174.jpg) | ![在线](.image/banner/banner1175.jpg) | ![统计](.image/banner/banner1176.jpg) |
-| ![总览](.image/banner/banner1177.jpg) | ![看板](.image/banner/banner1178.jpg) | ![产品](.image/banner/banner1006.jpg) | ![设备](.image/banner/banner1009.jpg) |
+| | | |
+|:---:|:---:|:---:|
+| ![物模型](.image/banner/banner1149.jpg) | ![定义](.image/banner/banner1150.jpg) | ![产品](.image/banner/banner1151.jpg) |
+| ![详情](.image/banner/banner1152.jpg) | ![设备](.image/banner/banner1153.jpg) | ![详情](.image/banner/banner1154.jpg) |
+| ![状态](.image/banner/banner1155.jpg) | ![属性](.image/banner/banner1156.jpg) | ![服务](.image/banner/banner1157.jpg) |
+| ![事件](.image/banner/banner1158.jpg) | ![影子](.image/banner/banner1159.jpg) | ![拓扑](.image/banner/banner1160.jpg) |
+| ![子设备](.image/banner/banner1161.jpg) | ![分组](.image/banner/banner1162.jpg) | ![控制](.image/banner/banner1163.jpg) |
+| ![遥测](.image/banner/banner1164.jpg) | ![历史](.image/banner/banner1165.jpg) | ![协议](.image/banner/banner1166.jpg) |
+| ![连接](.image/banner/banner1167.jpg) | ![认证](.image/banner/banner1168.jpg) | ![调试](.image/banner/banner1169.jpg) |
+| ![功能](.image/banner/banner1170.jpg) | ![读写](.image/banner/banner1171.jpg) | ![服务](.image/banner/banner1172.jpg) |
+| ![订阅](.image/banner/banner1173.jpg) | ![日志](.image/banner/banner1174.jpg) | ![在线](.image/banner/banner1175.jpg) |
+| ![统计](.image/banner/banner1176.jpg) | ![总览](.image/banner/banner1177.jpg) | ![看板](.image/banner/banner1178.jpg) |
+| ![产品](.image/banner/banner1006.jpg) | ![设备](.image/banner/banner1009.jpg) |  |
 
 #### 🚀 OTA / 规则
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![OTA](.image/banner/banner1179.jpg) | ![固件](.image/banner/banner1180.jpg) | ![任务](.image/banner/banner1181.jpg) | ![进度](.image/banner/banner1182.jpg) |
-| ![规则](.image/banner/banner1013.jpg) | ![编排](.image/banner/banner1014.png) |  |  |
+| | | |
+|:---:|:---:|:---:|
+| ![OTA](.image/banner/banner1179.jpg) | ![固件](.image/banner/banner1180.jpg) | ![任务](.image/banner/banner1181.jpg) |
+| ![进度](.image/banner/banner1182.jpg) | ![规则](.image/banner/banner1013.jpg) | ![编排](.image/banner/banner1014.png) |
 
 #### 🖥️ 集群
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![概览](.image/banner/banner1127.jpg) | ![算力](.image/banner/banner1128.jpg) | ![节点](.image/banner/banner1129.jpg) | ![详情](.image/banner/banner1130.jpg) |
-| ![监控](.image/banner/banner1131.jpg) | ![调度](.image/banner/banner1132.jpg) | ![列表](.image/banner/banner1133.jpg) | ![状态](.image/banner/banner1134.jpg) |
-| ![配置](.image/banner/banner1135.jpg) | ![分配](.image/banner/banner1136.jpg) |  |  |
+| | | |
+|:---:|:---:|:---:|
+| ![概览](.image/banner/banner1127.jpg) | ![算力](.image/banner/banner1128.jpg) | ![节点](.image/banner/banner1129.jpg) |
+| ![详情](.image/banner/banner1130.jpg) | ![监控](.image/banner/banner1131.jpg) | ![调度](.image/banner/banner1132.jpg) |
+| ![列表](.image/banner/banner1133.jpg) | ![状态](.image/banner/banner1134.jpg) | ![配置](.image/banner/banner1135.jpg) |
+| ![分配](.image/banner/banner1136.jpg) |  |  |
 
 #### 🔔 告警
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![事件](.image/banner/banner1089.jpg) | ![处理](.image/banner/banner1090.jpg) | ![通知](.image/banner/banner1029.jpg) | ![配置](.image/banner/banner1030.jpg) |
-| ![列表](.image/banner/banner1072.jpg) | ![详情](.image/banner/banner1031.jpg) | ![处置](.image/banner/banner1070.jpg) | ![统计](.image/banner/banner1071.jpg) |
+| | | |
+|:---:|:---:|:---:|
+| ![事件](.image/banner/banner1089.jpg) | ![处理](.image/banner/banner1090.jpg) | ![通知](.image/banner/banner1029.jpg) |
+| ![配置](.image/banner/banner1030.jpg) | ![列表](.image/banner/banner1072.jpg) | ![详情](.image/banner/banner1031.jpg) |
+| ![处置](.image/banner/banner1070.jpg) | ![统计](.image/banner/banner1071.jpg) |  |
 
 #### ⚙️ 系统
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![标识](.image/banner/banner1143.jpg) | ![重置](.image/banner/banner1144.jpg) | ![用户](.image/banner/banner1003.png) | ![权限](.image/banner/banner1004.png) |
-| ![菜单](.image/banner/banner1005.png) | ![配置](.image/banner/banner1002.png) |  |  |
+| | | |
+|:---:|:---:|:---:|
+| ![标识](.image/banner/banner1143.jpg) | ![重置](.image/banner/banner1144.jpg) | ![用户](.image/banner/banner1003.png) |
+| ![权限](.image/banner/banner1004.png) | ![菜单](.image/banner/banner1005.png) | ![配置](.image/banner/banner1002.png) |
 
 #### 📱 APP
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| ![首页](.image/banner/app/app_1000.jpg) | ![监控](.image/banner/app/app_1001.jpg) | ![预览](.image/banner/app/app_1002.jpg) | ![告警](.image/banner/app/app_1003.jpg) |
-| ![回放](.image/banner/app/app_1004.jpg) | ![设备](.image/banner/app/app_1005.jpg) | ![消息](.image/banner/app/app_1006.jpg) | ![我的](.image/banner/app/app_1007.jpg) |
+| | | |
+|:---:|:---:|:---:|
+| ![首页](.image/banner/app/app_1000.jpg) | ![监控](.image/banner/app/app_1001.jpg) | ![预览](.image/banner/app/app_1002.jpg) |
+| ![告警](.image/banner/app/app_1003.jpg) | ![回放](.image/banner/app/app_1004.jpg) | ![设备](.image/banner/app/app_1005.jpg) |
+| ![消息](.image/banner/app/app_1006.jpg) | ![我的](.image/banner/app/app_1007.jpg) |  |
 
 ## 📞 联系方式
 
