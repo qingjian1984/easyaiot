@@ -13,6 +13,7 @@ import javax.validation.Valid;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 图片数据集 Service 接口
@@ -136,6 +137,12 @@ public interface DatasetImageService {
      * 批量导入图片（同名覆盖，批量入库）
      */
     DatasetImageUploadRespVO batchImportImages(Long datasetId, List<DatasetImageImportItem> items);
+
+    /**
+     * 批量导入图片，复用调用方维护的同名图片索引，避免每批重新全表查询。
+     */
+    DatasetImageUploadRespVO batchImportImages(Long datasetId, List<DatasetImageImportItem> items,
+                                               Map<String, DatasetImageDO> existingByName);
 
     /**
      * 从 ZIP 文件流式分批导入（避免一次性加载全部图片到内存）

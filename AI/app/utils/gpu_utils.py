@@ -158,6 +158,17 @@ def format_device_for_log(device: YoloDevice) -> str:
     return str(device)
 
 
+def _get_gpu_memory_status(torch_module, index: int) -> dict:
+    try:
+        free_bytes, total_bytes = torch_module.cuda.mem_get_info(index)
+        return {
+            'free_memory_gb': round(free_bytes / (1024 ** 3), 2),
+            'used_memory_gb': round((total_bytes - free_bytes) / (1024 ** 3), 2),
+        }
+    except Exception:
+        return {}
+
+
 def check_gpu_status() -> dict:
     """检查并返回 GPU 状态（供 API 与训练日志使用）。"""
     status = {
@@ -196,12 +207,14 @@ def check_gpu_status() -> dict:
     if torch.cuda.is_available():
         for i in range(torch.cuda.device_count()):
             props = torch.cuda.get_device_properties(i)
-            status['devices'].append({
+            device_status = {
                 'index': i,
                 'name': torch.cuda.get_device_name(i),
                 'capability': torch.cuda.get_device_capability(i),
                 'total_memory_gb': round(props.total_memory / (1024 ** 3), 2),
-            })
+            }
+            device_status.update(_get_gpu_memory_status(torch, i))
+            status['devices'].append(device_status)
             status[f'device_{i}_name'] = torch.cuda.get_device_name(i)
             status[f'device_{i}_capability'] = torch.cuda.get_device_capability(i)
 

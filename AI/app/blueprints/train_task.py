@@ -9,7 +9,7 @@ import os
 import re
 import shutil
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 import requests
@@ -478,6 +478,16 @@ def _default_publish_name(task: TrainTask) -> str:
     return base or _task_display_name(task)
 
 
+def _serialize_utc_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat().replace('+00:00', 'Z')
+
+
 def _extract_class_names_from_minio_model(model_url: str) -> list[str]:
     bucket_name, object_key = _parse_minio_url(model_url)
     if not bucket_name or not object_key:
@@ -517,9 +527,9 @@ def _serialize_task(task: TrainTask) -> dict:
         'dataset_name': task.dataset_name,
         'dataset_version': task.dataset_version,
         'hyperparameters': task.hyperparameters,
-        'start_time': task.start_time.isoformat() if task.start_time else None,
+        'start_time': _serialize_utc_datetime(task.start_time),
         'progress': task.progress,
-        'end_time': task.end_time.isoformat() if task.end_time else None,
+        'end_time': _serialize_utc_datetime(task.end_time),
         'status': task.status,
         'metrics_path': task.metrics_path,
         'train_results_path': task.train_results_path,

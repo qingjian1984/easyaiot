@@ -1,6 +1,7 @@
 import {BasicColumn, FormProps} from '@/components/Table';
 import {Progress, Tag} from 'ant-design-vue';
 import {formatClusterRuntime, formatSchedulePolicy} from '@/utils/clusterRuntime';
+import {formatTrainTaskTime} from './trainTaskUtils';
 
 const getProgressColor = (percent) => {
   const lightness = 45 + (percent / 100) * 30;
@@ -32,6 +33,7 @@ export function getBasicColumns(): BasicColumn[] {
       dataIndex: 'start_time',
       width: 120,
       responsive: ['md'],
+      customRender: ({text}) => formatTrainTaskTime(text),
     },
     {
       title: '训练进度',

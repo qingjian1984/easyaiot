@@ -179,9 +179,47 @@ export interface DatasetImageImportTaskResult {
   taskId: string;
   status: 'processing' | 'completed' | 'failed' | 'cancelled';
   processedCount?: number;
+  totalCount?: number;
   result?: DatasetImageUploadResult;
   annotationResult?: DatasetAnnotationImportResult;
   errorMessage?: string;
+}
+
+export interface DatasetYoloPreflightClass {
+  classId: number;
+  detectedName?: string;
+  suggestedName?: string;
+  manualNameRequired: boolean;
+  existingTag: boolean;
+}
+
+export interface DatasetYoloPreflightSplit {
+  split: 'train' | 'validation' | 'test' | 'unassigned';
+  imageCount: number;
+  matchedLabelCount: number;
+}
+
+export interface DatasetYoloPreflightResult {
+  rootPath: string;
+  importable: boolean;
+  imageCount: number;
+  matchedLabelCount: number;
+  missingLabelCount: number;
+  invalidLabelCount: number;
+  duplicateImageNameCount: number;
+  splits: DatasetYoloPreflightSplit[];
+  classes: DatasetYoloPreflightClass[];
+  existingTags: string[];
+  warnings: string[];
+}
+
+export interface DatasetYoloImportParams {
+  path: string;
+  classMapping: Record<number, string>;
+  classMappingConfirmed: boolean;
+  importMode: 'annotations_only' | 'overwrite';
+  allowMissingLabels: boolean;
+  preserveSplits: boolean;
 }
 
 export const getDatasetImageImportTask = (taskId: string): Promise<DatasetImageImportTaskResult> => {
@@ -206,7 +244,7 @@ function sleepMs(ms: number) {
 
 export async function waitForDatasetImportTask(
   taskId: string,
-  options?: { onProgress?: (processed: number) => void; signal?: AbortSignal },
+  options?: { onProgress?: (processed: number, total?: number) => void; signal?: AbortSignal },
 ): Promise<DatasetImageImportTaskResult> {
   const pollIntervalMs = 2000;
   let cancelRequested = false;
@@ -233,7 +271,9 @@ export async function waitForDatasetImportTask(
         throw new Error(task.errorMessage || '导入失败');
       }
       if (task.processedCount != null && task.processedCount > 0) {
-        options?.onProgress?.(task.processedCount);
+        options?.onProgress?.(task.processedCount, task.totalCount);
+      } else if (task.totalCount != null && task.totalCount > 0) {
+        options?.onProgress?.(0, task.totalCount);
       }
       await sleepMs(pollIntervalMs);
     }
@@ -249,8 +289,9 @@ interface DatasetImportTaskSubmitResult {
 
 async function submitAnnotationPathImport(
   url: string,
-  data: Record<string, unknown>,
+  data: object,
   signal?: AbortSignal,
+  onProgress?: (processed: number, total?: number) => void,
 ): Promise<DatasetAnnotationImportResult> {
   defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
   const submit = await defHttp.post<DatasetImportTaskSubmitResult>(
@@ -261,7 +302,7 @@ async function submitAnnotationPathImport(
   if (!taskId) {
     throw new Error('导入任务创建失败');
   }
-  const task = await waitForDatasetImportTask(taskId, { signal });
+  const task = await waitForDatasetImportTask(taskId, { signal, onProgress });
   if (!task.annotationResult) {
     throw new Error('导入结果为空');
   }
@@ -433,19 +474,46 @@ export const importAnnotationLabelme = (datasetId: number, formData: FormData) =
 };
 
 /** ImageFolder 路径导入（异步任务，支持取消） */
-export const importAnnotationImageFolderPath = (datasetId: number, path: string, signal?: AbortSignal) =>
-  submitAnnotationPathImport(`${Api.Dataset}/${datasetId}/annotation/import-path`, { path }, signal);
+export const importAnnotationImageFolderPath = (
+  datasetId: number,
+  path: string,
+  signal?: AbortSignal,
+  onProgress?: (processed: number, total?: number) => void,
+) => submitAnnotationPathImport(`${Api.Dataset}/${datasetId}/annotation/import-path`, { path }, signal, onProgress);
 
 /** YOLO 路径导入（异步任务，支持取消） */
-export const importAnnotationYoloPath = (datasetId: number, path: string, signal?: AbortSignal) =>
-  submitAnnotationPathImport(`${Api.Dataset}/${datasetId}/annotation/import-yolo-path`, { path }, signal);
+export const importAnnotationYoloPath = (
+  datasetId: number,
+  data: DatasetYoloImportParams,
+  signal?: AbortSignal,
+  onProgress?: (processed: number, total?: number) => void,
+) => submitAnnotationPathImport(`${Api.Dataset}/${datasetId}/annotation/import-yolo-path`, data, signal, onProgress);
+
+/** YOLO 路径导入预检 */
+export const preflightAnnotationYoloPath = (
+  datasetId: number,
+  path: string,
+  signal?: AbortSignal,
+): Promise<DatasetYoloPreflightResult> => {
+  defHttp.setHeader({ 'X-Authorization': 'Bearer ' + localStorage.getItem('jwt_token') });
+  return defHttp.post(
+    {
+      url: `${Api.Dataset}/${datasetId}/annotation/import-yolo-path/preflight`,
+      data: { path },
+      timeout: 10 * 60 * 1000,
+      signal,
+    },
+    { successMessageMode: 'none', errorMessageMode: 'none' },
+  );
+};
 
 /** COCO 路径导入（异步任务，支持取消） */
 export const importAnnotationCocoPath = (
   datasetId: number,
   body: { cocoJson: string; imagesRoot?: string },
   signal?: AbortSignal,
-) => submitAnnotationPathImport(`${Api.Dataset}/${datasetId}/annotation/import-coco-path`, body, signal);
+  onProgress?: (processed: number, total?: number) => void,
+) => submitAnnotationPathImport(`${Api.Dataset}/${datasetId}/annotation/import-coco-path`, body, signal, onProgress);
 
 /** 云平台数据集列表 */
 export const listAnnotationCloudDatasets = () =>

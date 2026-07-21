@@ -16,6 +16,9 @@ public class DatasetImageImportTaskRespVO {
     @Schema(description = "已处理图片数（解压+上传进度）")
     private int processedCount;
 
+    @Schema(description = "待处理图片总数；无法预先确定时为 0")
+    private int totalCount;
+
     @Schema(description = "图片导入结果（completed 时有值）")
     private DatasetImageUploadRespVO result;
 

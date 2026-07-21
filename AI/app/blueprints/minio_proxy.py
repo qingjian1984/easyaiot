@@ -9,15 +9,38 @@ MinIO 对象下载代理（兼容 Console API 路径格式）
 import logging
 import mimetypes
 import os
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from flask import Blueprint, Response, request
 from minio.error import S3Error
+from werkzeug.utils import secure_filename
 
 from app.services.minio_service import ModelService, parse_minio_download_url
 
 minio_proxy_bp = Blueprint('minio_proxy', __name__)
 logger = logging.getLogger(__name__)
+
+
+def _build_content_disposition(disposition: str, filename: str) -> str:
+    fallback = secure_filename(filename)
+    extension = os.path.splitext(filename)[1]
+    if not (
+        extension.startswith('.')
+        and len(extension) <= 16
+        and extension[1:].isascii()
+        and extension[1:].isalnum()
+    ):
+        extension = ''
+    if not fallback or fallback == extension.lstrip('.'):
+        fallback = f'download{extension}'
+
+    if filename.isascii() and fallback == filename:
+        return f'{disposition}; filename="{fallback}"'
+    encoded_filename = quote(filename, safe='')
+    return (
+        f'{disposition}; filename="{fallback}"; '
+        f"filename*=UTF-8''{encoded_filename}"
+    )
 
 
 @minio_proxy_bp.route('/api/v1/buckets/<bucket_name>/objects/download', methods=['GET'])
@@ -44,7 +67,7 @@ def download_object(bucket_name: str):
             return Response(err or '对象不存在', status=404, mimetype='text/plain')
         filename = os.path.basename(object_key) or 'download'
         response = Response(content, mimetype=content_type or 'application/octet-stream')
-        response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+        response.headers['Content-Disposition'] = _build_content_disposition('inline', filename)
         response.headers['Content-Length'] = str(len(content))
         return response
 
@@ -66,7 +89,7 @@ def download_object(bucket_name: str):
             content_type = guessed or 'application/octet-stream'
 
         response = Response(content, mimetype=content_type)
-        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response.headers['Content-Disposition'] = _build_content_disposition('attachment', filename)
         response.headers['Content-Length'] = str(len(content))
         return response
     except S3Error as e:

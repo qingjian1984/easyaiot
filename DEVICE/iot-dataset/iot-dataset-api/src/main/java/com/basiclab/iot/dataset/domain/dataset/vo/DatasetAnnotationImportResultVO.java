@@ -4,6 +4,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.List;
+
 @Schema(description = "标注数据导入结果")
 @Data
 @Builder
@@ -32,4 +34,10 @@ public class DatasetAnnotationImportResultVO {
 
     @Schema(description = "新建图片数（云导出）")
     private Integer createdImages;
+
+    @Schema(description = "本次导入涉及的类别名称")
+    private List<String> classes;
+
+    @Schema(description = "本次新建的标签数量")
+    private Integer tagsCreated;
 }

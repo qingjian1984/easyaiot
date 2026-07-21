@@ -100,8 +100,10 @@ async function waitForImportTask(
 ): Promise<DatasetImageUploadResult> {
   const task = await waitForDatasetImportTask(taskId, {
     signal,
-    onProgress: (processed) => {
-      if (processed > 0) {
+    onProgress: (processed, total) => {
+      if (total != null && total > 0) {
+        onProgress?.(Math.min(99, Math.floor((processed / total) * 100)));
+      } else if (processed > 0) {
         onProgress?.(99);
       }
     },

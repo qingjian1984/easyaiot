@@ -32,7 +32,7 @@
                     </div>
                     <div class="prop">
                       <div class="label">开始时间</div>
-                      <div class="value">{{ formatStartTime(item.start_time) }}</div>
+                      <div class="value">{{ formatTrainTaskTime(item.start_time) }}</div>
                     </div>
                   </div>
                   <div class="flex" style="justify-content: space-between;">
@@ -144,7 +144,7 @@ import {propTypes} from '@/utils/propTypes';
 import {isFunction} from '@/utils/is';
 import {Icon} from '@/components/Icon';
 import {getFormConfig} from '../TrainTaskList/Data';
-import {canPublishTrainTask, canResumeTrainTask, canRetrainTrainTask, getPublishedModelId, isTrainTaskActive} from '../TrainTaskList/trainTaskUtils';
+import {canPublishTrainTask, canResumeTrainTask, canRetrainTrainTask, formatTrainTaskTime, getPublishedModelId, isTrainTaskActive} from '../TrainTaskList/trainTaskUtils';
 
 defineOptions({name: 'TrainTaskCardList'});
 
@@ -351,21 +351,6 @@ function getProgressTextStyle(item: Record<string, unknown>) {
     color: getProgressColor(item),
     fontWeight: theme.prominent ? 700 : 600,
   };
-}
-
-function formatStartTime(startTime?: string) {
-  if (!startTime) return '--';
-  try {
-    return new Date(startTime).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return startTime;
-  }
 }
 
 function handleViewLogs(record: Record<string, unknown>) {

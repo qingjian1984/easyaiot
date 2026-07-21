@@ -27,4 +27,13 @@ public class DatasetImageImportItem {
 
     @Schema(description = "是否标注完成 0/1")
     private Integer completed;
+
+    @Schema(description = "是否训练集 0/1")
+    private Integer isTrain;
+
+    @Schema(description = "是否验证集 0/1")
+    private Integer isValidation;
+
+    @Schema(description = "是否测试集 0/1")
+    private Integer isTest;
 }

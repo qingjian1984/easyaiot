@@ -93,6 +93,8 @@ export interface GpuDeviceInfo {
   index: number
   name: string
   total_memory_gb: number
+  free_memory_gb?: number
+  used_memory_gb?: number
 }
 
 export interface GpuStatusData {

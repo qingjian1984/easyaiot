@@ -180,12 +180,19 @@ import {
   resolveLocalDatasetDisplayName,
   resolveTaskBaseNameFromRecord,
 } from '../TrainTaskList/trainTaskUtils';
+import {
+  defaultAutoBatchSize,
+  recommendTrainBatchSize,
+  type TrainTaskLaunchMode,
+} from '../../utils/trainBatchSize';
 import { formatModelVersionDisplay } from '../../utils/modelVersionUtils';
 
 interface GpuDeviceInfo {
   index: number;
   name: string;
   total_memory_gb: number;
+  free_memory_gb?: number;
+  used_memory_gb?: number;
 }
 
 interface GpuStatusData {
@@ -268,16 +275,29 @@ function parseNodeGpuDevices(node?: ComputeNodeVO): GpuDeviceInfo[] {
     const parsed = JSON.parse(node.gpuInfo);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((item, index) => ({
-        index: Number(item?.id ?? item?.index ?? index),
-        name: String(item?.name || item?.gpu_name || 'GPU'),
-        total_memory_gb: Number(
+      .map((item, index) => {
+        const totalMemoryGb = Number(
           item?.total_memory_gb
           ?? item?.memory_total_gb
           ?? item?.mem_total_gb
           ?? (Number(item?.memory_total_mb ?? item?.mem_total_mb ?? 0) / 1024),
-        ) || 0,
-      }))
+        ) || 0;
+        const usedMemoryGb = Number(
+          item?.used_memory_gb
+          ?? item?.memory_used_gb
+          ?? item?.mem_used_gb
+          ?? (Number(item?.memory_used_mb ?? item?.mem_used_mb ?? 0) / 1024),
+        ) || 0;
+        return {
+          index: Number(item?.id ?? item?.index ?? index),
+          name: String(item?.name || item?.gpu_name || 'GPU'),
+          total_memory_gb: totalMemoryGb,
+          used_memory_gb: usedMemoryGb,
+          free_memory_gb: totalMemoryGb > 0
+            ? Math.max(0, totalMemoryGb - usedMemoryGb)
+            : undefined,
+        };
+      })
       .filter((item) => Number.isInteger(item.index) && item.index >= 0)
       .filter((item, index, items) => items.findIndex((candidate) => candidate.index === item.index) === index)
       .sort((left, right) => left.index - right.index);
@@ -488,10 +508,14 @@ const refreshGpuSelection = async () => {
         options: gpuOptions.value,
         placeholder: '请选择训练使用的 GPU',
         allowClear: false,
+        onChange: (gpuIds: Array<string | number>) => {
+          void refreshAutoBatchSize({ gpu_ids: gpuIds });
+        },
       },
     },
     { field: 'use_gpu', helpMessage: gpuHelpMessage.value },
   ]);
+  await refreshAutoBatchSize();
 };
 
 const datasetSourceTab = ref<DatasetSourceTab>('local');
@@ -606,6 +630,20 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getF
       helpMessage: '推荐 100-300',
     },
     {
+      field: 'auto_batch_size',
+      label: '自动批量',
+      component: 'Switch',
+      defaultValue: defaultAutoBatchSize('new'),
+      componentProps: {
+        checkedChildren: '是',
+        unCheckedChildren: '否',
+        onChange: (value: boolean) => {
+          void handleAutoBatchChange(value);
+        },
+      },
+      helpMessage: '根据所选 GPU、可用显存和图像尺寸自动计算',
+    },
+    {
       field: 'batch_size',
       label: '批量大小',
       component: 'InputNumber',
@@ -616,8 +654,9 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getF
         max: 64,
         style: { width: '100%' },
         placeholder: 'batch_size',
+        disabled: true,
       },
-      helpMessage: '按 GPU 显存调整，常见值为 8 / 16 / 32',
+      helpMessage: '正在根据训练资源计算推荐值',
     },
     {
       field: 'imgsz',
@@ -631,6 +670,9 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getF
         step: 32,
         style: { width: '100%' },
         placeholder: '640',
+        onChange: (value: number) => {
+          void refreshAutoBatchSize({ imgsz: value });
+        },
       },
       helpMessage: 'YOLO 默认 640',
     },
@@ -642,6 +684,9 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getF
       componentProps: {
         checkedChildren: '是',
         unCheckedChildren: '否',
+        onChange: (value: boolean) => {
+          void refreshAutoBatchSize({ use_gpu: value });
+        },
       },
       helpMessage: '正在探测 GPU...',
     },
@@ -654,6 +699,9 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getF
         options: [],
         placeholder: '请选择训练使用的 GPU',
         allowClear: false,
+        onChange: (gpuIds: Array<string | number>) => {
+          void refreshAutoBatchSize({ gpu_ids: gpuIds });
+        },
       },
       ifShow: ({ values }) => values.use_gpu && availableGpuIds.value.length > 0,
       required: ({ values }) => values.use_gpu && availableGpuIds.value.length > 0,
@@ -695,7 +743,84 @@ const [registerForm, { setFieldsValue, validate, resetFields, updateSchema, getF
   ],
 });
 
-const resetTrainForm = () => {
+function selectedGpuIdsFromValues(values: Record<string, any>): number[] {
+  if (values.use_gpu === false || !Array.isArray(values.gpu_ids)) return [];
+  return [...new Set(
+    values.gpu_ids
+      .map((gpuId: string | number) => Number(gpuId))
+      .filter((gpuId: number) => Number.isInteger(gpuId) && gpuId >= 0),
+  )];
+}
+
+function recommendationDevices(gpuIds: number[]): GpuDeviceInfo[] {
+  if (!gpuIds.length) return [];
+  if (selectedSchedulePolicy.value === 'local') {
+    return gpuStatus.value.devices.filter((device) => gpuIds.includes(device.index));
+  }
+  if (selectedSchedulePolicy.value === 'node') {
+    return parseNodeGpuDevices(selectedTargetNode.value)
+      .filter((device) => gpuIds.includes(device.index));
+  }
+
+  const gpuCount = gpuIds.length;
+  const candidates: GpuDeviceInfo[] = [];
+  if (gpuStatus.value.devices.length >= gpuCount) {
+    candidates.push(...gpuStatus.value.devices.slice(0, gpuCount));
+  }
+  nodeRecords.value.forEach((node) => {
+    if (nodeGpuCount(node) < gpuCount) return;
+    const devices = parseNodeGpuDevices(node);
+    if (devices.length >= gpuCount) candidates.push(...devices.slice(0, gpuCount));
+  });
+  return candidates;
+}
+
+function updateBatchSizeMode(autoBatchSize: boolean) {
+  updateSchema({
+    field: 'batch_size',
+    componentProps: { disabled: autoBatchSize },
+    helpMessage: autoBatchSize
+      ? '正在根据训练资源计算推荐值'
+      : '手动设置时，多卡训练的总批量需能被 GPU 数量整除',
+  });
+}
+
+async function handleAutoBatchChange(autoBatchSize: boolean) {
+  updateBatchSizeMode(autoBatchSize);
+  if (autoBatchSize) {
+    await refreshAutoBatchSize({ auto_batch_size: true });
+  }
+}
+
+async function refreshAutoBatchSize(overrides: Record<string, unknown> = {}) {
+  const values = { ...(await getFieldsValue()), ...overrides };
+  if (values.auto_batch_size === false) return;
+  const gpuIds = selectedGpuIdsFromValues(values);
+  const devices = recommendationDevices(gpuIds).map((device) => ({
+    totalMemoryGb: device.total_memory_gb,
+    freeMemoryGb: device.free_memory_gb,
+  }));
+  const recommendation = recommendTrainBatchSize({
+    gpuCount: gpuIds.length,
+    devices,
+    imageSize: Number(values.imgsz) || 640,
+  });
+
+  await setFieldsValue({ batch_size: recommendation.batchSize });
+
+  const resourceText = recommendation.gpuCount
+    ? `${recommendation.gpuCount} 张 GPU，每卡 ${recommendation.perGpuBatchSize}`
+    : 'CPU 模式';
+  const memoryText = recommendation.limitingMemoryGb == null
+    ? ''
+    : `，最低安全显存 ${recommendation.limitingMemoryGb} GB`;
+  updateSchema({
+    field: 'batch_size',
+    helpMessage: `自动推荐总批量 ${recommendation.batchSize}（${resourceText}${memoryText}）`,
+  });
+}
+
+const resetTrainForm = async () => {
   isRetrainMode.value = false;
   isResumeMode.value = false;
   retrainTaskId.value = undefined;
@@ -713,11 +838,16 @@ const resetTrainForm = () => {
   gpuStatus.value = defaultGpuStatus();
   selectedModelPath.value = presetModels[0];
   modelPathDisabled.value = false;
-  resetFields();
+  await resetFields();
   resetDatasetSelection();
   updateSchema([
     { field: 'task_name', componentProps: { disabled: false } },
     { field: 'epochs', componentProps: { min: 10 }, helpMessage: '推荐 100-300' },
+    {
+      field: 'batch_size',
+      componentProps: { disabled: true },
+      helpMessage: '正在根据训练资源计算推荐值',
+    },
   ]);
 };
 
@@ -737,11 +867,16 @@ const applyResumeFormState = () => {
 const drawerOpenData = ref<Record<string, unknown>>({});
 
 async function initTrainDrawer(data: Record<string, unknown> = {}) {
-  resetTrainForm();
+  await resetTrainForm();
   await Promise.all([loadCustomModels(), loadNodes()]);
 
-  const fillFromRecord = async (record: Record<string, unknown>) => {
+  const fillFromRecord = async (
+    record: Record<string, unknown>,
+    launchMode: Exclude<TrainTaskLaunchMode, 'new'>,
+  ) => {
+    const autoBatchSize = defaultAutoBatchSize(launchMode);
     retrainTaskId.value = record.id as number;
+    updateBatchSizeMode(autoBatchSize);
 
     const hp = parseTrainHyperparameters(record.hyperparameters);
     completedEpochs.value = getCompletedEpochs(record);
@@ -749,6 +884,7 @@ async function initTrainDrawer(data: Record<string, unknown> = {}) {
     await setFieldsValue({
       task_name: hp.taskName || resolveTaskBaseNameFromRecord(record),
       epochs: hp.epochs ?? 100,
+      auto_batch_size: autoBatchSize,
       batch_size: hp.batch_size ?? 16,
       imgsz: hp.imgsz ?? 640,
       schedule_policy: (record.schedule_policy as string) || 'auto',
@@ -790,14 +926,14 @@ async function initTrainDrawer(data: Record<string, unknown> = {}) {
 
   if (data?.isResume && data?.record) {
     isResumeMode.value = true;
-    await fillFromRecord(data.record as Record<string, unknown>);
+    await fillFromRecord(data.record as Record<string, unknown>, 'resume');
     const values = await getFieldsValue();
     if ((values.epochs ?? 100) <= completedEpochs.value) {
       await setFieldsValue({ epochs: completedEpochs.value + 1 });
     }
   } else if (data?.isRetrain && data?.record) {
     isRetrainMode.value = true;
-    await fillFromRecord(data.record as Record<string, unknown>);
+    await fillFromRecord(data.record as Record<string, unknown>, 'retrain');
   }
 
   await loadGpuStatus();
@@ -818,6 +954,10 @@ async function initTrainDrawer(data: Record<string, unknown> = {}) {
           : (availableGpuIds.value.length ? [availableGpuIds.value[0]] : undefined),
       });
     }
+  }
+
+  if (isRetrainMode.value) {
+    await refreshAutoBatchSize();
   }
 
   if (isResumeMode.value || isRetrainMode.value) {

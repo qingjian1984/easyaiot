@@ -4,6 +4,23 @@ export const ACTIVE_TRAIN_STATUSES = ['preparing', 'Train', 'train', 'running', 
 
 export const RETRAINABLE_STATUSES = ['stopped', 'completed', 'error', 'failed'];
 
+const TIMEZONE_SUFFIX_RE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+export function formatTrainTaskTime(value?: string): string {
+  if (!value) return '--';
+  const trimmed = value.trim();
+  const timestamp = TIMEZONE_SUFFIX_RE.test(trimmed) ? trimmed : `${trimmed}Z`;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function isTrainTaskActive(status?: string): boolean {
   return ACTIVE_TRAIN_STATUSES.includes(String(status || ''));
 }

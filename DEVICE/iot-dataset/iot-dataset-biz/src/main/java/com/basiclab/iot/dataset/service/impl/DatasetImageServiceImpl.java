@@ -793,6 +793,16 @@ public class DatasetImageServiceImpl implements DatasetImageService {
         return batchImportImagesInternal(datasetId, items, existingByName);
     }
 
+    @Override
+    public DatasetImageUploadRespVO batchImportImages(Long datasetId, List<DatasetImageImportItem> items,
+                                                      Map<String, DatasetImageDO> existingByName) {
+        if (items == null || items.isEmpty()) {
+            return new DatasetImageUploadRespVO();
+        }
+        Map<String, DatasetImageDO> index = existingByName != null ? existingByName : loadExistingByName(datasetId);
+        return batchImportImagesInternal(datasetId, items, index);
+    }
+
     private Map<String, DatasetImageDO> loadExistingByName(Long datasetId) {
         return datasetImageMapper.selectByDatasetId(datasetId).stream()
                 .collect(Collectors.toMap(
@@ -988,6 +998,15 @@ public class DatasetImageServiceImpl implements DatasetImageService {
         } else {
             image.setCompleted(0);
             image.setModificationCount(0);
+        }
+        if (item.getIsTrain() != null) {
+            image.setIsTrain(item.getIsTrain());
+        }
+        if (item.getIsValidation() != null) {
+            image.setIsValidation(item.getIsValidation());
+        }
+        if (item.getIsTest() != null) {
+            image.setIsTest(item.getIsTest());
         }
     }
 
