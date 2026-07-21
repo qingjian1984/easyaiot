@@ -78,7 +78,13 @@ public class DatasetImageServiceImpl implements DatasetImageService {
 
     private final static Logger logger = LoggerFactory.getLogger(DatasetImageServiceImpl.class);
     private static final int IMPORT_ZIP_BATCH_SIZE = 100;
+    private static final long IMPORT_ZIP_BATCH_MAX_BYTES = 64L * 1024 * 1024;
+    private static final long IMPORT_ZIP_ENTRY_MAX_BYTES = 50L * 1024 * 1024;
     private static final int MINIO_UPLOAD_PARALLEL = 12;
+    private static final int MAX_BATCH_DELETE_SIZE = 100;
+    private static final int SYNC_EXPORT_BATCH_SIZE = 100;
+
+    private final Set<Long> syncingDatasetIds = ConcurrentHashMap.newKeySet();
 
     @Resource
     @Qualifier("uploadExecutor")
@@ -168,10 +174,14 @@ public class DatasetImageServiceImpl implements DatasetImageService {
         if (ids == null || ids.isEmpty()) {
             return;
         }
+        List<Long> uniqueIds = new ArrayList<>(new LinkedHashSet<>(ids));
+        if (uniqueIds.size() > MAX_BATCH_DELETE_SIZE) {
+            throw exception(DATASET_IMAGE_BATCH_DELETE_LIMIT_EXCEEDED);
+        }
         // 删除MinIO中的文件
-        deleteMinioFiles(ids);
+        deleteMinioFiles(uniqueIds);
         // 批量删除数据库记录
-        datasetImageMapper.deleteBatchIds(ids);
+        datasetImageMapper.deleteBatchIds(uniqueIds);
     }
 
     private void deleteMinioFiles(List<Long> ids) {
@@ -272,6 +282,17 @@ public class DatasetImageServiceImpl implements DatasetImageService {
 
     @Override
     public String syncToMinio(Long datasetId) {
+        if (!syncingDatasetIds.add(datasetId)) {
+            throw exception(DATASET_SYNC_IN_PROGRESS);
+        }
+        try {
+            return doSyncToMinio(datasetId);
+        } finally {
+            syncingDatasetIds.remove(datasetId);
+        }
+    }
+
+    private String doSyncToMinio(Long datasetId) {
         DatasetSyncCheckRespVO check = checkSyncCondition(datasetId);
         if (check.getTotalImages() == null || check.getTotalImages() == 0) {
             throw exception(DATASET_NO_IMAGES);
@@ -282,26 +303,32 @@ public class DatasetImageServiceImpl implements DatasetImageService {
         if (!Boolean.TRUE.equals(check.getAnnotationCompleted())) {
             throw exception(DATASET_ANNOTATION_INCOMPLETE);
         }
-        List<DatasetImageDO> images = datasetImageMapper.selectList(
-                new LambdaQueryWrapper<DatasetImageDO>()
-                        .eq(DatasetImageDO::getDatasetId, datasetId));
         Path tempDir = createTempDirectoryStructure(datasetId);
         Path zipPath = null;
         try {
             int skippedCount = 0;
-            for (DatasetImageDO image : images) {
-                String usageType = getUsageType(image);
-                String imageName = image.getName();
-                Path imagePath = tempDir.resolve("images/" + usageType + "/" + imageName);
-                String labelFileName = stripImageExtension(imageName) + ".txt";
-                Path labelPath = tempDir.resolve("labels/" + usageType + "/" + labelFileName);
-                try {
-                    downloadImageToTemp(image, imagePath);
-                    createLabelFile(image, labelPath, datasetId);
-                } catch (Exception e) {
-                    skippedCount++;
-                    logger.warn("跳过文件 {}: {}", image.getName(), e.getMessage());
+            long lastImageId = 0L;
+            while (true) {
+                List<DatasetImageDO> images = datasetImageMapper.selectSyncBatch(
+                        datasetId, lastImageId, SYNC_EXPORT_BATCH_SIZE);
+                if (images.isEmpty()) {
+                    break;
                 }
+                for (DatasetImageDO image : images) {
+                    String usageType = getUsageType(image);
+                    String imageName = image.getName();
+                    Path imagePath = tempDir.resolve("images/" + usageType + "/" + imageName);
+                    String labelFileName = stripImageExtension(imageName) + ".txt";
+                    Path labelPath = tempDir.resolve("labels/" + usageType + "/" + labelFileName);
+                    try {
+                        downloadImageToTemp(image, imagePath);
+                        createLabelFile(image, labelPath, datasetId);
+                    } catch (Exception e) {
+                        skippedCount++;
+                        logger.warn("跳过文件 {}: {}", image.getName(), e.getMessage());
+                    }
+                }
+                lastImageId = images.get(images.size() - 1).getId();
             }
             if (skippedCount > 0) {
                 logger.warn("数据集 {} 打包完成，跳过 {} 个缺失文件", datasetId, skippedCount);
@@ -624,7 +651,9 @@ public class DatasetImageServiceImpl implements DatasetImageService {
      */
     private DatasetImageUploadRespVO processZipUpload(MultipartFile file, Long datasetId)
             throws IOException {
-        List<DatasetImageImportItem> items = new ArrayList<>();
+        DatasetImageUploadRespVO total = new DatasetImageUploadRespVO();
+        List<DatasetImageImportItem> batch = new ArrayList<>(IMPORT_ZIP_BATCH_SIZE);
+        long batchBytes = 0;
         byte[] buffer = new byte[8192];
 
         try (ZipInputStream zis = openZipInputStream(file)) {
@@ -639,24 +668,28 @@ public class DatasetImageServiceImpl implements DatasetImageService {
                     continue;
                 }
 
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                int len;
-                while ((len = zis.read(buffer)) > 0) {
-                    outputStream.write(buffer, 0, len);
-                }
-
-                byte[] fileData = outputStream.toByteArray();
+                byte[] fileData = readZipEntryBytes(zis, buffer, originalFilename);
                 if (fileData.length == 0) {
                     continue;
+                }
+
+                if (!batch.isEmpty() && shouldFlushZipBatch(batch, batchBytes, fileData.length)) {
+                    mergeImportResult(total, batchImportImages(datasetId, batch));
+                    batch.clear();
+                    batchBytes = 0;
                 }
 
                 DatasetImageImportItem item = new DatasetImageImportItem();
                 item.setFilename(originalFilename);
                 item.setData(fileData);
-                items.add(item);
+                batch.add(item);
+                batchBytes += fileData.length;
             }
         }
-        return batchImportImages(datasetId, items);
+        if (!batch.isEmpty()) {
+            mergeImportResult(total, batchImportImages(datasetId, batch));
+        }
+        return total;
     }
 
     private DatasetImageUploadRespVO processZipUploadFromPath(Path zipPath, Long datasetId) throws IOException {
@@ -665,6 +698,25 @@ public class DatasetImageServiceImpl implements DatasetImageService {
 
     private ZipInputStream openZipInputStream(MultipartFile file) throws IOException {
         return new ZipInputStream(file.getInputStream(), StandardCharsets.UTF_8);
+    }
+
+    private byte[] readZipEntryBytes(ZipInputStream zis, byte[] buffer, String filename) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        long entryBytes = 0;
+        int len;
+        while ((len = zis.read(buffer)) > 0) {
+            entryBytes += len;
+            if (entryBytes > IMPORT_ZIP_ENTRY_MAX_BYTES) {
+                throw exception(FILE_SIZE_EXCEEDED, "压缩包内单张图片超过 50MB: " + filename);
+            }
+            outputStream.write(buffer, 0, len);
+        }
+        return outputStream.toByteArray();
+    }
+
+    private boolean shouldFlushZipBatch(List<DatasetImageImportItem> batch, long batchBytes, int nextFileBytes) {
+        return batch.size() >= IMPORT_ZIP_BATCH_SIZE
+                || batchBytes + nextFileBytes > IMPORT_ZIP_BATCH_MAX_BYTES;
     }
 
     /**
@@ -723,10 +775,10 @@ public class DatasetImageServiceImpl implements DatasetImageService {
         if (cancelChecker == null) {
             cancelChecker = ImportCancelChecker.NONE;
         }
-        Map<String, DatasetImageDO> existingByName = loadExistingByName(datasetId);
         DatasetImageUploadRespVO total = new DatasetImageUploadRespVO();
         List<DatasetImageImportItem> batch = new ArrayList<>(IMPORT_ZIP_BATCH_SIZE);
         int processed = 0;
+        long batchBytes = 0;
         byte[] buffer = new byte[8192];
 
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipPath), StandardCharsets.UTF_8)) {
@@ -742,35 +794,31 @@ public class DatasetImageServiceImpl implements DatasetImageService {
                     continue;
                 }
 
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                int len;
-                while ((len = zis.read(buffer)) > 0) {
-                    outputStream.write(buffer, 0, len);
-                }
-
-                byte[] fileData = outputStream.toByteArray();
+                byte[] fileData = readZipEntryBytes(zis, buffer, originalFilename);
                 if (fileData.length == 0) {
                     continue;
+                }
+
+                if (!batch.isEmpty() && shouldFlushZipBatch(batch, batchBytes, fileData.length)) {
+                    cancelChecker.throwIfCancelled();
+                    mergeImportResult(total, batchImportImages(datasetId, batch));
+                    processed += batch.size();
+                    if (progressCallback != null) {
+                        progressCallback.accept(processed);
+                    }
+                    batch.clear();
+                    batchBytes = 0;
                 }
 
                 DatasetImageImportItem item = new DatasetImageImportItem();
                 item.setFilename(originalFilename);
                 item.setData(fileData);
                 batch.add(item);
-
-                if (batch.size() >= IMPORT_ZIP_BATCH_SIZE) {
-                    cancelChecker.throwIfCancelled();
-                    mergeImportResult(total, batchImportImagesInternal(datasetId, batch, existingByName));
-                    processed += batch.size();
-                    if (progressCallback != null) {
-                        progressCallback.accept(processed);
-                    }
-                    batch.clear();
-                }
+                batchBytes += fileData.length;
             }
             if (!batch.isEmpty()) {
                 cancelChecker.throwIfCancelled();
-                mergeImportResult(total, batchImportImagesInternal(datasetId, batch, existingByName));
+                mergeImportResult(total, batchImportImages(datasetId, batch));
                 processed += batch.size();
                 if (progressCallback != null) {
                     progressCallback.accept(processed);
@@ -789,7 +837,7 @@ public class DatasetImageServiceImpl implements DatasetImageService {
         if (items == null || items.isEmpty()) {
             return new DatasetImageUploadRespVO();
         }
-        Map<String, DatasetImageDO> existingByName = loadExistingByName(datasetId);
+        Map<String, DatasetImageDO> existingByName = loadExistingByNames(datasetId, items);
         return batchImportImagesInternal(datasetId, items, existingByName);
     }
 
@@ -799,17 +847,30 @@ public class DatasetImageServiceImpl implements DatasetImageService {
         if (items == null || items.isEmpty()) {
             return new DatasetImageUploadRespVO();
         }
-        Map<String, DatasetImageDO> index = existingByName != null ? existingByName : loadExistingByName(datasetId);
+        Map<String, DatasetImageDO> index = existingByName != null
+                ? existingByName
+                : loadExistingByNames(datasetId, items);
         return batchImportImagesInternal(datasetId, items, index);
     }
 
-    private Map<String, DatasetImageDO> loadExistingByName(Long datasetId) {
-        return datasetImageMapper.selectByDatasetId(datasetId).stream()
+    private Map<String, DatasetImageDO> loadExistingByNames(
+            Long datasetId, List<DatasetImageImportItem> items) {
+        List<String> names = items.stream()
+                .filter(Objects::nonNull)
+                .map(DatasetImageImportItem::getFilename)
+                .filter(Objects::nonNull)
+                .map(name -> Paths.get(name).getFileName().toString())
+                .distinct()
+                .collect(Collectors.toList());
+        if (names.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        return datasetImageMapper.selectImportIndexByDatasetIdAndNames(datasetId, names).stream()
                 .collect(Collectors.toMap(
                         DatasetImageDO::getName,
                         img -> img,
                         (a, b) -> a,
-                        ConcurrentHashMap::new));
+                        LinkedHashMap::new));
     }
 
     private void mergeImportResult(DatasetImageUploadRespVO total, DatasetImageUploadRespVO batch) {

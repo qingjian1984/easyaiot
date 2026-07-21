@@ -200,43 +200,53 @@
       <!-- 左侧图片列表（虚拟滚动，单次最多加载 1000 条） -->
       <div ref="imagePanelRef" class="image-panel">
         <div class="image-list-header">
-          <div v-if="!batchSelectMode" class="image-list-stats">
-            <span class="stat-done">已完成 {{ completedCount }}</span>
-            <span class="stat-sep">/</span>
-            <span class="stat-total">{{ totalImages }}</span>
-            <span v-if="listFilterStatus !== 'all'" class="stat-filtered">· {{ displayImages.length }}</span>
-          </div>
-          <div class="image-list-header-actions">
-            <div v-if="batchSelectMode" class="batch-action-group">
-              <Popconfirm
-                placement="topRight"
-                title="是否确认删除选中的图片？"
-                ok-text="确认"
-                cancel-text="取消"
-                :get-popup-container="getSidePanelPopupContainer"
-                @confirm="handleBatchDeleteSelected"
-              >
-                <Button
-                  class="image-panel-toolbar-btn image-panel-toolbar-btn--danger"
-                  size="small"
-                  type="primary"
-                  danger
-                  :disabled="selectedImageCount === 0"
-                  preIcon="ant-design:delete-outlined"
-                >
-                  删除
-                </Button>
-              </Popconfirm>
+          <div v-if="batchSelectMode" class="batch-selection-toolbar">
+            <div class="batch-selection-summary">
+              <span>已选 {{ selectedImageCount }}/{{ MAX_BATCH_SELECTION }}</span>
+              <Button size="small" type="text" @click="toggleBatchSelectMode">
+                取消
+              </Button>
+            </div>
+            <div class="batch-action-group">
               <Button
                 class="image-panel-toolbar-btn"
                 size="small"
                 type="default"
-                @click="toggleBatchSelectMode"
+                :disabled="displayImages.length === 0 || allSelectableImagesSelected"
+                @click="selectAllImagesInChunk"
               >
-                取消
+                全选
+              </Button>
+              <Button
+                class="image-panel-toolbar-btn"
+                size="small"
+                type="default"
+                :disabled="selectedImageCount === 0"
+                @click="clearImageSelection"
+              >
+                全不选
+              </Button>
+              <Button
+                class="image-panel-toolbar-btn image-panel-toolbar-btn--danger"
+                size="small"
+                type="primary"
+                danger
+                :disabled="selectedImageCount === 0"
+                preIcon="ant-design:delete-outlined"
+                @click="confirmBatchDeleteSelected"
+              >
+                删除
               </Button>
             </div>
-            <template v-else>
+          </div>
+          <template v-else>
+            <div class="image-list-stats">
+              <span class="stat-done">已完成 {{ completedCount }}</span>
+              <span class="stat-sep">/</span>
+              <span class="stat-total">{{ totalImages }}</span>
+              <span v-if="listFilterStatus !== 'all'" class="stat-filtered">· {{ displayImages.length }}</span>
+            </div>
+            <div class="image-list-header-actions">
               <Button
                 v-if="totalImages > 0"
                 class="image-panel-toolbar-btn image-panel-toolbar-btn--icon"
@@ -255,16 +265,16 @@
                 title="跳到下一张待标注 (N)"
                 @click="jumpToNextPending"
               />
-            </template>
-            <Select
-              v-model:value="listFilterStatus"
-              size="small"
-              class="filter-select"
-              :options="listFilterOptions"
-              popup-class-name="image-panel-dropdown"
-              :get-popup-container="getSidePanelPopupContainer"
-            />
-          </div>
+              <Select
+                v-model:value="listFilterStatus"
+                size="small"
+                class="filter-select"
+                :options="listFilterOptions"
+                popup-class-name="image-panel-dropdown"
+                :get-popup-container="getSidePanelPopupContainer"
+              />
+            </div>
+          </template>
         </div>
         <div
           ref="listScrollRef"
@@ -501,7 +511,7 @@
 
 <script setup lang="ts">
 import {computed, nextTick, onMounted, onUnmounted, reactive, ref, watch} from 'vue';
-import {Checkbox, ConfigProvider, Dropdown, Menu, MenuDivider, MenuItem, Pagination, Popconfirm, Select} from 'ant-design-vue';
+import {Checkbox, ConfigProvider, Dropdown, Menu, MenuDivider, MenuItem, Pagination, Select} from 'ant-design-vue';
 import {Icon} from '@/components/Icon';
 import {Button} from '@/components/Button';
 import {useMessage} from "@/hooks/web/useMessage";
@@ -615,6 +625,7 @@ const isSaved = ref(true);
 
 /** 左侧列表每个分块展示的条数（与后端 PageParam.PAGE_SIZE_MAX 一致） */
 const LIST_CHUNK_SIZE = 1000;
+const MAX_BATCH_SELECTION = 100;
 const LIST_ITEM_HEIGHT = 36;
 const LIST_OVERSCAN = 10;
 
@@ -654,6 +665,13 @@ let batchTaskPollTimer: ReturnType<typeof setInterval> | null = null;
 const totalPages = computed(() => Math.max(1, Math.ceil(totalImages.value / LIST_CHUNK_SIZE)));
 
 const displayImages = computed(() => images.value);
+const selectableImageIds = computed(() =>
+  displayImages.value.slice(0, MAX_BATCH_SELECTION).map((image) => image.id),
+);
+const allSelectableImagesSelected = computed(() =>
+  selectableImageIds.value.length > 0
+  && selectableImageIds.value.every((id) => selectedImageIds.value.has(id)),
+);
 
 const globalImageIndex = computed(() => {
   return (listChunkPage.value - 1) * LIST_CHUNK_SIZE + currentImageIndex.value;
@@ -790,6 +808,7 @@ const onListChunkPageChange = async (page: number) => {
     listChunkPage.value = prevPage;
     return;
   }
+  clearImageSelection();
   currentImageIndex.value = 0;
   await fetchImages(page);
 };
@@ -983,6 +1002,7 @@ const resolveAnnotationColor = (labelKey: string, storedColor?: string): string 
 };
 
 watch(listFilterStatus, () => {
+  clearImageSelection();
   listChunkPage.value = 1;
   fetchImages(1);
 });
@@ -1080,6 +1100,10 @@ const isImageSelected = (id: number): boolean => selectedImageIds.value.has(id);
 const toggleImageSelection = (id: number, checked: boolean): void => {
   const next = new Set(selectedImageIds.value);
   if (checked) {
+    if (!next.has(id) && next.size >= MAX_BATCH_SELECTION) {
+      createMessage.warning(`单次最多选择 ${MAX_BATCH_SELECTION} 张图片`);
+      return;
+    }
     next.add(id);
   } else {
     next.delete(id);
@@ -1087,10 +1111,21 @@ const toggleImageSelection = (id: number, checked: boolean): void => {
   selectedImageIds.value = next;
 };
 
+const clearImageSelection = (): void => {
+  selectedImageIds.value = new Set();
+};
+
+const selectAllImagesInChunk = (): void => {
+  selectedImageIds.value = new Set(selectableImageIds.value);
+  if (displayImages.value.length > MAX_BATCH_SELECTION) {
+    createMessage.info(`已按单次限制选中前 ${MAX_BATCH_SELECTION} 张图片`);
+  }
+};
+
 const toggleBatchSelectMode = (): void => {
   batchSelectMode.value = !batchSelectMode.value;
   if (!batchSelectMode.value) {
-    selectedImageIds.value = new Set();
+    clearImageSelection();
   }
 };
 
@@ -1104,7 +1139,9 @@ const onImageListItemClick = async (img: Image): Promise<void> => {
 
 const buildDeleteConfirmContent = (ids: number[]): string => {
   const deletingCurrent = ids.includes(currentImage.value.id);
-  let content = '删除后图片及标注数据将无法恢复，且会同时删除存储中的原图。';
+  let content = ids.length > 1
+    ? `将永久删除 ${ids.length} 张图片及其标注和存储中的原图，此操作无法恢复。`
+    : '删除后图片及标注数据将无法恢复，且会同时删除存储中的原图。';
   if (deletingCurrent && !isSaved.value) {
     content += ' 当前图片有未保存的标注，也将一并删除。';
   }
@@ -1143,6 +1180,10 @@ const deleteImagesByIds = async (ids: number[]): Promise<void> => {
   if (ids.length === 0 || listLoading.value) return;
 
   const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length > MAX_BATCH_SELECTION) {
+    createMessage.warning(`单次最多删除 ${MAX_BATCH_SELECTION} 张图片`);
+    return;
+  }
   const prevGlobalIndex = globalImageIndex.value;
 
   try {
@@ -1153,7 +1194,7 @@ const deleteImagesByIds = async (ids: number[]): Promise<void> => {
       await deleteDatasetImages(uniqueIds);
     }
 
-    selectedImageIds.value = new Set();
+    clearImageSelection();
     batchSelectMode.value = false;
     isSaved.value = true;
 
@@ -1197,10 +1238,17 @@ const confirmDeleteCurrentImage = (): void => {
   });
 };
 
-const handleBatchDeleteSelected = (): void => {
+const confirmBatchDeleteSelected = (): void => {
   const ids = [...selectedImageIds.value];
   if (ids.length === 0) return;
-  deleteImagesByIds(ids);
+  createConfirm({
+    iconType: 'warning',
+    title: `永久删除 ${ids.length} 张图片？`,
+    content: buildDeleteConfirmContent(ids),
+    okText: '删除',
+    okType: 'danger',
+    onOk: () => deleteImagesByIds(ids),
+  });
 };
 
 const getImageStatusText = (img: Image): string => {
@@ -2780,12 +2828,38 @@ onUnmounted(() => {
       flex-shrink: 0;
     }
 
-    .batch-action-group {
-      display: inline-flex;
+    .batch-selection-toolbar {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      min-width: 0;
+      gap: 8px;
+    }
+
+    .batch-selection-summary {
+      display: flex;
       align-items: center;
+      justify-content: space-between;
+      min-height: 24px;
+      color: rgba(255, 255, 255, 0.88);
+      font-size: 13px;
+      font-weight: 500;
+
+      .ant-btn {
+        height: 24px;
+        padding: 0 4px;
+        color: rgba(255, 255, 255, 0.72);
+      }
+    }
+
+    .batch-action-group {
+      display: flex;
+      align-items: center;
+      width: 100%;
       gap: 8px;
 
       .ant-btn {
+        flex: 1;
         height: 28px !important;
         min-width: 56px;
         padding: 0 12px !important;

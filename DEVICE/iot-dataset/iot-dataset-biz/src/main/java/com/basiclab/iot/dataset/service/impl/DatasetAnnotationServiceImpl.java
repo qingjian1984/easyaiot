@@ -540,7 +540,7 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
             classMapping.forEach((classId, name) ->
                     classLabelMapping.put(classId, nameToShortcut.getOrDefault(name, name)));
 
-            Map<String, DatasetImageDO> existingByName = datasetImageMapper.selectByDatasetId(datasetId).stream()
+            Map<String, DatasetImageDO> existingByName = datasetImageMapper.selectImportIndexByDatasetId(datasetId).stream()
                     .collect(Collectors.toMap(DatasetImageDO::getName, image -> image, (first, ignored) -> first,
                             LinkedHashMap::new));
             List<DatasetImageDO> pendingUpdates = new ArrayList<>(PATH_IMPORT_BATCH_SIZE);
@@ -598,7 +598,7 @@ public class DatasetAnnotationServiceImpl implements DatasetAnnotationService {
             effectiveCancelChecker.throwIfCancelled();
             flushYoloImportBatches(datasetId, pendingUpdates, pendingImports, existingByName, uploadResult);
             if (preserveSplits && fileImportsQueued) {
-                existingByName = datasetImageMapper.selectByDatasetId(datasetId).stream()
+                existingByName = datasetImageMapper.selectImportIndexByDatasetId(datasetId).stream()
                         .collect(Collectors.toMap(DatasetImageDO::getName, image -> image,
                                 (first, ignored) -> first, LinkedHashMap::new));
                 restoreYoloSplits(inspection.getSamples(), existingByName);

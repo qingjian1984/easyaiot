@@ -142,7 +142,7 @@ services:
     user: root
     environment:
       - TZ=Asia/Shanghai # 配置程序默认时区为上海（中国标准时间）
-      - JAVA_OPTS=-Xms256m -Xmx320m
+      - JAVA_OPTS=-Xms512m -Xmx2g -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/root/logs/iot-dataset-oom.hprof -XX:+ExitOnOutOfMemoryError
       - SPRING_PROFILES_ACTIVE=local # 指定程序运行环境
       - SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR=Nacos:8848 # 配置中心地址（使用Docker服务名）
       - SPRING_CLOUD_NACOS_CONFIG_NAMESPACE= # 使用默认命名空间（public）

@@ -54,10 +54,37 @@
         WHERE dataset_id = #{datasetId}
     </update>
 
-    <!-- DatasetImageMapper.xml 新增查询 -->
-    <select id="selectByDatasetId" resultType="com.basiclab.iot.dataset.dal.dataobject.DatasetImageDO">
-        SELECT * FROM dataset_image
+    <sql id="importIndexColumns">
+        id, dataset_id, name, path, modification_count, is_train, is_validation, is_test
+    </sql>
+
+    <!-- 导入只需要覆盖定位信息，不读取可能很大的 annotations 字段。 -->
+    <select id="selectImportIndexByDatasetId"
+            resultType="com.basiclab.iot.dataset.dal.dataobject.DatasetImageDO">
+        SELECT <include refid="importIndexColumns"/>
+        FROM dataset_image
         WHERE dataset_id = #{datasetId}
+    </select>
+
+    <select id="selectImportIndexByDatasetIdAndNames"
+            resultType="com.basiclab.iot.dataset.dal.dataobject.DatasetImageDO">
+        SELECT <include refid="importIndexColumns"/>
+        FROM dataset_image
+        WHERE dataset_id = #{datasetId}
+          AND name IN
+        <foreach collection="names" item="name" open="(" separator="," close=")">
+            #{name}
+        </foreach>
+    </select>
+
+    <select id="selectSyncBatch"
+            resultType="com.basiclab.iot.dataset.dal.dataobject.DatasetImageDO">
+        SELECT id, dataset_id, name, path, annotations, is_train, is_validation, is_test
+        FROM dataset_image
+        WHERE dataset_id = #{datasetId}
+          AND id &gt; #{lastId}
+        ORDER BY id
+        LIMIT #{limit}
     </select>
 
     <!-- 同步主键序列到 MAX(id)，修复初始化脚本中 setval 低于已有数据导致的 duplicate key -->

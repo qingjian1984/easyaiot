@@ -33,8 +33,8 @@ public class DatasetImageImportTaskServiceImpl implements DatasetImageImportTask
     private static final Logger logger = LoggerFactory.getLogger(DatasetImageImportTaskServiceImpl.class);
 
     @Resource
-    @Qualifier("uploadExecutor")
-    private Executor uploadExecutor;
+    @Qualifier("importExecutor")
+    private Executor importExecutor;
 
     @Resource
     private DatasetImageService datasetImageService;
@@ -48,14 +48,14 @@ public class DatasetImageImportTaskServiceImpl implements DatasetImageImportTask
     @Override
     public String submitZipImport(Path zipPath, Long datasetId, Runnable onFinished) {
         ImportTaskState state = createTask();
-        uploadExecutor.execute(() -> runZipImport(state, zipPath, datasetId, onFinished));
+        importExecutor.execute(() -> runZipImport(state, zipPath, datasetId, onFinished));
         return state.taskId;
     }
 
     @Override
     public String submitAnnotationImport(Supplier<DatasetAnnotationImportResultVO> importer) {
         ImportTaskState state = createTask();
-        uploadExecutor.execute(() -> runAnnotationImport(state, importer));
+        importExecutor.execute(() -> runAnnotationImport(state, importer));
         return state.taskId;
     }
 
@@ -88,7 +88,7 @@ public class DatasetImageImportTaskServiceImpl implements DatasetImageImportTask
                     "该数据集已有路径导入任务正在执行，taskId=" + activeTaskId);
         }
         try {
-            uploadExecutor.execute(() -> {
+            importExecutor.execute(() -> {
                 try {
                     runAnnotationImport(state, () -> importer.apply(state));
                 } finally {
