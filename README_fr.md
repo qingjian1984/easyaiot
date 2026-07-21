@@ -90,14 +90,6 @@ Beaucoup de projets IoT intelligents butent au déploiement : <strong>les foncti
   </div>
 </div>
 
-<div style="margin: 20px 0; padding: 18px 22px; border-radius: 10px; border: 1px solid rgba(52, 152, 219, 0.25); background: linear-gradient(120deg, #f0f7ff 0%, #ffffff 55%, #eef9f4 100%);">
-  <p style="font-size: 16px; font-weight: 700; color: #1a5276; margin: 0 0 8px 0;">🚀 Mode cluster edge fédéré illimité EasyAIoT</p>
-  <p style="font-size: 14px; line-height: 1.8; color: #333; margin: 0;">
-    Déplacer l'intelligence du datacenter vers le terrain : les cartes de développement ordinaires et les boîtiers edge peuvent effectuer la perception et l'analyse sur place, tandis que les alertes, les preuves et la situation remontent automatiquement vers le centre — sans empiler de lourdes infrastructures à chaque site.
-    Lors de l'expansion métier, ajoutez des nœuds au fil des points ; le centre orchestre de manière unifiée, l'edge veille de façon autonome — pour que la « puissance de calcul suive l'activité et l'intelligence s'adapte aux scénarios ».
-  </p>
-</div>
-
 #### 🧠 Capacités d'IA
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">

@@ -90,14 +90,6 @@ Many intelligent IoT projects stall at deployment: <strong>full features won't f
   </div>
 </div>
 
-<div style="margin: 20px 0; padding: 18px 22px; border-radius: 10px; border: 1px solid rgba(52, 152, 219, 0.25); background: linear-gradient(120deg, #f0f7ff 0%, #ffffff 55%, #eef9f4 100%);">
-  <p style="font-size: 16px; font-weight: 700; color: #1a5276; margin: 0 0 8px 0;">🚀 EasyAIoT Infinite Federated Edge Cluster Mode</p>
-  <p style="font-size: 14px; line-height: 1.8; color: #333; margin: 0;">
-    Move intelligence from the server room to the field: ordinary development boards and edge boxes can perform on-site perception and judgment, with alerts, evidence, and situational awareness automatically aggregated to the center—no need to stack heavy equipment at every site.
-    As business expands, add capacity point by point; the center orchestrates uniformly while edges stand watch autonomously, truly achieving "compute scales with business, intelligence grows with the scenario."
-  </p>
-</div>
-
 #### 🧠 AI Capabilities
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">
