@@ -142,10 +142,13 @@ threadBus:
 
 --- #################### FUXA 组态 SSO ####################
 # 生产可用环境变量覆盖：IOT_FUXA_BASE_URL / IOT_FUXA_PUBLIC_URL / IOT_FUXA_USERNAME / IOT_FUXA_PASSWORD
+# FUXA 容器在 10.0.0.87:1881；浏览器经 WEB 本机 nginx :1881 反代访问
+# base-url  ：后端代登录，直连容器
+# public-url：SSO 跳转地址，填用户访问 WEB 的主机 IP:1881（与 VITE_GLOB_FUXA_URL=/fuxa 解析结果一致）
 iot:
   fuxa:
     sso-enabled: true
     base-url: ${IOT_FUXA_BASE_URL:http://10.0.0.87:1881}
-    public-url: ${IOT_FUXA_PUBLIC_URL:http://10.0.0.87:1881}
+    public-url: ${IOT_FUXA_PUBLIC_URL:http://172.16.0.134:1881}
     username: ${IOT_FUXA_USERNAME:admin}
     password: ${IOT_FUXA_PASSWORD:123456}
