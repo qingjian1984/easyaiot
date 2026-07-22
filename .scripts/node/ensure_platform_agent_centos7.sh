@@ -36,8 +36,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-print_info()    { echo -e "${BLUE}[platform-agent]${NC} $1"; }
-print_success() { echo -e "${GREEN}[platform-agent]${NC} $1"; }
+# 日志一律走 stderr，避免被 $(...) 捕获吞掉（否则会表现为“卡住无输出”）
+print_info()    { echo -e "${BLUE}[platform-agent]${NC} $1" >&2; }
+print_success() { echo -e "${GREEN}[platform-agent]${NC} $1" >&2; }
 print_warning() { echo -e "${YELLOW}[platform-agent]${NC} $1" >&2; }
 print_error()   { echo -e "${RED}[platform-agent]${NC} $1" >&2; }
 
@@ -249,10 +250,18 @@ read_env_credentials() {
 }
 
 fetch_platform_node_credentials() {
+  # 短超时：Gateway 未起时避免 curl 长时间挂死（CentOS7 默认 TCP 超时可达数分钟）
   # 使用 .format 兼容 CentOS 7 常见 Python 3.6（及更早）
-  curl -fsS \
+  # JSON 解析优先用轻量系统 python，避免 conda 环境每次冷启动过慢
+  local json_python="$PYTHON"
+  if command -v /usr/bin/python3 >/dev/null 2>&1; then
+    json_python="/usr/bin/python3"
+  elif command -v python36 >/dev/null 2>&1; then
+    json_python="$(command -v python36)"
+  fi
+  curl -fsS --connect-timeout 2 --max-time 5 \
     "${GATEWAY_URL}/admin-api/node/platform-agent-bootstrap" 2>/dev/null \
-    | PYTHONPATH= "$PYTHON" -c "
+    | PYTHONPATH= "$json_python" -c "
 import json, sys
 raw = sys.stdin.read()
 try:
@@ -298,14 +307,19 @@ fetch_platform_node_credentials_with_wait() {
     return 1
   fi
 
-  local deadline creds=""
+  local deadline creds="" elapsed=0
   deadline=$(($(now_epoch) + AGENT_BOOTSTRAP_WAIT_SECONDS))
-  print_info "等待 bootstrap 就绪（最长 ${AGENT_BOOTSTRAP_WAIT_SECONDS}s）..."
+  print_info "等待 bootstrap 就绪（最长 ${AGENT_BOOTSTRAP_WAIT_SECONDS}s）: ${GATEWAY_URL}/admin-api/node/platform-agent-bootstrap"
+  print_info "若 Gateway 未启动，可 Ctrl+C 后改用: AGENT_USE_CACHED_ENV=1 $0"
   while [[ $(now_epoch) -lt $deadline ]]; do
     creds="$(fetch_platform_node_credentials)"
     if [[ -n "$creds" ]]; then
       echo "$creds"
       return 0
+    fi
+    elapsed=$((elapsed + AGENT_BOOTSTRAP_RETRY_INTERVAL))
+    if [[ $((elapsed % 15)) -eq 0 ]] || [[ "$elapsed" -eq "$AGENT_BOOTSTRAP_RETRY_INTERVAL" ]]; then
+      print_info "仍在等待 bootstrap... (${elapsed}s/${AGENT_BOOTSTRAP_WAIT_SECONDS}s)"
     fi
     sleep "$AGENT_BOOTSTRAP_RETRY_INTERVAL"
   done
