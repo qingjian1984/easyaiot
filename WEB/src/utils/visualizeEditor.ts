@@ -106,6 +106,27 @@ export function openVisualizeEditor(
 }
 
 /**
+ * 将后端返回的 FUXA SSO URL 主机改写为当前页面访问主机:1881。
+ * 避免 public-url 配成内网 IP 后，外网用户浏览器无法打开。
+ */
+export function alignFuxaOpenUrlWithBrowser(url: string): string {
+  if (!url || typeof window === 'undefined' || !window.location?.hostname) {
+    return url
+  }
+  try {
+    const parsed = new URL(url, window.location.href)
+    const browserBase = getFuxaBaseUrl()
+    const target = new URL(browserBase)
+    parsed.protocol = target.protocol
+    parsed.hostname = target.hostname
+    parsed.port = target.port
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}
+
+/**
  * 打开 FUXA：优先走后端 SSO 代登录桥接页；失败则直跳
  * - 编辑器 /editor
  * - 运行态 /home?view=画面名
@@ -123,7 +144,7 @@ export async function openFuxaEditor(
     })
     const url = res?.url
     if (url) {
-      window.open(url, '_blank')
+      window.open(alignFuxaOpenUrlWithBrowser(url), '_blank')
       return
     }
   } catch (e) {
