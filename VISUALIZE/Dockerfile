@@ -96,7 +96,8 @@ RUN --mount=type=cache,target=/pnpm/store,id=visualize-pnpm-store \
         rm -rf dist && mv dist-prebuilt dist; \
     else \
         echo "=== vite build 开始（约 1–5 分钟）===" && \
-        pnpm run build 2>&1 | tee /tmp/visualize-build-logs/pnpm-build.log || \
+        # 与 WEB 一致：直接调 vite，避免 pnpm run 触发隐式 install 再拉各平台 esbuild 可选依赖（易超时）
+        NODE_ENV=production npx vite build 2>&1 | tee /tmp/visualize-build-logs/pnpm-build.log || \
         (echo "=== vite build failed, log: ===" && cat /tmp/visualize-build-logs/pnpm-build.log && exit 1); \
     fi
 
