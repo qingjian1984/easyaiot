@@ -314,7 +314,7 @@ async function handleDelete(record: object) {
     &.normal {
       background-image: url('@/assets/images/product/blue-bg.719b437a.png');
 
-      .status {
+      .product-info .status {
         background: #d9dffd;
         color: #266CFBFF;
       }
@@ -323,19 +323,26 @@ async function handleDelete(record: object) {
     &.error {
       background-image: url('@/assets/images/product/red-bg.101af5ac.png');
 
-      .status {
+      .product-info .status {
         background: #fad7d9;
         color: #d43030;
       }
     }
 
     &.is-demo-readonly {
-      .status {
+      .product-info .status {
         width: auto;
-        min-width: 57px;
-        padding: 0 8px;
-        background: #e2e8f0;
-        color: #475569;
+        min-width: 72px;
+        height: 26px;
+        padding: 0 12px;
+        white-space: nowrap;
+        background: #fff7e6;
+        color: #d46b08;
+        border: 1px solid #ffd591;
+        border-right: 0;
+        box-sizing: border-box;
+        font-weight: 600;
+        line-height: 24px;
       }
     }
 
@@ -355,6 +362,8 @@ async function handleDelete(record: object) {
         position: absolute;
         right: 0;
         top: 16px;
+        white-space: nowrap;
+        overflow: hidden;
       }
 
       .title {

@@ -65,7 +65,10 @@ docker restart nodered-server
 ### 3) 部署平台前端与公网 nginx
 
 1. 部署 WEB（含规则链演示只读逻辑：`WEB/src/utils/noderedDemo.ts`）
-2. 重载公网 nginx（`WEB/conf/nginx.prod-server.conf` / `WEB/conf/nginx.conf`）  
+2. 发布/重启 `iot-gateway`（需含 `/admin-api/nodeRed/**` → Node-RED 路由）
+3. 重载公网 nginx（`WEB/conf/nginx.prod-server.conf`）  
+   - Admin API：`/dev-api/nodeRed/{flows,flow,flow/*}` → Gateway → Node-RED（CRUD 经网关入口）
+   - 编辑器静态/WS：其余 `/dev-api/nodeRed/` 仍直连内网 `1880`
    - 确保 `/dev-api/nodeRed/flow/easyaiot_demo_*` 仅允许 GET
 
 ```bash
@@ -79,11 +82,13 @@ nginx -t && nginx -s reload
 - [ ] 规则链列表可见 4 条演示项，**无编辑/删除**，可查看打开
 - [ ] 公网经 `/dev-api/nodeRed/` 无法 PUT/DELETE `easyaiot_demo_*`
 - [ ] 演示页签 Deploy 被禁用或部署后演示内容被回填锁定副本
+- [ ] 新增/删除规则链成功（流量经 Gateway，浏览器路径仍为 `/dev-api/nodeRed/...`）
+- [ ] 规则链编辑器 iframe 打开正常（静态仍直连 1880）
 
 ## 导入 / 恢复被改坏的演示数据
 
 ```bash
-# 需 nodered-server 已启动；生产务必直连内网
+# 需 nodered-server 已启动；生产务必直连内网（勿走公网/Gateway）
 NODERED_URL=http://10.0.0.87:1880 bash .scripts/node-red/seed_nodered_demo.sh
 
 # 本地默认：
@@ -101,7 +106,7 @@ bash .scripts/node-red/seed_nodered_demo.sh
 | 平台前端 | 演示项（上表 4 个 ID/名称）隐藏编辑/删除，仅保留查看 |
 | Node-RED `settings.js` | `httpAdminMiddleware`：禁止 PUT/DELETE 演示页签；`POST /flows` 部署时强制回填锁定副本 |
 | 编辑器脚本 | `public/easyaiot-demo-guard.js`：演示页签禁用 Deploy |
-| 公网 nginx | `/dev-api/nodeRed/flow/easyaiot_demo_*` 仅允许 GET（禁止覆盖/删除） |
+| 公网 nginx | Admin API（`/flows`、`/flow`）经 Gateway；`/dev-api/nodeRed/flow/easyaiot_demo_*` 仅允许 GET；编辑器静态仍直连 1880 |
 
 运维若需修改演示链路：
 
