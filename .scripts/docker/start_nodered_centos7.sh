@@ -22,10 +22,18 @@
 #   --skip-pull         跳过拉取镜像
 #   --no-upgrade-docker 检测到过旧 Docker 时不自动升级
 #   --upgrade-docker    强制升级 Docker CE（需 root）
+#   --seed              启动成功后导入/恢复演示规则链（覆盖演示页签）
+#   --seed-only         仅导入/恢复演示规则链（容器需已运行，不重启）
 #
 # 默认访问信息（与 docker-compose.yml 一致）：
-#   编辑器:  http://127.0.0.1:1880
+#   编辑器:  http://127.0.0.1:1880  （页面标题 EasyAIoT）
 #   数据目录: .scripts/docker/nodered_data/data
+#   演示工程: .scripts/node-red/easyaiot_flows_demo.json
+#
+# 演示只读说明：
+#   - 平台前端禁演示项编辑/删除；settings.js 中间件禁 PUT/DELETE 并 Deploy 回填锁定副本
+#   - 公网 nginx 对 /flow/easyaiot_demo_* 仅允许 GET
+#   - 本脚本直连容器 :1880，可用 --seed / --seed-only 整包恢复演示链路
 # ============================================
 
 set -e
@@ -45,6 +53,10 @@ SERVICE_NODERED="NodeRED"
 CONTAINER_NAME="nodered-server"
 NETWORK_NAME="easyaiot-network"
 NODERED_PORT=1880
+NODERED_SETTINGS="${SCRIPT_DIR}/../node-red/settings.js"
+NODERED_FLOWS_DEMO="${SCRIPT_DIR}/../node-red/easyaiot_flows_demo.json"
+NODERED_PUBLIC_DIR="${SCRIPT_DIR}/../node-red/public"
+SEED_SCRIPT="${SCRIPT_DIR}/../node-red/seed_nodered_demo.sh"
 # 记录外部环境是否已指定（优先于 compose / 默认值）
 [ -n "${NODERED_IMAGE+x}" ] && _NODERED_IMAGE_FROM_ENV=1 || _NODERED_IMAGE_FROM_ENV=
 NODERED_IMAGE="${NODERED_IMAGE:-nodered/node-red:latest}"
@@ -57,6 +69,7 @@ SKIP_MIRROR=false
 SKIP_PULL=false
 SKIP_DOCKER_UPGRADE=false
 FORCE_DOCKER_UPGRADE=false
+SEED_DEMO=false
 MIN_DOCKER_MAJOR=20
 ACTION="start"
 
@@ -75,7 +88,7 @@ print_section() {
 
 show_help() {
     cat <<'EOF'
-CentOS 7.9 单独部署 Node-RED（流程编排 / 低代码）
+CentOS 7.9 单独部署 Node-RED（流程编排 / 低代码 · EasyAIoT）
 
 用法:
   ./start_nodered_centos7.sh [选项]
@@ -92,16 +105,25 @@ CentOS 7.9 单独部署 Node-RED（流程编排 / 低代码）
   --skip-pull         跳过拉取镜像
   --no-upgrade-docker 不自动升级过旧 Docker
   --upgrade-docker    强制升级 Docker CE（需 root）
+  --seed              启动成功后导入/恢复演示规则链（覆盖演示页签）
+  --seed-only         仅恢复演示规则链（容器已运行时用；数据被改删后推荐）
 
 环境变量:
   NODERED_IMAGE       覆盖镜像（默认 nodered/node-red:latest）
   DOCKER_MIRROR       镜像加速器地址
+  NODERED_URL         --seed/--seed-only 时覆盖导入地址（默认 http://127.0.0.1:1880）
 
 示例:
   sudo ./start_nodered_centos7.sh              # 首次部署推荐 root
+  sudo ./start_nodered_centos7.sh --seed       # 启动并导入演示规则链
+  sudo ./start_nodered_centos7.sh --seed-only  # 仅恢复被改坏的演示规则链
   ./start_nodered_centos7.sh --status
   ./start_nodered_centos7.sh --restart
   ./start_nodered_centos7.sh --logs
+
+演示只读:
+  平台禁演示项改删；settings.js 禁 PUT/DELETE 并 Deploy 回填锁定副本；公网 nginx 禁写 easyaiot_demo_*。
+  宿主机直连本容器可运维改流；恢复演示请用 --seed / --seed-only。
 EOF
 }
 
@@ -119,6 +141,8 @@ parse_args() {
             --skip-pull) SKIP_PULL=true; shift ;;
             --no-upgrade-docker) SKIP_DOCKER_UPGRADE=true; shift ;;
             --upgrade-docker) FORCE_DOCKER_UPGRADE=true; shift ;;
+            --seed) SEED_DEMO=true; shift ;;
+            --seed-only) ACTION="seed-only"; SEED_DEMO=true; shift ;;
             *)
                 print_error "未知选项: $1"
                 show_help
@@ -508,6 +532,37 @@ check_compose_file() {
     [ -f "$COMPOSE_FILE" ] || { print_error "未找到 ${COMPOSE_FILE}"; exit 1; }
 }
 
+check_required_files() {
+    local missing=0
+
+    if [ ! -f "$NODERED_SETTINGS" ]; then
+        print_warning "未找到 EasyAIoT settings: ${NODERED_SETTINGS}"
+        print_info "compose 挂载 ../node-red/settings.js（标题 EasyAIoT + 演示只读中间件）"
+        missing=1
+    else
+        print_success "settings.js 存在（页面标题 EasyAIoT）"
+    fi
+
+    if [ ! -f "$NODERED_FLOWS_DEMO" ]; then
+        print_warning "未找到演示工程: ${NODERED_FLOWS_DEMO}"
+        print_info "compose 挂载 ../node-red/easyaiot_flows_demo.json；可用 --seed 导入"
+        missing=1
+    else
+        print_success "演示工程存在: easyaiot_flows_demo.json"
+    fi
+
+    if [ ! -d "$NODERED_PUBLIC_DIR" ] || [ ! -f "${NODERED_PUBLIC_DIR}/easyaiot-demo-guard.js" ]; then
+        print_warning "未找到编辑器只读脚本: ${NODERED_PUBLIC_DIR}/easyaiot-demo-guard.js"
+        missing=1
+    else
+        print_success "演示只读脚本存在: easyaiot-demo-guard.js"
+    fi
+
+    if [ "$missing" -ne 0 ]; then
+        print_warning "部分 EasyAIoT Node-RED 资源缺失，容器仍可启动；请从仓库恢复 .scripts/node-red/"
+    fi
+}
+
 ensure_network() {
     if docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
         print_success "Docker 网络 ${NETWORK_NAME} 已存在"
@@ -599,19 +654,52 @@ wait_for_nodered() {
     return 1
 }
 
+seed_nodered_demo() {
+    if [ "$SEED_DEMO" != true ]; then
+        return 0
+    fi
+
+    if [ ! -f "$SEED_SCRIPT" ]; then
+        print_warning "未找到 seed_nodered_demo.sh，跳过演示规则链导入"
+        return 0
+    fi
+
+    # 直连本机容器端口（绕过公网 nginx 只读），可恢复被改删的演示规则链
+    local seed_url="${NODERED_URL:-http://127.0.0.1:${NODERED_PORT}}"
+    print_section "导入/恢复 EasyAIoT Node-RED 演示规则链"
+    print_info "目标: ${seed_url}（将覆盖 4 条演示页签，保留其它自定义流）"
+    chmod +x "$SEED_SCRIPT" 2>/dev/null || true
+    set +e
+    NODERED_URL="${seed_url}" \
+      NODERED_DATA_DIR="${SCRIPT_DIR}/nodered_data/data" \
+      bash "$SEED_SCRIPT"
+    local rc=$?
+    set -e
+    if [ "$rc" -eq 0 ]; then
+        print_success "演示规则链导入/恢复完成（4 条只读）"
+        print_info "页面标题/只读中间件依赖 settings.js 挂载；若未生效可: docker restart ${CONTAINER_NAME}"
+    else
+        print_warning "演示规则链导入失败 (exit ${rc})，可稍后: NODERED_URL=${seed_url} bash ${SEED_SCRIPT}"
+    fi
+}
+
 show_connection_info() {
     print_section "Node-RED 访问信息"
     echo "  容器名:   ${CONTAINER_NAME}"
-    echo "  编辑器:   http://127.0.0.1:${NODERED_PORT}"
+    echo "  编辑器:   http://127.0.0.1:${NODERED_PORT}  （标题 EasyAIoT）"
     echo "  镜像:     ${NODERED_IMAGE}"
     echo "  数据目录: ${SCRIPT_DIR}/nodered_data/data"
+    echo "  演示工程: ${SCRIPT_DIR}/../node-red/easyaiot_flows_demo.json"
+    echo ""
+    print_info "演示只读: 平台禁改删；settings.js 禁写演示页签；公网 nginx 禁写 easyaiot_demo_*"
+    print_info "恢复演示: ./start_nodered_centos7.sh --seed-only"
     echo ""
     print_info "常用命令:"
     echo "  docker ps | grep ${CONTAINER_NAME}"
     echo "  docker logs -f ${CONTAINER_NAME}"
     echo "  ./start_nodered_centos7.sh --status"
     echo "  ./start_nodered_centos7.sh --stop"
-    echo "  ./start_nodered_centos7.sh --logs"
+    echo "  ./start_nodered_centos7.sh --seed-only"
 }
 
 stop_nodered() {
@@ -664,6 +752,19 @@ main() {
             show_logs
             exit 0
             ;;
+        seed-only)
+            check_docker
+            print_section "仅恢复 Node-RED 演示规则链"
+            if ! docker ps --filter "name=${CONTAINER_NAME}" --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+                print_error "容器 ${CONTAINER_NAME} 未运行，请先: sudo $0  或  sudo $0 --seed"
+                exit 1
+            fi
+            wait_for_nodered || true
+            seed_nodered_demo
+            show_connection_info
+            print_success "演示规则链恢复流程完成"
+            exit 0
+            ;;
         restart)
             check_docker
             resolve_compose_cmd
@@ -681,6 +782,7 @@ main() {
     ensure_docker_mirror || print_warning "镜像源配置未完成，将尝试直连拉取"
     resolve_compose_cmd
     check_compose_file
+    check_required_files
     resolve_nodered_image_from_compose
     ensure_nodered_image
     ensure_network
@@ -689,6 +791,7 @@ main() {
 
     start_nodered
     wait_for_nodered || true
+    seed_nodered_demo
     show_connection_info
     print_success "Node-RED 独立部署流程完成"
 }

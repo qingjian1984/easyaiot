@@ -49,10 +49,11 @@
                         },
                         icon: 'ant-design:edit-filled',
                         onClick: () => openTargetModal('edit', record),
+                        ifShow: !isNodeRedDemoFlow(record),
                       },
                       {
                         tooltip: {
-                          title: '编辑规则链',
+                          title: isNodeRedDemoFlow(record) ? '查看规则链（只读）' : '编辑规则链',
                           placement: 'top',
                         },
                         icon: 'material-symbols:media-link-outline-sharp',
@@ -68,6 +69,7 @@
                           title: `是否确认删除?`,
                           confirm: handleDelete.bind(null, record),
                         },
+                        ifShow: !isNodeRedDemoFlow(record),
                       },
                     ]"
                     :dropDownActions="[]"
@@ -130,6 +132,7 @@ import {useDrawer} from '@/components/Drawer';
 import Drawer from './drawer.vue';
 import {Tabs, Tag} from 'ant-design-vue';
 import RulechainCardList from '@/views/rulechains/components/CardList/RulechainCardList.vue';
+import {isNodeRedDemoFlow} from '@/utils/noderedDemo';
 
 export default defineComponent({
   name: 'RuleChains',
@@ -238,7 +241,7 @@ export default defineComponent({
         onSelect: onSelect,
         onSelectAll: onSelectAll,
         getCheckboxProps(record) {
-          if (record.root) {
+          if (record.root || isNodeRedDemoFlow(record)) {
             return {disabled: true};
           } else {
             return {disabled: false};
@@ -258,6 +261,10 @@ export default defineComponent({
     }
 
     function openTargetModal(type: string, data?: any) {
+      if (type === 'edit' && isNodeRedDemoFlow(data)) {
+        createMessage.warning('EasyAIoT 演示规则链为只读，禁止修改');
+        return;
+      }
       openModal(true, {
         data,
         info: type,
@@ -291,6 +298,10 @@ export default defineComponent({
         createMessage.error('规则链ID无效！');
         return;
       }
+      if (isNodeRedDemoFlow(record)) {
+        createMessage.warning('EasyAIoT 演示规则链为只读，禁止删除');
+        return;
+      }
       try {
         await deleteflows(record.id);
         createMessage.success('删除成功！');
@@ -320,8 +331,16 @@ export default defineComponent({
         createMessage.error('没有有效的规则链ID！');
         return;
       }
+      const deletableKeys = validKeys.filter((item) => !isNodeRedDemoFlow({id: String(item)}));
+      if (deletableKeys.length === 0) {
+        createMessage.warning('所选均为演示规则链，禁止删除');
+        return;
+      }
+      if (deletableKeys.length < validKeys.length) {
+        createMessage.warning('已跳过演示规则链，仅删除可编辑项');
+      }
       try {
-        await Promise.all([...validKeys.map((item) => deleteflows(item + ''))]);
+        await Promise.all([...deletableKeys.map((item) => deleteflows(item + ''))]);
         createMessage.success('删除成功！');
       } catch (error) {
         console.error(error);
@@ -340,9 +359,12 @@ export default defineComponent({
         return;
       }
       const nodeRedPath = '/dev-api/nodeRed/#flow/';
+      const title = isNodeRedDemoFlow(record)
+        ? `EasyAIoT · ${record.label || '演示规则链'}`
+        : (record.label || 'EasyAIoT');
       go({
-        path: `/rulechains/index/${encodeURIComponent(record.label || '规则链')}`,
-        query: {code: record.id, path: nodeRedPath},
+        path: `/rulechains/index/${encodeURIComponent(title)}`,
+        query: {code: record.id, path: nodeRedPath, title},
       });
     }
 
@@ -375,6 +397,7 @@ export default defineComponent({
       handleSuccess,
       registerDrawer,
       flowsList,
+      isNodeRedDemoFlow,
     };
   },
 });

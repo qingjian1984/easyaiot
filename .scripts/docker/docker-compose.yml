@@ -357,7 +357,8 @@ services:
       retries: 5
       start_period: 30s
 
-  # Node-RED Server
+  # Node-RED Server（页面标题 EasyAIoT；演示规则链只读，见 .scripts/node-red/）
+  # 编辑器: http://localhost:1880  恢复演示: bash .scripts/node-red/seed_nodered_demo.sh
   NodeRED:
     image: nodered/node-red:latest
     container_name: nodered-server
@@ -370,6 +371,10 @@ services:
     user: "1000:1000"
     volumes:
       - "./nodered_data/data:/data:rw"
+      # EasyAIoT 标题 + 演示规则链只读中间件
+      - "../node-red/settings.js:/data/settings.js:ro"
+      - "../node-red/easyaiot_flows_demo.json:/data/easyaiot_flows_demo.json:ro"
+      - "../node-red/public:/data/public:ro"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:1880/ || exit 1"]
       interval: 30s

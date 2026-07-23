@@ -19,9 +19,12 @@
             </div>
           </template>
           <template #renderItem="{ item }">
-            <ListItem :class="!item.disabled? 'product-item normal' : 'product-item error'">
+            <ListItem :class="[
+              !item.disabled ? 'product-item normal' : 'product-item error',
+              isNodeRedDemoFlow(item) ? 'is-demo-readonly' : '',
+            ]">
               <div class="product-info">
-                <div class="status">{{ !item.disabled ? '启用' : '禁用' }}</div>
+                <div class="status">{{ isNodeRedDemoFlow(item) ? '演示只读' : (!item.disabled ? '启用' : '禁用') }}</div>
                 <div class="title o2">{{ item.label }}</div>
                 <div class="props">
                   <div class="flex" style="justify-content: space-between;">
@@ -45,12 +48,18 @@
                       <Icon icon="ant-design:eye-filled" :size="15" />
                     </span>
                   </Tooltip>
-                  <Tooltip title="编辑">
+                  <Tooltip v-if="!isNodeRedDemoFlow(item)" title="编辑">
                     <span class="action-btn" @click="handleEdit(item)">
                       <Icon icon="ant-design:edit-filled" :size="15" />
                     </span>
                   </Tooltip>
+                  <Tooltip v-else title="演示规则链只读，禁止编辑">
+                    <span class="action-btn action-btn--disabled">
+                      <Icon icon="ant-design:lock-filled" :size="15" />
+                    </span>
+                  </Tooltip>
                   <PopConfirmButton
+                    v-if="!isNodeRedDemoFlow(item)"
                     type="default"
                     placement="topRight"
                     title="是否确认删除？"
@@ -83,6 +92,7 @@ import {isFunction} from '@/utils/is';
 import RULE_C1 from '@/assets/images/rule/rule_c1.png';
 import RULE_C2 from '@/assets/images/rule/rule_c2.png';
 import RULE_C3 from '@/assets/images/rule/rule_c3.png';
+import {isNodeRedDemoFlow} from '@/utils/noderedDemo';
 
 defineOptions({ name: 'RulechainCardList' });
 
@@ -319,6 +329,16 @@ async function handleDelete(record: object) {
       }
     }
 
+    &.is-demo-readonly {
+      .status {
+        width: auto;
+        min-width: 57px;
+        padding: 0 8px;
+        background: #e2e8f0;
+        color: #475569;
+      }
+    }
+
     .product-info {
       flex-direction: column;
       max-width: calc(100% - 128px);
@@ -420,6 +440,12 @@ async function handleDelete(record: object) {
 
           &:first-child:before {
             display: none;
+          }
+
+          &--disabled {
+            cursor: not-allowed;
+            color: #94a3b8;
+            opacity: 0.85;
           }
         }
       }

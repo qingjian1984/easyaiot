@@ -48,6 +48,7 @@
   import { Upload } from 'ant-design-vue';
   import { CloudUploadOutlined } from '@ant-design/icons-vue';
   import { Button } from '@/components/Button';
+  import { isNodeRedDemoFlow } from '@/utils/noderedDemo';
 
   const schemas: FormSchema[] = [
     {
@@ -154,6 +155,10 @@
             } else if (tplType.value === 'edit') {
               if (!flowsId.value || flowsId.value === 'undefined') {
                 createMessage.error('规则链ID无效！');
+                return;
+              }
+              if (isNodeRedDemoFlow({ id: flowsId.value, label: (params as any)?.label })) {
+                createMessage.warning('EasyAIoT 演示规则链为只读，禁止修改');
                 return;
               }
               await updateflows(flowsId.value, params);
