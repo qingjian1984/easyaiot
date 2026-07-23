@@ -17,6 +17,39 @@ export function getProjectTypeLabel(projectType?: string | null): string {
   return isScadaProject(projectType) ? '组态' : '大屏'
 }
 
+/** 内置 FUXA 演示项目 ID（与 visualize_demo_seed.sql 一致） */
+export const FUXA_DEMO_PROJECT_IDS = new Set<number>([9311, 9312, 9313, 9314])
+
+/** 内置 FUXA 演示画面名（与 easyaiot_scada_demo.fuxap 一致） */
+export const FUXA_DEMO_VIEW_NAMES = new Set<string>([
+  '水厂工艺总貌',
+  '产线运行看板',
+  '厂区管网组态',
+  '配电室电力监视',
+])
+
+export interface FuxaDemoProjectLike {
+  id?: number | string | null
+  projectType?: string | null
+  projectName?: string | null
+  editorRef?: string | null
+}
+
+/** 是否为内置演示组态（只读，禁止打开 FUXA 编辑器改删工艺图） */
+export function isFuxaDemoProject(project?: FuxaDemoProjectLike | null): boolean {
+  if (!project) return false
+  if (project.projectType != null && project.projectType !== '' && !isScadaProject(project.projectType)) {
+    return false
+  }
+  const id = Number(project.id)
+  if (Number.isFinite(id) && FUXA_DEMO_PROJECT_IDS.has(id)) {
+    return true
+  }
+  const name = (project.projectName || '').trim()
+  const ref = (project.editorRef || '').trim()
+  return FUXA_DEMO_VIEW_NAMES.has(name) || FUXA_DEMO_VIEW_NAMES.has(ref)
+}
+
 /** VISUALIZE 大屏编辑器基址（开发默认 :8002）
  * - 绝对地址原样使用
  * - 相对路径（如生产 env 的 /visualize）解析为当前主机 :8002
@@ -98,8 +131,21 @@ export function openVisualizeEditor(
   options?: OpenVisualizeEditorOptions,
 ) {
   if (isScadaProject(options?.projectType)) {
-    const editorRef = resolveScadaEditorRef(mode, options?.editorRef, options?.projectName)
-    void openFuxaEditor(mode, editorRef, projectId)
+    let openMode = mode
+    // 演示组态只读：即便点「打开编辑器」也只进运行态，避免改删工艺图
+    if (
+      openMode === 'edit' &&
+      isFuxaDemoProject({
+        id: projectId,
+        projectType: options?.projectType,
+        projectName: options?.projectName,
+        editorRef: options?.editorRef,
+      })
+    ) {
+      openMode = 'preview'
+    }
+    const editorRef = resolveScadaEditorRef(openMode, options?.editorRef, options?.projectName)
+    void openFuxaEditor(openMode, editorRef, projectId)
     return
   }
   openDashboardEditor(projectId, mode)
@@ -161,11 +207,17 @@ export async function openFuxaEditor(
 export function openFuxaDirect(mode: 'edit' | 'preview' = 'edit', editorRef?: string | null) {
   const base = getFuxaBaseUrl()
   const ref = (editorRef || '').trim()
+  // 演示画面禁止直跳 /editor（含无 token 桥接）
+  const effectiveMode =
+    mode === 'edit' && FUXA_DEMO_VIEW_NAMES.has(ref) ? 'preview' : mode
 
   let path: string
   if (ref.startsWith('/')) {
-    path = ref
-  } else if (mode === 'preview') {
+    // 演示保护下避免把 /editor 当目标
+    path = effectiveMode === 'preview' && (ref === '/editor' || ref.startsWith('/editor?'))
+      ? '/home'
+      : ref
+  } else if (effectiveMode === 'preview') {
     path = ref ? `/home?view=${encodeURIComponent(ref)}` : '/home'
   } else if (ref) {
     // 同源桥接：写入 currentview 后跳 /editor（无需 token）
