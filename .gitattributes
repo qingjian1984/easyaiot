@@ -18,6 +18,9 @@ WEB/docker-build-logs/** -diff
 # VSCode 容器配置与工作区：不参与 diff
 .scripts/docker/vscode_data/** -diff
 
+# FUXA 运行时数据目录：不参与 diff
+.scripts/docker/fuxa_data/** -diff
+
 # ZLMediaKit 运行时配置：不参与 diff
 .scripts/zlmediakit/conf/config.ini -diff
 

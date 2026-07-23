@@ -43,13 +43,13 @@ spring:
       datasource:
         master:
           driver-class-name: org.postgresql.Driver
-          url: jdbc:postgresql://localhost:5432/iot-visualize20?autoReconnect=true&autoReconnectForPools=true&useUnicode=true&characterEncoding=utf8&createDatabaseIfNotExist=true&allowMultiQueries=true&zeroDateTimeBehavior=convertToNull&stringtype=unspecified
+          url: jdbc:postgresql://14.18.122.2:5432/iot-visualize20?autoReconnect=true&autoReconnectForPools=true&useUnicode=true&characterEncoding=utf8&createDatabaseIfNotExist=true&allowMultiQueries=true&zeroDateTimeBehavior=convertToNull&stringtype=unspecified
           username: postgres
           password: iot45722414822
 
   # Redis 配置。Redisson 默认的配置足够使用，一般不需要进行调优
   redis:
-    host: localhost # 地址
+    host: 14.18.122.2 # 地址
     port: 6379 # 端口
     database: 0 # 数据库索引
     password: basiclab@iot975248395 # 密码，建议生产环境开启
@@ -141,11 +141,10 @@ threadBus:
     thread-name-prefix: iotAsync-
 
 --- #################### FUXA 组态 SSO ####################
-# Docker 可用环境变量覆盖：IOT_FUXA_BASE_URL=http://FUXA:1881 等
 iot:
   fuxa:
     sso-enabled: true
-    base-url: ${IOT_FUXA_BASE_URL:http://127.0.0.1:1881}
-    public-url: ${IOT_FUXA_PUBLIC_URL:http://127.0.0.1:1881}
+    base-url: ${IOT_FUXA_BASE_URL:http://14.18.122.2:1881}
+    public-url: ${IOT_FUXA_PUBLIC_URL:http://14.18.122.2:1881}
     username: ${IOT_FUXA_USERNAME:admin}
     password: ${IOT_FUXA_PASSWORD:123456}

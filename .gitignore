@@ -64,6 +64,7 @@ hs_err_pid*
 .scripts/docker/milvus_config/
 .scripts/docker/milvus_data/
 .scripts/docker/vscode_data/
+.scripts/docker/fuxa_data/
 
 # .scripts/nexus3 数据目录
 .scripts/nexus3/nexus_data/
