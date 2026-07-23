@@ -183,7 +183,6 @@ export default defineComponent({
 
     function handleDel(record) {
       handleDelete(record);
-      cardListReload();
     }
 
     function handleClickSwap() {
@@ -307,10 +306,9 @@ export default defineComponent({
         createMessage.success('删除成功！');
         reload();
         cardListReload();
-      } catch (error) {
+      } catch (error: any) {
         console.error(error);
-        console.log(error);
-        createMessage.error('删除失败！');
+        createMessage.error(error?.message || '删除失败！');
       }
     }
 
@@ -342,15 +340,14 @@ export default defineComponent({
       try {
         await Promise.all([...deletableKeys.map((item) => deleteflows(item + ''))]);
         createMessage.success('删除成功！');
-      } catch (error) {
+        reload({
+          page: 0,
+        });
+        cardListReload();
+      } catch (error: any) {
         console.error(error);
-        console.log(error);
-        createMessage.error('删除失败！');
+        createMessage.error(error?.message || '删除失败！');
       }
-      reload({
-        page: 0,
-      });
-      cardListReload();
     }
 
     function rowClickTable(record) {

@@ -166,9 +166,9 @@
             createMessage.success('操作成功！');
             closeDrawer();
             emit('success', {});
-          }catch (error) {
-            console.error(error)
-            createMessage.error('操作失败！');
+          } catch (error: any) {
+            console.error(error);
+            createMessage.error(error?.message || '操作失败！');
           }
         }catch (error) {
           console.error(error)
