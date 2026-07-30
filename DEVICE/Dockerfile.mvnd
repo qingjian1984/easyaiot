@@ -2,9 +2,9 @@
 # 由 install_linux.sh 在 USE_MVND=1 时自建：docker build -f Dockerfile.mvnd -t device-mvnd:latest .
 #
 # 基础镜像须 glibc（mvnd 原生客户端 glibc 链接，不支持 Alpine/musl）。
-# 默认 bellsoft/liberica-openjdk-debian:21.0.8——运行时阶段已在用、服务器必定可拉取，
-# 避免 eclipse-temurin 从 docker.io 拉取失败（liberica-openjdk 为完整 JDK，含 javac）。
-ARG MVND_BASE_IMAGE=bellsoft/liberica-openjdk-debian:21.0.8
+# 默认 cimg/openjdk:17.0.17——运行时阶段已在用、服务器必定可拉取，
+# cimg/openjdk 为完整 JDK，含 javac，基于 Ubuntu（glibc）。
+ARG MVND_BASE_IMAGE=cimg/openjdk:17.0.17
 FROM ${MVND_BASE_IMAGE}
 
 # 可经 --build-arg 覆盖：mvnd 版本与下载源（默认腾讯云）

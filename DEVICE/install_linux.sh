@@ -464,8 +464,8 @@ USE_MVND="${USE_MVND:-0}"
 MVND_IMAGE="${MVND_IMAGE:-device-mvnd:latest}"
 MVND_CONTAINER="${MVND_CONTAINER:-device-mvnd-builder}"
 MVND_VERSION="${MVND_VERSION:-1.0.6}"
-# mvnd 镜像的 glibc 基础镜像：默认复用运行时已在用、服务器必可拉取的 liberica（避免 docker.io 拉取失败）
-MVND_BASE_IMAGE="${MVND_BASE_IMAGE:-bellsoft/liberica-openjdk-debian:21.0.8}"
+# mvnd 镜像的 glibc 基础镜像：默认复用运行时已在用的 cimg/openjdk（避免 docker.io 拉取失败）
+MVND_BASE_IMAGE="${MVND_BASE_IMAGE:-cimg/openjdk:17.0.17}"
 # mvnd daemon 空闲多久自动退出（释放约 1–2GB 内存，容器仍保留，下次用自动重生）。
 # 活跃连续构建时 daemon 一直热；停手超过该时长则自动回收内存。值须每次一致（否则起新 daemon）。
 MVND_IDLE_TIMEOUT="${MVND_IDLE_TIMEOUT:-30m}"
@@ -921,7 +921,7 @@ build_base_jars() {
             -v "${MAVEN_CACHE_DIR}:/m2/repository" \
             -v "${MAVEN_SETTINGS_FILE}:/m2/settings.xml:ro" \
             -w /build \
-            maven:3.9.11-eclipse-temurin-21-alpine \
+            maven:3.9.16-amazoncorretto-17-alpine \
             mvn -s /m2/settings.xml -B -ntp -T 1C \
                 -Dmaven.artifact.threads=8 \
                 install ${maven_build_args} ${off} \

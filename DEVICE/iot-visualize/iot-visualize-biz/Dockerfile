@@ -1,4 +1,6 @@
-FROM bellsoft/liberica-openjdk-rocky:21.0.8-cds
+FROM cimg/openjdk:17.0.17
+
+USER root
 
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 RUN mkdir -p /app && chown -R appuser:appuser /app

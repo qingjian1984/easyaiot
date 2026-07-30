@@ -1,7 +1,10 @@
 # 运行时镜像：从宿主机 target/jars 复制已编译的 Jar（由 Dockerfile.base 产出）
-FROM bellsoft/liberica-openjdk-debian:21.0.8
+FROM cimg/openjdk:17.0.17
 
-RUN groupadd -r appuser -g 1001 && useradd -r -u 1001 -g appuser appuser
+USER root
+
+RUN userdel -r circleci 2>/dev/null || true && \
+    groupadd -r appuser -g 1001 && useradd -r -u 1001 -g appuser appuser
 RUN mkdir -p /app/logs /app/config /app/data /app/temp && chown -R appuser:appuser /app
 WORKDIR /app
 

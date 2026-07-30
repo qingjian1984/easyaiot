@@ -1,6 +1,6 @@
 # BuildKit 内置前端，支持 RUN --mount
 # 备用：单 Dockerfile 多 target 一体构建（日常请用 Dockerfile.base + 各模块 Dockerfile，见 install_linux.sh）
-FROM maven:3.9.11-eclipse-temurin-21-alpine AS builder
+FROM maven:3.9.16-amazoncorretto-17-alpine AS builder
 
 # 镜像源配置（通过 --build-arg 传入；默认阿里云，避免清华对 org.graalvm.* 缺包）
 ARG MAVEN_MIRROR_URL=https://maven.aliyun.com/repository/public
@@ -53,8 +53,10 @@ RUN --mount=type=bind,source=../.build-cache/device/m2/repository,target=/m2/rep
 RUN --mount=type=bind,source=../.build-cache/device/m2/repository,target=/m2/repository \
     mvn clean package -DskipTests -Dmaven.test.skip=true -Drevision=1.0.0
 
-FROM bellsoft/liberica-openjdk-rocky:21.0.8-cds AS runtime-base
-RUN groupadd -r appgroup -g 1001 && useradd -r -u 1001 -g appgroup appuser
+FROM cimg/openjdk:17.0.17 AS runtime-base
+USER root
+RUN userdel -r circleci 2>/dev/null || true && \
+    groupadd -r appgroup -g 1001 && useradd -r -u 1001 -g appgroup appuser
 
 RUN mkdir -p /app/logs /app/config /app/data /app/cache /app/temp /app/backup /app/message-queue && chown -R appuser:appgroup /app
 WORKDIR /app

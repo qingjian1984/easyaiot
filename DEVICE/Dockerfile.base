@@ -7,7 +7,7 @@
 # 依赖缓存：宿主机目录挂载到 /m2/host-cache（读写）；mvn 结束后 cp 到 /m2/repository 写入镜像层，供 install_linux.sh docker cp 回宿主机
 # 产物：install_linux.sh 从 builder 阶段提取 ./target/jars
 
-FROM maven:3.9.11-eclipse-temurin-21-alpine AS builder
+FROM maven:3.9.11-eclipse-temurin-17-alpine AS builder
 
 # 镜像源配置（通过 --build-arg 传入；默认阿里云，避免清华对 org.graalvm.* 缺包）
 ARG MAVEN_MIRROR_URL=https://maven.aliyun.com/repository/public

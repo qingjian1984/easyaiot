@@ -2,7 +2,9 @@
 # 此 Dockerfile 从宿主机挂载的 Jar 包构建运行时镜像
 # Jar 包应该已经通过 base-builder 服务编译并挂载到 ./target/jars/ 目录
 
-FROM bellsoft/liberica-openjdk-debian:21.0.8
+FROM cimg/openjdk:17.0.17
+
+USER root
 
 # 安全设置：使用非 root 用户
 RUN groupadd -r appuser && useradd -r -g appuser appuser

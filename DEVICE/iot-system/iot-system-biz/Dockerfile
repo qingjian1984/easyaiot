@@ -2,10 +2,13 @@
 # 此 Dockerfile 从宿主机挂载的 Jar 包构建运行时镜像
 # Jar 包应该已经通过 base-builder 服务编译并挂载到 ./target/jars/ 目录
 
-FROM bellsoft/liberica-openjdk-debian:21.0.8
+FROM cimg/openjdk:17.0.17
 
-# 安全设置：创建专用用户和组
-RUN groupadd -r appuser -g 1001 && useradd -r -u 1001 -g appuser appuser
+USER root
+
+# 安全设置：创建专用用户和组（先删除 cimg 自带的 circleci 用户，避免 UID 1001 冲突）
+RUN userdel -r circleci 2>/dev/null || true && \
+    groupadd -r appuser -g 1001 && useradd -r -u 1001 -g appuser appuser
 
 # 创建标准化的应用目录结构
 RUN mkdir -p /app/logs /app/config /app/data /app/temp && chown -R appuser:appuser /app

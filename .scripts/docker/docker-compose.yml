@@ -238,7 +238,7 @@ services:
       - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
       # 业务主题默认 64 分区（告警 / 人脸匹配 / 车牌匹配；install 脚本会显式创建或扩容）
-      - KAFKA_NUM_PARTITIONS=64
+      - KAFKA_NUM_PARTITIONS=3
       - KAFKA_DEFAULT_REPLICATION_FACTOR=1
       - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
       - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
@@ -383,7 +383,7 @@ services:
   # 编辑器: http://localhost:1881/editor  运行态: http://localhost:1881/home
   # 默认经 proxy.vvvv.ee 拉取（实测 docker.1ms.run 对 FUXA 易卡住/401）
   FUXA:
-    image: ${FUXA_IMAGE:-proxy.vvvv.ee/frangoteam/fuxa:1.3.3}
+    image: ${FUXA_IMAGE:-frangoteam/fuxa:1.3.3}
     container_name: fuxa-server
     restart: always
     ports:
