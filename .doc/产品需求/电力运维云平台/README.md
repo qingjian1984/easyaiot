@@ -1,6 +1,6 @@
 # EasyAIoT 电力运维云平台 SDD 文档索引
 
-> 文档集版本：1.3.0  
+> 文档集版本：1.3.1  
 > 日期：2026-07-30  
 > 上游依据：[《平台功能计划》1.4.0](../../架构设计/平台功能计划.md)、[《EasyAIoT 项目开发宪法》1.4.0](../../开发规范/EasyAIoT项目开发宪法.md)  
 > 当前阶段：M1 Feature Spec 已冻结，进入 Technical Design
@@ -24,7 +24,7 @@ flowchart LR
 | 顺序 | 文档 | 产品域 | 目标里程碑 | 状态 |
 |---:|---|---|---|---|
 | 0 | [PRD-00 产品总纲](./PRD-00-产品总纲.md) | 全平台 | 全程 | In Review |
-| 1 | [PRD-01 站点设备与数据采集](./PRD-01-站点设备与数据采集.md) | 设备与边缘 | M1 | In Review |
+| 1 | [PRD-01 站点设备与数据采集](./PRD-01-站点设备与数据采集.md) | 设备与边缘 | M1 | Approved / Baselined |
 | 2 | [PRD-02 监控告警与安全控制](./PRD-02-监控告警与安全控制.md) | 安全运行 | M2-M3 | In Review |
 | 3 | [PRD-03 可视化SCADA与视频联动](./PRD-03-可视化SCADA与视频联动.md) | 展示与视频 | M2 | In Review |
 | 4 | [PRD-04 设备档案与运维闭环](./PRD-04-设备档案与运维闭环.md) | 运维管理 | M4 | In Review |
@@ -90,6 +90,8 @@ Draft → In Review → Approved → Specified → Implementing → Released →
 - `Retired`：能力下线或被新版本替代。
 
 ## 6. 当前产品基线
+
+- 2026-07-31：PRD-01 1.2.0 完成 M1 产品基线化；文档集版本更新为 1.3.1，M1 进入 TD-001～TD-005 Technical Design。
 
 - 电力运维仅支持 `standard/full`；`mini` 不建设、不启用、不验收电力功能。
 - `standard` 形成采集、存储、监控、告警、处置和基础运维闭环；`full` 在同一实现上增加多站点、SCADA、事故证据、高级能源、完整运维和经营分析。

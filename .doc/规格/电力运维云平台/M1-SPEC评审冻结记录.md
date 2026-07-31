@@ -56,9 +56,9 @@
 
 下一阶段为 Technical Design，不得直接进入业务功能编码。必须先产出并评审：
 
-- TD-001：站点 collector profile、ADR-007 NODE 容器部署契约与配置发布状态机。
-- TD-002：SQLite schema、容量估算、并发模型、加密/权限、恢复与迁移。
-- TD-003：遥测 envelope、中心 inbox 表/索引、ACK payload、Topic/QoS、两层幂等、投影死信/补偿和分档时序后端。
+- [TD-001](../../技术设计/电力运维云平台/TD-001-collector与NODE部署契约.md)：站点 collector profile、ADR-007 NODE 容器部署契约与配置发布状态机（已产出，In Review）。
+- [TD-002](../../技术设计/电力运维云平台/TD-002-SQLite-Outbox与恢复迁移.md)：SQLite schema、容量估算、并发模型、加密/权限、恢复与迁移（已产出，In Review）。
+- [TD-003](../../技术设计/电力运维云平台/TD-003-遥测Inbox-ACK与时序投影.md)：遥测 envelope、中心 inbox 表/索引、ACK payload、Topic/QoS、两层幂等、投影死信/补偿和分档时序后端（已产出，In Review）。
 - TD-004：对象/别名/二维码短码数据模型、存量编码画像、解析权限、API 兼容矩阵和迁移脚本设计。
 - TD-005：物模型模板 JSON Schema、Excel 模板、版本差异和发布 API。
 
