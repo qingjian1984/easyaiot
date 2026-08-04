@@ -1,0 +1,1198 @@
+{
+  "dictionaryVersion": "1.0.2",
+  "schemaVersion": "1.0.0",
+  "status": "REVIEW_CANDIDATE",
+  "description": "M1 标准电力物模型点位基线。地址、功能码、字节序、缩放和从站号属于 RTUPointBindings，不属于标准模板。",
+  "normalizationRules": {
+    "currentTransformerRatio": {
+      "deviceType": "CURRENT_TRANSFORMER",
+      "propertyCode": "transformation-ratio",
+      "calculation": "rated-primary-current / rated-secondary-current",
+      "normalizedValue": "raw-secondary-value * transformation-ratio",
+      "arithmetic": "BASE10_ARBITRARY_PRECISION",
+      "precision": 6,
+      "precisionScope": "RATIO_STORAGE_AND_COMPARISON",
+      "roundingMode": "HALF_UP",
+      "intermediateRounding": "NONE",
+      "outputPrecisionSource": "TARGET_PROPERTY",
+      "outputRoundingModeSource": "TARGET_PROPERTY",
+      "valueEncoding": "decimal-string",
+      "constraints": "rated-secondary-current > 0; explicit ratio MUST equal the server-calculated 6-decimal ratio; final normalized output MUST use target-property precision"
+    },
+    "voltageTransformerRatio": {
+      "deviceType": "VOLTAGE_TRANSFORMER",
+      "propertyCode": "transformation-ratio",
+      "calculation": "rated-primary-voltage / rated-secondary-voltage",
+      "normalizedValue": "raw-secondary-value * transformation-ratio",
+      "arithmetic": "BASE10_ARBITRARY_PRECISION",
+      "precision": 6,
+      "precisionScope": "RATIO_STORAGE_AND_COMPARISON",
+      "roundingMode": "HALF_UP",
+      "intermediateRounding": "NONE",
+      "outputPrecisionSource": "TARGET_PROPERTY",
+      "outputRoundingModeSource": "TARGET_PROPERTY",
+      "valueEncoding": "decimal-string",
+      "constraints": "rated-secondary-voltage > 0; explicit ratio MUST equal the server-calculated 6-decimal ratio; final normalized output MUST use target-property precision"
+    }
+  },
+  "templates": [
+    {
+      "templateCode": "std-high-voltage-cabinet",
+      "templateName": "高压开关柜",
+      "deviceType": "HIGH_VOLTAGE_CABINET",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "current-a",
+          "propertyName": "A相电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "current-b",
+          "propertyName": "B相电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "current-c",
+          "propertyName": "C相电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "voltage-ab",
+          "propertyName": "AB线电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "voltage-bc",
+          "propertyName": "BC线电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "voltage-ca",
+          "propertyName": "CA线电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "active-power",
+          "propertyName": "有功功率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kW",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "reactive-power",
+          "propertyName": "无功功率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kvar",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": false,
+          "critical": false
+        },
+        {
+          "propertyCode": "power-factor",
+          "propertyName": "功率因数",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "1",
+          "precision": 4,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": false,
+          "critical": false
+        },
+        {
+          "propertyCode": "frequency",
+          "propertyName": "频率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "Hz",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": false,
+          "critical": false
+        },
+        {
+          "propertyCode": "breaker-position",
+          "propertyName": "断路器位置",
+          "dataType": "ENUM",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": true,
+          "critical": true,
+          "enumValues": "0=分位;1=合位;2=中间位;3=未知"
+        },
+        {
+          "propertyCode": "energy-import-total",
+          "propertyName": "正向有功总电能",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kWh",
+          "precision": 3,
+          "semanticType": "CUMULATIVE",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 60000,
+          "required": false,
+          "critical": false
+        }
+      ],
+      "events": [
+        {
+          "eventCode": "overcurrent-alarm",
+          "eventName": "过流告警",
+          "defaultSeverity": "MAJOR",
+          "ackRequired": true
+        },
+        {
+          "eventCode": "breaker-trip",
+          "eventName": "断路器跳闸",
+          "defaultSeverity": "CRITICAL",
+          "ackRequired": true
+        }
+      ],
+      "services": [
+        {
+          "serviceCode": "open-breaker",
+          "serviceName": "分闸",
+          "riskLevel": "HIGH_RISK",
+          "timeoutMs": 10000,
+          "idempotency": "REQUIRED"
+        },
+        {
+          "serviceCode": "close-breaker",
+          "serviceName": "合闸",
+          "riskLevel": "HIGH_RISK",
+          "timeoutMs": 10000,
+          "idempotency": "REQUIRED"
+        },
+        {
+          "serviceCode": "reset-protection",
+          "serviceName": "保护复归",
+          "riskLevel": "HIGH_RISK",
+          "timeoutMs": 10000,
+          "idempotency": "REQUIRED"
+        }
+      ]
+    },
+    {
+      "templateCode": "std-protection-device",
+      "templateName": "继电保护装置",
+      "deviceType": "PROTECTION_DEVICE",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "current-a",
+          "propertyName": "A相保护电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 2000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "current-b",
+          "propertyName": "B相保护电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 2000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "current-c",
+          "propertyName": "C相保护电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 2000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "zero-sequence-current",
+          "propertyName": "零序电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 2000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "protection-active",
+          "propertyName": "保护动作状态",
+          "dataType": "BOOL",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": true,
+          "critical": true,
+          "enumValues": "0=未动作;1=动作"
+        },
+        {
+          "propertyCode": "fault-code",
+          "propertyName": "故障码",
+          "dataType": "STRING",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": false,
+          "critical": true
+        }
+      ],
+      "events": [
+        {
+          "eventCode": "protection-trip",
+          "eventName": "保护跳闸",
+          "defaultSeverity": "CRITICAL",
+          "ackRequired": true
+        },
+        {
+          "eventCode": "device-fault",
+          "eventName": "装置故障",
+          "defaultSeverity": "MAJOR",
+          "ackRequired": true
+        }
+      ],
+      "services": [
+        {
+          "serviceCode": "reset-protection",
+          "serviceName": "保护复归",
+          "riskLevel": "HIGH_RISK",
+          "timeoutMs": 10000,
+          "idempotency": "REQUIRED"
+        }
+      ]
+    },
+    {
+      "templateCode": "std-transformer",
+      "templateName": "变压器",
+      "deviceType": "TRANSFORMER",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "load-rate",
+          "propertyName": "负载率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "%",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 10000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "winding-temp-a",
+          "propertyName": "A相绕组温度",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "Cel",
+          "precision": 1,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 10000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "winding-temp-b",
+          "propertyName": "B相绕组温度",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "Cel",
+          "precision": 1,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 10000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "winding-temp-c",
+          "propertyName": "C相绕组温度",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "Cel",
+          "precision": 1,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 10000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "oil-temperature",
+          "propertyName": "油温",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "Cel",
+          "precision": 1,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 10000,
+          "required": false,
+          "critical": true
+        },
+        {
+          "propertyCode": "active-power",
+          "propertyName": "有功功率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kW",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "power-factor",
+          "propertyName": "功率因数",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "1",
+          "precision": 4,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": false,
+          "critical": false
+        },
+        {
+          "propertyCode": "energy-import-total",
+          "propertyName": "正向有功总电能",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kWh",
+          "precision": 3,
+          "semanticType": "CUMULATIVE",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 60000,
+          "required": false,
+          "critical": false
+        }
+      ],
+      "events": [
+        {
+          "eventCode": "overtemperature-alarm",
+          "eventName": "超温告警",
+          "defaultSeverity": "CRITICAL",
+          "ackRequired": true
+        },
+        {
+          "eventCode": "overload-alarm",
+          "eventName": "过载告警",
+          "defaultSeverity": "MAJOR",
+          "ackRequired": true
+        }
+      ],
+      "services": []
+    },
+    {
+      "templateCode": "std-dc-panel",
+      "templateName": "直流屏",
+      "deviceType": "DC_PANEL",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "dc-bus-voltage",
+          "propertyName": "直流母线电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 10000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "dc-bus-current",
+          "propertyName": "直流母线电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 10000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "battery-voltage",
+          "propertyName": "蓄电池组电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 10000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "battery-soc",
+          "propertyName": "蓄电池荷电状态",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "%",
+          "precision": 1,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 30000,
+          "required": false,
+          "critical": false
+        },
+        {
+          "propertyCode": "insulation-resistance",
+          "propertyName": "绝缘电阻",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "MOhm",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 30000,
+          "required": false,
+          "critical": true
+        },
+        {
+          "propertyCode": "rectifier-fault",
+          "propertyName": "整流模块故障",
+          "dataType": "BOOL",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": true,
+          "critical": true,
+          "enumValues": "0=正常;1=故障"
+        }
+      ],
+      "events": [
+        {
+          "eventCode": "dc-voltage-abnormal",
+          "eventName": "直流电压异常",
+          "defaultSeverity": "MAJOR",
+          "ackRequired": true
+        },
+        {
+          "eventCode": "insulation-alarm",
+          "eventName": "绝缘告警",
+          "defaultSeverity": "CRITICAL",
+          "ackRequired": true
+        }
+      ],
+      "services": []
+    },
+    {
+      "templateCode": "std-low-voltage-cabinet",
+      "templateName": "低压开关柜",
+      "deviceType": "LOW_VOLTAGE_CABINET",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "current-a",
+          "propertyName": "A相电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "current-b",
+          "propertyName": "B相电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "current-c",
+          "propertyName": "C相电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "voltage-a",
+          "propertyName": "A相电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "voltage-b",
+          "propertyName": "B相电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "voltage-c",
+          "propertyName": "C相电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "active-power",
+          "propertyName": "有功功率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kW",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": false,
+          "critical": false
+        },
+        {
+          "propertyCode": "breaker-position",
+          "propertyName": "断路器位置",
+          "dataType": "ENUM",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": true,
+          "critical": true,
+          "enumValues": "0=分位;1=合位;2=中间位;3=未知"
+        },
+        {
+          "propertyCode": "energy-import-total",
+          "propertyName": "正向有功总电能",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kWh",
+          "precision": 3,
+          "semanticType": "CUMULATIVE",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 60000,
+          "required": false,
+          "critical": false
+        }
+      ],
+      "events": [
+        {
+          "eventCode": "overcurrent-alarm",
+          "eventName": "过流告警",
+          "defaultSeverity": "MAJOR",
+          "ackRequired": true
+        },
+        {
+          "eventCode": "breaker-trip",
+          "eventName": "断路器跳闸",
+          "defaultSeverity": "CRITICAL",
+          "ackRequired": true
+        }
+      ],
+      "services": [
+        {
+          "serviceCode": "open-breaker",
+          "serviceName": "分闸",
+          "riskLevel": "HIGH_RISK",
+          "timeoutMs": 10000,
+          "idempotency": "REQUIRED"
+        },
+        {
+          "serviceCode": "close-breaker",
+          "serviceName": "合闸",
+          "riskLevel": "HIGH_RISK",
+          "timeoutMs": 10000,
+          "idempotency": "REQUIRED"
+        }
+      ]
+    },
+    {
+      "templateCode": "std-capacitor-cabinet",
+      "templateName": "电容补偿柜",
+      "deviceType": "CAPACITOR_CABINET",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "reactive-power",
+          "propertyName": "无功功率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kvar",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "power-factor",
+          "propertyName": "功率因数",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "1",
+          "precision": 4,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "step-count",
+          "propertyName": "已投切级数",
+          "dataType": "UINT",
+          "accessMode": "R",
+          "unit": "1",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": true,
+          "critical": false
+        },
+        {
+          "propertyCode": "cabinet-temperature",
+          "propertyName": "柜内温度",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "Cel",
+          "precision": 1,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 10000,
+          "required": false,
+          "critical": true
+        },
+        {
+          "propertyCode": "controller-fault",
+          "propertyName": "控制器故障",
+          "dataType": "BOOL",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": true,
+          "critical": true,
+          "enumValues": "0=正常;1=故障"
+        }
+      ],
+      "events": [
+        {
+          "eventCode": "capacitor-overtemperature",
+          "eventName": "电容超温",
+          "defaultSeverity": "MAJOR",
+          "ackRequired": true
+        },
+        {
+          "eventCode": "controller-fault",
+          "eventName": "控制器故障",
+          "defaultSeverity": "MAJOR",
+          "ackRequired": true
+        }
+      ],
+      "services": [
+        {
+          "serviceCode": "switch-capacitor-step",
+          "serviceName": "电容级投切",
+          "riskLevel": "HIGH_RISK",
+          "timeoutMs": 10000,
+          "idempotency": "REQUIRED"
+        }
+      ]
+    },
+    {
+      "templateCode": "std-meter",
+      "templateName": "多功能电表",
+      "deviceType": "METER",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "current-a",
+          "propertyName": "A相电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "current-b",
+          "propertyName": "B相电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "current-c",
+          "propertyName": "C相电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "voltage-a",
+          "propertyName": "A相电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "voltage-b",
+          "propertyName": "B相电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "voltage-c",
+          "propertyName": "C相电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "active-power",
+          "propertyName": "有功功率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kW",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": true,
+          "critical": false
+        },
+        {
+          "propertyCode": "reactive-power",
+          "propertyName": "无功功率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kvar",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": false,
+          "critical": false
+        },
+        {
+          "propertyCode": "power-factor",
+          "propertyName": "功率因数",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "1",
+          "precision": 4,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": false,
+          "critical": false
+        },
+        {
+          "propertyCode": "frequency",
+          "propertyName": "频率",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "Hz",
+          "precision": 3,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 5000,
+          "required": false,
+          "critical": false
+        },
+        {
+          "propertyCode": "energy-import-total",
+          "propertyName": "正向有功总电能",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kWh",
+          "precision": 3,
+          "semanticType": "CUMULATIVE",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 60000,
+          "required": true,
+          "critical": false
+        },
+        {
+          "propertyCode": "energy-export-total",
+          "propertyName": "反向有功总电能",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "kWh",
+          "precision": 3,
+          "semanticType": "CUMULATIVE",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 60000,
+          "required": false,
+          "critical": false
+        }
+      ],
+      "events": [
+        {
+          "eventCode": "measurement-abnormal",
+          "eventName": "计量异常",
+          "defaultSeverity": "WARNING",
+          "ackRequired": true
+        }
+      ],
+      "services": []
+    },
+    {
+      "templateCode": "std-current-transformer",
+      "templateName": "电流互感器",
+      "deviceType": "CURRENT_TRANSFORMER",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "rated-primary-current",
+          "propertyName": "额定一次电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "CONFIGURATION",
+          "sampleMode": "ON_DEMAND",
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "rated-secondary-current",
+          "propertyName": "额定二次电流",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "A",
+          "precision": 3,
+          "semanticType": "CONFIGURATION",
+          "sampleMode": "ON_DEMAND",
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "transformation-ratio",
+          "propertyName": "变比",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "1",
+          "precision": 6,
+          "semanticType": "CONFIGURATION",
+          "sampleMode": "ON_DEMAND",
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "accuracy-class",
+          "propertyName": "准确级",
+          "dataType": "STRING",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "CONFIGURATION",
+          "sampleMode": "ON_DEMAND",
+          "required": true,
+          "critical": false
+        }
+      ],
+      "events": [],
+      "services": []
+    },
+    {
+      "templateCode": "std-voltage-transformer",
+      "templateName": "电压互感器",
+      "deviceType": "VOLTAGE_TRANSFORMER",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "rated-primary-voltage",
+          "propertyName": "额定一次电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "CONFIGURATION",
+          "sampleMode": "ON_DEMAND",
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "rated-secondary-voltage",
+          "propertyName": "额定二次电压",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "V",
+          "precision": 2,
+          "semanticType": "CONFIGURATION",
+          "sampleMode": "ON_DEMAND",
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "transformation-ratio",
+          "propertyName": "变比",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "1",
+          "precision": 6,
+          "semanticType": "CONFIGURATION",
+          "sampleMode": "ON_DEMAND",
+          "required": true,
+          "critical": true
+        },
+        {
+          "propertyCode": "accuracy-class",
+          "propertyName": "准确级",
+          "dataType": "STRING",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "CONFIGURATION",
+          "sampleMode": "ON_DEMAND",
+          "required": true,
+          "critical": false
+        }
+      ],
+      "events": [],
+      "services": []
+    },
+    {
+      "templateCode": "std-environment-monitor",
+      "templateName": "环境监测装置",
+      "deviceType": "ENVIRONMENT_MONITOR",
+      "version": "1.0.0",
+      "properties": [
+        {
+          "propertyCode": "temperature",
+          "propertyName": "环境温度",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "Cel",
+          "precision": 1,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 30000,
+          "required": true,
+          "critical": false
+        },
+        {
+          "propertyCode": "humidity",
+          "propertyName": "相对湿度",
+          "dataType": "DOUBLE",
+          "accessMode": "R",
+          "unit": "%",
+          "precision": 1,
+          "semanticType": "INSTANTANEOUS",
+          "sampleMode": "PERIODIC",
+          "intervalMs": 30000,
+          "required": true,
+          "critical": false
+        },
+        {
+          "propertyCode": "smoke-alarm",
+          "propertyName": "烟感告警",
+          "dataType": "BOOL",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": true,
+          "critical": true,
+          "enumValues": "0=正常;1=告警"
+        },
+        {
+          "propertyCode": "water-alarm",
+          "propertyName": "水浸告警",
+          "dataType": "BOOL",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": true,
+          "critical": true,
+          "enumValues": "0=正常;1=告警"
+        },
+        {
+          "propertyCode": "door-state",
+          "propertyName": "门禁状态",
+          "dataType": "ENUM",
+          "accessMode": "R",
+          "unit": "",
+          "semanticType": "STATE",
+          "sampleMode": "CHANGE",
+          "required": false,
+          "critical": false,
+          "enumValues": "0=关闭;1=打开;2=未知"
+        }
+      ],
+      "events": [
+        {
+          "eventCode": "smoke-alarm",
+          "eventName": "烟雾告警",
+          "defaultSeverity": "CRITICAL",
+          "ackRequired": true
+        },
+        {
+          "eventCode": "water-alarm",
+          "eventName": "水浸告警",
+          "defaultSeverity": "MAJOR",
+          "ackRequired": true
+        },
+        {
+          "eventCode": "environment-abnormal",
+          "eventName": "温湿度异常",
+          "defaultSeverity": "WARNING",
+          "ackRequired": true
+        }
+      ],
+      "services": []
+    }
+  ]
+}

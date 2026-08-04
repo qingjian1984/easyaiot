@@ -1,0 +1,144 @@
+{
+  "fixtureVersion": "1.0.0",
+  "baseArtifact": "../example-standard-meter-1.0.0.json",
+  "cases": [
+    {
+      "name": "valid-standard-meter",
+      "valid": true,
+      "patches": []
+    },
+    {
+      "name": "valid-vendor-meter-with-exact-base",
+      "valid": true,
+      "patches": [
+        { "op": "replace", "path": "/templateCode", "value": "vendor-meter" },
+        { "op": "replace", "path": "/templateKind", "value": "VENDOR" },
+        {
+          "op": "add",
+          "path": "/base",
+          "value": {
+            "templateCode": "std-meter",
+            "version": "1.0.0",
+            "contentHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-event-code-underscore",
+      "valid": false,
+      "expectKeywords": ["pattern"],
+      "patches": [
+        { "op": "replace", "path": "/events/0/eventCode", "value": "measurement_abnormal" }
+      ]
+    },
+    {
+      "name": "invalid-root-unknown-field",
+      "valid": false,
+      "expectKeywords": ["additionalProperties"],
+      "patches": [
+        { "op": "add", "path": "/registerAddress", "value": 0 }
+      ]
+    },
+    {
+      "name": "invalid-float-without-precision",
+      "valid": false,
+      "expectKeywords": ["required"],
+      "patches": [
+        { "op": "replace", "path": "/properties/0/dataType", "value": "FLOAT" },
+        { "op": "remove", "path": "/properties/0/precision" }
+      ]
+    },
+    {
+      "name": "invalid-enum-without-values",
+      "valid": false,
+      "expectKeywords": ["required"],
+      "patches": [
+        { "op": "replace", "path": "/properties/0/dataType", "value": "ENUM" },
+        { "op": "remove", "path": "/properties/0/precision" },
+        { "op": "remove", "path": "/properties/0/roundingMode" }
+      ]
+    },
+    {
+      "name": "invalid-vendor-without-base",
+      "valid": false,
+      "expectKeywords": ["required"],
+      "patches": [
+        { "op": "replace", "path": "/templateKind", "value": "VENDOR" }
+      ]
+    },
+    {
+      "name": "invalid-standard-with-base",
+      "valid": false,
+      "expectKeywords": ["not"],
+      "patches": [
+        {
+          "op": "add",
+          "path": "/base",
+          "value": {
+            "templateCode": "std-meter",
+            "version": "1.0.0",
+            "contentHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-high-risk-policy-incomplete",
+      "valid": false,
+      "expectKeywords": ["const", "required"],
+      "patches": [
+        {
+          "op": "add",
+          "path": "/services/0",
+          "value": {
+            "serviceCode": "open-breaker",
+            "serviceName": "分闸",
+            "riskLevel": "HIGH_RISK",
+            "inputs": [],
+            "outputs": [],
+            "timeoutMs": 10000,
+            "idempotency": "REQUIRED",
+            "safetyPolicy": {
+              "approvalRequired": true,
+              "secondConfirmationRequired": false,
+              "deviceFeedbackRequired": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-periodic-without-interval",
+      "valid": false,
+      "expectKeywords": ["required"],
+      "patches": [
+        { "op": "remove", "path": "/properties/0/sampleHint/intervalMs" }
+      ]
+    },
+    {
+      "name": "invalid-rtu-field-inside-property",
+      "valid": false,
+      "expectKeywords": ["additionalProperties"],
+      "patches": [
+        { "op": "add", "path": "/properties/0/registerAddress", "value": 0 }
+      ]
+    },
+    {
+      "name": "invalid-decimal-leading-zero",
+      "valid": false,
+      "expectKeywords": ["pattern"],
+      "patches": [
+        { "op": "replace", "path": "/properties/0/min", "value": "01" }
+      ]
+    },
+    {
+      "name": "invalid-empty-properties",
+      "valid": false,
+      "expectKeywords": ["minItems"],
+      "patches": [
+        { "op": "replace", "path": "/properties", "value": [] }
+      ]
+    }
+  ]
+}

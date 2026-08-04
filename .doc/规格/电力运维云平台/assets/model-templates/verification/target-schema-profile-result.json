@@ -1,0 +1,277 @@
+{
+  "profileVersion": "1.1.0",
+  "resultSchemaVersion": "1.0.0",
+  "verifiedDate": "2026-08-04",
+  "scope": "LOCAL_TARGET_INTEGRATION_INSTANCE",
+  "container": "postgres-server",
+  "database": "iot-device20",
+  "databaseUser": "postgres",
+  "postgresVersion": "18.4 (Debian 18.4-1.pgdg13+1)",
+  "transactionReadOnly": true,
+  "tables": [
+    "product",
+    "product_properties",
+    "product_event",
+    "product_services",
+    "product_commands",
+    "product_commands_requests",
+    "product_commands_response"
+  ],
+  "rowCounts": {
+    "product": 4,
+    "product_properties": 21,
+    "product_event": 0,
+    "product_services": 0,
+    "product_commands": 0,
+    "product_commands_requests": 0,
+    "product_commands_response": 0
+  },
+  "schemaFacts": {
+    "productPropertiesHasServiceId": false,
+    "allProfiledTablesHaveTenantId": true,
+    "businessUniqueConstraintCount": 0,
+    "foreignKeyCount": 0,
+    "triggerCount": 0,
+    "tables": {
+      "product": {
+        "columnCount": 29,
+        "hasTenantId": true,
+        "tenantNotNull": true,
+        "columnSignatures": [
+          "id|bigint|NOT_NULL",
+          "app_id|character varying|NOT_NULL",
+          "template_identification|character varying|NULLABLE",
+          "product_name|character varying|NOT_NULL",
+          "product_identification|character varying|NOT_NULL",
+          "product_type|character varying|NOT_NULL",
+          "manufacturer_id|character varying|NOT_NULL",
+          "manufacturer_name|character varying|NOT_NULL",
+          "model|character varying|NOT_NULL",
+          "data_format|character varying|NOT_NULL",
+          "device_type|character varying|NOT_NULL",
+          "protocol_type|character varying|NOT_NULL",
+          "status|character varying|NOT_NULL",
+          "remark|character varying|NULLABLE",
+          "create_by|character varying|NULLABLE",
+          "create_time|timestamp without time zone|NULLABLE",
+          "update_by|character varying|NULLABLE",
+          "update_time|timestamp without time zone|NULLABLE",
+          "auth_mode|character varying|NULLABLE",
+          "user_name|character varying|NULLABLE",
+          "password|character varying|NULLABLE",
+          "connector|character varying|NULLABLE",
+          "sign_key|character varying|NULLABLE",
+          "encrypt_method|integer|NULLABLE",
+          "encrypt_key|character varying|NULLABLE",
+          "encrypt_vector|character varying|NULLABLE",
+          "tenant_id|bigint|NOT_NULL",
+          "public_key|text|NULLABLE",
+          "private_key|text|NULLABLE"
+        ]
+      },
+      "product_properties": {
+        "columnCount": 20,
+        "hasTenantId": true,
+        "tenantNotNull": true,
+        "columnSignatures": [
+          "id|bigint|NOT_NULL",
+          "property_name|character varying|NOT_NULL",
+          "property_code|character varying|NOT_NULL",
+          "datatype|character varying|NOT_NULL",
+          "description|character varying|NULLABLE",
+          "enumlist|character varying|NULLABLE",
+          "max|character varying|NULLABLE",
+          "maxlength|bigint|NULLABLE",
+          "method|character varying|NULLABLE",
+          "min|character varying|NULLABLE",
+          "required|integer|NULLABLE",
+          "step|integer|NULLABLE",
+          "unit|character varying|NULLABLE",
+          "create_by|character varying|NULLABLE",
+          "create_time|timestamp without time zone|NULLABLE",
+          "update_by|character varying|NULLABLE",
+          "update_time|timestamp without time zone|NULLABLE",
+          "template_identification|character varying|NULLABLE",
+          "product_identification|character varying|NULLABLE",
+          "tenant_id|bigint|NOT_NULL"
+        ]
+      },
+      "product_event": {
+        "columnCount": 13,
+        "hasTenantId": true,
+        "tenantNotNull": true,
+        "columnSignatures": [
+          "id|bigint|NOT_NULL",
+          "event_name|character varying|NOT_NULL",
+          "event_code|character varying|NOT_NULL",
+          "event_type|character varying|NOT_NULL",
+          "template_identification|character varying|NULLABLE",
+          "product_identification|character varying|NULLABLE",
+          "status|character varying|NULLABLE",
+          "description|character varying|NULLABLE",
+          "create_by|character varying|NULLABLE",
+          "create_time|timestamp without time zone|NULLABLE",
+          "update_by|character varying|NULLABLE",
+          "update_time|timestamp without time zone|NULLABLE",
+          "tenant_id|bigint|NOT_NULL"
+        ]
+      },
+      "product_services": {
+        "columnCount": 12,
+        "hasTenantId": true,
+        "tenantNotNull": true,
+        "columnSignatures": [
+          "id|bigint|NOT_NULL",
+          "service_code|character varying|NOT_NULL",
+          "service_name|character varying|NOT_NULL",
+          "template_identification|character varying|NULLABLE",
+          "product_identification|character varying|NULLABLE",
+          "status|character varying|NULLABLE",
+          "description|character varying|NULLABLE",
+          "create_by|character varying|NULLABLE",
+          "create_time|timestamp without time zone|NULLABLE",
+          "update_by|character varying|NULLABLE",
+          "update_time|timestamp without time zone|NULLABLE",
+          "tenant_id|bigint|NOT_NULL"
+        ]
+      },
+      "product_commands": {
+        "columnCount": 11,
+        "hasTenantId": true,
+        "tenantNotNull": true,
+        "columnSignatures": [
+          "id|bigint|NOT_NULL",
+          "service_id|bigint|NOT_NULL",
+          "name|character varying|NOT_NULL",
+          "description|character varying|NULLABLE",
+          "create_by|character varying|NULLABLE",
+          "create_time|timestamp without time zone|NULLABLE",
+          "update_by|character varying|NULLABLE",
+          "update_time|timestamp without time zone|NULLABLE",
+          "command_code|character varying|NULLABLE",
+          "remark|character varying|NULLABLE",
+          "tenant_id|bigint|NOT_NULL"
+        ]
+      },
+      "product_commands_requests": {
+        "columnCount": 19,
+        "hasTenantId": true,
+        "tenantNotNull": true,
+        "columnSignatures": [
+          "id|bigint|NOT_NULL",
+          "service_id|bigint|NOT_NULL",
+          "commands_id|bigint|NOT_NULL",
+          "datatype|character varying|NOT_NULL",
+          "enumlist|character varying|NULLABLE",
+          "max|character varying|NULLABLE",
+          "maxlength|character varying|NULLABLE",
+          "min|character varying|NULLABLE",
+          "parameter_description|character varying|NULLABLE",
+          "parameter_name|character varying|NULLABLE",
+          "required|character varying|NULLABLE",
+          "step|character varying|NULLABLE",
+          "unit|character varying|NULLABLE",
+          "create_by|character varying|NULLABLE",
+          "create_time|timestamp without time zone|NULLABLE",
+          "update_by|character varying|NULLABLE",
+          "update_time|timestamp without time zone|NULLABLE",
+          "parameter_code|character varying|NULLABLE",
+          "tenant_id|bigint|NOT_NULL"
+        ]
+      },
+      "product_commands_response": {
+        "columnCount": 19,
+        "hasTenantId": true,
+        "tenantNotNull": true,
+        "columnSignatures": [
+          "id|bigint|NOT_NULL",
+          "commands_id|bigint|NOT_NULL",
+          "service_id|bigint|NULLABLE",
+          "datatype|character varying|NOT_NULL",
+          "enumlist|character varying|NULLABLE",
+          "max|character varying|NULLABLE",
+          "maxlength|character varying|NULLABLE",
+          "min|character varying|NULLABLE",
+          "parameter_description|character varying|NULLABLE",
+          "parameter_name|character varying|NULLABLE",
+          "required|character varying|NULLABLE",
+          "step|character varying|NULLABLE",
+          "unit|character varying|NULLABLE",
+          "create_by|character varying|NULLABLE",
+          "create_time|timestamp without time zone|NULLABLE",
+          "update_by|character varying|NULLABLE",
+          "update_time|timestamp without time zone|NULLABLE",
+          "parameter_code|character varying|NULLABLE",
+          "tenant_id|bigint|NOT_NULL"
+        ]
+      }
+    }
+  },
+  "duplicateGroups": {
+    "productIdentification": 0,
+    "propertyCodeProductScope": 0,
+    "propertyCodeTemplateScope": 0,
+    "eventCodeProductScope": 0,
+    "eventCodeTemplateScope": 0,
+    "serviceCodeProductScope": 0,
+    "serviceCodeTemplateScope": 0
+  },
+  "identifierScopeAnomalies": {
+    "propertiesBothNull": 0,
+    "propertiesBothSet": 0,
+    "eventsBothNull": 0,
+    "eventsBothSet": 0,
+    "servicesBothNull": 0,
+    "servicesBothSet": 0
+  },
+  "orphanCounts": {
+    "propertiesWithoutProduct": 4,
+    "eventsWithoutProduct": 0,
+    "servicesWithoutProduct": 0,
+    "commandsWithoutService": 0,
+    "requestsWithoutCommand": 0,
+    "responsesWithoutCommand": 0
+  },
+  "orphanPropertyGroups": [
+    {
+      "tenantId": 1,
+      "productIdentification": "8700054938017792",
+      "propertyCount": 2
+    },
+    {
+      "tenantId": 1,
+      "productIdentification": "9030000000000001",
+      "propertyCount": 2
+    }
+  ],
+  "repositoryDrift": [
+    "ProductPropertiesMapper.Base_Column_List references missing service_id",
+    "ProductProperties runtime entity does not declare serviceId while API param/result VOs do",
+    "ProductPropertiesMapper insert has a column/value arity mismatch and a bare jdbcType=BIGINT} token",
+    "legacy service-property query methods remain callable but rely on missing or commented SQL",
+    "single and bulk product deletion do not cover the complete runtime model chain",
+    "legacy ThingModel release returns placeholder success without persistence"
+  ],
+  "comparisonContract": {
+    "resultSchema": "target-schema-profile-result.schema.json",
+    "productionRerunRequired": true,
+    "rawPsqlOutputRequired": true,
+    "blockingConditions": [
+      "profiled table missing",
+      "approved column signature changed",
+      "tenant_id missing or nullable",
+      "duplicate group count greater than zero",
+      "identifier scope anomaly count greater than zero",
+      "orphan count greater than zero",
+      "service_id shape conflicts with accepted ADR-012",
+      "approved unique/FK/trigger baseline regresses"
+    ],
+    "warningConditions": [
+      "PostgreSQL major version differs from approved baseline",
+      "a profiled runtime table has zero rows",
+      "row count changes without an attached migration explanation"
+    ]
+  },
+  "gateDecision": "OPEN_REMEDIATION_REQUIRED",
+  "result": "PROFILE_EXECUTED_WITH_BLOCKERS"
+}

@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/schemas/td-005/target-schema-profile-result-1.0.0.schema.json",
+  "title": "TD-005 target schema profile result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profileVersion",
+    "resultSchemaVersion",
+    "verifiedDate",
+    "scope",
+    "container",
+    "database",
+    "databaseUser",
+    "postgresVersion",
+    "transactionReadOnly",
+    "tables",
+    "rowCounts",
+    "schemaFacts",
+    "duplicateGroups",
+    "identifierScopeAnomalies",
+    "orphanCounts",
+    "orphanPropertyGroups",
+    "repositoryDrift",
+    "comparisonContract",
+    "gateDecision",
+    "result"
+  ],
+  "properties": {
+    "profileVersion": { "const": "1.1.0" },
+    "resultSchemaVersion": { "const": "1.0.0" },
+    "verifiedDate": { "type": "string", "format": "date" },
+    "scope": { "const": "LOCAL_TARGET_INTEGRATION_INSTANCE" },
+    "container": { "type": "string", "minLength": 1 },
+    "database": { "type": "string", "minLength": 1 },
+    "databaseUser": { "type": "string", "minLength": 1 },
+    "postgresVersion": { "type": "string", "minLength": 1 },
+    "transactionReadOnly": { "const": true },
+    "tables": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "product",
+          "product_properties",
+          "product_event",
+          "product_services",
+          "product_commands",
+          "product_commands_requests",
+          "product_commands_response"
+        ]
+      }
+    },
+    "rowCounts": { "$ref": "#/$defs/sevenTableCounts" },
+    "schemaFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productPropertiesHasServiceId",
+        "allProfiledTablesHaveTenantId",
+        "businessUniqueConstraintCount",
+        "foreignKeyCount",
+        "triggerCount",
+        "tables"
+      ],
+      "properties": {
+        "productPropertiesHasServiceId": { "type": "boolean" },
+        "allProfiledTablesHaveTenantId": { "type": "boolean" },
+        "businessUniqueConstraintCount": { "type": "integer", "minimum": 0 },
+        "foreignKeyCount": { "type": "integer", "minimum": 0 },
+        "triggerCount": { "type": "integer", "minimum": 0 },
+        "tables": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "product",
+            "product_properties",
+            "product_event",
+            "product_services",
+            "product_commands",
+            "product_commands_requests",
+            "product_commands_response"
+          ],
+          "properties": {
+            "product": { "$ref": "#/$defs/tableShape" },
+            "product_properties": { "$ref": "#/$defs/tableShape" },
+            "product_event": { "$ref": "#/$defs/tableShape" },
+            "product_services": { "$ref": "#/$defs/tableShape" },
+            "product_commands": { "$ref": "#/$defs/tableShape" },
+            "product_commands_requests": { "$ref": "#/$defs/tableShape" },
+            "product_commands_response": { "$ref": "#/$defs/tableShape" }
+          }
+        }
+      }
+    },
+    "duplicateGroups": { "$ref": "#/$defs/nonNegativeIntegerMap" },
+    "identifierScopeAnomalies": { "$ref": "#/$defs/nonNegativeIntegerMap" },
+    "orphanCounts": { "$ref": "#/$defs/nonNegativeIntegerMap" },
+    "orphanPropertyGroups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tenantId", "productIdentification", "propertyCount"],
+        "properties": {
+          "tenantId": { "type": "integer", "minimum": 0 },
+          "productIdentification": { "type": "string", "minLength": 1 },
+          "propertyCount": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "repositoryDrift": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "comparisonContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resultSchema",
+        "productionRerunRequired",
+        "rawPsqlOutputRequired",
+        "blockingConditions",
+        "warningConditions"
+      ],
+      "properties": {
+        "resultSchema": { "const": "target-schema-profile-result.schema.json" },
+        "productionRerunRequired": { "const": true },
+        "rawPsqlOutputRequired": { "const": true },
+        "blockingConditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "warningConditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "gateDecision": { "enum": ["OPEN_REMEDIATION_REQUIRED", "PASS"] },
+    "result": { "enum": ["PROFILE_EXECUTED_WITH_BLOCKERS", "PASS"] }
+  },
+  "$defs": {
+    "tableShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["columnCount", "hasTenantId", "tenantNotNull", "columnSignatures"],
+      "properties": {
+        "columnCount": { "type": "integer", "minimum": 1 },
+        "hasTenantId": { "type": "boolean" },
+        "tenantNotNull": { "type": "boolean" },
+        "columnSignatures": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]*\\|[^|]+\\|(NOT_NULL|NULLABLE)$"
+          }
+        }
+      }
+    },
+    "sevenTableCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product",
+        "product_properties",
+        "product_event",
+        "product_services",
+        "product_commands",
+        "product_commands_requests",
+        "product_commands_response"
+      ],
+      "properties": {
+        "product": { "type": "integer", "minimum": 0 },
+        "product_properties": { "type": "integer", "minimum": 0 },
+        "product_event": { "type": "integer", "minimum": 0 },
+        "product_services": { "type": "integer", "minimum": 0 },
+        "product_commands": { "type": "integer", "minimum": 0 },
+        "product_commands_requests": { "type": "integer", "minimum": 0 },
+        "product_commands_response": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "nonNegativeIntegerMap": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    }
+  }
+}

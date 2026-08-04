@@ -1,6 +1,6 @@
 # EasyAIoT 电力运维云平台 ADR 索引
 
-> 索引版本：1.0.1  
+> 索引版本：1.0.2  
 > 日期：2026-07-31  
 > 产品基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[项目开发宪法 1.4.0](../../开发规范/EasyAIoT项目开发宪法.md)
 
@@ -19,11 +19,12 @@
 | [ADR-009](./ADR-009-物模型模板版本策略.md) | Accepted | 模板采用 SemVer，发布版本不可原地修改 |
 | [ADR-010](./ADR-010-统一告警模型迁移.md) | Accepted | `iot-device` 统一告警事实、状态机与迁移 |
 | [ADR-011](./ADR-011-Capability-Manifest规范.md) | Accepted | standard/full 同源能力清单和 strict-superset CI 门禁 |
+| [ADR-012](./ADR-012-产品根属性与服务参数单一事实.md) | Proposed | 候选：根属性使用 `product_properties`，服务参数使用 command request/response，禁止双事实 |
 
 ## 开发解释顺序
 
 1. 先遵循产品功能计划与项目开发宪法。
-2. 再遵循 Accepted ADR 和冻结 Feature Spec。
+2. 再遵循 Accepted ADR 和冻结 Feature Spec；`Proposed` ADR 仅作为待决策门禁，不得作为生产实现授权。
 3. ADR 冲突时，以状态更新较新且明确 supersede 关系的 ADR 为准；无法判定时停止 Technical Design 并发起 ADR 评审。
 4. [ADR 评审报告](../../开发规范/ADR评审报告.md)第一至第九章保留原始评审证据，第十章为复核后的最终处置；评审报告不可覆盖本索引中的当前 ADR 状态。
 

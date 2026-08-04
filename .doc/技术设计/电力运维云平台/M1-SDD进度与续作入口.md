@@ -1,6 +1,6 @@
 # M1 SDD 进度与续作入口
 
-> 检查点日期：2026-07-31  
+> 检查点日期：2026-08-04  
 > Git 分支：`cfdqiot`  
 > 当前阶段：Technical Design 进行中  
 > 说明：本文件用于下次会话恢复上下文；状态以各正式文档为准
@@ -14,11 +14,14 @@
 | PRD-01 站点设备与数据采集 | 1.2.0 | Approved / Baselined（M1） |
 | SPEC-001～004 集合 | 1.4.0 | Approved / Frozen |
 | ADR-001～011 | 当前索引基线 | Accepted |
-| [TD-001 collector 与 NODE 部署契约](./TD-001-collector与NODE部署契约.md) | 1.0.3 | In Review |
+| [TD-001 collector 与 NODE 部署契约](./TD-001-collector与NODE部署契约.md) | 1.0.4 | In Review |
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
+| [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.1 | In Review |
+| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.5 | In Review |
+| [TD-005 孤儿属性处置方案](./TD-005-孤儿属性处置方案.md) | 0.1.2 | Execution Approved / Pending Execution |
 
-`In Review` 表示设计已形成并完成文档评审处置，但尚无全部实现/压测证据；不得描述为已经开发完成或 Approved / Frozen。
+`In Review` 表示设计已形成并进入评审，可能仍有评审意见或实现/压测证据待关闭；不得描述为已经开发完成或 Approved / Frozen。TD-001～005 均已完成现有评审报告的文档处置；各 TD 仍需分别关闭证据门禁。
 
 ## 2. 已完成工作
 
@@ -27,8 +30,17 @@
 - TD-001 已完成 collector Profile、NODE 类型化部署、配置快照、串口、健康与 `TelemetryOutboxPort` 设计；评审问题已处置。
 - TD-002 已完成 SQLite WAL、单 writer、有界队列、ACK 状态机、容量保护、恢复、迁移与 Gap 设计；评审问题已处置。
 - TD-003 已完成 Envelope V1、中心 Inbox、应用 ACK、两层幂等、standard/full Store、投影事件 Outbox、Gap Report、完整率、水位和混合版本设计；评审问题已处置。
+- TD-004 已完成首次评审处置，补齐授权撤销、幂等、审计 Schema、永久 assetCode、索引、collector 契约和 API 细节；仍待存量画像、自动合同/安全测试、迁移与压测证据。
+- TD-005 已完成 1.0.4 评审处置与自动证据，明确现有 `/thingModel` 发布仅为无持久化占位成功；采用新增版本化控制层并保留现有产品运行表的兼容方案，形成 Schema、SemVer/JCS/hash、三方差异、产品绑定、升级回滚、导入和发布 API。
+- TD-005 已产出 Review Candidate 资产：10 类标准模板、71 个属性、16 个事件、7 个高风险服务、JSON Schema、合法样例、Excel 统一导入模板和 SHA-256 manifest；尚未完成行业专家与标准 validator 冻结。
+- TD-005 评审的 5 项 HIGH 已完成设计处置：幂等复用 TD-004、capability 对齐 `power.device.model`、旧电力发布入口拒绝假成功、导入攻击面收敛、CT/PT 变比十进制归一化；3 项部分采纳和 1 项错误文件名意见已在评审报告末尾说明。
+- TD-005 Draft 2020-12 自动验证已执行 2 个正例、11 个反例；修正了原合法样例的下划线 eventCode。Python RFC8785 与 Node/ECMAScript 已对 2 组 canonical/hash golden 一致通过，证据位于资产 `verification/` 目录。
+- TD-005 二次复核 R-01～R-05 已处置：最终输出精度取目标属性、冒号 action 路由单一风格、旧电力发布保持 409 并说明依据、补齐版本记录、固定 UTF-8 无 BOM。
+- TD-005 已在 `postgres-server / iot-device20` 完成本地目标库只读画像：确认缺少 `product_properties.service_id`、业务唯一约束、外键和触发器，并发现 4 条孤儿属性；事实采集完成但修复门禁仍为 OPEN。
+- TD-005 画像评审 R1～R7 已完成文档处置：画像 v1.1 增加七表列签名、双作用域重复、标识异常、结果 JSON Schema 与生产重跑契约；ADR-012 已建立但仍为 Proposed。
+- TD-005 的 4 条孤儿属性处置方案已完成 O1～O7 专项评审：O5 参数化租户因扩大未画像删除范围而驳回，O1/O2/O3 按实际命令服务链、父对象语义和 COPY 数据段修正；动态扫描 12 个直接标识列、完整行快照断言和默认回滚演练 PASS，演练后 4 行仍完整，数据库与初始化种子均尚未持久化改动。
 - TD-001/002/003 的 Envelope、configVersion、siteCode、dataPriority、requestId、Topic、5 分钟 ACK deadline 和健康语义已经对齐。
-- 三份评审报告均保留原始意见并附最终逐项处置，发生冲突时以报告末尾的“复核与最终处置”为准。
+- TD-001～004 四份评审报告均保留原始意见并附最终逐项处置，发生冲突时以报告末尾的“复核与最终处置”为准。
 
 ## 3. 已冻结的关键方向
 
@@ -42,6 +54,9 @@
 - 未知 ACK 按 messageId 独立计数，不能使用 collector 全局次数推动正常消息进死信。
 - 最终拒绝必须先有持久审计，不允许 `audit_pending` FINAL。
 - EDGE_DELIVERY 与 CENTER_PROJECTION gap 分阶段存储和统计，不得重复计数。
+- 物模型模板使用 SemVer、JCS canonical JSON 和 SHA-256；PUBLISHED 内容不可原地修改，产品绑定精确版本与快照。
+- standard/full 共用模板 Schema、表、API、差异算法和导入资产；full 只允许提高配额；mini capability 禁用。
+- 标准模板与 RTU 点位绑定分别版本化；同一发布包原子静态校验，寄存器地址不得进入标准模板。
 
 ## 4. 尚未关闭的门禁
 
@@ -64,22 +79,39 @@
 - TDengine 确定性幂等 DDL/驱动 Spike，尤其“写成功后崩溃再投影”；
 - 完整率、迟到、封账/重开和投影死信的业务/运维验收。
 
+### TD-004
+
+- `deviceIdentification` 存量重复、tenant 异常、软删除复用和未绑定站点画像；
+- alias 并发锁/循环、二维码 HMAC/keyVersion、统一错误、审计故障和授权撤销证据；
+- OpenFeign/objectRevision/configVersion 合同及迁移、回滚、压测演练。
+
+### TD-005
+
+- 本地目标集成实例画像与 R1～R7 文档处置已完成；仍需 ADR-012 转 Accepted、处置 4 条孤儿属性、修正 Mapper/实体/VO，并通过唯一约束、租户 CRUD 和删除链合同；生产存量环境需按画像 Schema 重跑；
+- 4 条孤儿属性的处置设计及专项评审已完成，用户已要求“下次直接执行”；授权仅覆盖租户 1 的四个固定主键。下次只读预检全部 PASS 后，直接同步删除初始化 COPY 数据段中 4 条旧种子、显式提交修复并重跑画像；任何漂移均失败关闭；
+- Draft 2020-12 资产级 fixture 已 PASS；仍需生产 Java/TypeScript 消费相同 JCS/hash golden，并补 Schema 外语义校验；
+- 10 类模板、71 个属性、单位、三相、累计量、CT/PT 变比及高风险服务的行业专家复核；
+- 发布不可变、SemVer、三方差异、全量错误、租户隔离、产品绑定事务和精确回滚测试；
+- Excel 宏/公式拒绝、逐行错误、RTU 分区版本合同与现有非电力功能回归；
+- manifest 仍为 `gitCommit=UNCOMMITTED`，评审冻结时必须写入实际提交并复算哈希。
+
 ## 5. 下次建议起点
 
-继续 SDD 文档链，优先编写 **TD-004：对象、别名、二维码及历史编码兼容**：
+继续 SDD 文档链，下一步优先执行 **TD-005 证据准备与冻结门禁关闭**：
 
-1. 读取 PRD-01、SPEC-001、ADR-004、ADR-008 和现有设备/站点数据模型；
-2. 核对历史 `deviceIdentification` 字符串/Long VO 调用链；
-3. 设计站点、空间、回路、计量点、设备别名和二维码短码表；
-4. 冻结租户唯一约束、解析权限、撤销/审计、兼容 API 和迁移脚本；
-5. 形成 TD-004 In Review 初稿和 OBJ-001～OBJ-012 追踪矩阵；
-6. 评审完成后再进入 TD-005 物模型模板设计。
+1. 读取 [TD-005 1.0.5](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 评审报告 §17](../../开发规范/TD-005评审报告.md)、[孤儿属性处置方案 0.1.2](./TD-005-孤儿属性处置方案.md)和[自动验证报告](../../规格/电力运维云平台/assets/model-templates/verification/README.md)；
+2. **直接执行已授权孤儿清理**：只读 precheck → 删除初始化 COPY 精确 4 行并核对 9 条现行演示属性 → remediation 默认回滚演练 → `COMMIT_REMEDIATION=true` → 重跑画像并保存前后证据；任一断言变化立即停止；
+3. 评审 ADR-012，冻结根属性/服务参数单一事实；
+4. 在生产 Java/TypeScript 模块中消费现有 JCS/hash golden，并补成员唯一、SemVer、CT/PT 等 Schema 外语义合同；
+5. 建立恶意 Excel/JSON 导入 fixture，验证宏、OLE、外链、Pivot、ZIP Slip/Bomb 和外部 `$ref` fail-closed；
+6. 组织电力领域评审 10 类模板和点位字典，重点核对三相后缀、单位、累计量、CT/PT 变比和高风险服务；
+7. 评审发布不可变、SemVer、三方差异、租户只读共享、产品绑定事务、升级回滚和 legacy 非电力兼容；
+8. 门禁通过后更新资产 manifest 的真实 Git commit/hash，再决定是否转 Approved / Frozen 和拆分代码任务。
 
-TD-004 可以与 TD-001～003 的证据准备并行设计，但任何生产代码不得绕过各 TD 的冻结门禁。
+TD-005 评审可以与 TD-001～004 的证据准备并行，但任何生产代码不得绕过各 TD 的冻结门禁。
 
 ## 6. 下次恢复提示
 
 可直接使用：
 
-> 读取 `.doc/技术设计/电力运维云平台/M1-SDD进度与续作入口.md`，遵循《平台功能计划》和《EasyAIoT 项目开发宪法》，从 TD-004 开始继续 SDD。先核对 SPEC-001、ADR-004/008 和现有设备模型，再形成 In Review 初稿，不提前宣称冻结或完成功能开发。
-
+> 读取 `.doc/技术设计/电力运维云平台/M1-SDD进度与续作入口.md`，遵循《平台功能计划》和《EasyAIoT 项目开发宪法》，继续 TD-005。TD-005 1.0.5、画像评审 R1～R7 和孤儿属性方案 O1～O7 已完成；用户已授权下次直接执行租户 1 的四条固定孤儿属性清理。先重跑只读 precheck，全部 PASS 后修正初始化 COPY、执行默认回滚演练、以 `COMMIT_REMEDIATION=true` 提交并重跑画像；任何环境或数据漂移均失败关闭。完成后继续 ADR-012 和其他门禁。

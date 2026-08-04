@@ -1,0 +1,31 @@
+{
+  "manifestVersion": "1.0.0",
+  "status": "REVIEW_CANDIDATE",
+  "generatedAt": "2026-08-04T00:00:00+08:00",
+  "gitCommit": "UNCOMMITTED",
+  "hashAlgorithm": "SHA-256",
+  "canonicalizationVersion": "binary-file-v1",
+  "note": "评审冻结或发布时必须将 gitCommit 更新为实际提交，并重新计算全部哈希；当前清单不是生产发布证明。",
+  "artifacts": [
+    {
+      "path": "easyaiot-power-model-import-v1.xlsx",
+      "sizeBytes": 28365,
+      "sha256": "6c50b83a10a1105f9d5a5373fffdb17f65889b5ecb50828fb6d76ed2aab8fd63"
+    },
+    {
+      "path": "easyaiot-power-model-template.schema.json",
+      "sizeBytes": 10294,
+      "sha256": "2431b8e7f25414aff89468d1b1daced2d10ce064d80b0816791912c7272bbae5"
+    },
+    {
+      "path": "example-standard-meter-1.0.0.json",
+      "sizeBytes": 1423,
+      "sha256": "394f094fe58a0f732f6eabed575ac93c87cfb8706ccb11c8d5193ad9ca9ca8fb"
+    },
+    {
+      "path": "standard-point-dictionary-v1.json",
+      "sizeBytes": 35104,
+      "sha256": "c3aeba3b51fa4e54f363bc53727abb217a2c0f816fb156965fb3aecb3ccd23fd"
+    }
+  ]
+}

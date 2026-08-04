@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0.0",
+  "templateCode": "std-meter",
+  "templateName": "多功能电表",
+  "deviceType": "METER",
+  "templateKind": "STANDARD",
+  "version": "1.0.0",
+  "description": "M1 标准多功能电表最小可发布示例。",
+  "tags": ["power", "meter", "m1"],
+  "properties": [
+    {
+      "propertyCode": "current-a",
+      "propertyName": "A相电流",
+      "dataType": "DOUBLE",
+      "accessMode": "R",
+      "unit": "A",
+      "precision": 3,
+      "roundingMode": "HALF_UP",
+      "min": "0",
+      "semanticType": "INSTANTANEOUS",
+      "sampleHint": { "mode": "PERIODIC", "intervalMs": 5000 },
+      "required": true,
+      "critical": true
+    },
+    {
+      "propertyCode": "energy-import-total",
+      "propertyName": "正向有功总电能",
+      "dataType": "DOUBLE",
+      "accessMode": "R",
+      "unit": "kWh",
+      "precision": 3,
+      "roundingMode": "HALF_UP",
+      "min": "0",
+      "semanticType": "CUMULATIVE",
+      "sampleHint": { "mode": "PERIODIC", "intervalMs": 60000 },
+      "required": true,
+      "critical": false
+    }
+  ],
+  "events": [
+    {
+      "eventCode": "measurement-abnormal",
+      "eventName": "计量异常",
+      "defaultSeverity": "WARNING",
+      "ackRequired": true,
+      "inputs": [],
+      "alarmPolicySuggestion": {
+        "durationMs": 60000,
+        "recoveryDurationMs": 60000,
+        "notify": true
+      }
+    }
+  ],
+  "services": []
+}

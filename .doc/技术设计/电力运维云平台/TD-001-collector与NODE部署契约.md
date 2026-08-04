@@ -1,9 +1,9 @@
 # TD-001：collector Profile 与 NODE 部署契约
 
 > TD ID：POWER-TD-001  
-> 版本：1.0.3  
+> 版本：1.0.4  
 > 状态：In Review  
-> 日期：2026-07-31  
+> 日期：2026-08-04  
 > 上游需求：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)  
 > 规格：[SPEC-003 1.4.0](../../规格/电力运维云平台/SPEC-003-RS485-Modbus-RTU采集产品化.md)  
 > 架构决策：[ADR-001](../../架构决策/电力运维云平台/ADR-001-RTU-Poller运行位置.md)、[ADR-007](../../架构决策/电力运维云平台/ADR-007-collector打包与NODE管理契约.md)、[ADR-011](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -203,7 +203,7 @@ flowchart LR
       "requestTimeoutMs": 1000,
       "maxRetries": 2,
       "points": [{
-        "propertyCode": "activePower",
+        "propertyCode": "active-power",
         "function": "HOLDING_REGISTER",
         "address": 0,
         "quantity": 2,
@@ -479,4 +479,4 @@ TD-001 转为 `Approved / Frozen` 前必须关闭：
 5. 完成第 13 节首轮资源压测，冻结 standard/full 生产 request/limit、串口/点位/周期配额；未完成不得形成销售承诺。
 6. TD-002/003 对 `TelemetryOutboxPort`、卷路径和健康摘要无冲突。
 
-当前无未决架构选型。评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`；未冻结项仍为需要实测证据的资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review，完成本节门禁后才能转为 Approved / Frozen。
+当前无未决架构选型。评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则；未冻结项仍为需要实测证据的资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review，完成本节门禁后才能转为 Approved / Frozen。

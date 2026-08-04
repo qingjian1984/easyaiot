@@ -1,0 +1,10 @@
+{
+  "z-last": "line\nquote\"slash\\",
+  "a-first": [0, -1, 4.5, 0.002, 1e+30],
+  "中": "电力",
+  "emoji-😀": true,
+  "nested": {
+    "b": null,
+    "a": "0.000001"
+  }
+}

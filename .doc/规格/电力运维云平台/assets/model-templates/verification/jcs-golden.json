@@ -1,0 +1,21 @@
+{
+  "goldenVersion": "1.0.0",
+  "canonicalizationVersion": "jcs-rfc8785-v1",
+  "hashAlgorithm": "SHA-256",
+  "cases": [
+    {
+      "name": "standard-meter-artifact",
+      "input": "../example-standard-meter-1.0.0.json",
+      "canonicalBase64": "eyJkZXNjcmlwdGlvbiI6Ik0xIOagh+WHhuWkmuWKn+iDveeUteihqOacgOWwj+WPr+WPkeW4g+ekuuS+i+OAgiIsImRldmljZVR5cGUiOiJNRVRFUiIsImV2ZW50cyI6W3siYWNrUmVxdWlyZWQiOnRydWUsImFsYXJtUG9saWN5U3VnZ2VzdGlvbiI6eyJkdXJhdGlvbk1zIjo2MDAwMCwibm90aWZ5Ijp0cnVlLCJyZWNvdmVyeUR1cmF0aW9uTXMiOjYwMDAwfSwiZGVmYXVsdFNldmVyaXR5IjoiV0FSTklORyIsImV2ZW50Q29kZSI6Im1lYXN1cmVtZW50LWFibm9ybWFsIiwiZXZlbnROYW1lIjoi6K6h6YeP5byC5bi4IiwiaW5wdXRzIjpbXX1dLCJwcm9wZXJ0aWVzIjpbeyJhY2Nlc3NNb2RlIjoiUiIsImNyaXRpY2FsIjp0cnVlLCJkYXRhVHlwZSI6IkRPVUJMRSIsIm1pbiI6IjAiLCJwcmVjaXNpb24iOjMsInByb3BlcnR5Q29kZSI6ImN1cnJlbnQtYSIsInByb3BlcnR5TmFtZSI6IkHnm7jnlLXmtYEiLCJyZXF1aXJlZCI6dHJ1ZSwicm91bmRpbmdNb2RlIjoiSEFMRl9VUCIsInNhbXBsZUhpbnQiOnsiaW50ZXJ2YWxNcyI6NTAwMCwibW9kZSI6IlBFUklPRElDIn0sInNlbWFudGljVHlwZSI6IklOU1RBTlRBTkVPVVMiLCJ1bml0IjoiQSJ9LHsiYWNjZXNzTW9kZSI6IlIiLCJjcml0aWNhbCI6ZmFsc2UsImRhdGFUeXBlIjoiRE9VQkxFIiwibWluIjoiMCIsInByZWNpc2lvbiI6MywicHJvcGVydHlDb2RlIjoiZW5lcmd5LWltcG9ydC10b3RhbCIsInByb3BlcnR5TmFtZSI6Iuato+WQkeacieWKn+aAu+eUteiDvSIsInJlcXVpcmVkIjp0cnVlLCJyb3VuZGluZ01vZGUiOiJIQUxGX1VQIiwic2FtcGxlSGludCI6eyJpbnRlcnZhbE1zIjo2MDAwMCwibW9kZSI6IlBFUklPRElDIn0sInNlbWFudGljVHlwZSI6IkNVTVVMQVRJVkUiLCJ1bml0Ijoia1doIn1dLCJzY2hlbWFWZXJzaW9uIjoiMS4wLjAiLCJzZXJ2aWNlcyI6W10sInRhZ3MiOlsicG93ZXIiLCJtZXRlciIsIm0xIl0sInRlbXBsYXRlQ29kZSI6InN0ZC1tZXRlciIsInRlbXBsYXRlS2luZCI6IlNUQU5EQVJEIiwidGVtcGxhdGVOYW1lIjoi5aSa5Yqf6IO955S16KGoIiwidmVyc2lvbiI6IjEuMC4wIn0=",
+      "bytes": 1052,
+      "sha256": "e34427a38eb4f3821cf79caafa21902cd84cf3a47938445f764a4e6ac002cca1"
+    },
+    {
+      "name": "unicode-and-numbers",
+      "input": "golden/unicode-numbers-input.json",
+      "canonicalBase64": "eyJhLWZpcnN0IjpbMCwtMSw0LjUsMC4wMDIsMWUrMzBdLCJlbW9qaS3wn5iAIjp0cnVlLCJuZXN0ZWQiOnsiYSI6IjAuMDAwMDAxIiwiYiI6bnVsbH0sInotbGFzdCI6ImxpbmVcbnF1b3RlXCJzbGFzaFxcIiwi5LitIjoi55S15YqbIn0=",
+      "bytes": 134,
+      "sha256": "948e8a673f920c7acde693ca2a50d1f3ea55d9d7f410f7f780d69be4bf960172"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "verifiedDate": "2026-08-04",
+  "draft": "2020-12",
+  "validator": "python-jsonschema-4.26.0",
+  "schemaPositive": 2,
+  "schemaNegative": 11,
+  "jcsImplementations": [
+    "python-rfc8785-0.1.4",
+    "node-ecmascript"
+  ],
+  "jcsCases": [
+    {
+      "name": "standard-meter-artifact",
+      "sha256": "e34427a38eb4f3821cf79caafa21902cd84cf3a47938445f764a4e6ac002cca1",
+      "bytes": 1052
+    },
+    {
+      "name": "unicode-and-numbers",
+      "sha256": "948e8a673f920c7acde693ca2a50d1f3ea55d9d7f410f7f780d69be4bf960172",
+      "bytes": 134
+    }
+  ],
+  "manifestArtifacts": 4,
+  "targetProfileSchema": "1.0.0",
+  "utf8NoBomFiles": 18,
+  "result": "PASS"
+}
