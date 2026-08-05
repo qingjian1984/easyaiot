@@ -1,6 +1,6 @@
 # EasyAIoT 电力运维云平台 ADR 索引
 
-> 索引版本：1.1.1
+> 索引版本：1.1.2
 > 日期：2026-08-05
 > 产品基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[项目开发宪法 1.4.0](../../开发规范/EasyAIoT项目开发宪法.md)
 
@@ -19,7 +19,7 @@
 | [ADR-009](./ADR-009-物模型模板版本策略.md) | Accepted | 模板采用 SemVer，发布版本不可原地修改 |
 | [ADR-010](./ADR-010-统一告警模型迁移.md) | Accepted | `iot-device` 统一告警事实、状态机与迁移 |
 | [ADR-011](./ADR-011-Capability-Manifest规范.md) | Accepted | standard/full 同源能力清单和 strict-superset CI 门禁 |
-| [ADR-012](./ADR-012-产品根属性与服务参数单一事实.md) | Accepted | 1.0.1：根属性使用 `product_properties`；服务参数使用 command request/response；`commands_id` 为参数权威关联，禁止双事实；影子列收缩须独立 ADR |
+| [ADR-012](./ADR-012-产品根属性与服务参数单一事实.md) | Accepted | 1.0.2：根属性使用 `product_properties`；服务参数使用 command request/response；影子列收缩须独立 ADR、明确 owner/到期日及备份审批 |
 
 ## 开发解释顺序
 
