@@ -132,7 +132,39 @@
 
 TD-005 评审可以与 TD-001～004 的证据准备并行，但任何生产代码不得绕过各 TD 的冻结门禁。
 
-## 6. 下次恢复提示
+## 6. 可直接复跑的检查点
+
+- 功能检查点提交：`b7472b45 feat(sdd): enforce power model capabilities`；
+- 当前分支：`cfdqiot`，尚未推送；
+- 预期结果：capability manifest 4 tests、只读 API 1 test、设备侧 19 tests 全部 PASS，PostgreSQL 测试 tenant 八表残留为 0；
+- 下一份应先创建/更新的设计产物：`TD-005-版本绑定审计Outbox迁移与回滚设计.md`，只形成 migration/rollback 候选并进入评审，批准前不执行 DDL。
+
+从仓库根目录可直接执行以下 PowerShell 复跑当前基线；命令只读取本地 `.scripts/docker/.env.docker` 的 PostgreSQL 密码，不输出、不提交凭据：
+
+```powershell
+$passwordLine = Get-Content -LiteralPath '.scripts/docker/.env.docker' -Encoding UTF8 |
+  Where-Object { $_ -match '^POSTGRES_PASSWORD=' } |
+  Select-Object -First 1
+$env:TD005_PG_PASSWORD = ($passwordLine -split '=', 2)[1]
+$env:TD005_PG_ENABLED = 'true'
+
+Push-Location DEVICE
+mvn test -pl iot-system/iot-system-biz,iot-device/iot-device-biz -am `
+  '-Dtest=CapabilityManifestContractTest,CapabilityControllerTest,ProductPropertiesMapperContractTest,ProductPropertiesTenantPostgresIntegrationTest,LegacyServicePropertyAdapterTest,LegacyThingModelRuntimeAdapterGoldenTest,LegacyThingModelPersistencePostgresIntegrationTest' `
+  '-Dsurefire.failIfNoSpecifiedTests=false' `
+  '-Dmaven.test.skip=false' '-DskipTests=false' `
+  '-Dmaven.compiler.source=17' '-Dmaven.compiler.target=17'
+Pop-Location
+```
+
+manifest 与部署脚本可独立快速复核：
+
+```powershell
+node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').default,d='.scripts/docker/capabilities/';const s=JSON.parse(fs.readFileSync(d+'capability.schema.json','utf8')),v=new Ajv({strict:true}).compile(s);for(const n of ['electric-standard.json','electric-full.json']){const x=JSON.parse(fs.readFileSync(d+n,'utf8'));if(!v(x))throw new Error(JSON.stringify(v.errors))}console.log('schema=PASS manifests=2 draft=2020-12')"
+& 'C:\Program Files\Git\bin\bash.exe' -n .scripts/docker/deploy_profile.sh
+```
+
+## 7. 下次恢复提示
 
 可直接使用：
 
