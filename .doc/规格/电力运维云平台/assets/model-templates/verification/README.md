@@ -1,7 +1,7 @@
 # TD-005 Schema 与 JCS 自动验证证据
 
 > 证据日期：2026-08-05  
-> 对应设计：TD-005 1.0.6  
+> 对应设计：TD-005 1.0.10
 > 状态：PASS（资产级验证；生产 Java/TypeScript 集成仍需实现阶段合同测试）
 
 ## 1. 验证范围
@@ -12,8 +12,9 @@
 - canonical 字节的 SHA-256；
 - Python RFC8785 与 Node/ECMAScript 两个独立实现一致性；
 - release asset manifest 的文件大小和 SHA-256。
-- 画像结果 JSON Schema 1.0.0、七表列计数及 tenant 签名一致性；
-- 18 个 JSON/Markdown/脚本/SQL 资产严格 UTF-8 解码且无 BOM。
+- 画像结果 JSON Schema 1.1.0、12 表列计数、角色清单及 tenant 签名一致性；
+- 24 个 JSON/Markdown/脚本/SQL 资产严格 UTF-8 解码且无 BOM；
+- 1 组非空旧格式导入→8 张核心运行表投影→旧格式导出 round-trip fixture/golden。
 
 TD-005 目标库画像的孤儿属性处置还提供三份数据库脚本：
 
@@ -62,8 +63,21 @@ Linux/macOS 将最后两行改为：
     }
   ],
   "manifestArtifacts": 4,
-  "targetProfileSchema": "1.0.0",
-  "utf8NoBomFiles": 15,
+  "targetProfileSchema": "1.1.0",
+  "legacyRoundTrip": {
+    "contractVersion": "td005-runtime-projection-v1",
+    "runtimeTables": 8,
+    "rootProperties": 1,
+    "services": 1,
+    "commands": 1,
+    "serviceInputs": 1,
+    "serviceOutputs": 1,
+    "events": 1,
+    "eventOutputs": 1,
+    "canonicalSha256": "b0457e19d65a5de810222ab2ee5ac92fdafcb799058d3857944f88aa66e70262",
+    "result": "PASS"
+  },
+  "utf8NoBomFiles": 24,
   "result": "PASS"
 }
 ```
@@ -100,11 +114,17 @@ Linux/macOS 将最后两行改为：
 
 ## 7. 目标数据库画像
 
-已在 `postgres-server / iot-device20` 使用只读事务执行画像脚本 v1.1.0，机器摘要保存为 `target-schema-profile-result.json`，并由 `target-schema-profile-result.schema.json` 1.0.0 校验。画像保存七表完整列签名/tenant 状态，分别检查 product/template 成员作用域重复和标识异常；目标库没有 `product_properties.service_id`、业务唯一约束、外键或触发器，并存在 4 条孤儿属性记录。
+已在 `postgres-server / iot-device20` 使用只读事务执行画像脚本 v1.2.0，机器摘要保存为 `target-schema-profile-result.json`，并由 `target-schema-profile-result.schema.json` 1.1.0 校验。画像范围固定为 8 张核心运行表与 4 张受保护依赖表，共 12 张；保存完整列签名、tenant 状态、行数、逐表 PK/unique/FK/check/trigger/index、跨表孤儿与关系异常。目标库没有 `product_properties.service_id`、业务唯一约束、外键、check 或触发器；12 表孤儿和当前关系异常均为 0。`product_script` 没有主键，`ota_packages.tenant_id` 当前允许为空，因此“全部表含 tenant_id”为 true，但“全部 tenant_id 均 NOT NULL”为 false；这些差异继续作为 DDL/删除链上线前阻断项，不因当前表为空而豁免。
 
 正式判定见 [TD-005 目标数据库与现有实现画像报告](../../../../../技术设计/电力运维云平台/TD-005-目标数据库与现有实现画像报告.md)。本结果关闭“本地目标集成实例事实采集”，没有关闭差异修复和生产存量画像。
 
-## 8. 尚未覆盖
+## 8. 非空旧格式 round-trip golden
+
+首份前置兼容合同已冻结在 `legacy-roundtrip/easyaiot-legacy-thing-model-v1_td005-1.0.10/`。fixture 覆盖 1 个根属性、1 个服务、1 个命令、1 个输入参数、1 个输出参数、1 个事件和 1 个事件输出参数；运行投影覆盖 8 张核心表。`legacy_roundtrip_reference.py` 验证导入投影、导出 golden、批准差异外的业务语义相等、JCS canonical 字节和 manifest SHA-256，当前结果为 PASS。
+
+该 golden 冻结的是 Mapper/DO/VO 迁移前的兼容目标，不是假装生产 adapter 已实现。后续 Java importer/exporter、TypeScript 客户端和 PostgreSQL tenant 集成测试必须消费同一份 fixture/golden；在这些测试通过前，TD-005 仍为 `OPEN_REMEDIATION_REQUIRED`。该 fixture 是非电力通用物模型，适用于 mini/standard/full 的既有功能回归；它不会给 mini 增加任何电力运维 capability。
+
+## 9. 尚未覆盖
 
 - 生产 Java/TypeScript canonical 实现与本 golden 的合同测试；
 - 成员 code 跨数组唯一、SemVer 最小增量、CT/PT 变比一致性等 Schema 外语义校验；

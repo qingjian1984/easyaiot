@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.9
+> 版本：1.0.10
 > 日期：2026-08-05  
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -22,6 +22,7 @@
 | 1.0.7 | ADR-012 转 Accepted；新增运行模型兼容与删除链技术设计，冻结 Mapper/DO/VO、租户、唯一约束和删除合同候选 |
 | 1.0.8 | 处置 ADR-012 独立复核及运行模型 R1～R10：保持 20 列批准签名，细化 12 表画像、作用域 SQL、删除和回滚证据 |
 | 1.0.9 | 处置 ADR-012 宪法专项复核：区分 Accepted 与交付 DoD，补 owner、golden 前置、Feign、性能和删除审批门禁 |
+| 1.0.10 | 完成 12 表目标库画像与首份非空旧格式 round-trip fixture/golden；冻结迁移前兼容合同，不冒充生产 adapter 已实现 |
 
 ## 1. 结论
 
@@ -647,13 +648,13 @@ TD-005 由 In Review 转 `Approved / Frozen` 前必须全部满足：
 
 [TD-005 孤儿属性处置方案 0.2.0](./TD-005-孤儿属性处置方案.md) 已完成执行。初始化 COPY 旧种子由 4 行降为 0，数据库以 `COMMIT_REMEDIATION=true` 精确删除 4 行；修复后画像 `product_properties=17`，六类 orphan、七类重复组和六类标识作用域异常全部为 0，现行演示产品/设备/属性保持 3/3/9。该子门禁 PASS，但 Mapper、唯一约束、租户和删除链代码门禁仍未关闭。
 
-因此 §23 门禁 1 的“本地目标集成实例事实采集、ADR-012 接受、孤儿属性处置”三个子项已完成，但整体门禁仍为 `OPEN_REMEDIATION_REQUIRED`。仍须按[运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md)修正 Mapper/DO/VO，扩展画像到事件参数和受保护下游引用，并补齐租户、唯一约束、删除链及旧格式 round-trip 合同；生产存量环境上线前仍须按 result schema 重跑画像并附原始输出。
+因此 §23 门禁 1 的“本地目标集成实例事实采集、ADR-012 接受、孤儿属性处置”三个子项已完成，但整体门禁仍为 `OPEN_REMEDIATION_REQUIRED`。12 表扩展画像和迁移前旧格式 round-trip 合同已由 §24.4 补齐；仍须按[运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md)修正 Mapper/DO/VO，并补齐租户、唯一约束、删除链及生产 adapter 合同；生产存量环境上线前仍须按 result schema 重跑画像并附原始输出。
 
 ### 24.2 ADR-012 与运行模型契约状态
 
 [ADR 评审报告 §11](../../开发规范/ADR评审报告.md)确认：ADR-012 的事实归属决策可接受，原“先完成代码才能接受 ADR、但未接受又不得修代码”的循环门禁已拆分。`Accepted` 只授权按单一事实方向实施，不代表当前 Mapper/API/数据库已合格。
 
-配套 [TD-005 运行模型兼容与删除链技术设计 0.1.2](./TD-005-运行模型兼容与删除链技术设计.md) 已形成 Review Candidate，包含：
+配套 [TD-005 运行模型兼容与删除链技术设计 0.1.3](./TD-005-运行模型兼容与删除链技术设计.md) 已形成 Review Candidate，包含：
 
 - 根属性、服务、命令、输入/输出及事件参数的依赖图；
 - DO/Request/Response/MapStruct 分层和 legacy adapter；
@@ -664,10 +665,16 @@ TD-005 由 In Review 转 `Approved / Frozen` 前必须全部满足：
 
 独立复核确认 `product_properties` 批准列签名仍为 20 列；评审中的“18 列”源于把修复前 21 条数据行误作列数，已明确驳回。扩展画像固定为 8 张核心运行表和 4 张受保护依赖表，共 12 张；ACTIVE binding 表实现后追加。
 
-该配套设计仍为 In Review。下一证据步骤是扩展画像、建立非空旧格式 fixture/golden，然后才能进入生产代码与 DDL 实现。
+该配套设计仍为 In Review。扩展画像和非空旧格式 fixture/golden 已完成并冻结；下一证据步骤是按冻结合同实现 Mapper/DO/VO 与 legacy adapter，再形成 migration/rollback 候选。
 
 ### 24.3 ADR-012 宪法专项复核状态
 
 [ADR-012 宪法专项评审](../../开发规范/ADR-012评审报告-宪法专项.md)确认事实归属决策没有宪法级冲突，但纠正原“DoD 11/11 全部合规”结论：宪法 §15 实际有 12 项，当前仅 3 项决策/文档级 PASS，7 项交付证据 OPEN，2 项在设计阶段 N/A。ADR Accepted 不得被扩大解释为功能已完成。
 
-ADR-012 1.0.2 与运行模型 0.1.2 已补收缩 owner/到期日、golden 先于 Mapper/DO/VO 迁移、备份/保留期/审批/恢复演练、OpenFeign 超时/降级、分层测试及 standard 最低规格性能证据。上述均是冻结门禁，尚无执行证据；TD-005 继续保持 `In Review / OPEN_REMEDIATION_REQUIRED`。
+ADR-012 1.0.2 与运行模型 0.1.3 已补收缩 owner/到期日、golden 先于 Mapper/DO/VO 迁移、备份/保留期/审批/恢复演练、OpenFeign 超时/降级、分层测试及 standard 最低规格性能证据。12 表画像和前置 golden 已有执行证据；其余交付门禁仍无执行证据，TD-005 继续保持 `In Review / OPEN_REMEDIATION_REQUIRED`。
+
+### 24.4 12 表画像与迁移前兼容 golden（2026-08-05）
+
+目标画像脚本已升级到 1.2.0，结果 Schema 升级到 1.1.0，并在 `postgres-server / iot-device20` 只读事务中覆盖 8 张核心运行表与 4 张受保护依赖表。12 张表均存在，跨表孤儿和当前关系异常均为 0；`product_script` 缺少主键，业务唯一约束、外键、check、trigger 仍为 0，`ota_packages.tenant_id` 仍允许为空，因此整体门禁不变。
+
+首份非空旧格式兼容合同已冻结到 `verification/legacy-roundtrip/easyaiot-legacy-thing-model-v1_td005-1.0.10/`。覆盖根属性、服务、命令、输入/输出参数、事件和事件输出参数，验证旧 JSON→8 表运行投影→旧 JSON、批准差异外语义相等、JCS canonical 与 manifest/hash，资产级结果 PASS。该证据只关闭“Mapper/DO/VO 迁移前必须先有可评审 golden”的前置子门禁；生产 Java/TypeScript adapter、PostgreSQL tenant 集成、唯一/FK/trigger、TEN/DEL、性能与三档回归仍为 OPEN。

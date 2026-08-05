@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://easyaiot.local/schemas/td-005/target-schema-profile-result-1.0.0.schema.json",
+  "$id": "https://easyaiot.local/schemas/td-005/target-schema-profile-result-1.1.0.schema.json",
   "title": "TD-005 target schema profile result",
   "type": "object",
   "additionalProperties": false,
@@ -15,11 +15,13 @@
     "postgresVersion",
     "transactionReadOnly",
     "tables",
+    "tableRoles",
     "rowCounts",
     "schemaFacts",
     "duplicateGroups",
     "identifierScopeAnomalies",
     "orphanCounts",
+    "relationshipAnomalies",
     "orphanPropertyGroups",
     "repositoryDrift",
     "comparisonContract",
@@ -27,8 +29,8 @@
     "result"
   ],
   "properties": {
-    "profileVersion": { "const": "1.1.0" },
-    "resultSchemaVersion": { "const": "1.0.0" },
+    "profileVersion": { "const": "1.2.0" },
+    "resultSchemaVersion": { "const": "1.1.0" },
     "verifiedDate": { "type": "string", "format": "date" },
     "scope": { "const": "LOCAL_TARGET_INTEGRATION_INSTANCE" },
     "container": { "type": "string", "minLength": 1 },
@@ -38,39 +40,91 @@
     "transactionReadOnly": { "const": true },
     "tables": {
       "type": "array",
-      "minItems": 7,
-      "maxItems": 7,
+      "minItems": 12,
+      "maxItems": 12,
       "uniqueItems": true,
       "items": {
         "enum": [
           "product",
           "product_properties",
           "product_event",
+          "product_event_response",
           "product_services",
           "product_commands",
           "product_commands_requests",
-          "product_commands_response"
+          "product_commands_response",
+          "product_script",
+          "device",
+          "device_service_invoke_response",
+          "ota_packages"
         ]
       }
     },
-    "rowCounts": { "$ref": "#/$defs/sevenTableCounts" },
+    "tableRoles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coreRuntime", "protectedDependency"],
+      "properties": {
+        "coreRuntime": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "product",
+              "product_properties",
+              "product_event",
+              "product_event_response",
+              "product_services",
+              "product_commands",
+              "product_commands_requests",
+              "product_commands_response"
+            ]
+          }
+        },
+        "protectedDependency": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "product_script",
+              "device",
+              "device_service_invoke_response",
+              "ota_packages"
+            ]
+          }
+        }
+      }
+    },
+    "rowCounts": { "$ref": "#/$defs/twelveTableCounts" },
     "schemaFacts": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "productPropertiesHasServiceId",
         "allProfiledTablesHaveTenantId",
+        "allProfiledTenantIdsNotNull",
+        "primaryKeyCount",
         "businessUniqueConstraintCount",
         "foreignKeyCount",
+        "checkConstraintCount",
         "triggerCount",
+        "indexCount",
         "tables"
       ],
       "properties": {
         "productPropertiesHasServiceId": { "type": "boolean" },
         "allProfiledTablesHaveTenantId": { "type": "boolean" },
+        "allProfiledTenantIdsNotNull": { "type": "boolean" },
+        "primaryKeyCount": { "type": "integer", "minimum": 0 },
         "businessUniqueConstraintCount": { "type": "integer", "minimum": 0 },
         "foreignKeyCount": { "type": "integer", "minimum": 0 },
+        "checkConstraintCount": { "type": "integer", "minimum": 0 },
         "triggerCount": { "type": "integer", "minimum": 0 },
+        "indexCount": { "type": "integer", "minimum": 0 },
         "tables": {
           "type": "object",
           "additionalProperties": false,
@@ -78,19 +132,29 @@
             "product",
             "product_properties",
             "product_event",
+            "product_event_response",
             "product_services",
             "product_commands",
             "product_commands_requests",
-            "product_commands_response"
+            "product_commands_response",
+            "product_script",
+            "device",
+            "device_service_invoke_response",
+            "ota_packages"
           ],
           "properties": {
             "product": { "$ref": "#/$defs/tableShape" },
             "product_properties": { "$ref": "#/$defs/tableShape" },
             "product_event": { "$ref": "#/$defs/tableShape" },
+            "product_event_response": { "$ref": "#/$defs/tableShape" },
             "product_services": { "$ref": "#/$defs/tableShape" },
             "product_commands": { "$ref": "#/$defs/tableShape" },
             "product_commands_requests": { "$ref": "#/$defs/tableShape" },
-            "product_commands_response": { "$ref": "#/$defs/tableShape" }
+            "product_commands_response": { "$ref": "#/$defs/tableShape" },
+            "product_script": { "$ref": "#/$defs/tableShape" },
+            "device": { "$ref": "#/$defs/tableShape" },
+            "device_service_invoke_response": { "$ref": "#/$defs/tableShape" },
+            "ota_packages": { "$ref": "#/$defs/tableShape" }
           }
         }
       }
@@ -98,6 +162,7 @@
     "duplicateGroups": { "$ref": "#/$defs/nonNegativeIntegerMap" },
     "identifierScopeAnomalies": { "$ref": "#/$defs/nonNegativeIntegerMap" },
     "orphanCounts": { "$ref": "#/$defs/nonNegativeIntegerMap" },
+    "relationshipAnomalies": { "$ref": "#/$defs/nonNegativeIntegerMap" },
     "orphanPropertyGroups": {
       "type": "array",
       "items": {
@@ -151,11 +216,28 @@
     "tableShape": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["columnCount", "hasTenantId", "tenantNotNull", "columnSignatures"],
+      "required": [
+        "columnCount",
+        "hasTenantId",
+        "tenantNotNull",
+        "primaryKeyCount",
+        "businessUniqueCount",
+        "foreignKeyCount",
+        "checkConstraintCount",
+        "triggerCount",
+        "indexCount",
+        "columnSignatures"
+      ],
       "properties": {
         "columnCount": { "type": "integer", "minimum": 1 },
         "hasTenantId": { "type": "boolean" },
         "tenantNotNull": { "type": "boolean" },
+        "primaryKeyCount": { "type": "integer", "minimum": 0 },
+        "businessUniqueCount": { "type": "integer", "minimum": 0 },
+        "foreignKeyCount": { "type": "integer", "minimum": 0 },
+        "checkConstraintCount": { "type": "integer", "minimum": 0 },
+        "triggerCount": { "type": "integer", "minimum": 0 },
+        "indexCount": { "type": "integer", "minimum": 0 },
         "columnSignatures": {
           "type": "array",
           "minItems": 1,
@@ -167,26 +249,36 @@
         }
       }
     },
-    "sevenTableCounts": {
+    "twelveTableCounts": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "product",
         "product_properties",
         "product_event",
+        "product_event_response",
         "product_services",
         "product_commands",
         "product_commands_requests",
-        "product_commands_response"
+        "product_commands_response",
+        "product_script",
+        "device",
+        "device_service_invoke_response",
+        "ota_packages"
       ],
       "properties": {
         "product": { "type": "integer", "minimum": 0 },
         "product_properties": { "type": "integer", "minimum": 0 },
         "product_event": { "type": "integer", "minimum": 0 },
+        "product_event_response": { "type": "integer", "minimum": 0 },
         "product_services": { "type": "integer", "minimum": 0 },
         "product_commands": { "type": "integer", "minimum": 0 },
         "product_commands_requests": { "type": "integer", "minimum": 0 },
-        "product_commands_response": { "type": "integer", "minimum": 0 }
+        "product_commands_response": { "type": "integer", "minimum": 0 },
+        "product_script": { "type": "integer", "minimum": 0 },
+        "device": { "type": "integer", "minimum": 0 },
+        "device_service_invoke_response": { "type": "integer", "minimum": 0 },
+        "ota_packages": { "type": "integer", "minimum": 0 }
       }
     },
     "nonNegativeIntegerMap": {

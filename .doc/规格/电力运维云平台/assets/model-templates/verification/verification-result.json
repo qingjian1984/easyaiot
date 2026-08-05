@@ -21,7 +21,21 @@
     }
   ],
   "manifestArtifacts": 4,
-  "targetProfileSchema": "1.0.0",
-  "utf8NoBomFiles": 18,
+  "targetProfileSchema": "1.1.0",
+  "legacyRoundTrip": {
+    "contractVersion": "td005-runtime-projection-v1",
+    "legacySchemaVersion": "easyaiot-legacy-thing-model-v1",
+    "runtimeTables": 8,
+    "rootProperties": 1,
+    "services": 1,
+    "commands": 1,
+    "serviceInputs": 1,
+    "serviceOutputs": 1,
+    "events": 1,
+    "eventOutputs": 1,
+    "canonicalSha256": "b0457e19d65a5de810222ab2ee5ac92fdafcb799058d3857944f88aa66e70262",
+    "result": "PASS"
+  },
+  "utf8NoBomFiles": 24,
   "result": "PASS"
 }

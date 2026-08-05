@@ -14,6 +14,8 @@ from typing import Any
 import rfc8785
 from jsonschema import Draft202012Validator
 
+from legacy_roundtrip_reference import verify_legacy_roundtrip
+
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent
@@ -135,21 +137,53 @@ def verify_target_profile() -> str:
     table_facts = result["schemaFacts"]["tables"]
     if table_names != set(table_facts):
         raise AssertionError("Target profile table list and schemaFacts.tables differ")
+    role_tables = set(result["tableRoles"]["coreRuntime"]) | set(result["tableRoles"]["protectedDependency"])
+    if table_names != role_tables:
+        raise AssertionError("Target profile table list and tableRoles differ")
+    if table_names != set(result["rowCounts"]):
+        raise AssertionError("Target profile table list and rowCounts differ")
     for table_name, facts in table_facts.items():
         signatures = facts["columnSignatures"]
         if facts["columnCount"] != len(signatures):
             raise AssertionError(f"Target profile column count mismatch: {table_name}")
-        tenant_signature = "tenant_id|bigint|NOT_NULL"
-        if facts["hasTenantId"] != (tenant_signature in signatures):
+        tenant_not_null_signature = "tenant_id|bigint|NOT_NULL"
+        tenant_nullable_signature = "tenant_id|bigint|NULLABLE"
+        if facts["hasTenantId"] != (
+            tenant_not_null_signature in signatures or tenant_nullable_signature in signatures
+        ):
             raise AssertionError(f"Target profile tenant flag mismatch: {table_name}")
-        if facts["tenantNotNull"] != (tenant_signature in signatures):
+        if facts["tenantNotNull"] != (tenant_not_null_signature in signatures):
             raise AssertionError(f"Target profile tenant nullability mismatch: {table_name}")
+    if result["schemaFacts"]["allProfiledTablesHaveTenantId"] != all(
+        facts["hasTenantId"] for facts in table_facts.values()
+    ):
+        raise AssertionError("Target profile aggregate tenant presence flag mismatch")
+    if result["schemaFacts"]["allProfiledTenantIdsNotNull"] != all(
+        facts["tenantNotNull"] for facts in table_facts.values()
+    ):
+        raise AssertionError("Target profile aggregate tenant nullability flag mismatch")
+    aggregate_fields = {
+        "primaryKeyCount": "primaryKeyCount",
+        "businessUniqueConstraintCount": "businessUniqueCount",
+        "foreignKeyCount": "foreignKeyCount",
+        "checkConstraintCount": "checkConstraintCount",
+        "triggerCount": "triggerCount",
+        "indexCount": "indexCount",
+    }
+    for aggregate_name, table_field in aggregate_fields.items():
+        expected = sum(facts[table_field] for facts in table_facts.values())
+        if result["schemaFacts"][aggregate_name] != expected:
+            raise AssertionError(f"Target profile aggregate count mismatch: {aggregate_name}")
     return result["resultSchemaVersion"]
 
 
 def verify_utf8_no_bom() -> int:
     text_suffixes = {".json", ".md", ".mjs", ".py", ".sql", ".txt"}
-    paths = [path for path in ASSETS.rglob("*") if path.is_file() and path.suffix.lower() in text_suffixes]
+    paths = [
+        path
+        for path in ASSETS.rglob("*")
+        if path.is_file() and path.suffix.lower() in text_suffixes and ".venv" not in path.parts
+    ]
     for path in paths:
         content = path.read_bytes()
         if content.startswith(b"\xef\xbb\xbf"):
@@ -169,6 +203,7 @@ def main() -> int:
     golden = verify_jcs(args.node)
     artifacts = verify_manifest()
     target_profile_schema = verify_target_profile()
+    legacy_roundtrip = verify_legacy_roundtrip()
     utf8_files = verify_utf8_no_bom()
     summary = {
         "draft": "2020-12",
@@ -182,6 +217,7 @@ def main() -> int:
         "jcsCases": golden,
         "manifestArtifacts": artifacts,
         "targetProfileSchema": target_profile_schema,
+        "legacyRoundTrip": legacy_roundtrip,
         "utf8NoBomFiles": utf8_files,
         "result": "PASS",
     }

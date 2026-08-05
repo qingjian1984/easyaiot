@@ -1,0 +1,72 @@
+{
+  "manifestVersion": "1.0.0",
+  "legacySchemaVersion": "easyaiot-legacy-thing-model-v1",
+  "td005Version": "1.0.10",
+  "runtimeContractVersion": "td005-runtime-projection-v1",
+  "canonicalization": "jcs-rfc8785-v1",
+  "frozenDate": "2026-08-05",
+  "status": "FROZEN_FOR_MAPPER_MIGRATION",
+  "scope": "ALL_PROFILES_NON_POWER_COMPATIBILITY",
+  "artifacts": [
+    {
+      "role": "LEGACY_INPUT_FIXTURE",
+      "path": "legacy-input.json",
+      "sizeBytes": 1721,
+      "sha256": "365a30844cc62c99eda5aa45e7d66f8bedf05589540c8155e8d72c566be5bb3f"
+    },
+    {
+      "role": "RUNTIME_ROWS_GOLDEN",
+      "path": "runtime-rows.golden.json",
+      "sizeBytes": 2859,
+      "sha256": "e90e4038515410449b97e93ec07855f5843e261220f6f5ef1869331d96bea703"
+    },
+    {
+      "role": "LEGACY_OUTPUT_GOLDEN",
+      "path": "legacy-output.golden.json",
+      "sizeBytes": 2357,
+      "sha256": "1f30320246c057fd1042e1a6738051d3ad5085d8c2d002addff85b9c1d55114a"
+    },
+    {
+      "role": "LEGACY_OUTPUT_CANONICAL_BASE64",
+      "path": "legacy-output.canonical.b64.txt",
+      "sizeBytes": 2077,
+      "sha256": "c09b053970f6ad288a6d36faedb3bea261299eae55915585cddd4771762ebb84"
+    }
+  ],
+  "canonicalPayload": {
+    "decodedBytes": 1557,
+    "sha256": "b0457e19d65a5de810222ab2ee5ac92fdafcb799058d3857944f88aa66e70262"
+  },
+  "coverage": {
+    "rootProperties": 1,
+    "services": 1,
+    "commands": 1,
+    "serviceInputs": 1,
+    "serviceOutputs": 1,
+    "events": 1,
+    "eventOutputs": 1,
+    "runtimeTables": 8
+  },
+  "approvedDifferences": [
+    "database generated id fields are added on export",
+    "serviceId and commandId are derived from the service-command chain",
+    "service parameter propertyCode/propertyName aliases mirror parameterCode/parameterName",
+    "parameterDescription mirrors description for legacy response compatibility",
+    "BOOL labels are derived from enumlist",
+    "database numeric text is converted back to legacy JSON numbers"
+  ],
+  "invariants": [
+    "root properties never contain serviceId",
+    "service parameters are persisted only in command request/response tables",
+    "product_properties.service_id is neither required nor synthesized",
+    "tenantId and productIdentification survive round-trip",
+    "all unapproved business semantics are byte-independent structural equals",
+    "mini receives no electric-power capability and shares the unchanged non-power legacy behavior"
+  ],
+  "openExecutionGates": [
+    "production Java importer must consume this fixture",
+    "production Java exporter must match the runtime and output golden",
+    "TypeScript legacy client contract must consume the output golden",
+    "PostgreSQL integration test must execute the same round-trip under tenant isolation"
+  ]
+}
