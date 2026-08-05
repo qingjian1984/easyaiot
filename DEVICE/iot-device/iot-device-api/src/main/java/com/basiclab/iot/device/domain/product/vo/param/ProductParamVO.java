@@ -120,4 +120,7 @@ public class ProductParamVO implements Serializable {
     @ApiModelProperty(value = "产品模型服务")
     private List<ProductServiceParamVO> services;
 
+    @ApiModelProperty(value = "产品根级属性")
+    private List<ProductPropertyParamVO> properties;
+
 }

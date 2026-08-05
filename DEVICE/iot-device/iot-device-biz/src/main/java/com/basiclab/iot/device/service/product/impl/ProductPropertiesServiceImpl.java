@@ -1,6 +1,8 @@
 package com.basiclab.iot.device.service.product.impl;
 
 import com.basiclab.iot.device.dal.pgsql.product.ProductPropertiesMapper;
+import com.basiclab.iot.device.convert.product.ProductPropertyConvert;
+import com.basiclab.iot.device.dal.dataobject.product.ProductPropertyDO;
 import com.basiclab.iot.device.domain.device.vo.ProductProperties;
 import com.basiclab.iot.device.service.product.ProductPropertiesService;
 import org.springframework.stereotype.Service;
@@ -33,57 +35,69 @@ public class ProductPropertiesServiceImpl implements ProductPropertiesService {
 
     @Override
     public int insert(ProductProperties record) {
-        return productPropertiesMapper.insert(record);
+        ProductPropertyDO entity = ProductPropertyConvert.INSTANCE.toDO(record);
+        int count = productPropertiesMapper.insert(entity);
+        copyGeneratedId(record, entity);
+        return count;
     }
 
     @Override
     public int insertOrUpdate(ProductProperties record) {
-        return productPropertiesMapper.insertOrUpdate(record);
+        ProductPropertyDO entity = ProductPropertyConvert.INSTANCE.toDO(record);
+        int count = productPropertiesMapper.insertOrUpdate(entity);
+        copyGeneratedId(record, entity);
+        return count;
     }
 
     @Override
     public int insertOrUpdateSelective(ProductProperties record) {
-        return productPropertiesMapper.insertOrUpdateSelective(record);
+        ProductPropertyDO entity = ProductPropertyConvert.INSTANCE.toDO(record);
+        int count = productPropertiesMapper.insertOrUpdateSelective(entity);
+        copyGeneratedId(record, entity);
+        return count;
     }
 
     @Override
     public int insertSelective(ProductProperties record) {
-        return productPropertiesMapper.insertSelective(record);
+        ProductPropertyDO entity = ProductPropertyConvert.INSTANCE.toDO(record);
+        int count = productPropertiesMapper.insertSelective(entity);
+        copyGeneratedId(record, entity);
+        return count;
     }
 
     @Override
     public ProductProperties selectByPrimaryKey(Long id) {
-        return productPropertiesMapper.selectByPrimaryKey(id);
+        return ProductPropertyConvert.INSTANCE.toLegacy(productPropertiesMapper.selectByPrimaryKey(id));
     }
 
     @Override
     public int updateByPrimaryKeySelective(ProductProperties record) {
-        return productPropertiesMapper.updateByPrimaryKeySelective(record);
+        return productPropertiesMapper.updateByPrimaryKeySelective(ProductPropertyConvert.INSTANCE.toDO(record));
     }
 
     @Override
     public int updateByPrimaryKey(ProductProperties record) {
-        return productPropertiesMapper.updateByPrimaryKey(record);
+        return productPropertiesMapper.updateByPrimaryKey(ProductPropertyConvert.INSTANCE.toDO(record));
     }
 
     @Override
     public int updateBatch(List<ProductProperties> list) {
-        return productPropertiesMapper.updateBatch(list);
+        return productPropertiesMapper.updateBatch(ProductPropertyConvert.INSTANCE.toDOList(list));
     }
 
     @Override
     public int updateBatchSelective(List<ProductProperties> list) {
-        return productPropertiesMapper.updateBatchSelective(list);
+        return productPropertiesMapper.updateBatchSelective(ProductPropertyConvert.INSTANCE.toDOList(list));
     }
 
     @Override
     public int batchInsert(List<ProductProperties> list) {
-        return productPropertiesMapper.batchInsert(list);
-    }
-
-    @Override
-    public List<ProductProperties> findAllByServiceId(Long serviceId) {
-        return productPropertiesMapper.findAllByServiceId(serviceId);
+        List<ProductPropertyDO> entities = ProductPropertyConvert.INSTANCE.toDOList(list);
+        int count = productPropertiesMapper.batchInsert(entities);
+        for (int i = 0; i < list.size() && i < entities.size(); i++) {
+            copyGeneratedId(list.get(i), entities.get(i));
+        }
+        return count;
     }
 
     /**
@@ -94,7 +108,7 @@ public class ProductPropertiesServiceImpl implements ProductPropertiesService {
      */
     @Override
     public ProductProperties selectProductPropertiesById(Long id) {
-        return productPropertiesMapper.selectProductPropertiesById(id);
+        return ProductPropertyConvert.INSTANCE.toLegacy(productPropertiesMapper.selectProductPropertiesById(id));
     }
 
     /**
@@ -105,7 +119,8 @@ public class ProductPropertiesServiceImpl implements ProductPropertiesService {
      */
     @Override
     public List<ProductProperties> selectProductPropertiesList(ProductProperties productProperties) {
-        return productPropertiesMapper.selectProductPropertiesList(productProperties);
+        return ProductPropertyConvert.INSTANCE.toLegacyList(productPropertiesMapper.selectProductPropertiesList(
+                ProductPropertyConvert.INSTANCE.toDO(productProperties)));
     }
 
     /**
@@ -116,7 +131,10 @@ public class ProductPropertiesServiceImpl implements ProductPropertiesService {
      */
     @Override
     public int insertProductProperties(ProductProperties productProperties) {
-        return productPropertiesMapper.insertProductProperties(productProperties);
+        ProductPropertyDO entity = ProductPropertyConvert.INSTANCE.toDO(productProperties);
+        int count = productPropertiesMapper.insertProductProperties(entity);
+        copyGeneratedId(productProperties, entity);
+        return count;
     }
 
     /**
@@ -127,7 +145,7 @@ public class ProductPropertiesServiceImpl implements ProductPropertiesService {
      */
     @Override
     public int updateProductProperties(ProductProperties productProperties) {
-        return productPropertiesMapper.updateProductProperties(productProperties);
+        return productPropertiesMapper.updateProductProperties(ProductPropertyConvert.INSTANCE.toDO(productProperties));
     }
 
     /**
@@ -143,11 +161,13 @@ public class ProductPropertiesServiceImpl implements ProductPropertiesService {
 
     @Override
     public List<ProductProperties> selectPropertiesByPropertiesIdList(List<Long> propertiesIdList) {
-        return productPropertiesMapper.selectPropertiesByPropertiesIdList(propertiesIdList);
+        return ProductPropertyConvert.INSTANCE.toLegacyList(
+                productPropertiesMapper.selectPropertiesByPropertiesIdList(propertiesIdList));
     }
 
-    @Override
-    public List<ProductProperties> selectPropertiesByServiceIdList(List<Long> serviceIdList) {
-        return productPropertiesMapper.selectPropertiesByServiceIdList(serviceIdList);
+    private void copyGeneratedId(ProductProperties target, ProductPropertyDO source) {
+        if (target != null && source != null) {
+            target.setId(source.getId());
+        }
     }
 }

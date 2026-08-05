@@ -41,9 +41,6 @@ public interface ProductPropertiesService {
 
     int batchInsert(List<ProductProperties> list);
 
-
-    List<ProductProperties> findAllByServiceId(Long serviceId);
-
     /**
      * 查询产品模型服务属性
      *
@@ -86,5 +83,4 @@ public interface ProductPropertiesService {
 
     List<ProductProperties> selectPropertiesByPropertiesIdList(List<Long> propertiesIdList);
 
-    List<ProductProperties> selectPropertiesByServiceIdList(List<Long> serviceIdList);
 }

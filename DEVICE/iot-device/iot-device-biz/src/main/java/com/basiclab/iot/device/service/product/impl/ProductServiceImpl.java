@@ -27,6 +27,7 @@ import com.basiclab.iot.device.domain.product.vo.param.ProductParamVO;
 import com.basiclab.iot.device.domain.product.vo.param.ProductPropertyParamVO;
 import com.basiclab.iot.device.domain.product.vo.param.ProductServiceParamVO;
 import com.basiclab.iot.device.domain.product.vo.result.ProductResultVO;
+import com.basiclab.iot.device.domain.product.vo.result.ProductPropertyResultVO;
 import com.basiclab.iot.device.enums.device.DataTypeEnum;
 import com.basiclab.iot.device.enums.product.ProductTypeEnum;
 import com.basiclab.iot.device.service.device.DeviceCommandService;
@@ -82,6 +83,9 @@ public class ProductServiceImpl implements ProductService {
     private ProductServicesService productServicesService;
     @Autowired
     private ProductPropertiesService productPropertiesService;
+
+    @Autowired
+    private LegacyServicePropertyAdapter legacyServicePropertyAdapter;
 
     @Autowired
     private ProductCommandsService productCommandsService;
@@ -379,7 +383,8 @@ public class ProductServiceImpl implements ProductService {
                     BeanUtils.copyBeanProp(service, ps);
                     service.setServiceId(String.valueOf(ps.getId()));
                     // 查询服务属性列表
-                    List<ProductProperties> productPropertiesList = productPropertiesService.findAllByServiceId(ps.getId());
+                    List<ProductPropertyResultVO> productPropertiesList =
+                            legacyServicePropertyAdapter.findAllByServiceId(ps.getId());
                     if (!productPropertiesList.isEmpty()) {
                         List<Properties> properties = new ArrayList<>();
                         productPropertiesList.forEach(pp -> {
@@ -564,9 +569,15 @@ public class ProductServiceImpl implements ProductService {
                                     productCommandsService.selectProductCommandsByServiceIdList(serviceIds))
                             .orElse(Collections.emptyList());
 
+                    ProductProperties propertyQuery = new ProductProperties();
+                    propertyQuery.setProductIdentification(product.getProductIdentification());
                     List<ProductProperties> productPropertiesList = Optional.ofNullable(
-                                    productPropertiesService.selectPropertiesByServiceIdList(serviceIds))
+                                    productPropertiesService.selectProductPropertiesList(propertyQuery))
                             .orElse(Collections.emptyList());
+
+                    productDetails.setProperties(productPropertiesList.stream()
+                            .map(property -> BeanPlusUtil.toBeanIgnoreError(property, ProductPropertyParamVO.class))
+                            .collect(Collectors.toList()));
 
                     List<ProductServiceParamVO> services = productServicesList.stream()
                             .map(ps -> {
@@ -602,14 +613,6 @@ public class ProductServiceImpl implements ProductService {
                                         })
                                         .collect(Collectors.toList());
                                 service.setCommands(commands);
-
-                                List<ProductPropertyParamVO> properties = Optional.ofNullable(productPropertiesList)
-                                        .orElse(Collections.emptyList())
-                                        .stream()
-                                        //.filter(property -> property.getServiceId().equals(ps.getId()))
-                                        .map(pp -> BeanPlusUtil.toBeanIgnoreError(pp, ProductPropertyParamVO.class))
-                                        .collect(Collectors.toList());
-                                service.setProperties(properties);
 
                                 return service;
                             })

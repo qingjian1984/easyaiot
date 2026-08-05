@@ -6,7 +6,6 @@ import lombok.*;
 import lombok.experimental.Accessors;
 
 import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 import java.io.Serializable;
 
@@ -43,8 +42,8 @@ public class ProductPropertyParamVO implements Serializable {
     /**
      * 服务ID
      */
-    @ApiModelProperty(value = "服务ID")
-    @NotNull(message = "请填写服务ID")
+    @Deprecated
+    @ApiModelProperty(value = "服务ID（旧服务属性请求兼容字段；服务端只用于定位服务）")
     private Long serviceId;
     /**
      * 指示属性编码

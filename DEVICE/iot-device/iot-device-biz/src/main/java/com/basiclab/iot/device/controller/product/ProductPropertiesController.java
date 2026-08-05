@@ -8,6 +8,7 @@ import com.basiclab.iot.common.utils.SecurityUtils;
 import com.basiclab.iot.common.web.controller.BaseController;
 import com.basiclab.iot.device.domain.device.vo.ProductProperties;
 import com.basiclab.iot.device.service.product.ProductPropertiesService;
+import com.basiclab.iot.device.service.product.LegacyServicePropertyAdapter;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -30,6 +31,9 @@ public class ProductPropertiesController extends BaseController {
      */
     @Resource
     private ProductPropertiesService productPropertiesService;
+
+    @Resource
+    private LegacyServicePropertyAdapter legacyServicePropertyAdapter;
 
     /**
      * 通过主键查询单条数据
@@ -120,5 +124,14 @@ public class ProductPropertiesController extends BaseController {
     @PostMapping("/selectPropertiesByPropertiesIdList")
     public R<?> selectPropertiesByPropertiesIdList(@RequestBody List<Long> propertiesIdList) {
         return R.ok(productPropertiesService.selectPropertiesByPropertiesIdList(propertiesIdList));
+    }
+
+    /**
+     * @deprecated 服务参数已迁移到 command request/response 链；仅保留旧调用兼容。
+     */
+    @Deprecated
+    @GetMapping("/selectAllPropertiesByServiceId/{serviceId}")
+    public R<?> selectAllPropertiesByServiceId(@PathVariable("serviceId") Long serviceId) {
+        return R.ok(legacyServicePropertyAdapter.findAllByServiceId(serviceId));
     }
 }

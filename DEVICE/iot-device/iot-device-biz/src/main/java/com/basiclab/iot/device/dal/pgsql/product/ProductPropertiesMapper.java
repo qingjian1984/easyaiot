@@ -1,6 +1,6 @@
 package com.basiclab.iot.device.dal.pgsql.product;
 
-import com.basiclab.iot.device.domain.device.vo.ProductProperties;
+import com.basiclab.iot.device.dal.dataobject.product.ProductPropertyDO;
 
 import java.util.List;
 
@@ -36,11 +36,11 @@ public interface ProductPropertiesMapper {
      * @param record the record
      * @return insert count
      */
-    int insert(ProductProperties record);
+    int insert(ProductPropertyDO record);
 
-    int insertOrUpdate(ProductProperties record);
+    int insertOrUpdate(ProductPropertyDO record);
 
-    int insertOrUpdateSelective(ProductProperties record);
+    int insertOrUpdateSelective(ProductPropertyDO record);
 
     /**
      * insert record to table selective
@@ -48,7 +48,7 @@ public interface ProductPropertiesMapper {
      * @param record the record
      * @return insert count
      */
-    int insertSelective(ProductProperties record);
+    int insertSelective(ProductPropertyDO record);
 
     /**
      * select by primary key
@@ -56,7 +56,7 @@ public interface ProductPropertiesMapper {
      * @param id primary key
      * @return object by primary key
      */
-    ProductProperties selectByPrimaryKey(Long id);
+    ProductPropertyDO selectByPrimaryKey(Long id);
 
     /**
      * update record selective
@@ -64,7 +64,7 @@ public interface ProductPropertiesMapper {
      * @param record the updated record
      * @return update count
      */
-    int updateByPrimaryKeySelective(ProductProperties record);
+    int updateByPrimaryKeySelective(ProductPropertyDO record);
 
     /**
      * update record
@@ -72,15 +72,13 @@ public interface ProductPropertiesMapper {
      * @param record the updated record
      * @return update count
      */
-    int updateByPrimaryKey(ProductProperties record);
+    int updateByPrimaryKey(ProductPropertyDO record);
 
-    int updateBatch(List<ProductProperties> list);
+    int updateBatch(@Param("list") List<ProductPropertyDO> list);
 
-    int updateBatchSelective(List<ProductProperties> list);
+    int updateBatchSelective(@Param("list") List<ProductPropertyDO> list);
 
-    int batchInsert(@Param("list") List<ProductProperties> list);
-
-    List<ProductProperties> findAllByServiceId(@Param("serviceId") Long serviceId);
+    int batchInsert(@Param("list") List<ProductPropertyDO> list);
 
     /**
      * 查询产品模型服务属性
@@ -88,7 +86,7 @@ public interface ProductPropertiesMapper {
      * @param id 产品模型服务属性主键
      * @return 产品模型服务属性
      */
-    ProductProperties selectProductPropertiesById(Long id);
+    ProductPropertyDO selectProductPropertiesById(Long id);
 
     /**
      * 查询产品模型服务属性列表
@@ -96,7 +94,7 @@ public interface ProductPropertiesMapper {
      * @param productProperties 产品模型服务属性
      * @return 产品模型服务属性集合
      */
-    List<ProductProperties> selectProductPropertiesList(ProductProperties productProperties);
+    List<ProductPropertyDO> selectProductPropertiesList(ProductPropertyDO productProperty);
 
     /**
      * 新增产品模型服务属性
@@ -104,7 +102,7 @@ public interface ProductPropertiesMapper {
      * @param productProperties 产品模型服务属性
      * @return 结果
      */
-    int insertProductProperties(ProductProperties productProperties);
+    int insertProductProperties(ProductPropertyDO productProperty);
 
     /**
      * 修改产品模型服务属性
@@ -112,7 +110,7 @@ public interface ProductPropertiesMapper {
      * @param productProperties 产品模型服务属性
      * @return 结果
      */
-    int updateProductProperties(ProductProperties productProperties);
+    int updateProductProperties(ProductPropertyDO productProperty);
 
     /**
      * 批量删除产品模型服务属性
@@ -122,8 +120,5 @@ public interface ProductPropertiesMapper {
      */
     int deleteProductPropertiesByIds(Long[] ids);
 
-    List<ProductProperties> selectPropertiesByPropertiesIdList(@Param("propertiesIdList") List<Long> propertiesIdList);
-
-
-    List<ProductProperties> selectPropertiesByServiceIdList(@Param("serviceIdList") List<Long> serviceIdList);
+    List<ProductPropertyDO> selectPropertiesByPropertiesIdList(@Param("propertiesIdList") List<Long> propertiesIdList);
 }

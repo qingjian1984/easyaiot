@@ -45,7 +45,8 @@ public class ProductPropertyResultVO implements Serializable {
     /**
      * 服务ID
      */
-    @ApiModelProperty(value = "服务ID")
+    @Deprecated
+    @ApiModelProperty(value = "服务ID（旧服务属性响应兼容字段；由 command 链派生）")
     private Long serviceId;
     /**
      * 指示属性编码

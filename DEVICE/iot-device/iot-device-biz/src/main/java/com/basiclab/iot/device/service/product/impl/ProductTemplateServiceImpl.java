@@ -3,16 +3,16 @@ package com.basiclab.iot.device.service.product.impl;
 import com.basiclab.iot.common.constant.Constants;
 import com.basiclab.iot.common.text.UUID;
 import com.basiclab.iot.common.utils.bean.BeanUtils;
-import com.basiclab.iot.device.domain.device.vo.ProductProperties;
 import com.basiclab.iot.device.domain.device.vo.ProductServices;
 import com.basiclab.iot.device.domain.device.vo.ProductTemplate;
 import com.basiclab.iot.device.domain.product.model.ProductTemplateModel;
 import com.basiclab.iot.device.domain.product.model.Properties;
 import com.basiclab.iot.device.domain.product.model.Services;
+import com.basiclab.iot.device.domain.product.vo.result.ProductPropertyResultVO;
 import com.basiclab.iot.device.dal.pgsql.product.ProductTemplateMapper;
-import com.basiclab.iot.device.service.product.ProductPropertiesService;
 import com.basiclab.iot.device.service.product.ProductServicesService;
 import com.basiclab.iot.device.service.product.ProductTemplateService;
+import com.basiclab.iot.device.service.product.LegacyServicePropertyAdapter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -35,7 +35,7 @@ public class ProductTemplateServiceImpl implements ProductTemplateService {
     @Autowired
     private ProductServicesService productServicesService;
     @Autowired
-    private ProductPropertiesService productPropertiesService;
+    private LegacyServicePropertyAdapter legacyServicePropertyAdapter;
 
     @Override
     public int deleteByPrimaryKey(Long id) {
@@ -127,7 +127,8 @@ public class ProductTemplateServiceImpl implements ProductTemplateService {
                     BeanUtils.copyBeanProp(service, ps);
                     service.setServiceId(String.valueOf(ps.getId()));
                     // 查询服务属性列表
-                    List<ProductProperties> productPropertiesList = productPropertiesService.findAllByServiceId(ps.getId());
+                    List<ProductPropertyResultVO> productPropertiesList =
+                            legacyServicePropertyAdapter.findAllByServiceId(ps.getId());
                     if (!productPropertiesList.isEmpty()) {
                         List<Properties> properties = new ArrayList<>();
                         productPropertiesList.forEach(pp -> {

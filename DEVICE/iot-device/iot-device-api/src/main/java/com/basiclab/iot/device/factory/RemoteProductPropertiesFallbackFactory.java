@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -28,8 +27,8 @@ public class RemoteProductPropertiesFallbackFactory implements FallbackFactory<R
         log.error("产品服务属性管理服务调用失败:{}", throwable.getMessage());
         return new RemoteProductPropertiesService() {
             @Override
-            public R<?> selectAllByServiceId(@RequestParam("serviceId") Long serviceId) {
-                return R.fail("产品服务属性", throwable.getMessage());
+            public R<?> selectAllByServiceId(Long serviceId) {
+                return R.fail("旧服务属性兼容查询失败", throwable.getMessage());
             }
             @Override
             public R<?> selectPropertiesByPropertiesIdList(List<Long> propertiesIdList){

@@ -23,6 +23,7 @@ import java.io.Serializable;
 @ToString(callSuper = true)
 @Accessors(chain = true)
 @Builder
+@Deprecated
 public class ProductProperties extends BaseEntity implements Serializable {
     /**
     * 属性id
