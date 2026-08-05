@@ -1,10 +1,10 @@
 # ADR 系列文档评审报告
 
 > 评审日期：2026-07-30  
-> 评审范围：ADR-001 ～ ADR-011（电力运维云平台架构决策全系列）  
+> 评审范围：ADR-001 ～ ADR-012（电力运维云平台架构决策系列；ADR-012 为追加评审）
 > 评审基线：[《平台功能计划》1.4.0](../架构设计/平台功能计划.md)、[《EasyAIoT 项目开发宪法》1.4.0](../开发规范/EasyAIoT项目开发宪法.md)、PRD 1.2.0、SPEC-001～004  
 > 评审视角：决策质量 · 基线合规 · PRD/SPEC 闭环 · 跨 ADR 一致 · 回滚完备性
-> 复核处置：2026-07-30，已依据本报告修订有效 ADR；第十章为最终处置结论，与原始发现冲突时以第十章为准  
+> 复核处置：2026-07-30，已依据本报告修订 ADR-001～011；2026-08-05 追加 ADR-012 评审，第十一章是 ADR-012 的最终处置结论
 
 ---
 
@@ -414,3 +414,54 @@
 ### 10.5 最终结论
 
 评审报告总体合理，识别出的职责、状态和跨 ADR 一致性问题应当修改，现已完成。两处建议不按原建议直接实施：不把清理能力暴露为普通 `TelemetryStore.delete`，也不使用 HTTP 206 表示投影滞后。ADR-001～004、006～011 继续保持 **Accepted**，ADR-005 继续保持 **Superseded**；剩余事项是有明确验收标准的 TD 参数冻结，不再是未决架构决策。
+
+---
+
+## 十一、ADR-012 追加评审与最终处置
+
+> 追加评审日期：2026-08-05
+> 评审对象：[ADR-012 产品根属性与服务参数单一事实](../架构决策/电力运维云平台/ADR-012-产品根属性与服务参数单一事实.md)
+> 代码/数据基线：`29b80394`、`postgres-server / iot-device20` 修复后画像
+
+### 11.1 评审结论
+
+ADR 的核心方向合理，应接受：`product_properties` 只承载产品/模板根属性，服务输入/输出参数由 command request/response 链承载，不为属性表补回 `service_id`。该方向与目标 Schema、现有可用服务详情实现、项目宪法的单一事实、兼容优先和 standard/full 禁止重复开发一致。
+
+原 Proposed 文档存在一个流程循环：要求先完成 Mapper/VO/合同测试才能把 ADR 转 Accepted，同时又规定 ADR 未 Accepted 前不得按该方向修改生产实现。评审决定拆分门禁：ADR 接受只冻结事实归属；代码修复、数据库约束、迁移和测试继续由 TD-005 阻断。
+
+### 11.2 发现与处置
+
+| 编号 | 严重度 | 发现 | 处置 |
+|---|---|---|---|
+| A12-01 | HIGH | ADR 接受门禁与实现门禁循环依赖 | 已拆分“决策接受依据”和“TD 实现/发布门禁” |
+| A12-02 | HIGH | request/response 同时有 `commands_id` 与 `service_id`，仍可能形成关系双事实 | 冻结 `commands_id` 为权威关联；`service_id` 仅为服务端派生兼容影子，后续收缩删除 |
+| A12-03 | HIGH | 原删除范围遗漏 `product_event_response`、`product_script`、device 和历史引用 | 新增完整依赖图；设备/历史/ACTIVE binding 默认 RESTRICT，内部模型显式事务删除 |
+| A12-04 | HIGH | 批量删除把 `product_identification` 传给 `deleteByTemplateIds`，单条删除又直接删父行 | 冻结单条委托批量、作用域方法分名、全有或全无和逐步骤故障注入 |
+| A12-05 | HIGH | API VO 与持久化实体混用，legacy Property VO 把 `serviceId` 设为必填 | 冻结 DO/Request/Response 分层；legacy DTO 只由 adapter 使用 |
+| A12-06 | MEDIUM | `RemoteProductPropertiesService`、聚合、模板、缓存等调用者未形成清单 | 已写入 ADR 和配套技术设计，要求 owner 复核后冻结 |
+| A12-07 | MEDIUM | 仅依赖租户拦截器，数据库没有同租户引用约束 | 增加 tenant composite unique/FK、XOR scope 和交叉租户合同 |
+| A12-08 | MEDIUM | 旧接口若直接删除会破坏非电力兼容 | 采用 legacy adapter、调用量监控、至少 6 个月兼容窗口 |
+| A12-09 | LOW | 目标画像只覆盖 7 表，未纳入事件参数和保护引用 | 下一证据步骤扩展画像；不因此改变 ADR 核心决策 |
+
+### 11.3 被否决建议
+
+- 不采纳“给 `product_properties` 增加可空 `service_id` 以快速修复查询”。这会制造双事实且无法解决发布快照和差异语义。
+- 不采纳“M1 立即统一成一张 TSL member 表”。回归面超过当前里程碑，需独立 ADR。
+- 不采纳“发现旧路径已损坏即可无兼容删除”。仓库内仍有缓存和聚合调用者，必须先迁移、监控、再下线。
+- 不使用数据库 `ON DELETE CASCADE` 自动删除设备或历史事实；未知引用必须 fail-closed。
+
+### 11.4 合规评估
+
+| 基线 | 结果 |
+|---|---|
+| 项目宪法 §1.2/§6.2 单一事实与数据边界 | PASS |
+| 项目宪法 §2.4/§5.1 兼容与 API 演进 | PASS，保留 adapter 与迁移窗口 |
+| 项目宪法 standard/full 禁止重复开发 | PASS，同一运行表、服务与合同 |
+| mini 电力能力排除 | PASS，由 `power.device.model` capability 关闭 |
+| 数据安全、租户、回滚 | CONDITIONAL，设计完整但代码/DDL/合同尚未落地 |
+
+### 11.5 最终结论
+
+**ADR-012 转为 Accepted。** 接受的是根属性、服务、命令和参数的唯一事实归属，不是对当前代码质量的批准。配套新增 [TD-005 运行模型兼容与删除链技术设计](../技术设计/电力运维云平台/TD-005-运行模型兼容与删除链技术设计.md)，用于冻结 Mapper/DO/VO、唯一约束、租户 CRUD 和删除链合同。
+
+TD-005 继续保持 `In Review / OPEN_REMEDIATION_REQUIRED`。在扩展画像、代码修复、DDL 迁移、TEN/DEL 合同、旧格式 round-trip 和三档回归完成前，不得宣称运行模型已修复或模板能力已冻结。

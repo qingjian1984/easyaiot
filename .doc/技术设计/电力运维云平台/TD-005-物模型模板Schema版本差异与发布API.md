@@ -1,11 +1,11 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.6  
+> 版本：1.0.7
 > 日期：2026-08-05  
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
-> 评审处置：[TD-005 评审报告](../../开发规范/TD-005评审报告.md)，当前以 §18 孤儿属性执行复核为准  
+> 评审处置：[TD-005 评审报告](../../开发规范/TD-005评审报告.md)，当前以 §19 ADR-012 与运行模型契约复核为准
 > 下游依赖：产品实例化、collector 点表发布、设备档案、告警策略、SCADA、能源计量点、遥控安全闭环
 
 变更记录：
@@ -19,6 +19,7 @@
 | 1.0.4 | 处置画像评审 R1～R7：画像 JSON Schema/列签名/双作用域重复/生产重跑契约，并建立 Proposed ADR-012 |
 | 1.0.5 | 处置孤儿属性方案 O1～O7：动态引用扫描、完整快照断言、回滚父对象保护和 COPY 基线修正规则 |
 | 1.0.6 | 完成 4 条孤儿属性修复执行与修复后画像；该子门禁 PASS，整体仍为 OPEN_REMEDIATION_REQUIRED |
+| 1.0.7 | ADR-012 转 Accepted；新增运行模型兼容与删除链技术设计，冻结 Mapper/DO/VO、租户、唯一约束和删除合同候选 |
 
 ## 1. 结论
 
@@ -68,7 +69,7 @@ standard/full 使用相同 Schema、表、API、权限点、状态机、差异�
 | PostgreSQL `tenant_id` + MyBatis 租户拦截 | 可复用租户隔离基础设施 | 系统标准模板跨租户只读需要专用仓储；不能开放通用 `TenantIgnore` 写入口 |
 | WEB `phsyicalModal.ts` | 现有产品物模型编辑 UI/API | 发布按钮调用占位接口；没有版本、差异、导入任务、升级影响和错误下载界面 |
 
-实现前 P0 数据库门禁：目标库与仓库 SQL dump 均未声明 `product_properties.service_id`，但 Mapper 基础列、upsert 和公开查询仍使用该列；运行实体 `ProductProperties` 没有 `serviceId`，接口 Param/Result VO 却声明该字段。生成式 `insert` 还存在 16 列/17 值和裸 `jdbcType=BIGINT}`。目标实例已发现 4 条孤儿属性，七张运行表没有业务唯一约束、外键或 trigger。完整证据见[目标数据库画像报告](./TD-005-目标数据库与现有实现画像报告.md)。在 ADR-012、数据处置和合同测试关闭前，不得编写依赖运行表契约的 migration。
+实现前 P0 数据库门禁：目标库与仓库 SQL dump 均未声明 `product_properties.service_id`，但 Mapper 基础列、upsert 和公开查询仍使用该列；运行实体 `ProductProperties` 没有 `serviceId`，legacy Param/Result VO 却声明该字段。生成式 `insert` 还存在列值数量漂移和裸 `jdbcType=BIGINT}`。目标实例的 4 条孤儿属性已清零，但七张画像运行表仍没有业务唯一约束、外键或 trigger；删除依赖还应扩展覆盖 `product_event_response`、`product_script`、设备和历史引用。完整证据见[目标数据库画像报告](./TD-005-目标数据库与现有实现画像报告.md)与[运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md)。ADR-012 已接受，但 Mapper/DO/VO、DDL、租户和删除合同未通过前不得执行模板绑定 migration。
 
 ## 4. 组件边界
 
@@ -612,7 +613,7 @@ quota key 清单冻结为：`maxTemplates`、`maxImportLines`、`maxConcurrentIm
 
 TD-005 由 In Review 转 `Approved / Frozen` 前必须全部满足：
 
-1. 目标数据库画像完成，ADR-012 转 Accepted，孤儿数据可审计处置，Mapper/实体/VO、业务唯一约束、租户 CRUD 和删除链合同全部通过；
+1. 目标数据库画像完成，ADR-012 保持 Accepted，孤儿数据可审计处置，Mapper/DO/VO、业务唯一约束、租户 CRUD 和删除链合同全部通过；
 2. Schema 经标准 JSON Schema Draft 2020-12 validator 正反 fixture 验证；
 3. JCS canonical/hash 至少两个语言实现的 golden 一致；
 4. 10 类模板和 71 个属性由电力领域专家复核，尤其三相、单位、累计量、CT/PT 变比和高风险服务；
@@ -640,8 +641,23 @@ TD-005 由 In Review 转 `Approved / Frozen` 前必须全部满足：
 
 [TD-005 目标数据库与现有实现画像报告](./TD-005-目标数据库与现有实现画像报告.md) 已在 `postgres-server / iot-device20` 以只读事务完成。目标库确认 `product_properties` 不存在 `service_id`，七张运行表没有业务唯一约束、外键或触发器；4 个产品和 21 个属性中存在 4 条孤儿属性。仓库 Mapper 则仍在基础列、upsert 和公开查询中依赖 `service_id`，运行实体没有该字段，接口 VO 有该字段，部分旧 service-property statement 缺失或查询缺列。
 
-画像评审 R1～R7 已处置：画像脚本/结果升级至 v1.1，结构化保存七表完整列签名和 tenant 状态，分别检查产品/模板成员作用域重复及标识异常，并增加结果 JSON Schema 与生产重跑阻断/告警契约。[ADR-012](../../架构决策/电力运维云平台/ADR-012-产品根属性与服务参数单一事实.md) 已建立但仍为 `Proposed`。
+画像评审 R1～R7 已处置：画像脚本/结果升级至 v1.1，结构化保存七表完整列签名和 tenant 状态，分别检查产品/模板成员作用域重复及标识异常，并增加结果 JSON Schema 与生产重跑阻断/告警契约。[ADR-012](../../架构决策/电力运维云平台/ADR-012-产品根属性与服务参数单一事实.md) 已于 2026-08-05 评审接受，冻结根属性与 command 参数链的单一事实。
 
 [TD-005 孤儿属性处置方案 0.2.0](./TD-005-孤儿属性处置方案.md) 已完成执行。初始化 COPY 旧种子由 4 行降为 0，数据库以 `COMMIT_REMEDIATION=true` 精确删除 4 行；修复后画像 `product_properties=17`，六类 orphan、七类重复组和六类标识作用域异常全部为 0，现行演示产品/设备/属性保持 3/3/9。该子门禁 PASS，但 Mapper、唯一约束、租户和删除链代码门禁仍未关闭。
 
-因此 §23 门禁 1 的“本地目标集成实例事实采集”已完成，但整体门禁为 `OPEN_REMEDIATION_REQUIRED`。必须先让 ADR-012 转 Accepted、处置孤儿数据、修正 Mapper/实体/VO 和补齐租户/唯一/删除合同；生产存量环境上线前仍须按 result schema 重跑画像并附原始输出。不得把本次画像描述为数据库门禁已经 PASS。
+因此 §23 门禁 1 的“本地目标集成实例事实采集、ADR-012 接受、孤儿属性处置”三个子项已完成，但整体门禁仍为 `OPEN_REMEDIATION_REQUIRED`。仍须按[运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md)修正 Mapper/DO/VO，扩展画像到事件参数和受保护下游引用，并补齐租户、唯一约束、删除链及旧格式 round-trip 合同；生产存量环境上线前仍须按 result schema 重跑画像并附原始输出。
+
+### 24.2 ADR-012 与运行模型契约状态
+
+[ADR 评审报告 §11](../../开发规范/ADR评审报告.md)确认：ADR-012 的事实归属决策可接受，原“先完成代码才能接受 ADR、但未接受又不得修代码”的循环门禁已拆分。`Accepted` 只授权按单一事实方向实施，不代表当前 Mapper/API/数据库已合格。
+
+配套 [TD-005 运行模型兼容与删除链技术设计 0.1.0](./TD-005-运行模型兼容与删除链技术设计.md) 已形成 Review Candidate，包含：
+
+- 根属性、服务、命令、输入/输出及事件参数的依赖图；
+- DO/Request/Response/MapStruct 分层和 legacy adapter；
+- `ProductPropertiesMapper` 确定性漂移清单；
+- unique、XOR scope、tenant composite FK 与 RESTRICT 迁移顺序；
+- TEN-001～008 和 DEL-001～010 合同；
+- 产品单条/批量删除统一编排、保护引用和逐阶段失败回滚。
+
+该配套设计仍为 In Review。下一证据步骤是扩展画像、建立非空旧格式 fixture/golden，然后才能进入生产代码与 DDL 实现。
