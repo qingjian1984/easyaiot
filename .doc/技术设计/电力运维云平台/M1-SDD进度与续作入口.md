@@ -27,8 +27,8 @@
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
 | [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.1 | In Review |
-| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.11 | In Review |
-| [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.4 | In Review |
+| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.12 | In Review |
+| [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.5 | In Review |
 | [TD-005 孤儿属性处置方案](./TD-005-孤儿属性处置方案.md) | 0.2.0 | Executed / Verified |
 
 `In Review` 表示设计已形成并进入评审，可能仍有评审意见或实现/压测证据待关闭；不得描述为已经开发完成或 Approved / Frozen。TD-001～005 均已完成现有评审报告的文档处置；各 TD 仍需分别关闭证据门禁。
@@ -57,6 +57,7 @@
 - 目标画像已升级到 v1.2.0 与结果 Schema 1.1.0：覆盖 8 张核心运行表 + 4 张受保护依赖表，12 表孤儿/当前关系异常为0；`product_script` 缺少主键、`ota_packages.tenant_id` 可空及业务 unique/FK/check/trigger 为0继续阻断上线。
 - 首份非空旧格式 round-trip fixture/golden 已冻结并自动验证 PASS：覆盖根属性、服务、命令、输入/输出、事件及事件输出，8 表运行投影和 canonical SHA-256 已进入 manifest；生产 adapter 合同经第一批实现推进为 PARTIAL。
 - TD-005 第一批生产实现已完成：`ProductPropertyDO`/MapStruct 分层、20 列根属性 Mapper、无 `serviceId` 的新根属性 DTO、command 参数链 legacy 只读 adapter、旧聚合调用迁移；Java 17 反应堆编译 PASS，6 项定向合同测试 PASS。该批次不含 PostgreSQL tenant CRUD 和 frozen golden 的生产 Java 全量消费，因此 adapter 总门禁仍为 PARTIAL。
+- TD-005 主代码 Java legacy 双向纯转换已直接消费冻结的同一 fixture/golden：旧 JSON→八表运行投影→旧 JSON 结构等价 PASS，歧义服务属性和根属性 `serviceId` 均 fail-closed；新增 3 项测试后定向测试累计 9 项 PASS。尚未接入数据库和旧端点，生产 adapter 总门禁仍为 PARTIAL。
 - TD-001/002/003 的 Envelope、configVersion、siteCode、dataPriority、requestId、Topic、5 分钟 ACK deadline 和健康语义已经对齐。
 - TD-001～004 四份评审报告均保留原始意见并附最终逐项处置，发生冲突时以报告末尾的“复核与最终处置”为准。
 
@@ -105,7 +106,7 @@
 
 ### TD-005
 
-- 本地目标集成实例 12 表画像、R1～R7 文档处置、4条孤儿属性清理、ADR-012 接受、迁移前非空 golden 及 Mapper/DO/根属性 DTO/legacy 只读 adapter 第一批实现已完成；仍需通过 frozen golden 的生产 Java 全量 adapter、唯一约束、租户 CRUD 和删除链合同；生产存量环境需按画像 Schema 重跑；
+- 本地目标集成实例 12 表画像、R1～R7 文档处置、4条孤儿属性清理、ADR-012 接受、迁移前非空 golden、Mapper/DO/根属性 DTO/legacy 只读 adapter 第一批实现及 Java 双向纯转换 golden 合同已完成；仍需完成数据库持久化接线、唯一约束、租户 CRUD 和删除链合同；生产存量环境需按画像 Schema 重跑；
 - 孤儿存量子门禁已 PASS，但单条/批量产品删除代码仍不完整，不得把数据清理等同于删除链修复；
 - Draft 2020-12 资产级 fixture 已 PASS；仍需生产 Java/TypeScript 消费相同 JCS/hash golden，并补 Schema 外语义校验；
 - 10 类模板、71 个属性、单位、三相、累计量、CT/PT 变比及高风险服务的行业专家复核；
@@ -117,9 +118,9 @@
 
 继续 SDD 文档链，下一步优先执行 **TD-005 证据准备与冻结门禁关闭**：
 
-1. 读取 [TD-005 1.0.11](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计 0.1.4](./TD-005-运行模型兼容与删除链技术设计.md)和[TD-005 评审报告 §22](../../开发规范/TD-005评审报告.md)；
-2. 第一批 Mapper/DO/VO/legacy 只读 adapter 与 6 项 Java 合同测试已经完成；先复跑该测试集，禁止回退到 `product_properties.service_id`；
-3. 下一步实现 legacy importer/exporter 聚合适配并消费相同 fixture/golden，补 PostgreSQL tenant CRUD/拦截器集成测试，随后形成数据库 migration/rollback 候选，但暂不启用约束；
+1. 读取 [TD-005 1.0.12](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计 0.1.5](./TD-005-运行模型兼容与删除链技术设计.md)和[TD-005 评审报告 §22](../../开发规范/TD-005评审报告.md)；
+2. Mapper/DO/VO、legacy 只读 adapter 与 Java 双向纯转换 golden 合同已经完成，定向测试累计 9 项 PASS；先复跑该测试集，禁止回退到 `product_properties.service_id`；
+3. 下一步补 PostgreSQL tenant CRUD/拦截器集成测试，并把 `LegacyThingModelRuntimeAdapter` 接入 tenant-safe 持久化与导出服务；证据通过后形成数据库 migration/rollback 候选，但暂不启用约束；
 4. 实现 TEN-001～008、DEL-001～010、旧缓存/Feign adapter 和 standard/full/mini 回归，通过后再启用 unique/XOR/tenant FK/RESTRICT；
 5. 在生产 Java/TypeScript 模块中消费现有 JCS/hash golden，并补成员唯一、SemVer、CT/PT 等 Schema 外语义合同；
 6. 建立恶意 Excel/JSON 导入 fixture，并组织 10 类行业模板评审；
@@ -131,4 +132,4 @@ TD-005 评审可以与 TD-001～004 的证据准备并行，但任何生产代�
 
 可直接使用：
 
-> 读取 `.doc/技术设计/电力运维云平台/M1-SDD进度与续作入口.md`，遵循《平台功能计划》和《EasyAIoT 项目开发宪法》，继续 TD-005。TD-005 1.0.11 / 运行模型 0.1.4 已完成 12 表目标画像、结果 Schema 1.1.0、迁移前非空旧格式 golden，以及 Mapper/DO/根属性 DTO/legacy 只读 adapter 第一批生产实现；Java 17 编译和 6 项合同测试 PASS。ADR-012 1.0.2 已 Accepted，整体仍为 OPEN_REMEDIATION_REQUIRED。下一步实现生产 Java legacy importer/exporter 消费同一 golden，并补 PostgreSQL tenant CRUD/拦截器集成测试，再形成 migration/rollback 候选。
+> 读取 `.doc/技术设计/电力运维云平台/M1-SDD进度与续作入口.md`，遵循《平台功能计划》和《EasyAIoT 项目开发宪法》，继续 TD-005。TD-005 1.0.12 / 运行模型 0.1.5 已完成 12 表目标画像、结果 Schema 1.1.0、迁移前非空旧格式 golden、Mapper/DO/根属性 DTO/legacy 只读 adapter 第一批实现，以及主代码 Java legacy 双向纯转换对同一 golden 的消费；Java 17 编译和 9 项合同测试 PASS。ADR-012 1.0.2 已 Accepted，整体仍为 OPEN_REMEDIATION_REQUIRED。下一步补 PostgreSQL tenant CRUD/拦截器集成测试，并将转换 adapter 接入 tenant-safe 持久化与导出服务，再形成 migration/rollback 候选。
