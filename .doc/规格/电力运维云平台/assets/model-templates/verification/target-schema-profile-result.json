@@ -1,7 +1,7 @@
 {
   "profileVersion": "1.1.0",
   "resultSchemaVersion": "1.0.0",
-  "verifiedDate": "2026-08-04",
+  "verifiedDate": "2026-08-05",
   "scope": "LOCAL_TARGET_INTEGRATION_INSTANCE",
   "container": "postgres-server",
   "database": "iot-device20",
@@ -19,7 +19,7 @@
   ],
   "rowCounts": {
     "product": 4,
-    "product_properties": 21,
+    "product_properties": 17,
     "product_event": 0,
     "product_services": 0,
     "product_commands": 0,
@@ -225,25 +225,14 @@
     "servicesBothSet": 0
   },
   "orphanCounts": {
-    "propertiesWithoutProduct": 4,
+    "propertiesWithoutProduct": 0,
     "eventsWithoutProduct": 0,
     "servicesWithoutProduct": 0,
     "commandsWithoutService": 0,
     "requestsWithoutCommand": 0,
     "responsesWithoutCommand": 0
   },
-  "orphanPropertyGroups": [
-    {
-      "tenantId": 1,
-      "productIdentification": "8700054938017792",
-      "propertyCount": 2
-    },
-    {
-      "tenantId": 1,
-      "productIdentification": "9030000000000001",
-      "propertyCount": 2
-    }
-  ],
+  "orphanPropertyGroups": [],
   "repositoryDrift": [
     "ProductPropertiesMapper.Base_Column_List references missing service_id",
     "ProductProperties runtime entity does not declare serviceId while API param/result VOs do",

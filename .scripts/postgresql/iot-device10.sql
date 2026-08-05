@@ -5915,10 +5915,6 @@ COPY public.product_properties (id, property_name, property_code, datatype, desc
 51	电量	Vbatt	TEXT	\N		\N	10240	r	\N	\N	\N	\N	admin	2024-06-18 15:32:13.564	admin	2024-06-18 15:32:13.565	\N	9820630576939008	1
 52	服务ID	serviceId	TEXT	\N		\N	10240	r	\N	\N	\N	\N	admin	2024-06-18 15:32:45.728	admin	2024-06-18 15:32:45.728	\N	9820630576939008	1
 53	设备ID	deviceId	TEXT	\N		\N	10240	r	\N	\N	\N	\N	admin	2024-06-18 15:32:59.716	admin	2024-06-18 15:32:59.716	\N	9820630576939008	1
-900101	温度	temperature	double	Modbus 演示温度	\N	\N	\N	R	\N	\N	\N	°	admin	2026-07-18 13:18:46.937229	\N	\N	\N	8700054938017792	1
-900102	设定点	setpoint	double	Modbus 演示设定点	\N	\N	\N	RW	\N	\N	\N	°	admin	2026-07-18 13:18:46.937229	\N	\N	\N	8700054938017792	1
-900111	温度	temperature	double	OPC UA 演示温度	\N	\N	\N	R	\N	\N	\N	°	admin	2026-07-18 13:18:46.94235	\N	\N	\N	9030000000000001	1
-900112	设定点	setpoint	double	OPC UA 演示设定点	\N	\N	\N	RW	\N	\N	\N	°	admin	2026-07-18 13:18:46.94235	\N	\N	\N	9030000000000001	1
 911001	温度	temperature	DOUBLE	演示温度	\N	\N	\N	r	\N	0	\N	\N	admin	2026-07-18 13:29:08.165384	\N	\N	\N	IND_MODBUS_TCP_DEMO	1
 911002	设定值	setpoint	INT	演示设定值	\N	\N	\N	w	\N	0	\N	\N	admin	2026-07-18 13:29:08.165384	\N	\N	\N	IND_MODBUS_TCP_DEMO	1
 911003	运行	running	BOOL	演示运行状态	\N	\N	\N	w	\N	0	\N	\N	admin	2026-07-18 13:29:08.165384	\N	\N	\N	IND_MODBUS_TCP_DEMO	1

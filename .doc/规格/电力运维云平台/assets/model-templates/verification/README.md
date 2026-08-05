@@ -1,7 +1,7 @@
 # TD-005 Schema 与 JCS 自动验证证据
 
-> 证据日期：2026-08-04  
-> 对应设计：TD-005 1.0.4  
+> 证据日期：2026-08-05  
+> 对应设计：TD-005 1.0.6  
 > 状态：PASS（资产级验证；生产 Java/TypeScript 集成仍需实现阶段合同测试）
 
 ## 1. 验证范围
@@ -21,7 +21,7 @@ TD-005 目标库画像的孤儿属性处置还提供三份数据库脚本：
 - `orphan-properties-remediation.sql`：精确删除候选，动态锁定和扫描全部直接产品/模板标识列，以完整行快照失败关闭；默认回滚，只有 `COMMIT_REMEDIATION=true` 才提交；
 - `orphan-properties-rollback.sql`：完整快照恢复，同时保护父产品状态；默认回滚，只有 `COMMIT_ROLLBACK=true` 才提交。
 
-修复脚本已在 `postgres-server / iot-device20` 完成默认回滚演练；未执行持久化删除。回滚脚本须在修复已提交且确需事件恢复时演练，当前存在 4 条原记录时会按设计拒绝执行。
+修复脚本已在 `postgres-server / iot-device20` 完成默认回滚演练和显式提交。2026-08-05 修复后画像为 `product_properties=17`、六类 orphan 全部为0；初始化基线旧种子也已移除。rollback 脚本随后完成默认回滚演练：临时恢复完整4行、快照断言 PASS、最终回滚后仍为0；未触发真实回滚。
 
 ## 2. 可复现命令
 
