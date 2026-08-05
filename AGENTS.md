@@ -2,6 +2,21 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## 项目强制双基线
+
+EasyAIoT 仓库内所有需求分析、产品设计、Feature Spec、ADR、Technical Design、开发、重构、缺陷修复、测试、评审、发布和运维变更，必须同时依据以下两份当前有效基线：
+
+1. [EasyAIoT 项目开发宪法](.doc/开发规范/EasyAIoT项目开发宪法.md)：规定安全、架构、数据、兼容、流程、质量门禁和完成定义；
+2. [平台功能计划](.doc/架构设计/平台功能计划.md)：规定产品范围、版本边界、部署档位、模块归属、里程碑和功能优先级。
+
+执行规则：
+
+- 开始任何项目工作前必须读取两份基线的当前版本，不得只依据其中一份；
+- PRD、SPEC、ADR、TD、代码、数据库迁移、测试与交付说明不得违反双基线；
+- `mini` / `standard` / `full` 的功能归属以平台功能计划为产品事实，工程实现和质量要求以项目开发宪法为治理事实；
+- 双基线或下游文档发生冲突时必须停止实现，先完成事实核对和基线修订/ADR 决策，不得按既有代码或口头约定静默处理；
+- 每次 SDD 评审和续作记录必须注明所依据的双基线版本，并把未关闭门禁保留为 OPEN。
+
 ## 项目概述
 
 EasyAIoT 是云边端一体化智能算法应用平台，将 AI（YOLO26 目标检测、SAM 自动标注、视觉大模型、人脸/车牌识别）与 IoT 设备管理（MQTT/TCP/Modbus/OPC UA/GB28181/ONVIF）深度融合。同一套代码可部署于 4 GB 边缘盒子、AI 摄像机或全栈企业级一体机——通过安装时的部署配置（`mini` / `standard` / `full`）选择硬件档位。
