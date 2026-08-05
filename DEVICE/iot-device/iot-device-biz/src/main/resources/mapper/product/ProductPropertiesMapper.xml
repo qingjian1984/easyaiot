@@ -346,13 +346,24 @@
     </delete>
 
     <delete id="deleteProductPropertiesByIds">
-        DELETE FROM product_properties WHERE
+        <bind name="expectedCount" value="array == null ? 0 : array.length"/>
+        DELETE FROM product_properties
+        WHERE
         <choose>
             <when test="array != null and array.length &gt; 0">
                 id IN
                 <foreach item="id" collection="array" open="(" separator="," close=")">
                     #{id,jdbcType=BIGINT}
                 </foreach>
+                AND (
+                    SELECT COUNT(*)
+                    FROM product_properties scoped_properties
+                    WHERE scoped_properties.id IN
+                    <foreach item="id" collection="array" open="(" separator="," close=")">
+                        #{id,jdbcType=BIGINT}
+                    </foreach>
+                    AND scoped_properties.tenant_id = product_properties.tenant_id
+                ) = #{expectedCount,jdbcType=INTEGER}
             </when>
             <otherwise>1 = 0</otherwise>
         </choose>

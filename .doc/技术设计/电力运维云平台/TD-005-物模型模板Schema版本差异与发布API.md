@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.12
+> 版本：1.0.13
 > 日期：2026-08-05  
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -25,6 +25,7 @@
 | 1.0.10 | 完成 12 表目标库画像与首份非空旧格式 round-trip fixture/golden；冻结迁移前兼容合同，不冒充生产 adapter 已实现 |
 | 1.0.11 | 完成第一批运行模型生产实现与 Java 合同测试；Mapper/DO/根属性 DTO 和 legacy 只读投影已有证据，其余交付门禁保持 OPEN |
 | 1.0.12 | 主代码 Java legacy 双向转换直接消费冻结 8 表 golden 并通过合同测试；数据库持久化接线与租户集成仍保持 OPEN |
+| 1.0.13 | 完成真实 PostgreSQL 根属性 TEN-001～004/006 子合同，修复混租户批量删除部分成功；其余 TEN 与八表持久化仍 OPEN |
 
 ## 1. 结论
 
@@ -656,7 +657,7 @@ TD-005 由 In Review 转 `Approved / Frozen` 前必须全部满足：
 
 [ADR 评审报告 §11](../../开发规范/ADR评审报告.md)确认：ADR-012 的事实归属决策可接受，原“先完成代码才能接受 ADR、但未接受又不得修代码”的循环门禁已拆分。`Accepted` 只授权按单一事实方向实施，不代表当前 Mapper/API/数据库已合格。
 
-配套 [TD-005 运行模型兼容与删除链技术设计 0.1.5](./TD-005-运行模型兼容与删除链技术设计.md) 已形成 Review Candidate，包含：
+配套 [TD-005 运行模型兼容与删除链技术设计 0.1.6](./TD-005-运行模型兼容与删除链技术设计.md) 已形成 Review Candidate，包含：
 
 - 根属性、服务、命令、输入/输出及事件参数的依赖图；
 - DO/Request/Response/MapStruct 分层和 legacy adapter；
@@ -673,7 +674,7 @@ TD-005 由 In Review 转 `Approved / Frozen` 前必须全部满足：
 
 [ADR-012 宪法专项评审](../../开发规范/ADR-012评审报告-宪法专项.md)确认事实归属决策没有宪法级冲突，但纠正原“DoD 11/11 全部合规”结论：宪法 §15 实际有 12 项，当前仅 3 项决策/文档级 PASS，7 项交付证据 OPEN，2 项在设计阶段 N/A。ADR Accepted 不得被扩大解释为功能已完成。
 
-ADR-012 1.0.2 与运行模型 0.1.5 已补收缩 owner/到期日、golden 先于 Mapper/DO/VO 迁移、备份/保留期/审批/恢复演练、OpenFeign 超时/降级、分层测试及 standard 最低规格性能证据。12 表画像、前置 golden、第一批 Java 合同和 Java 纯转换 round-trip 已有执行证据；其余交付门禁仍未关闭，TD-005 继续保持 `In Review / OPEN_REMEDIATION_REQUIRED`。
+ADR-012 1.0.2 与运行模型 0.1.6 已补收缩 owner/到期日、golden 先于 Mapper/DO/VO 迁移、备份/保留期/审批/恢复演练、OpenFeign 超时/降级、分层测试及 standard 最低规格性能证据。12 表画像、前置 golden、第一批 Java 合同、Java 纯转换 round-trip 和根属性 PostgreSQL 租户子合同已有执行证据；其余交付门禁仍未关闭，TD-005 继续保持 `In Review / OPEN_REMEDIATION_REQUIRED`。
 
 ### 24.4 12 表画像与迁移前兼容 golden（2026-08-05）
 
@@ -683,7 +684,7 @@ ADR-012 1.0.2 与运行模型 0.1.5 已补收缩 owner/到期日、golden 先于
 
 ### 24.5 运行模型第一批生产实现（2026-08-05）
 
-[TD-005 运行模型兼容与删除链技术设计 0.1.5](./TD-005-运行模型兼容与删除链技术设计.md) 已记录本批次实现和执行证据：
+[TD-005 运行模型兼容与删除链技术设计 0.1.6](./TD-005-运行模型兼容与删除链技术设计.md) 已记录本批次实现和执行证据：
 
 - `ProductPropertyDO` 与 legacy API 对象分层，持久化对象显式承载 tenant 和产品/模板作用域；
 - 根属性 Mapper 与 20 列批准签名对齐，彻底移除不存在的 `product_properties.service_id` 和两个旧 serviceId statement；
@@ -698,3 +699,11 @@ ADR-012 1.0.2 与运行模型 0.1.5 已补收缩 owner/到期日、golden 先于
 新增主代码 `LegacyThingModelRuntimeAdapter`，把冻结的旧格式 JSON 确定性投影到 product、root property、service、command、command request、command response、event、event response 八类运行行，并可从这些行恢复冻结的旧格式输出。新增合同测试直接读取 `verification/legacy-roundtrip/easyaiot-legacy-thing-model-v1_td005-1.0.10/` 的原始 fixture 与两份 golden；八表投影和导出结构等价断言均 PASS，同时验证根属性 `serviceId` 与歧义 `services[].properties` fail-closed。
 
 联合运行 Mapper、legacy service-property adapter 和双向转换测试共 9 项，0 failure、0 error，Java 17 反应堆编译 PASS。因此“主代码 Java 纯转换消费 frozen golden”子门禁为 **PASS**。该 adapter 当前不访问数据库，尚未替换旧 `/thingModel` 写入/导出流程；在 PostgreSQL tenant CRUD、拦截器、事务回滚与接口合同完成前，生产 adapter 总门禁仍为 **PARTIAL**，不得宣称 TD-005 已完成或冻结。
+
+### 24.7 PostgreSQL 根属性租户 CRUD 子合同（2026-08-05）
+
+在本地 `postgres-server / iot-device20` 上新增事务回滚型 Java 集成测试，真实加载 `ProductPropertiesMapper.xml`、`MybatisPlusInterceptor`、`TenantLineInnerInterceptor` 与 `TenantDatabaseInterceptor`。TEN-001、TEN-002、TEN-003、TEN-004、TEN-006 的根属性子合同 PASS，测试结束回滚且残留 fixture 为 0。
+
+测试首次发现混租户批量删除的完整性计数子查询没有被拦截器自动限定 tenant，导致请求可能部分成功。Mapper 已显式把子查询 tenant 与 DELETE 外层 tenant 关联，混入其他租户或不存在 ID 时整批影响 0 行；静态合同禁止文本替换参数。连同既有 Mapper、legacy adapter 与 frozen golden 回归共 13 项测试，0 failure、0 error、0 skipped，Java 17 反应堆 `BUILD SUCCESS`。
+
+本证据仅关闭根属性 TEN-001～004/006 子门禁。TEN-004 业务层统一不存在错误、跨服务/命令/参数的 TEN-005、档位一致性 TEN-007、mini capability TEN-008、八表持久化事务及旧接口接线仍为 OPEN，因此 §23 总门禁和生产 adapter 状态不变。

@@ -117,6 +117,15 @@ class ProductPropertiesMapperContractTest {
                 .getBoundSql(Collections.singletonMap("propertiesIdList", Collections.emptyList()));
         assertTrue(normalize(emptyIds.getSql()).contains("WHERE 1 = 0"));
 
+        BoundSql mixedTenantDelete = configuration
+                .getMappedStatement(namespace + "deleteProductPropertiesByIds")
+                .getBoundSql(Collections.singletonMap("array", new Long[]{1L, 2L}));
+        String mixedTenantDeleteSql = normalize(mixedTenantDelete.getSql());
+        assertTrue(mixedTenantDeleteSql.contains(
+                "scoped_properties.tenant_id = product_properties.tenant_id"),
+                "批量删除的完整性计数必须显式限定到外层租户");
+        assertFalse(mixedTenantDeleteSql.contains("${"), "批量计数不得使用文本替换参数");
+
         entity.setTemplateIdentification("template-must-not-mix");
         BoundSql mixedScope = configuration.getMappedStatement(namespace + "selectProductPropertiesList")
                 .getBoundSql(entity);
