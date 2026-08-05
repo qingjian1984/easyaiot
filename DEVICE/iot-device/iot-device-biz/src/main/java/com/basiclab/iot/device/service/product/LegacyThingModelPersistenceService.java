@@ -1,6 +1,8 @@
 package com.basiclab.iot.device.service.product;
 
 import com.basiclab.iot.common.core.context.TenantContextHolder;
+import com.basiclab.iot.common.capability.CapabilityService;
+import com.basiclab.iot.common.exception.ServiceException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -19,6 +21,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.basiclab.iot.common.exception.util.ServiceExceptionUtil.exception;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.CAPABILITY_NOT_SUPPORTED;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_FIELD_REQUIRED;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_LONG_REQUIRED;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_PRODUCT_NOT_FOUND;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_PRODUCT_SCOPE_AMBIGUOUS;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_RUNTIME_CONTRACT_INVALID;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_RUNTIME_ID_DUPLICATE;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_RUNTIME_SCOPE_INVALID;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_SERVICE_PARAM_RELATION_INVALID;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_TENANT_MISMATCH;
+import static com.basiclab.iot.device.enums.ErrorCodeConstants.MODEL_VERSION_UNSUPPORTED;
+
 /**
  * TD-005 legacy thing-model persistence boundary.
  *
@@ -30,6 +45,8 @@ import java.util.Set;
 @Service
 public class LegacyThingModelPersistenceService {
 
+    public static final String CAPABILITY_CODE = "power.device.model";
+
     private static final String PRODUCT_LOCK_SQL = """
             SELECT id
             FROM product
@@ -40,18 +57,27 @@ public class LegacyThingModelPersistenceService {
     private final NamedParameterJdbcTemplate jdbc;
     private final LegacyThingModelRuntimeAdapter adapter;
     private final ObjectMapper objectMapper;
+    private final CapabilityService capabilityService;
 
     public LegacyThingModelPersistenceService(DataSource dataSource,
                                               LegacyThingModelRuntimeAdapter adapter,
-                                              ObjectMapper objectMapper) {
+                                              ObjectMapper objectMapper,
+                                              CapabilityService capabilityService) {
         this.jdbc = new NamedParameterJdbcTemplate(dataSource);
         this.adapter = adapter;
         this.objectMapper = objectMapper;
+        this.capabilityService = capabilityService;
     }
 
     @Transactional(rollbackFor = Exception.class)
     public ObjectNode replaceLegacyDocument(JsonNode document) {
-        ObjectNode runtime = adapter.importToRuntime(document);
+        requireCapability();
+        ObjectNode runtime;
+        try {
+            runtime = adapter.importToRuntime(document);
+        } catch (IllegalArgumentException error) {
+            throw translateAdapterError(error);
+        }
         replaceRuntimeForCurrentTenant(runtime);
         String productIdentification = requiredText(product(runtime), "productIdentification");
         return exportLegacyForCurrentTenant(productIdentification);
@@ -63,6 +89,7 @@ public class LegacyThingModelPersistenceService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void replaceRuntimeForCurrentTenant(JsonNode runtimeDocument) {
+        requireCapability();
         long tenantId = TenantContextHolder.getRequiredTenantId();
         ObjectNode runtime = requireObject(runtimeDocument, "MODEL_RUNTIME_DOCUMENT_INVALID");
         if (!LegacyThingModelRuntimeAdapter.RUNTIME_CONTRACT_VERSION.equals(
@@ -82,6 +109,7 @@ public class LegacyThingModelPersistenceService {
 
     @Transactional(readOnly = true)
     public ObjectNode exportLegacyForCurrentTenant(String productIdentification) {
+        requireCapability();
         long tenantId = TenantContextHolder.getRequiredTenantId();
         if (productIdentification == null || productIdentification.isBlank()) {
             throw contractError("MODEL_FIELD_REQUIRED", "productIdentification");
@@ -105,7 +133,11 @@ public class LegacyThingModelPersistenceService {
         tables.set("product_commands_response", queryCommandResponses(scope));
         tables.set("product_event", queryEvents(scope));
         tables.set("product_event_response", queryEventResponses(scope));
-        return adapter.exportFromRuntime(runtime);
+        try {
+            return adapter.exportFromRuntime(runtime);
+        } catch (IllegalArgumentException error) {
+            throw translateAdapterError(error);
+        }
     }
 
     private void validateOwnershipGraph(ObjectNode tables, long tenantId, String productIdentification) {
@@ -613,8 +645,42 @@ public class LegacyThingModelPersistenceService {
         return source.has(field) && !source.get(field).isNull();
     }
 
-    private IllegalArgumentException contractError(String code, String detail) {
-        return new IllegalArgumentException(code + ": " + detail);
+    private void requireCapability() {
+        if (!capabilityService.isEnabled(CAPABILITY_CODE)) {
+            throw exception(CAPABILITY_NOT_SUPPORTED, CAPABILITY_CODE);
+        }
+    }
+
+    private ServiceException translateAdapterError(IllegalArgumentException error) {
+        String message = error.getMessage() == null ? "unknown" : error.getMessage();
+        String code = message.contains(":") ? message.substring(0, message.indexOf(':')) : message;
+        String detail = message.contains(":") ? message.substring(message.indexOf(':') + 1).trim() : message;
+        return contractError(code, detail);
+    }
+
+    private ServiceException contractError(String code, String detail) {
+        switch (code) {
+            case "MODEL_TENANT_MISMATCH":
+                return exception(MODEL_TENANT_MISMATCH, detail);
+            case "MODEL_SERVICE_PARAM_RELATION_INVALID":
+                return exception(MODEL_SERVICE_PARAM_RELATION_INVALID, detail);
+            case "MODEL_PRODUCT_NOT_FOUND":
+                return exception(MODEL_PRODUCT_NOT_FOUND, detail);
+            case "MODEL_PRODUCT_SCOPE_AMBIGUOUS":
+                return exception(MODEL_PRODUCT_SCOPE_AMBIGUOUS, detail);
+            case "MODEL_VERSION_UNSUPPORTED":
+                return exception(MODEL_VERSION_UNSUPPORTED, detail);
+            case "MODEL_FIELD_REQUIRED":
+                return exception(MODEL_FIELD_REQUIRED, detail);
+            case "MODEL_LONG_REQUIRED":
+                return exception(MODEL_LONG_REQUIRED, detail);
+            case "MODEL_RUNTIME_SCOPE_INVALID":
+                return exception(MODEL_RUNTIME_SCOPE_INVALID, detail);
+            case "MODEL_RUNTIME_ID_DUPLICATE":
+                return exception(MODEL_RUNTIME_ID_DUPLICATE, detail);
+            default:
+                return exception(MODEL_RUNTIME_CONTRACT_INVALID, code + ": " + detail);
+        }
     }
 
     private static void putText(ObjectNode row, ResultSet rs, String field, String column) throws SQLException {

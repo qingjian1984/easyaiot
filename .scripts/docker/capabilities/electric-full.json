@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "manifestVersion": "0.1.0",
+  "profile": "full",
+  "product": "power-operations",
+  "capabilities": {
+    "power.device.model": {
+      "enabled": true,
+      "quota": {
+        "maxTemplates": 1000,
+        "maxImportLines": 100000,
+        "maxConcurrentImportJobs": 8,
+        "maxConcurrentPublish": 8,
+        "maxRebasesPerDay": 200,
+        "maxVersionsPerTemplate": 200,
+        "maxTemplateCanonicalBytes": 4194304
+      },
+      "requires": ["iot-device", "postgresql"]
+    },
+    "power.scada.editor": {
+      "enabled": true,
+      "quota": {},
+      "requires": ["iot-visualize", "visualize", "fuxa"]
+    }
+  }
+}

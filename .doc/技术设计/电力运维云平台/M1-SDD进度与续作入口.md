@@ -27,8 +27,8 @@
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
 | [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.1 | In Review |
-| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.14 | In Review |
-| [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.7 | In Review |
+| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.15 | In Review |
+| [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.8 | In Review |
 | [TD-005 孤儿属性处置方案](./TD-005-孤儿属性处置方案.md) | 0.2.0 | Executed / Verified |
 
 `In Review` 表示设计已形成并进入评审，可能仍有评审意见或实现/压测证据待关闭；不得描述为已经开发完成或 Approved / Frozen。TD-001～005 均已完成现有评审报告的文档处置；各 TD 仍需分别关闭证据门禁。
@@ -60,6 +60,8 @@
 - TD-005 主代码 Java legacy 双向纯转换已直接消费冻结的同一 fixture/golden：旧 JSON→八表运行投影→旧 JSON 结构等价 PASS，歧义服务属性和根属性 `serviceId` 均 fail-closed；新增 3 项测试后定向测试累计 9 项 PASS。尚未接入数据库和旧端点，生产 adapter 总门禁仍为 PARTIAL。
 - TD-005 已在真实 `postgres-server / iot-device20` 完成根属性 TEN-001～004/006 子合同：上下文注入、跨租户查改删、混租户批量原子拒绝和缺失上下文 fail-closed 均 PASS；修复了租户拦截器未自动限制 DELETE 计数子查询导致的部分成功风险。完整定向测试累计 13 项 PASS，事务回滚后 fixture 残留为 0；其余 TEN 和八表持久化仍 OPEN。
 - TD-005 已新增内部八表聚合持久化边界：锁定当前租户既有 product，在同一事务替换其余七张模型表并导出旧格式；TEN-005 的跨租户参数和 service-command 影子关系在删除前拒绝，数据库中途失败保存点回滚后原模型完整恢复。完整定向测试累计 17 项 PASS，八表 fixture 残留总数为 0；公开接口尚未接线。
+- ADR-011 capability 基础已落地：版本化 Draft 2020-12 schema 与 electric-standard/full `0.1.0` 候选 manifest、`iot-common-env` 统一 `CapabilityService`、`iot-system GET /system/capabilities`、Docker/安装器同源传递均已实现；full enabled 集合为 standard 的严格超集，共有 quota 不降低。quota 仍待容量压测，不得作为销售承诺；standard 部署旧裁剪已修正为包含 `iot-device`，mini 未配置电力 manifest 时 fail-closed。
+- TD-005 内部持久化已接稳定业务错误与 `power.device.model` 前置守卫：TEN-007 standard/full 同业务语义和 SQL 路径、TEN-008 mini 在解析/数据库前统一拒绝。共享能力合同 4 项、只读 API 1 项、设备侧目标测试 19 项全部 PASS，真实 PostgreSQL 两测试 tenant 的八表残留总数为 0。审计/Outbox 因版本/绑定/outbox migration 尚未批准而保持 OPEN，本批次未提前造表。
 - TD-001/002/003 的 Envelope、configVersion、siteCode、dataPriority、requestId、Topic、5 分钟 ACK deadline 和健康语义已经对齐。
 - TD-001～004 四份评审报告均保留原始意见并附最终逐项处置，发生冲突时以报告末尾的“复核与最终处置”为准。
 
@@ -108,7 +110,7 @@
 
 ### TD-005
 
-- 本地目标集成实例 12 表画像、R1～R7 文档处置、4条孤儿属性清理、ADR-012 接受、迁移前非空 golden、Mapper/DO/根属性 DTO/legacy 只读 adapter、Java 双向纯转换、根属性 TEN-001～004/006 及内部八表持久化/TEN-005/回滚已完成；仍需公开接口、稳定错误、审计/Outbox、TEN-007/008、唯一约束和删除链合同；生产存量环境需按画像 Schema 重跑；
+- 本地目标集成实例 12 表画像、R1～R7 文档处置、4条孤儿属性清理、ADR-012 接受、迁移前非空 golden、Mapper/DO/根属性 DTO/legacy 只读 adapter、Java 双向纯转换、根属性 TEN-001～004/006、内部八表持久化/TEN-005/回滚、稳定错误和 TEN-007/008 已完成；仍需公开模型接口、审计/Outbox、唯一约束和删除链合同；生产存量环境需按画像 Schema 重跑；
 - 孤儿存量子门禁已 PASS，但单条/批量产品删除代码仍不完整，不得把数据清理等同于删除链修复；
 - Draft 2020-12 资产级 fixture 已 PASS；仍需生产 Java/TypeScript 消费相同 JCS/hash golden，并补 Schema 外语义校验；
 - 10 类模板、71 个属性、单位、三相、累计量、CT/PT 变比及高风险服务的行业专家复核；
@@ -120,10 +122,10 @@
 
 继续 SDD 文档链，下一步优先执行 **TD-005 证据准备与冻结门禁关闭**：
 
-1. 读取 [TD-005 1.0.14](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计 0.1.7](./TD-005-运行模型兼容与删除链技术设计.md)和[TD-005 评审报告 §22](../../开发规范/TD-005评审报告.md)；
-2. Mapper/DO/VO、legacy adapters、Java golden、根属性 TEN-001～004/006 及内部八表持久化/TEN-005/回滚已完成，定向测试累计 17 项 PASS；先复跑该测试集，禁止回退到 `product_properties.service_id`；
-3. 下一步为内部服务补稳定业务错误、审计/Outbox 和 capability 档位守卫，完成 standard/full TEN-007 与 mini TEN-008；通过后再设计公开接口接线和 migration/rollback 候选，暂不启用约束；
-4. 实现 TEN-001～008、DEL-001～010、旧缓存/Feign adapter 和 standard/full/mini 回归，通过后再启用 unique/XOR/tenant FK/RESTRICT；
+1. 读取 [TD-005 1.0.15](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计 0.1.8](./TD-005-运行模型兼容与删除链技术设计.md)和[TD-005 评审报告 §22](../../开发规范/TD-005评审报告.md)；
+2. Mapper/DO/VO、legacy adapters、Java golden、根属性 TEN-001～004/006、内部八表持久化/TEN-005/回滚、稳定错误和 TEN-007/008 已完成；先复跑 capability 4 项、只读 API 1 项与设备侧 19 项目标测试，禁止回退到 `product_properties.service_id` 或散落 profile 判断；
+3. 下一步先形成并评审版本/绑定/审计/`power_model_release_outbox` 的 migration/rollback 候选，明确事件 UUID、状态重试、审计最小字段和事务边界；批准前不得启用 DDL；
+4. migration 候选评审通过后，实现审计/Outbox 原子合同，再设计公开 `/thingModel` 电力/非电力兼容接线、TEN-004 业务层整批不存在错误、旧缓存/Feign adapter、DEL-001～010 和 standard/full/mini 端到端回归；通过后再启用 unique/XOR/tenant FK/RESTRICT；
 5. 在生产 Java/TypeScript 模块中消费现有 JCS/hash golden，并补成员唯一、SemVer、CT/PT 等 Schema 外语义合同；
 6. 建立恶意 Excel/JSON 导入 fixture，并组织 10 类行业模板评审；
 7. 所有门禁通过后更新资产 manifest 的真实 Git commit/hash，再决定 TD-005 是否转 Approved / Frozen。
@@ -134,4 +136,4 @@ TD-005 评审可以与 TD-001～004 的证据准备并行，但任何生产代�
 
 可直接使用：
 
-> 读取 `.doc/技术设计/电力运维云平台/M1-SDD进度与续作入口.md`，遵循《平台功能计划》和《EasyAIoT 项目开发宪法》，继续 TD-005。TD-005 1.0.14 / 运行模型 0.1.7 已完成 12 表目标画像、结果 Schema 1.1.0、迁移前非空旧格式 golden、Mapper/DO/根属性 DTO/legacy adapters、Java legacy 双向转换、真实 PostgreSQL 根属性 TEN-001～004/006，以及内部八表聚合持久化/TEN-005/数据库回滚；Java 17 编译和 17 项合同测试 PASS，八表 fixture 残留为 0。ADR-012 1.0.2 已 Accepted，整体仍为 OPEN_REMEDIATION_REQUIRED。下一步补稳定业务错误、审计/Outbox、standard/full TEN-007 与 mini TEN-008，再设计公开接口接线和 migration/rollback 候选。
+> 读取 `.doc/技术设计/电力运维云平台/M1-SDD进度与续作入口.md`，遵循《平台功能计划》和《EasyAIoT 项目开发宪法》，继续 TD-005。TD-005 1.0.15 / 运行模型 0.1.8 已完成 12 表画像、非空 legacy golden、Mapper/DO/DTO/adapters、八表 tenant-safe 持久化、TEN-001～003/005～008、TEN-004 数据层整批原子拒绝、内部边界稳定业务错误，以及 ADR-011 manifest/统一 CapabilityService/只读 API；共享能力 4 项、只读 API 1 项与设备侧 19 项测试 PASS，真实 PostgreSQL 八表 fixture 残留为 0。ADR-012 1.0.2 已 Accepted，整体仍为 OPEN_REMEDIATION_REQUIRED。下一步先设计并评审版本/绑定/审计/Outbox migration 与 rollback 候选，批准后实现原子合同，再补 TEN-004 业务层错误并接公开模型接口；不得提前启用 DDL。

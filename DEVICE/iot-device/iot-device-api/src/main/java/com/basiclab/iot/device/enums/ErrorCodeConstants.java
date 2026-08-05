@@ -88,4 +88,28 @@ public interface ErrorCodeConstants {
     ErrorCode ALGORITHM_PLAYBACK_NOT_EXISTS = new ErrorCode(1_003_022_007, "回放录像不存在");
     ErrorCode ALGORITHM_NVR_NOT_EXISTS = new ErrorCode(1_003_022_008, "NVR不存在");
 
+    // ========== 电力物模型 1-003-023-000 ==========
+    ErrorCode CAPABILITY_NOT_SUPPORTED = new ErrorCode(1_003_023_000,
+            "CAPABILITY_NOT_SUPPORTED: 当前部署不支持能力 {}");
+    ErrorCode MODEL_RUNTIME_CONTRACT_INVALID = new ErrorCode(1_003_023_001,
+            "MODEL_RUNTIME_CONTRACT_INVALID: 物模型运行契约无效，{}");
+    ErrorCode MODEL_TENANT_MISMATCH = new ErrorCode(1_003_023_002,
+            "MODEL_TENANT_MISMATCH: 物模型数据不属于当前租户，{}");
+    ErrorCode MODEL_SERVICE_PARAM_RELATION_INVALID = new ErrorCode(1_003_023_003,
+            "MODEL_SERVICE_PARAM_RELATION_INVALID: 服务参数关系无效，{}");
+    ErrorCode MODEL_PRODUCT_NOT_FOUND = new ErrorCode(1_003_023_004,
+            "MODEL_PRODUCT_NOT_FOUND: 当前租户下产品不存在，{}");
+    ErrorCode MODEL_PRODUCT_SCOPE_AMBIGUOUS = new ErrorCode(1_003_023_005,
+            "MODEL_PRODUCT_SCOPE_AMBIGUOUS: 当前租户下产品标识不唯一，{}");
+    ErrorCode MODEL_VERSION_UNSUPPORTED = new ErrorCode(1_003_023_006,
+            "MODEL_VERSION_UNSUPPORTED: 不支持的物模型契约版本，{}");
+    ErrorCode MODEL_FIELD_REQUIRED = new ErrorCode(1_003_023_007,
+            "MODEL_FIELD_REQUIRED: 缺少物模型必填字段，{}");
+    ErrorCode MODEL_LONG_REQUIRED = new ErrorCode(1_003_023_008,
+            "MODEL_LONG_REQUIRED: 物模型字段必须为整数，{}");
+    ErrorCode MODEL_RUNTIME_SCOPE_INVALID = new ErrorCode(1_003_023_009,
+            "MODEL_RUNTIME_SCOPE_INVALID: 物模型产品作用域无效，{}");
+    ErrorCode MODEL_RUNTIME_ID_DUPLICATE = new ErrorCode(1_003_023_010,
+            "MODEL_RUNTIME_ID_DUPLICATE: 物模型运行标识重复，{}");
+
 }

@@ -1,6 +1,9 @@
 package com.basiclab.iot.device.service.product;
 
 import com.basiclab.iot.common.core.context.TenantContextHolder;
+import com.basiclab.iot.common.capability.CapabilityService;
+import com.basiclab.iot.common.capability.ManifestCapabilityService;
+import com.basiclab.iot.common.exception.ServiceException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -20,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.Savepoint;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -60,7 +64,8 @@ class LegacyThingModelPersistencePostgresIntegrationTest {
         SingleConnectionDataSource dataSource = new SingleConnectionDataSource(connection, true);
         jdbc = new JdbcTemplate(dataSource);
         adapter = new LegacyThingModelRuntimeAdapter(objectMapper);
-        service = new LegacyThingModelPersistenceService(dataSource, adapter, objectMapper);
+        service = new LegacyThingModelPersistenceService(dataSource, adapter, objectMapper,
+                loadCapability("electric-standard.json"));
         productIdentification = "td005-runtime-" + UUID.randomUUID().toString().replace("-", "");
 
         jdbc.update("""
@@ -119,8 +124,9 @@ class LegacyThingModelPersistencePostgresIntegrationTest {
         assertEquals(1, count("product_event_response"));
 
         TenantContextHolder.setTenantId(TENANT_TWO);
-        IllegalArgumentException denied = assertThrows(IllegalArgumentException.class,
+        ServiceException denied = assertThrows(ServiceException.class,
                 () -> service.exportLegacyForCurrentTenant(productIdentification));
+        assertEquals(1_003_023_004, denied.getCode());
         assertTrue(denied.getMessage().startsWith("MODEL_PRODUCT_NOT_FOUND"));
     }
 
@@ -134,15 +140,17 @@ class LegacyThingModelPersistencePostgresIntegrationTest {
         ObjectNode request = (ObjectNode) crossTenant.path("tables")
                 .path("product_commands_requests").get(0);
         request.put("tenantId", TENANT_TWO);
-        IllegalArgumentException tenantError = assertThrows(IllegalArgumentException.class,
+        ServiceException tenantError = assertThrows(ServiceException.class,
                 () -> service.replaceRuntimeForCurrentTenant(crossTenant));
+        assertEquals(1_003_023_002, tenantError.getCode());
         assertTrue(tenantError.getMessage().startsWith("MODEL_TENANT_MISMATCH"));
         assertEquals(1, count("product_properties"));
 
         request.put("tenantId", TENANT_ONE);
         request.put("serviceId", Long.MAX_VALUE);
-        IllegalArgumentException relationError = assertThrows(IllegalArgumentException.class,
+        ServiceException relationError = assertThrows(ServiceException.class,
                 () -> service.replaceRuntimeForCurrentTenant(crossTenant));
+        assertEquals(1_003_023_003, relationError.getCode());
         assertTrue(relationError.getMessage().startsWith("MODEL_SERVICE_PARAM_RELATION_INVALID"));
         assertEquals(1, count("product_properties"));
         assertEquals(1, count("product_commands_requests"));
@@ -178,6 +186,40 @@ class LegacyThingModelPersistencePostgresIntegrationTest {
         assertEquals(1, count("product_event_response"));
     }
 
+    @Test
+    void ten007StandardAndFullMustUseSamePersistenceContract() throws Exception {
+        TenantContextHolder.setTenantId(TENANT_ONE);
+        ObjectNode standardResult = service.replaceLegacyDocument(fixtureDocument());
+
+        SingleConnectionDataSource dataSource = new SingleConnectionDataSource(connection, true);
+        LegacyThingModelPersistenceService fullService = new LegacyThingModelPersistenceService(
+                dataSource, adapter, objectMapper, loadCapability("electric-full.json"));
+        // Reuse the first result so generated legacy IDs are part of the same request contract.
+        ObjectNode fullResult = fullService.replaceLegacyDocument(standardResult);
+
+        // Legacy import allocates fresh surrogate IDs on every replacement; compare stable business semantics.
+        assertEquals(withoutGeneratedIds(standardResult), withoutGeneratedIds(fullResult));
+        assertEquals(1, count("product_properties"));
+        assertEquals(1, count("product_services"));
+        assertEquals(1, count("product_commands_requests"));
+    }
+
+    @Test
+    void ten008MiniMustRejectBeforeReadingOrWritingModelTables() {
+        TenantContextHolder.setTenantId(TENANT_ONE);
+        SingleConnectionDataSource dataSource = new SingleConnectionDataSource(connection, true);
+        LegacyThingModelPersistenceService miniService = new LegacyThingModelPersistenceService(
+                dataSource, adapter, objectMapper, ManifestCapabilityService.disabled("mini"));
+
+        ServiceException denied = assertThrows(ServiceException.class,
+                () -> miniService.replaceLegacyDocument(objectMapper.createObjectNode()));
+        assertEquals(1_003_023_000, denied.getCode());
+        assertTrue(denied.getMessage().startsWith("CAPABILITY_NOT_SUPPORTED"));
+        assertEquals(0, count("product_properties"));
+        assertEquals(0, count("product_services"));
+        assertEquals(0, count("product_event"));
+    }
+
     private ObjectNode fixtureDocument() throws IOException {
         ObjectNode document = (ObjectNode) objectMapper.readTree(
                 Files.newBufferedReader(findWorkspaceRoot().resolve(CASE_PATH)));
@@ -200,6 +242,29 @@ class LegacyThingModelPersistencePostgresIntegrationTest {
             current = current.getParent();
         }
         throw new IllegalStateException("找不到冻结 TD-005 legacy round-trip 资产目录");
+    }
+
+    private CapabilityService loadCapability(String fileName) throws IOException {
+        Path path = findWorkspaceRoot().resolve(".scripts/docker/capabilities").resolve(fileName);
+        try (java.io.InputStream input = Files.newInputStream(path)) {
+            return ManifestCapabilityService.load(input, objectMapper);
+        }
+    }
+
+    private JsonNode withoutGeneratedIds(JsonNode source) {
+        JsonNode copy = source.deepCopy();
+        removeGeneratedIds(copy);
+        return copy;
+    }
+
+    private void removeGeneratedIds(JsonNode node) {
+        if (node.isObject()) {
+            ObjectNode object = (ObjectNode) node;
+            object.remove(List.of("id", "serviceId", "commandId", "eventId"));
+            object.elements().forEachRemaining(this::removeGeneratedIds);
+        } else if (node.isArray()) {
+            node.elements().forEachRemaining(this::removeGeneratedIds);
+        }
     }
 
     private static String environmentOrDefault(String name, String defaultValue) {

@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.14
+> 版本：1.0.15
 > 日期：2026-08-05  
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -27,6 +27,7 @@
 | 1.0.12 | 主代码 Java legacy 双向转换直接消费冻结 8 表 golden 并通过合同测试；数据库持久化接线与租户集成仍保持 OPEN |
 | 1.0.13 | 完成真实 PostgreSQL 根属性 TEN-001～004/006 子合同，修复混租户批量删除部分成功；其余 TEN 与八表持久化仍 OPEN |
 | 1.0.14 | 完成内部八表聚合持久化/导出、TEN-005 应用校验和数据库失败回滚；公开接口、约束及其余交付门禁仍 OPEN |
+| 1.0.15 | 落地 ADR-011 capability manifest/共享服务/只读 API，补稳定业务错误并完成 TEN-007/008；审计/Outbox 与公开模型接口仍 OPEN |
 
 ## 1. 结论
 
@@ -652,13 +653,13 @@ TD-005 由 In Review 转 `Approved / Frozen` 前必须全部满足：
 
 [TD-005 孤儿属性处置方案 0.2.0](./TD-005-孤儿属性处置方案.md) 已完成执行。初始化 COPY 旧种子由 4 行降为 0，数据库以 `COMMIT_REMEDIATION=true` 精确删除 4 行；修复后画像 `product_properties=17`，六类 orphan、七类重复组和六类标识作用域异常全部为 0，现行演示产品/设备/属性保持 3/3/9。该子门禁 PASS，但 Mapper、唯一约束、租户和删除链代码门禁仍未关闭。
 
-因此 §23 门禁 1 的“本地目标集成实例事实采集、ADR-012 接受、孤儿属性处置”三个子项已完成，但整体门禁仍为 `OPEN_REMEDIATION_REQUIRED`。12 表扩展画像、迁移前旧格式 round-trip 合同、Mapper/DO/VO 第一批修复、Java 纯转换 golden 消费和内部 PostgreSQL 八表聚合持久化已由 §24.4～§24.8 补齐；仍须补齐公开接口、稳定错误、审计/Outbox、唯一约束、删除链及其余生产合同；生产存量环境上线前仍须按 result schema 重跑画像并附原始输出。
+因此 §23 门禁 1 的“本地目标集成实例事实采集、ADR-012 接受、孤儿属性处置”三个子项已完成，但整体门禁仍为 `OPEN_REMEDIATION_REQUIRED`。12 表扩展画像、迁移前旧格式 round-trip 合同、Mapper/DO/VO 第一批修复、Java 纯转换 golden 消费、内部 PostgreSQL 八表聚合持久化、稳定错误和 TEN-007/008 已由 §24.4～§24.9 补齐；仍须补齐公开模型接口、审计/Outbox、唯一约束、删除链及其余生产合同；生产存量环境上线前仍须按 result schema 重跑画像并附原始输出。
 
 ### 24.2 ADR-012 与运行模型契约状态
 
 [ADR 评审报告 §11](../../开发规范/ADR评审报告.md)确认：ADR-012 的事实归属决策可接受，原“先完成代码才能接受 ADR、但未接受又不得修代码”的循环门禁已拆分。`Accepted` 只授权按单一事实方向实施，不代表当前 Mapper/API/数据库已合格。
 
-配套 [TD-005 运行模型兼容与删除链技术设计 0.1.7](./TD-005-运行模型兼容与删除链技术设计.md) 已形成 Review Candidate，包含：
+配套 [TD-005 运行模型兼容与删除链技术设计 0.1.8](./TD-005-运行模型兼容与删除链技术设计.md) 已形成 Review Candidate，包含：
 
 - 根属性、服务、命令、输入/输出及事件参数的依赖图；
 - DO/Request/Response/MapStruct 分层和 legacy adapter；
@@ -669,13 +670,13 @@ TD-005 由 In Review 转 `Approved / Frozen` 前必须全部满足：
 
 独立复核确认 `product_properties` 批准列签名仍为 20 列；评审中的“18 列”源于把修复前 21 条数据行误作列数，已明确驳回。扩展画像固定为 8 张核心运行表和 4 张受保护依赖表，共 12 张；ACTIVE binding 表实现后追加。
 
-该配套设计仍为 In Review。扩展画像和非空旧格式 fixture/golden 已完成并冻结；Mapper/DO/根属性 DTO 与 legacy 只读 adapter 的第一批实现已由 §24.5 补齐，主代码 Java 双向纯转换已由 §24.6 直接消费同一 golden，根属性及八表 PostgreSQL tenant/rollback 证据已由 §24.7～§24.8 补齐。下一证据步骤是稳定错误、capability/档位合同、审计/Outbox 和公开接口接线，以及 migration/rollback 候选。
+该配套设计仍为 In Review。扩展画像和非空旧格式 fixture/golden 已完成并冻结；Mapper/DO/根属性 DTO 与 legacy 只读 adapter 的第一批实现已由 §24.5 补齐，主代码 Java 双向纯转换已由 §24.6 直接消费同一 golden，根属性及八表 PostgreSQL tenant/rollback、稳定错误和 capability 档位证据已由 §24.7～§24.9 补齐。下一证据步骤是先冻结审计/Outbox 新表与迁移，再接公开模型接口和 migration/rollback 候选。
 
 ### 24.3 ADR-012 宪法专项复核状态
 
 [ADR-012 宪法专项评审](../../开发规范/ADR-012评审报告-宪法专项.md)确认事实归属决策没有宪法级冲突，但纠正原“DoD 11/11 全部合规”结论：宪法 §15 实际有 12 项，当前仅 3 项决策/文档级 PASS，7 项交付证据 OPEN，2 项在设计阶段 N/A。ADR Accepted 不得被扩大解释为功能已完成。
 
-ADR-012 1.0.2 与运行模型 0.1.7 已补收缩 owner/到期日、golden 先于 Mapper/DO/VO 迁移、备份/保留期/审批/恢复演练、OpenFeign 超时/降级、分层测试及 standard 最低规格性能证据。12 表画像、前置 golden、第一批 Java 合同、Java 纯转换 round-trip、根属性租户合同及内部八表持久化/TEN-005/回滚已有执行证据；其余交付门禁仍未关闭，TD-005 继续保持 `In Review / OPEN_REMEDIATION_REQUIRED`。
+ADR-012 1.0.2 与运行模型 0.1.8 已补收缩 owner/到期日、golden 先于 Mapper/DO/VO 迁移、备份/保留期/审批/恢复演练、OpenFeign 超时/降级、分层测试及 standard 最低规格性能证据。12 表画像、前置 golden、第一批 Java 合同、Java 纯转换 round-trip、根属性租户合同、内部八表持久化/TEN-005/回滚及 capability TEN-007/008 已有执行证据；其余交付门禁仍未关闭，TD-005 继续保持 `In Review / OPEN_REMEDIATION_REQUIRED`。
 
 ### 24.4 12 表画像与迁移前兼容 golden（2026-08-05）
 
@@ -685,7 +686,7 @@ ADR-012 1.0.2 与运行模型 0.1.7 已补收缩 owner/到期日、golden 先于
 
 ### 24.5 运行模型第一批生产实现（2026-08-05）
 
-[TD-005 运行模型兼容与删除链技术设计 0.1.7](./TD-005-运行模型兼容与删除链技术设计.md) 已记录本批次实现和执行证据：
+[TD-005 运行模型兼容与删除链技术设计 0.1.8](./TD-005-运行模型兼容与删除链技术设计.md) 已记录本批次实现和执行证据：
 
 - `ProductPropertyDO` 与 legacy API 对象分层，持久化对象显式承载 tenant 和产品/模板作用域；
 - 根属性 Mapper 与 20 列批准签名对齐，彻底移除不存在的 `product_properties.service_id` 和两个旧 serviceId statement；
@@ -715,4 +716,16 @@ ADR-012 1.0.2 与运行模型 0.1.7 已补收缩 owner/到期日、golden 先于
 
 真实 PostgreSQL 测试覆盖：七子表写入与导出；其他 tenant 按同 productIdentification 导出返回 `MODEL_PRODUCT_NOT_FOUND`；跨租户参数或影子 service 关系不一致在删除前拒绝；删除并部分插入后触发 NOT NULL 异常，保存点回滚后原模型完整恢复。测试外层事务整体回滚，八表 fixture 残留总数为 0。连同既有合同共 17 项测试，0 failure、0 error、0 skipped，Java 17 反应堆 `BUILD SUCCESS`。
 
-因此 Java 内部聚合持久化/导出、TEN-005 应用校验与数据库失败回滚子门禁为 **PASS**。该内部服务尚未接入公开 `/thingModel`；稳定错误映射、审计/Outbox、TEN-007/008、unique/XOR/tenant FK/RESTRICT、DEL、TypeScript、三档回归和性能门禁仍为 OPEN，TD-005 继续保持 `In Review / OPEN_REMEDIATION_REQUIRED`。
+因此 Java 内部聚合持久化/导出、TEN-005 应用校验与数据库失败回滚子门禁为 **PASS**。该内部服务尚未接入公开 `/thingModel`；本小节完成时稳定错误与 TEN-007/008 尚未关闭，后续已由 §24.9 补齐。审计/Outbox、unique/XOR/tenant FK/RESTRICT、DEL、TypeScript、三档端到端回归和性能门禁仍为 OPEN，TD-005 继续保持 `In Review / OPEN_REMEDIATION_REQUIRED`。
+
+### 24.9 Capability、稳定错误与 TEN-007/008（2026-08-05）
+
+按 ADR-011 新增 `.scripts/docker/capabilities/capability.schema.json`、`electric-standard.json` 和 `electric-full.json`。两档共同启用 `power.device.model`，使用完全相同的七个 quota key；full 只提高数值并额外启用 `power.scada.editor`。两份 manifest 当前版本为 `0.1.0`，quota 数值只作为合同测试候选，容量压测和发布评审前不得升级为 1.0 或用于销售承诺。AJV Draft 2020-12 strict 模式对两份 manifest 验证 PASS，共享合同测试同时证明 `enabled(standard) ⊂ enabled(full)`、共有依赖不减少且共有配额不降低。
+
+`iot-common-env` 新增唯一 `CapabilityService`：读取版本化 manifest、校验 schema/profile/product/能力编码、计算 SHA-256，并在未配置 manifest 时 fail-closed。`iot-system` 新增只读 `GET /system/capabilities`，返回生效能力、配额、不可用原因、manifest/schema 版本与哈希。Docker Compose 只读挂载同一 manifest 目录；安装器把 profile 和文件位置同步到 Java 服务。standard 的旧裁剪规则已移除 `iot-device` 跳过项，与《平台功能计划》1.3 的目标部署要求一致；mini 不加载电力 manifest。
+
+`LegacyThingModelPersistenceService` 在解析 legacy JSON 或访问数据库前统一检查 `power.device.model`。设备错误段新增 `1_003_023_000～010`，`CAPABILITY_NOT_SUPPORTED`、产品不存在、tenant 不匹配、服务参数关系和运行契约错误均转为平台 `ServiceException`，不再由内部持久化边界向上泄漏不稳定 `IllegalArgumentException`。
+
+真实 PostgreSQL TEN-007 对 standard/full 调用同一 Bean/SQL/legacy 语义（忽略每次替换合法新建的代理 ID），TEN-008 证明 mini 在解析无效输入和访问模型表前返回 `1_003_023_000 CAPABILITY_NOT_SUPPORTED`，且三类代表模型表保持 0 行。共享 capability 测试 4 项、只读 API 测试 1 项、设备侧既有与新增目标测试 19 项全部 PASS；两测试 tenant 在 product 加七张子表的残留总数为 0。
+
+因此稳定错误与 TEN-007/008 子门禁转为 **PASS**。这不代表三档端到端回归完成：旧 `/thingModel` 电力/非电力分流、WEB capability 消费、后台任务/seed 禁用仍待公开接口阶段验证。`power_model_release_outbox`、版本/绑定/审计表尚未有批准 migration，本批次没有提前造表或伪造审计；审计/Outbox、DDL 约束、DEL、TypeScript、性能及公开接口继续 OPEN。

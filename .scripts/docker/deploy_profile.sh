@@ -81,7 +81,7 @@ device_skipped_services() {
             skips+=(iot-gateway iot-infra iot-device iot-dataset iot-node iot-visualize iot-file iot-message iot-gb28181 iot-tdengine iot-sink)
             ;;
         standard)
-            skips+=(iot-device iot-tdengine iot-visualize)
+            skips+=(iot-tdengine iot-visualize)
             ;;
         full)
             ;;
@@ -238,8 +238,8 @@ print_deploy_profile_summary() {
       echo "  API 路由: nginx 将 /admin-api、/dev-api 直连宿主机 iot-system:48099（登录鉴权由 system 自身处理）"
       ;;
     standard)
-      echo "  不启动: TDengine, NodeRED, FUXA, iot-device, iot-tdengine, iot-visualize/VISUALIZE（可视化管理菜单亦不启用）"
-      echo "  其余模块与中间件全部启动（含 EMQX）"
+      echo "  不启动: TDengine, NodeRED, FUXA, iot-tdengine, iot-visualize/VISUALIZE（可视化管理菜单亦不启用）"
+      echo "  启动电力核心所需 iot-device、iot-sink、PostgreSQL、Redis、EMQX 及其余标准模块"
       ;;
     full)
       echo "  启动全部业务模块与中间件（含 APP 移动端 H5、iot-visualize/VISUALIZE、FUXA，推荐宿主机内存 ≥ 20 GB）"
@@ -367,8 +367,13 @@ apply_device_deploy_env() {
     touch "$env_file"
     if is_mini_deploy_profile; then
         _set_env_docker_kv "$env_file" IOT_SYSTEM_SPRING_PROFILES_ACTIVE "local,mini"
+        _set_env_docker_kv "$env_file" EASYAIOT_CAPABILITY_PROFILE "mini"
+        _set_env_docker_kv "$env_file" EASYAIOT_CAPABILITY_MANIFEST_LOCATION ""
     else
         _set_env_docker_kv "$env_file" IOT_SYSTEM_SPRING_PROFILES_ACTIVE "local"
+        _set_env_docker_kv "$env_file" EASYAIOT_CAPABILITY_PROFILE "${EASYAIOT_DEPLOY_PROFILE}"
+        _set_env_docker_kv "$env_file" EASYAIOT_CAPABILITY_MANIFEST_LOCATION \
+            "file:/opt/easyaiot/capabilities/electric-${EASYAIOT_DEPLOY_PROFILE}.json"
     fi
     _set_env_docker_kv "$env_file" IOT_SINK_SPRING_PROFILES_ACTIVE "$(iot_sink_spring_profiles_active)"
 }
