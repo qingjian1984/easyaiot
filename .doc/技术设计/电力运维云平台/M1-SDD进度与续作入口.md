@@ -18,8 +18,8 @@
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
 | [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.1 | In Review |
-| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.7 | In Review |
-| [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.0 | In Review |
+| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.8 | In Review |
+| [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.1 | In Review |
 | [TD-005 孤儿属性处置方案](./TD-005-孤儿属性处置方案.md) | 0.2.0 | Executed / Verified |
 
 `In Review` 表示设计已形成并进入评审，可能仍有评审意见或实现/压测证据待关闭；不得描述为已经开发完成或 Approved / Frozen。TD-001～005 均已完成现有评审报告的文档处置；各 TD 仍需分别关闭证据门禁。
@@ -41,7 +41,8 @@
 - TD-005 画像评审 R1～R7 已完成文档处置：画像 v1.1 增加七表列签名、双作用域重复、标识异常、结果 JSON Schema 与生产重跑契约。
 - TD-005 的 4 条孤儿属性处置已执行完成：执行前 precheck、动态12列、完整快照、最终删除回滚演练及修复后 rollback 恢复演练均 PASS；初始化 COPY 旧种子4→0，数据库显式提交4→0，修复后画像 `product_properties=17`、六类 orphan/七类重复组/六类标识异常全部为0，现行演示产品/设备/属性保持3/3/9。该存量子门禁 PASS。
 - ADR-012 已完成独立评审并转 Accepted，冻结根属性使用 `product_properties`、服务参数使用 command request/response、参数以 `commands_id` 为权威关联；代码与 DDL 实现门禁仍由 TD-005 阻断。
-- 已新增 TD-005 运行模型兼容与删除链技术设计 0.1.0，覆盖 DO/VO/Mapper 分层、legacy adapter、unique/XOR/tenant FK/RESTRICT、完整删除依赖图和 TEN-001～008、DEL-001～010 合同。
+- ADR-012 专项复核已完成：ADR 更新至 1.0.1；L-01 部分采纳、L-02～L-04 采纳、L-05 不修改。运行模型更新至 0.1.1，纠正“18 列”为画像批准的 20 列，并固定 8 张核心运行表 + 4 张受保护依赖表的 12 表画像范围。
+- 已新增并复核 TD-005 运行模型兼容与删除链技术设计 0.1.1，覆盖 DO/VO/Mapper 分层、legacy adapter、unique/XOR/tenant FK/RESTRICT、完整删除依赖图和 TEN-001～008、DEL-001～010 合同。
 - 目标实例补充只读核对：`product_event_response=0`、`product_script=0`、`product_template=0`、`device=4`，4 个产品均各关联1个设备；现有产品必须受删除保护，删除成功测试需使用独立 fixture。
 - TD-001/002/003 的 Envelope、configVersion、siteCode、dataPriority、requestId、Topic、5 分钟 ACK deadline 和健康语义已经对齐。
 - TD-001～004 四份评审报告均保留原始意见并附最终逐项处置，发生冲突时以报告末尾的“复核与最终处置”为准。
@@ -103,7 +104,7 @@
 
 继续 SDD 文档链，下一步优先执行 **TD-005 证据准备与冻结门禁关闭**：
 
-1. 读取 [TD-005 1.0.7](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计](./TD-005-运行模型兼容与删除链技术设计.md)、[TD-005 评审报告 §19](../../开发规范/TD-005评审报告.md)和[ADR 评审报告 §11](../../开发规范/ADR评审报告.md)；
+1. 读取 [TD-005 1.0.8](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计 0.1.1](./TD-005-运行模型兼容与删除链技术设计.md)、[TD-005 评审报告 §20](../../开发规范/TD-005评审报告.md)和[ADR-012 评审报告 §13](../../开发规范/ADR-012评审报告.md)；
 2. 扩展目标画像到 `product_event_response`、`product_script`、device、历史调用、OTA 和模板绑定保护引用，更新结果 Schema/JSON；
 3. 建立含根属性、服务、命令、输入/输出参数和事件的非空 fixture，以及旧格式导入→运行表→导出 round-trip golden；
 4. 评审并冻结 TD-005-RUNTIME-001；冻结后再修正 Mapper/DO/VO/statement 漂移并建立数据库 migration/rollback；
@@ -118,4 +119,4 @@ TD-005 评审可以与 TD-001～004 的证据准备并行，但任何生产代�
 
 可直接使用：
 
-> 读取 `.doc/技术设计/电力运维云平台/M1-SDD进度与续作入口.md`，遵循《平台功能计划》和《EasyAIoT 项目开发宪法》，继续 TD-005。TD-005 1.0.7 已完成孤儿属性修复，ADR-012 已 Accepted，并新增运行模型兼容与删除链设计 0.1.0；整体仍为 OPEN_REMEDIATION_REQUIRED。下一步直接扩展目标画像和结果 Schema，建立非空旧格式 round-trip fixture/golden，再评审冻结 TD-005-RUNTIME-001。
+> 读取 `.doc/技术设计/电力运维云平台/M1-SDD进度与续作入口.md`，遵循《平台功能计划》和《EasyAIoT 项目开发宪法》，继续 TD-005。TD-005 1.0.8 已完成孤儿属性修复和 ADR-012 专项复核；ADR-012 1.0.1 已 Accepted，运行模型兼容与删除链设计为 0.1.1，批准 `product_properties` 20 列签名和 12 表扩展画像范围；整体仍为 OPEN_REMEDIATION_REQUIRED。下一步直接扩展目标画像和结果 Schema，建立非空旧格式 round-trip fixture/golden，再评审冻结 TD-005-RUNTIME-001。
