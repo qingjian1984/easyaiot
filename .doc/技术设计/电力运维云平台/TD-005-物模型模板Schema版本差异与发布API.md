@@ -1,11 +1,11 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.15
-> 日期：2026-08-05  
+> 版本：1.0.16
+> 日期：2026-08-06
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
-> 评审处置：[TD-005 评审报告](../../开发规范/TD-005评审报告.md)，当前以 §21 ADR-012 宪法专项复核处置为准
+> 评审处置：[TD-005 评审报告](../../开发规范/TD-005评审报告.md)，运行模型以 §22 为准，版本/绑定/审计/Outbox migration 以 §23 为准
 > 下游依赖：产品实例化、collector 点表发布、设备档案、告警策略、SCADA、能源计量点、遥控安全闭环
 
 变更记录：
@@ -28,6 +28,7 @@
 | 1.0.13 | 完成真实 PostgreSQL 根属性 TEN-001～004/006 子合同，修复混租户批量删除部分成功；其余 TEN 与八表持久化仍 OPEN |
 | 1.0.14 | 完成内部八表聚合持久化/导出、TEN-005 应用校验和数据库失败回滚；公开接口、约束及其余交付门禁仍 OPEN |
 | 1.0.15 | 落地 ADR-011 capability manifest/共享服务/只读 API，补稳定业务错误并完成 TEN-007/008；审计/Outbox 与公开模型接口仍 OPEN |
+| 1.0.16 | 形成并处置版本/绑定/审计/Outbox migration 0.1.1 宪法专项评审，补双版本事件、资源配置、幂等及 product unique/FK 前置；DDL 仍未执行 |
 
 ## 1. 结论
 
@@ -729,3 +730,11 @@ ADR-012 1.0.2 与运行模型 0.1.8 已补收缩 owner/到期日、golden 先于
 真实 PostgreSQL TEN-007 对 standard/full 调用同一 Bean/SQL/legacy 语义（忽略每次替换合法新建的代理 ID），TEN-008 证明 mini 在解析无效输入和访问模型表前返回 `1_003_023_000 CAPABILITY_NOT_SUPPORTED`，且三类代表模型表保持 0 行。共享 capability 测试 4 项、只读 API 测试 1 项、设备侧既有与新增目标测试 19 项全部 PASS；两测试 tenant 在 product 加七张子表的残留总数为 0。
 
 因此稳定错误与 TEN-007/008 子门禁转为 **PASS**。这不代表三档端到端回归完成：旧 `/thingModel` 电力/非电力分流、WEB capability 消费、后台任务/seed 禁用仍待公开接口阶段验证。`power_model_release_outbox`、版本/绑定/审计表尚未有批准 migration，本批次没有提前造表或伪造审计；审计/Outbox、DDL 约束、DEL、TypeScript、性能及公开接口继续 OPEN。
+
+### 24.10 版本、绑定、审计与 Outbox migration 候选（2026-08-06）
+
+新增 [migration/rollback 子设计 0.1.1](./TD-005-版本绑定审计Outbox迁移与回滚设计.md)，冻结候选的模板版本、绑定修订、领域审计和 Outbox 同事务边界；`system_operate_log` 只作通用日志，不替代 `iot-device` 本域审计。事件采用 UUID v4、版本化 Schema、消费者 Inbox 去重、租约重试和 V1/V2 双发迁移；standard/full 共用实现，mini 不装配发布任务。
+
+宪法专项与关联独立评审的合理意见已完成文档处置：增加目标角色、当前/上一主版本合同、未知字段/未知主版本处理、API/资源候选预算、配置默认、网络超时、migration 锁风险，以及 TD-004 `power_idempotency_record` 和 product `(tenant_id, product_identification)` unique 的串行前置。评审所称“每条约束未显式标 MUST/SHOULD/MAY 即违规”不符合宪法 §1.1，已用全局强度约定澄清。
+
+该子设计仍为 `In Review / Migration Candidate`。仓库尚无批准 migration runner；幂等表、product unique/binding FK、transport/消费者 Inbox、事件 Schema/fixture、SQL/manifest、压测和备份恢复全部 OPEN。本轮未执行 DDL，不把文本整改计作实现证据。

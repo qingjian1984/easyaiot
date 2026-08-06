@@ -1,7 +1,7 @@
 # EasyAIoT 电力运维云平台 Technical Design 索引
 
-> 索引版本：1.6.0
-> 日期：2026-08-05  
+> 索引版本：1.7.1
+> 日期：2026-08-06
 > 上游基线：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[M1 Spec 集合基线 1.4.0](../../规格/电力运维云平台/M1-SPEC评审冻结记录.md)、[ADR 决策集](../../架构决策/电力运维云平台/README.md)
 > 续作入口：[M1 SDD 进度与续作入口](./M1-SDD进度与续作入口.md)
 
@@ -13,8 +13,9 @@
 | [TD-002](./TD-002-SQLite-Outbox与恢复迁移.md) | SQLite outbox、容量、并发、恢复与迁移 | In Review | 评审并冻结队列状态机、容量保护和恢复流程 |
 | [TD-003](./TD-003-遥测Inbox-ACK与时序投影.md) | 遥测 envelope、inbox、ACK、幂等与时序投影 | In Review | 评审并冻结 ACK、Inbox、Store 适配和数据质量契约 |
 | [TD-004](./TD-004-电力对象别名二维码与历史编码兼容.md) | 对象、别名、二维码及历史编码兼容（1.0.1） | In Review | 评审意见已处置；待授权撤销、存量画像、alias/二维码安全、跨 TD 合同和迁移证据 |
-| [TD-005](./TD-005-物模型模板Schema版本差异与发布API.md) | 物模型模板 Schema、版本差异、导入资产、产品绑定及发布 API（1.0.10；ADR-012 1.0.2 Accepted、运行模型 0.1.3、12 表画像与前置 golden PASS） | In Review | Mapper/运行表合同、生产 Java/TypeScript golden、恶意导入 fixture、行业模板、发布/租户/删除/回滚/性能证据和资产 commit/hash 均通过评审 |
-| [TD-005-RUNTIME-001](./TD-005-运行模型兼容与删除链技术设计.md) | 根属性/服务参数单一事实、DO/VO/Mapper、租户约束和产品删除链（0.1.3；批准 20 列签名、12 表画像、非空兼容 golden 与宪法交付门禁） | In Review | Mapper/DO/VO、生产 adapter、DDL/rollback、Feign 合同、TEN-001～008、DEL-001～010、性能和三档回归全部通过 |
+| [TD-005](./TD-005-物模型模板Schema版本差异与发布API.md) | 物模型模板 Schema、版本差异、导入资产、产品绑定及发布 API（1.0.16；ADR-012 1.0.2 Accepted、12 表画像、legacy golden、内部八表持久化及 capability 合同已有证据） | In Review | 版本/绑定/审计/Outbox migration、公开接口、生产 TypeScript golden、恶意导入、行业模板、删除/性能和资产 commit/hash 门禁全部关闭 |
+| [TD-005-RUNTIME-001](./TD-005-运行模型兼容与删除链技术设计.md) | 根属性/服务参数单一事实、DO/VO/Mapper、租户约束和产品删除链（0.1.9；内部八表持久化、TEN-001～008、稳定错误及版本层 migration 前置已对齐） | In Review | 版本层原子合同、公开接口、DDL/rollback、Feign 合同、DEL-001～010、性能和三档端到端回归全部通过 |
+| [TD-005-MIG-001](./TD-005-版本绑定审计Outbox迁移与回滚设计.md) | 模板版本、产品绑定、领域审计与发布 Outbox 的原子事务、迁移及回滚（0.1.1；宪法专项评审已完成文档处置） | In Review / Migration Candidate | 迁移执行器、幂等表、product unique/binding FK、DDL/rollback、事件 Schema/transport/消费者 Inbox、故障注入、压测与备份恢复全部通过；批准前不得执行 DDL |
 | [TD-005-DATA-001](./TD-005-孤儿属性处置方案.md) | 4 条过期演示种子孤儿属性的证据、决策、预检、修复与回滚（0.2.0） | Executed / Verified | 初始化基线与目标库均为0，修复后画像已验证 |
 
 ## 状态规则
