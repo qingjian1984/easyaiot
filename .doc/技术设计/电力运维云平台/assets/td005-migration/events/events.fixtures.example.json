@@ -1,0 +1,83 @@
+{
+  "power_model_template_published_v1": {
+    "eventId": "00000000-0000-0000-0000-000000000001",
+    "eventType": "POWER_MODEL_TEMPLATE_PUBLISHED_V1",
+    "schemaVersion": 1,
+    "tenantId": "1",
+    "aggregateType": "power_model_template",
+    "aggregateId": "1001",
+    "occurredAt": "2026-08-06T08:00:00.000Z",
+    "requestId": "req-1001",
+    "traceId": "",
+    "data": {
+      "templateCode": "power.high_voltage_cabinet",
+      "templateVersion": "1.0.0",
+      "semver": "1.0.0",
+      "contentHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "lifecycle": "PUBLISHED",
+      "publishedAt": "2026-08-06T08:00:00.000Z",
+      "publisherId": "u-1"
+    }
+  },
+  "power_model_template_lifecycle_changed_v1": {
+    "eventId": "00000000-0000-0000-0000-000000000002",
+    "eventType": "POWER_MODEL_TEMPLATE_LIFECYCLE_CHANGED_V1",
+    "schemaVersion": 1,
+    "tenantId": "1",
+    "aggregateType": "power_model_template",
+    "aggregateId": "1001",
+    "occurredAt": "2026-08-06T09:00:00.000Z",
+    "requestId": "req-1002",
+    "traceId": "",
+    "data": {
+      "templateCode": "power.high_voltage_cabinet",
+      "templateVersion": "1.0.0",
+      "fromLifecycle": "PUBLISHED",
+      "toLifecycle": "DEPRECATED",
+      "changedAt": "2026-08-06T09:00:00.000Z",
+      "changedBy": "u-1"
+    }
+  },
+  "power_product_model_binding_applied_v1": {
+    "eventId": "00000000-0000-0000-0000-000000000003",
+    "eventType": "POWER_PRODUCT_MODEL_BINDING_APPLIED_V1",
+    "schemaVersion": 1,
+    "tenantId": "1",
+    "aggregateType": "power_product_model_binding",
+    "aggregateId": "5001",
+    "occurredAt": "2026-08-06T10:00:00.000Z",
+    "requestId": "req-1003",
+    "traceId": "",
+    "data": {
+      "productId": "2001",
+      "productIdentification": "POWER-HV-001",
+      "templateCode": "power.high_voltage_cabinet",
+      "templateVersion": "1.0.0",
+      "bindingRevision": "1",
+      "contentHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "effectiveFrom": "2026-08-06T10:00:00.000Z",
+      "appliedAt": "2026-08-06T10:00:00.000Z",
+      "appliedBy": "u-1"
+    }
+  },
+  "power_product_model_binding_rolled_back_v1": {
+    "eventId": "00000000-0000-0000-0000-000000000004",
+    "eventType": "POWER_PRODUCT_MODEL_BINDING_ROLLED_BACK_V1",
+    "schemaVersion": 1,
+    "tenantId": "1",
+    "aggregateType": "power_product_model_binding",
+    "aggregateId": "5001",
+    "occurredAt": "2026-08-06T11:00:00.000Z",
+    "requestId": "req-1004",
+    "traceId": "",
+    "data": {
+      "productId": "2001",
+      "productIdentification": "POWER-HV-001",
+      "fromBindingRevision": "2",
+      "toBindingRevision": "1",
+      "rolledBackAt": "2026-08-06T11:00:00.000Z",
+      "rolledBackBy": "u-1",
+      "reasonCode": "BINDING_VALIDATION_FAILED"
+    }
+  }
+}

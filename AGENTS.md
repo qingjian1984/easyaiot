@@ -239,4 +239,5 @@ PostgreSQL、Redis、TDengine、MinIO、Milvus、EMQX（MQTT）、Kafka、Nacos�
 - **WEB/VISUALIZE**：Vue 3 Composition API + TypeScript。提交前运行 `pnpm type:check`。
 - **APP**：UniApp + Wot Design UI。uni-app 特有模式（条件编译 `#ifdef`、生命周期 `onLoad/onShow/onReady`、rpx 单位、UnoCSS 原子类）请参考 `APP/.cursor/rules/`。
 - **TASK（C++）**：C++17、CMake。Windows 与 Linux 构建路径不同（见上方平台差异）。
+- **数据库 DDL**：新增表/字段必须同步提供中文 `COMMENT ON TABLE` / `COMMENT ON COLUMN` 描述业务语义、约束和审计规则；迁移脚本与全量 dump 保持一致。
 - 所有中间件端口/凭据通过 `.env` 文件配置（参见各模块下的 `env.example`）。

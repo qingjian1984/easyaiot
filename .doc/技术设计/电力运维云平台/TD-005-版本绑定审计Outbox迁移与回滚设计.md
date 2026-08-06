@@ -1,9 +1,9 @@
 # TD-005：版本、绑定、审计与 Outbox 迁移回滚设计
 
-> 版本：0.1.1
+> 版本：0.1.7
 > 状态：In Review / Migration Candidate
 > 日期：2026-08-06
-> 强制双基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.4.0](../../开发规范/EasyAIoT项目开发宪法.md)
+> 强制双基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.5.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 上游：[TD-005 1.0.16](./TD-005-物模型模板Schema版本差异与发布API.md)、[运行模型兼容与删除链设计 0.1.9](./TD-005-运行模型兼容与删除链技术设计.md)、[ADR-009](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)、[ADR-012 1.0.2](../../架构决策/电力运维云平台/ADR-012-产品根属性与服务参数单一事实.md)
 > 适用档位：`standard` / `full` 共用同一实现；`mini` 不建电力模板业务数据、不启动发布器并由 `power.device.model` fail-closed
 > 执行限制：本文只形成 migration/rollback 候选；完成独立评审、目标库 precheck 和自动合同前，不得在任何共享或生产数据库执行 DDL
@@ -12,6 +12,12 @@
 |---|---|---|
 | 0.1.0 | 2026-08-06 | 首次形成版本、绑定、领域审计与 Outbox migration/rollback 候选 |
 | 0.1.1 | 2026-08-06 | 处置宪法专项与关联独立评审：补目标角色、事件混合版本、资源/API 预算、配置、网络超时、迁移锁影响、幂等和 product FK 前置门禁 |
+| 0.1.2 | 2026-08-06 | 形成受控 migration runner 选型候选（ADR-013 Proposed）、V001/U001 DDL 骨架与 4 份事件 V1 Schema/fixture 评审附件；未执行任何 DDL |
+| 0.1.3 | 2026-08-06 | 同步 ADR-013 1.1.0 宪法专项设计处置与 MIG-001～009 门禁；V001/U001 中文表/字段注释资产已核对 |
+| 0.1.4 | 2026-08-06 | 同步 ADR-013 1.2.0 候选 runner Spike：MIG-001/002/004/007/009 临时库 PASS；MIG-003/005/006/008、压测与演练 OPEN |
+| 0.1.5 | 2026-08-06 | 同步 ADR-013 1.3.0：MIG-003/005 PARTIAL PASS、MIG-006/008 PASS；完整画像、幂等表 DDL、压测与演练仍 OPEN |
+| 0.1.6 | 2026-08-06 | 新增 ADR-014（Proposed）Kafka transport 与消费者 Inbox 候选（`power_model_event_inbox`），同步 `.scripts/postgresql` 运维文档与 runner env.example |
+| 0.1.7 | 2026-08-06 | TD-004 `power_idempotency_record` 候选 DDL 形成并临时库烟测 PASS（争抢唯一、8 项反例、注释完整性）；12 表画像新鲜度重跑与 2026-08-05 基线一致；落库与 MIG-005 合同仍 OPEN |
 
 ## 1. 结论
 
@@ -37,6 +43,16 @@ Outbox 发布器只在事务提交后异步投递。事件 ID 由应用在入事
 
 本文中的“必须/不得”为 MUST，“应该/默认”为 SHOULD，“可以”为 MAY；未显式写出英文缩写不改变约束强度。宪法 §1.1 定义这些词的效力，并不要求每个句子重复标注英文关键字；实现和评审必须按语义执行。
 
+### 1.3 Migration runner 选型候选
+
+仓库当前无 Flyway/Liquibase；全新安装由 `.scripts/postgresql/*10.sql` 全量基线导入，存量结构同步由 `schema-sync`（migra 差异引擎）承担，应用侧另有 `EdgeNodeSchemaInitializer` 等轻量兜底建表器。基于事实核对，形成以下候选决策：
+
+- 不引入 Flyway/Liquibase 作为本迁移窗口的主执行器，避免与现有 `*10.sql` 全量基线形成第二套 Schema 事实，并规避 `dynamic-datasource` 集成和 `CONCURRENTLY` 非事务步骤的框架适配风险；
+- 采用受控迁移步骤执行器：`schema_migration_history` + SHA-256 + advisory lock + dry-run/备份/破坏性拦截，事务步骤与非事务步骤分离；
+- 候选执行器决策见 [ADR-013 1.1.0（Proposed，宪法专项设计处置完成）](../../架构决策/电力运维云平台/ADR-013-受控数据库迁移执行器.md)，批准前不得据此实现或执行 DDL；
+- V001/U001 DDL 骨架已作为评审附件生成于 [assets/td005-migration](./assets/td005-migration/V001__power_model_version_binding_audit_outbox.sql)，仅用于 DBA/架构评审，不进入安装脚本。
+- 首批 4 个领域事件 V1 Schema 与合法 fixture 候选已生成于 [assets/td005-migration/events](./assets/td005-migration/events/README.md)，用于评审 payload 契约；尚未进入 `iot-device-api` 代码资源。
+
 ## 2. 范围与非目标
 
 本设计冻结候选：
@@ -60,7 +76,7 @@ Outbox 发布器只在事务提交后异步投递。事件 ID 由应用在入事
 1. 目标库 12 表画像和非空 legacy round-trip golden 已通过；现有运行模型约束、删除链和生产存量重跑仍为 OPEN。
 2. `LegacyThingModelPersistenceService` 已证明同租户八表替换与失败回滚，但尚未接公开模型接口，也没有版本/绑定/审计/Outbox 表。
 3. `power.device.model` capability、standard/full 同路径与 mini 前置拒绝已有合同证据；本设计不得增加 profile 分叉。
-4. 仓库当前未发现 Flyway/Liquibase 执行器。评审前必须决定受控 migration runner、脚本清单、校验和、执行身份与流水线；在此之前 SQL 只能作为候选资产，不能复制到安装脚本自动执行。
+4. 仓库当前未发现 Flyway/Liquibase 执行器。受控 runner 选型候选已写入 [ADR-013（Proposed）](../../架构决策/电力运维云平台/ADR-013-受控数据库迁移执行器.md)，仍需评审关闭；在此之前 SQL 只能作为候选资产，不能复制到安装脚本自动执行。
 5. `power_idempotency_record` 复用 TD-004 §7.12，不新建第二幂等表。若该表尚未落库，版本写 API 不得启用。
 6. 绑定表对现有 `product` 的同租户 FK，依赖运行模型迁移先提供可引用唯一键。该 FK 未验证前，绑定写路径保持关闭，禁止以应用层校验长期替代。
 7. 目标画像确认 `product` 有 29 列、`id` 主键、`tenant_id/product_identification NOT NULL`，但业务 unique/FK/check/trigger 均为 0；仓库 dump 的主键约束名为历史生成名，不能据此假定已有稳定 `(tenant_id, product_identification)` 唯一键。
@@ -221,7 +237,7 @@ payload 公共 envelope 固定包含 `eventId/eventType/schemaVersion/tenantId/a
 
 M1 的确定消费者是 TD-001 collector 配置发布协调器，它消费模板发布/绑定事件并异步创建或关联更高 `configVersion`；通用操作日志、WEB 和 APP 不是消息消费者。其他告警、分析或通知消费者必须登记模块 owner、事件类型、当前版本、Inbox/幂等位置和退出条件后才能加入。
 
-transport 仍为 OPEN 架构选择：优先评估仓库既有 Kafka 事件总线；只有在部署依赖、顺序、容量、消息大小和运维证据不满足时才比较 MQTT/内部 HTTP。选择必须形成 Accepted ADR 或补充 ADR，冻结 topic/route、key、最大消息大小、连接/读取超时、重试责任和消费者 Inbox。无论 transport 如何选择，业务事务、Outbox envelope、eventId 和 Schema 不变；HTTP 不能降级为事务内远程调用。
+transport 已形成 [ADR-014（Proposed）](../../架构决策/电力运维云平台/ADR-014-Outbox事件Transport与消费者Inbox.md) 候选：优先 Kafka（`power-model-release-v1` + `iot-device-power-model-release` 消费者组），消费者 Inbox 候选 DDL 见 [consumer_inbox_candidate.sql](./assets/td005-migration/consumer_inbox_candidate.sql)。仍需评审关闭并冻结 topic/route、key、最大消息大小、连接/读取超时、重试责任和 Inbox 保留窗口；只有部署依赖、顺序、容量、消息大小和运维证据不满足时才比较 MQTT/内部 HTTP。无论 transport 如何选择，业务事务、Outbox envelope、eventId 和 Schema 不变；HTTP 不能降级为事务内远程调用。
 
 消费者 Inbox 候选最小字段为 `tenant_id/event_id/event_type/payload_hash/status/received_at/processed_at/last_error_code`，`event_id` 全局唯一；同 eventId 同 hash 返回 DUPLICATE，同 eventId 不同 hash 进入隔离并 critical。Inbox 保留窗口不得短于生产者可重试、死信人工重放和双版本运行窗口的最大值。
 
@@ -371,10 +387,14 @@ PUBLISHED 行 M1 至少保留一个完整发布周期且不少于 30 天；在�
 
 ### 7.1 资产与执行器门禁
 
-评审通过后再生成两份 UTF-8 无 BOM 资产：
+评审通过后生成最终两份 UTF-8 无 BOM 资产；当前已提供对应评审骨架：
 
 - `assets/td005-migration/V001__power_model_version_binding_audit_outbox.sql`；
 - `assets/td005-migration/U001__power_model_version_binding_audit_outbox.sql`。
+
+骨架资产路径为 `.doc/技术设计/电力运维云平台/assets/td005-migration/`，仅作 DBA 核对附件；最终资产必须在 runner/约束名/trigger/权限评审冻结后重新生成并进入 SHA-256 manifest。
+
+骨架烟测（2026-08-06，本地临时评审库，PostgreSQL 18.4）：V001 空库执行 PASS；`power_model_audit` 追加写 UPDATE 拒绝 PASS；U001 面对非空审计表拒绝且零变更 PASS；U001 空表反向卸载 PASS。临时库已清理。该结果只证明骨架可执行，不等同于 MIG/TX/OUT 自动合同或生产迁移证据。
 
 `V001` 只能 additive 创建对象；`U001` 是带拒绝条件的受控卸载脚本，不作为日常应用回滚。两者进入 SHA-256 manifest，并记录目标 PostgreSQL 版本、执行人、审批单、开始/结束时间和输出。正式放入应用/安装目录前，必须先决定 migration runner；禁止由应用多副本启动时并发执行裸 SQL。
 
@@ -501,15 +521,15 @@ migration runner 以迁移 ID 和脚本 SHA-256 记录执行事实；同 ID 同 
 
 本文从 `In Review` 转为 `Approved / Frozen` 前必须关闭：
 
-1. 确定 migration runner、执行锁、history 表和 SHA-256 校验机制；
+1. 关闭 ADR-013 1.1.0（Proposed）受控 runner 选型的合同证据与演练门禁，冻结执行锁、history 表和 SHA-256 校验机制；V001/U001 骨架与中文注释已形成，仍需 DBA/代码 owner 核对全部列类型、稳定约束名、索引、trigger、权限和目标 PostgreSQL 兼容性；
 2. 由 DBA/代码 owner 核对全部列类型、稳定约束名、索引、trigger、权限和目标 PostgreSQL 兼容性；
-3. TD-004 `power_idempotency_record` DDL 已落地，跨副本唯一争抢、同 key 异 hash、24 小时保留、清理和恢复合同通过；
+3. TD-004 `power_idempotency_record` DDL 已落地，跨副本唯一争抢、同 key 异 hash、24 小时保留、清理和恢复合同通过（候选 DDL `assets/td005-migration/power_idempotency_record_candidate.sql` 已形成并在临时评审库通过争抢/反例/注释烟测；落库与合同仍 OPEN，须随 ADR-013 批准执行）；
 4. 在生产画像重复为 0 的证据上创建并验证 product `(tenant_id, product_identification)` unique，再验证 binding 同租户 FK 和启用顺序；
-5. 冻结事件 payload JSON Schema、逻辑消费者清单、当前/上一主版本、未知字段、未知主版本和 V1/V2 双发合同；
-6. 通过 ADR 明确 Outbox transport、topic/route、消息上限、消费者 Inbox、`eventId` 去重和退出条件；
+5. 评审并冻结事件 payload JSON Schema（首批 4 份 V1 Schema/fixture 候选已生成）、逻辑消费者清单、当前/上一主版本、未知字段、未知主版本和 V1/V2 双发合同；
+6. 评审并关闭 ADR-014（Proposed），冻结 Outbox transport、topic/route、消息上限、消费者 Inbox、`eventId` 去重和退出条件；
 7. 配置清单进入 `env.example`/Nacos 说明，网络超时和 standard 最低规格资源/API/恢复压测达到候选目标并冻结容量、保留和告警值；
 8. 生成 V001/U001 候选及 manifest，完成 MIG/TX/OUT/AUD/TEN/PROF/LEG/CFG/PERF 自动合同；
 9. 完成备份、恢复、应用回滚、INVALID index 清理和空表卸载演练；
 10. 把评审结论追加到 TD-005 评审报告，并同步主 TD、运行模型设计与续作入口。
 
-当前 OPEN：迁移执行器、幂等表落库、product unique/binding FK、事件消费者/transport/Inbox、Schema 双版本合同、容量和超时压测、审计/Outbox 保留政策、SQL 资产及全部本设计自动证据。任何一项未关闭时，不得执行 DDL、接公开接口或宣称审计/Outbox 已完成。
+当前 OPEN：ADR-013/ADR-014 仍为 Proposed、幂等表落库、product unique/binding FK、事件消费者/transport/Inbox 落地、Schema 双版本合同、容量和超时压测、审计/Outbox 保留政策、最终 SQL 资产及全部本设计自动证据。V001/U001 骨架仅用于评审，任何一项未关闭时，不得执行 DDL、接公开接口或宣称审计/Outbox 已完成。

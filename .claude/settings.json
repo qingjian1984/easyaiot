@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(ls .venv/Scripts/python.exe)",
+      "Bash(.venv/Scripts/python.exe rerun_profile_2026_08_06.py)",
+      "Bash(python rerun_profile_2026_08_06.py)"
+    ]
+  }
+}

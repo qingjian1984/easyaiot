@@ -1,8 +1,8 @@
 # EasyAIoT 电力运维云平台 ADR 索引
 
-> 索引版本：1.1.2
-> 日期：2026-08-05
-> 产品基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[项目开发宪法 1.4.0](../../开发规范/EasyAIoT项目开发宪法.md)
+> 索引版本：1.3.0
+> 日期：2026-08-06
+> 产品基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[项目开发宪法 1.5.0](../../开发规范/EasyAIoT项目开发宪法.md)
 
 ## 当前决策集
 
@@ -20,6 +20,8 @@
 | [ADR-010](./ADR-010-统一告警模型迁移.md) | Accepted | `iot-device` 统一告警事实、状态机与迁移 |
 | [ADR-011](./ADR-011-Capability-Manifest规范.md) | Accepted | standard/full 同源能力清单和 strict-superset CI 门禁 |
 | [ADR-012](./ADR-012-产品根属性与服务参数单一事实.md) | Accepted | 1.0.2：根属性使用 `product_properties`；服务参数使用 command request/response；影子列收缩须独立 ADR、明确 owner/到期日及备份审批 |
+| [ADR-013](./ADR-013-受控数据库迁移执行器.md) | Proposed | 1.3.1：TD-005 migration 采用受控迁移步骤执行器（history + SHA-256 + advisory lock）；不引入 Flyway/Liquibase；宪法专项设计处置与候选 runner Spike 完成，MIG-001/002/004/006/007/008/009 PASS、003/005 PARTIAL；12 表画像新鲜度重跑与 2026-08-05 基线一致；生产存量重跑、演练与核对 OPEN，批准前不得执行 DDL |
+| [ADR-014](./ADR-014-Outbox事件Transport与消费者Inbox.md) | Proposed | 1.1.0：Kafka 作为 Outbox transport（`power-model-release-v1` + 消费者组 + `power_model_event_inbox`）；消费者按 eventId 幂等；双版本窗口与回滚遵循宪法 §5.4；宪法专项设计处置完成（目标角色/档位行为/Envelope 冻结/CI 门禁/配置清单/安全态势/双 UNIQUE 收缩），压测、CI 接线与消费者实现 OPEN，批准前不接生产传输、Inbox 不落库 |
 
 ## 开发解释顺序
 
