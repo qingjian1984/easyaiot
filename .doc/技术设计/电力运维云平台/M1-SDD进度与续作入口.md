@@ -82,6 +82,7 @@
 - 演练证据第二批已完成（2026-08-07，ADR-013 升 1.4.1、migration 升 0.1.9、评审报告 §8.3）：索引签名漂移反例与恢复、MIG-005 幂等表门禁双向 + 8 反例烟测复跑、备份/恢复演练（损毁→异库恢复逐项一致）、回滚演练（六表清零、history/约束/幂等表保留）全部 PASS。转 Accepted 剩余 OPEN 收敛为四项：生产画像重跑、standard 最低规格压测、幂等表 runner 落库步骤建模、DBA/代码 owner 复核签字。
 - 幂等表 runner 落库步骤建模已完成（2026-08-07，ADR-013 升 1.4.2、migration 升 0.2.0）：新增 runner 步骤 `M05`（`.scripts/postgresql/td005-migration/steps/M05__power_idempotency_record.sql`，链首串行前置、单事务，DDL 与评审候选逐字一致），步骤链扩展为 M05 → M15 → M16 → V001 → V002，CLI/env/roles 同步，MIG-005 升 PASS。临时评审库演练全项 PASS：五步骤链 SUCCEEDED（history 五行 hash 与 manifest 一致）、重跑全 SKIPPED、M05 篡改 HASH_MISMATCH 阻断零变更、幂等语义 9 反例烟测 PASS（SMOKE_RESULT=2）、MIG-009 九表门禁 PASS、U001 保留幂等表与 history；临时库已销毁，`iot-device20` 未触碰（product=4 与基线一致）。转 Accepted 剩余 OPEN 收敛为三项：生产画像重跑、standard 最低规格压测、DBA/代码 owner 复核签字。
 - DBA/代码 owner 复核签字材料包已形成（2026-08-07，[ADR-013与ADR-014复核签字包](../../开发规范/ADR-013与ADR-014复核签字包.md) 1.0.0）：冻结基线提交 `a09a1b02` 与 17 项资产 SHA-256 清单（含五步骤链、roles、幂等表候选/烟测、Inbox 候选、事件 V1 Schema），提供资产漂移核对、dry-run 两阶段校验、临时库全链路复跑三类走查命令与预期输出，列明 DBA 视角 7 项重点复核项与签字栏。签字包仅就设计/资产/已有演练证据征求签署，明确不构成上线批准；签字关闭后剩余 OPEN 为两项：standard 最低规格压测、完整 12 表画像生产重跑。
+- 剩余两项 OPEN 的执行方案已形成（2026-08-07）：[TD-005-standard最低规格压测方案](./TD-005-standard最低规格压测方案.md) 0.1.0（6 类压测对象、环境规格/数据规模/阈值全为候选值待实测冻结、故障注入与证据包格式；发现仓库未定义 standard 硬件基线，列为执行前运维确认项）与 [TD-005-生产画像重跑Runbook](./TD-005-生产画像重跑Runbook.md) 1.0.0（只读红线、画像报告 §2 六条冻结契约、v1.2.0 脚本 + Schema 1.1.0 解析管线复用、PASS/WARN/BLOCK 判定与证据包格式）。两方案仅备制规程，均未执行任何压测或生产访问。
 - TD-001/002/003 的 Envelope、configVersion、siteCode、dataPriority、requestId、Topic、5 分钟 ACK deadline 和健康语义已经对齐。
 - TD-001～004 四份评审报告均保留原始意见并附最终逐项处置，发生冲突时以报告末尾的“复核与最终处置”为准。
 
@@ -142,7 +143,7 @@
 
 继续 SDD 文档链，下一步优先执行 **TD-005 证据准备与冻结门禁关闭**：
 
-0. **当前最优先：ADR-013/014 转 Accepted 的收尾**。可本机完成的证据（签名漂移反例、MIG-005 双向、备份/恢复/回滚演练、M05 幂等表建模演练）已全部 PASS（评审报告 §8.3/§8.4、ADR-013 1.4.2 证据表）；签字材料包已就绪（[ADR-013与ADR-014复核签字包](../../开发规范/ADR-013与ADR-014复核签字包.md)：资产哈希冻结 + 走查命令 + 签字栏）。剩余三项均需要人或环境：① 组织 **DBA/代码 owner 复核签字**（按签字包 §3 走查、§5 签署）；② standard 最低规格压测；③ 生产画像重跑。签字通过且 ②③ 完成后 ADR-013/014 可转 Accepted；
+0. **当前最优先：ADR-013/014 转 Accepted 的收尾**。可本机完成的证据（签名漂移反例、MIG-005 双向、备份/恢复/回滚演练、M05 幂等表建模演练）已全部 PASS（评审报告 §8.3/§8.4、ADR-013 1.4.2 证据表）；三项剩余 OPEN 的**材料与规程均已就绪**：① DBA/代码 owner 复核签字（按[签字包](../../开发规范/ADR-013与ADR-014复核签字包.md) §3 走查、§5 签署）；② standard 最低规格压测（按[压测方案](./TD-005-standard最低规格压测方案.md)，环境规格/规模/阈值为候选值待运维确认，造数与负载脚本可先行开发）；③ 生产画像重跑（按[Runbook](./TD-005-生产画像重跑Runbook.md)，需生产只读窗口与审批）。三项关闭后 ADR-013/014 可转 Accepted；
 1. 读取 [TD-005 1.0.16](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计 0.1.9](./TD-005-运行模型兼容与删除链技术设计.md)、[migration 子设计 0.1.7](./TD-005-版本绑定审计Outbox迁移与回滚设计.md)和[TD-005 评审报告 §23](../../开发规范/TD-005评审报告.md)；
 2. Mapper/DO/VO、legacy adapters、Java golden、根属性 TEN-001～004/006、内部八表持久化/TEN-005/回滚、稳定错误和 TEN-007/008 已完成；先复跑 capability 4 项、只读 API 1 项与设备侧 19 项目标测试，禁止回退到 `product_properties.service_id` 或散落 profile 判断；
 3. 对 [版本/绑定/审计/Outbox migration 与 rollback 0.1.2 候选](./TD-005-版本绑定审计Outbox迁移与回滚设计.md)继续 DBA/架构评审，优先评审 [ADR-013（Proposed）](../../架构决策/电力运维云平台/ADR-013-受控数据库迁移执行器.md)与 [V001/U001 DDL 骨架](./assets/td005-migration/V001__power_model_version_binding_audit_outbox.sql)，关闭 runner 决策后再决定 TD-004 幂等表落库顺序、product unique/binding FK、事件 transport/消费者 Inbox 和压测/保留值；批准前不得启用 DDL；
