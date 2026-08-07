@@ -255,3 +255,9 @@ ADR-013 的选型方向（受控步骤执行器、单事实基线、事务/非�
 - MIG-009 九表注释门禁 PASS；U001 空表卸载保留幂等表（TD-004 资产）与 history。
 
 转 Accepted 剩余 OPEN 收敛为三项：完整 12 表画像生产重跑、standard 最低规格压测、DBA/代码 owner 复核签字。
+
+### 8.5 复核签字与压测豁免（2026-08-07，ADR-013 升 1.4.3）
+
+- **DBA/代码 owner 复核签字关闭**：按《ADR-013与ADR-014复核签字包》执行走查——资产哈希零漂移（HEAD `9debfc54`，14 项文件与冻结值逐项一致）、dry-run manifest 一致、临时评审库 `td005_signoff_review`（用后销毁）全链路复跑 PASS（五步链 SUCCEEDED、重跑全 SKIPPED、M05 篡改 HASH_MISMATCH 零变更、幂等烟测 SMOKE_RESULT=2、MIG-009 PASS、U001 保留语义正确），`iot-device20` 全程未触碰。青见（qingjian1984）兼 DBA 与代码 owner 双签「通过」（签字包 §5/§5.1）。
+- **standard 最低规格压测豁免**：owner 决定不执行压测、默认通过该门禁项；ADR-013 §资源影响评估与预算的候选值保持**未冻结**标记，生产执行前按当时环境人工评估；压测方案文档转为存档规程。
+- 转 Accepted 剩余 OPEN 仅余一项：完整 12 表画像生产重跑（按《TD-005-生产画像重跑Runbook》，需生产只读窗口与审批）。
