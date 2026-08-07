@@ -7,7 +7,10 @@
       "Bash(python rerun_profile_2026_08_06.py)",
       "Bash(git -C \"d:/working/laoluopro/workspace/easyaiot\" log --oneline -20)",
       "Bash(git -C \"d:/working/laoluopro/workspace/easyaiot\" show --stat 629f6ba9)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(git push *)",
+      "Bash(bash -n .scripts/postgresql/td005-migration/td005_migration.sh)",
+      "Bash(bash .scripts/postgresql/td005-migration/td005_migration.sh dry-run)"
     ]
   }
 }
