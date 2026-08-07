@@ -61,4 +61,35 @@ class TemplateMemberValidatorTest {
         assertDoesNotThrow(() -> validator.requireUniqueMemberCodes(template),
                 "唯一性按成员类型分别约束，跨类型同 code 不冲突");
     }
+
+    @Test
+    void duplicateParameterCodeWithinServiceInputsIsRejected() throws IOException {
+        JsonNode template = objectMapper.readTree(
+                "{\"services\":[{\"serviceCode\":\"control\","
+                        + "\"inputs\":[{\"parameterCode\":\"mode\"},{\"parameterCode\":\"mode\"}],"
+                        + "\"outputs\":[]}]}");
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> validator.requireUniqueMemberCodes(template));
+        assertTrue(error.getMessage().startsWith("MODEL_MEMBER_CODE_DUPLICATE"));
+        assertTrue(error.getMessage().contains("mode"));
+    }
+
+    @Test
+    void duplicateParameterCodeWithinEventInputsIsRejected() throws IOException {
+        JsonNode template = objectMapper.readTree(
+                "{\"events\":[{\"eventCode\":\"alarm\","
+                        + "\"inputs\":[{\"parameterCode\":\"level\"},{\"parameterCode\":\"level\"}]}]}");
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> validator.requireUniqueMemberCodes(template))
+                .getMessage().startsWith("MODEL_MEMBER_CODE_DUPLICATE"));
+    }
+
+    @Test
+    void sameParameterCodeInDifferentServicesIsAllowed() throws IOException {
+        JsonNode template = objectMapper.readTree(
+                "{\"services\":[{\"serviceCode\":\"open\",\"inputs\":[{\"parameterCode\":\"mode\"}],\"outputs\":[]},"
+                        + "{\"serviceCode\":\"close\",\"inputs\":[{\"parameterCode\":\"mode\"}],\"outputs\":[]}]}");
+        assertDoesNotThrow(() -> validator.requireUniqueMemberCodes(template),
+                "参数唯一性限定在所属服务/事件内部");
+    }
 }
