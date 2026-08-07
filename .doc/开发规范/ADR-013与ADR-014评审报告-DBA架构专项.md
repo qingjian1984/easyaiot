@@ -261,3 +261,11 @@ ADR-013 的选型方向（受控步骤执行器、单事实基线、事务/非�
 - **DBA/代码 owner 复核签字关闭**：按《ADR-013与ADR-014复核签字包》执行走查——资产哈希零漂移（HEAD `9debfc54`，14 项文件与冻结值逐项一致）、dry-run manifest 一致、临时评审库 `td005_signoff_review`（用后销毁）全链路复跑 PASS（五步链 SUCCEEDED、重跑全 SKIPPED、M05 篡改 HASH_MISMATCH 零变更、幂等烟测 SMOKE_RESULT=2、MIG-009 PASS、U001 保留语义正确），`iot-device20` 全程未触碰。青见（qingjian1984）兼 DBA 与代码 owner 双签「通过」（签字包 §5/§5.1）。
 - **standard 最低规格压测豁免**：owner 决定不执行压测、默认通过该门禁项；ADR-013 §资源影响评估与预算的候选值保持**未冻结**标记，生产执行前按当时环境人工评估；压测方案文档转为存档规程。
 - 转 Accepted 剩余 OPEN 仅余一项：完整 12 表画像生产重跑（按《TD-005-生产画像重跑Runbook》，需生产只读窗口与审批）。
+
+### 8.6 画像生产重跑证据（2026-08-07，ADR-013 升 1.4.4）
+
+- **执行**：按《TD-005-生产画像重跑Runbook》§3.1～§3.5 全步执行。只读事务（PGOPTIONS 强制 `default_transaction_read_only=on`、`statement_timeout=300000`）对 `iot-device20`（PostgreSQL 18.4）执行画像脚本 v1.2.0；psql 退出码 0，原始输出 ROLLBACK 收尾，12 表全覆盖。
+- **校验与比对**：jsonschema 1.1.0 校验 PASS；与 2026-08-05 冻结基线逐项 diff **零差异**（仅 verifiedDate 豁免）；§3.4 六项阻断条件均未触发，无告警项。
+- **判定**：**PASS**。证据包五件归档于 `assets/model-templates/verification/profile-rerun-prod-20260807/`（env.txt / 原始输出 / 结果 JSON / diff-vs-baseline.md / verdict.md）。
+- **证据诚实性边界**：执行环境为本地目标集成实例（非独立生产实例），执行账号 postgres（无专用只读角色，只读性由 PGOPTIONS 强制）；`productionRerunRequired=true` 是否由本次重跑满足**待 owner 指定**，指定前 ADR-013/014 维持 Proposed。指定满足则三项人工闭环全数关闭；不满足则本项保持 OPEN、本证据包作为预演证据保留。
+

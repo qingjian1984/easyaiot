@@ -1,0 +1,407 @@
+Output format is unaligned.
+Field separator is "|".
+BEGIN
+PROFILE_VERSION|1.2.0
+TABLE_ROLE|product|CORE_RUNTIME
+TABLE_ROLE|product_commands|CORE_RUNTIME
+TABLE_ROLE|product_commands_requests|CORE_RUNTIME
+TABLE_ROLE|product_commands_response|CORE_RUNTIME
+TABLE_ROLE|product_event|CORE_RUNTIME
+TABLE_ROLE|product_event_response|CORE_RUNTIME
+TABLE_ROLE|product_properties|CORE_RUNTIME
+TABLE_ROLE|product_services|CORE_RUNTIME
+TABLE_ROLE|device|PROTECTED_DEPENDENCY
+TABLE_ROLE|device_service_invoke_response|PROTECTED_DEPENDENCY
+TABLE_ROLE|ota_packages|PROTECTED_DEPENDENCY
+TABLE_ROLE|product_script|PROTECTED_DEPENDENCY
+ENV|iot-device20|postgres|18.4 (Debian 18.4-1.pgdg13+1)|on
+COLUMN|device|1|id|bigint|NO|nextval('device_id_seq'::regclass)
+COLUMN|device|10|product_identification|character varying|NO|
+COLUMN|device|11|create_by|character varying|YES|
+COLUMN|device|12|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|device|13|update_by|character varying|YES|
+COLUMN|device|14|update_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|device|15|remark|character varying|YES|
+COLUMN|device|16|device_version|character varying|YES|
+COLUMN|device|17|device_sn|character varying|NO|
+COLUMN|device|18|ip_address|character varying|YES|
+COLUMN|device|19|mac_address|character varying|YES|
+COLUMN|device|2|client_id|character varying|YES|
+COLUMN|device|20|active_status|smallint|YES|0
+COLUMN|device|21|extension|text|YES|
+COLUMN|device|22|activated_time|timestamp without time zone|YES|
+COLUMN|device|23|last_online_time|timestamp without time zone|YES|
+COLUMN|device|24|parent_identification|character varying|YES|
+COLUMN|device|25|device_type|character varying|YES|
+COLUMN|device|26|tenant_id|bigint|NO|0
+COLUMN|device|27|deleted|smallint|NO|0
+COLUMN|device|3|app_id|character varying|YES|
+COLUMN|device|4|device_identification|character varying|NO|
+COLUMN|device|5|device_name|character varying|YES|
+COLUMN|device|6|device_description|character varying|YES|
+COLUMN|device|7|device_status|character varying|YES|
+COLUMN|device|8|connect_status|character varying|YES|'OFFLINE'::character varying
+COLUMN|device|9|is_will|character varying|YES|
+COLUMN|device_service_invoke_response|1|id|bigint|NO|nextval('device_service_invoke_response_id_seq'::regclass)
+COLUMN|device_service_invoke_response|10|response_code|integer|YES|
+COLUMN|device_service_invoke_response|11|response_msg|character varying|YES|
+COLUMN|device_service_invoke_response|12|topic|character varying|YES|
+COLUMN|device_service_invoke_response|13|report_time|timestamp without time zone|YES|
+COLUMN|device_service_invoke_response|14|tenant_id|bigint|NO|0
+COLUMN|device_service_invoke_response|15|create_time|timestamp without time zone|NO|CURRENT_TIMESTAMP
+COLUMN|device_service_invoke_response|2|message_id|character varying|NO|
+COLUMN|device_service_invoke_response|3|device_id|bigint|NO|
+COLUMN|device_service_invoke_response|4|device_identification|character varying|YES|
+COLUMN|device_service_invoke_response|5|product_identification|character varying|YES|
+COLUMN|device_service_invoke_response|6|service_identifier|character varying|YES|
+COLUMN|device_service_invoke_response|7|request_id|character varying|YES|
+COLUMN|device_service_invoke_response|8|method|character varying|YES|
+COLUMN|device_service_invoke_response|9|response_data|text|YES|
+COLUMN|ota_packages|1|id|bigint|NO|
+COLUMN|ota_packages|10|custom_info|text|YES|
+COLUMN|ota_packages|11|remark|character varying|YES|
+COLUMN|ota_packages|12|created_by|bigint|YES|
+COLUMN|ota_packages|13|created_time|timestamp without time zone|NO|
+COLUMN|ota_packages|14|updated_by|bigint|YES|
+COLUMN|ota_packages|15|updated_time|timestamp without time zone|NO|
+COLUMN|ota_packages|16|tenant_id|bigint|YES|
+COLUMN|ota_packages|17|deleted|smallint|NO|0
+COLUMN|ota_packages|2|app_id|character varying|NO|
+COLUMN|ota_packages|3|package_name|character varying|NO|
+COLUMN|ota_packages|4|package_type|smallint|NO|
+COLUMN|ota_packages|5|product_identification|character varying|NO|
+COLUMN|ota_packages|6|version|character varying|NO|
+COLUMN|ota_packages|7|file_location|character varying|NO|
+COLUMN|ota_packages|8|status|smallint|NO|
+COLUMN|ota_packages|9|description|character varying|YES|
+COLUMN|product|1|id|bigint|NO|nextval('product_id_seq'::regclass)
+COLUMN|product|10|data_format|character varying|NO|
+COLUMN|product|11|device_type|character varying|NO|
+COLUMN|product|12|protocol_type|character varying|NO|
+COLUMN|product|13|status|character varying|NO|
+COLUMN|product|14|remark|character varying|YES|
+COLUMN|product|15|create_by|character varying|YES|
+COLUMN|product|16|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|product|17|update_by|character varying|YES|
+COLUMN|product|18|update_time|timestamp without time zone|YES|
+COLUMN|product|19|auth_mode|character varying|YES|
+COLUMN|product|2|app_id|character varying|NO|
+COLUMN|product|20|user_name|character varying|YES|
+COLUMN|product|21|password|character varying|YES|
+COLUMN|product|22|connector|character varying|YES|
+COLUMN|product|23|sign_key|character varying|YES|
+COLUMN|product|24|encrypt_method|integer|YES|0
+COLUMN|product|25|encrypt_key|character varying|YES|
+COLUMN|product|26|encrypt_vector|character varying|YES|
+COLUMN|product|27|tenant_id|bigint|NO|0
+COLUMN|product|28|public_key|text|YES|
+COLUMN|product|29|private_key|text|YES|
+COLUMN|product|3|template_identification|character varying|YES|
+COLUMN|product|4|product_name|character varying|NO|
+COLUMN|product|5|product_identification|character varying|NO|
+COLUMN|product|6|product_type|character varying|NO|
+COLUMN|product|7|manufacturer_id|character varying|NO|
+COLUMN|product|8|manufacturer_name|character varying|NO|
+COLUMN|product|9|model|character varying|NO|
+COLUMN|product_commands|1|id|bigint|NO|nextval('product_commands_id_seq'::regclass)
+COLUMN|product_commands|10|remark|character varying|YES|
+COLUMN|product_commands|11|tenant_id|bigint|NO|0
+COLUMN|product_commands|2|service_id|bigint|NO|
+COLUMN|product_commands|3|name|character varying|NO|
+COLUMN|product_commands|4|description|character varying|YES|
+COLUMN|product_commands|5|create_by|character varying|YES|
+COLUMN|product_commands|6|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|product_commands|7|update_by|character varying|YES|
+COLUMN|product_commands|8|update_time|timestamp without time zone|YES|
+COLUMN|product_commands|9|command_code|character varying|YES|
+COLUMN|product_commands_requests|1|id|bigint|NO|nextval('product_commands_requests_id_seq'::regclass)
+COLUMN|product_commands_requests|10|parameter_name|character varying|YES|
+COLUMN|product_commands_requests|11|required|character varying|YES|'0'::character varying
+COLUMN|product_commands_requests|12|step|character varying|YES|
+COLUMN|product_commands_requests|13|unit|character varying|YES|
+COLUMN|product_commands_requests|14|create_by|character varying|YES|
+COLUMN|product_commands_requests|15|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|product_commands_requests|16|update_by|character varying|YES|
+COLUMN|product_commands_requests|17|update_time|timestamp without time zone|YES|
+COLUMN|product_commands_requests|18|parameter_code|character varying|YES|
+COLUMN|product_commands_requests|19|tenant_id|bigint|NO|0
+COLUMN|product_commands_requests|2|service_id|bigint|NO|
+COLUMN|product_commands_requests|3|commands_id|bigint|NO|
+COLUMN|product_commands_requests|4|datatype|character varying|NO|
+COLUMN|product_commands_requests|5|enumlist|character varying|YES|
+COLUMN|product_commands_requests|6|max|character varying|YES|
+COLUMN|product_commands_requests|7|maxlength|character varying|YES|
+COLUMN|product_commands_requests|8|min|character varying|YES|
+COLUMN|product_commands_requests|9|parameter_description|character varying|YES|
+COLUMN|product_commands_response|1|id|bigint|NO|nextval('product_commands_response_id_seq'::regclass)
+COLUMN|product_commands_response|10|parameter_name|character varying|YES|
+COLUMN|product_commands_response|11|required|character varying|YES|'0'::character varying
+COLUMN|product_commands_response|12|step|character varying|YES|
+COLUMN|product_commands_response|13|unit|character varying|YES|
+COLUMN|product_commands_response|14|create_by|character varying|YES|
+COLUMN|product_commands_response|15|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|product_commands_response|16|update_by|character varying|YES|
+COLUMN|product_commands_response|17|update_time|timestamp without time zone|YES|
+COLUMN|product_commands_response|18|parameter_code|character varying|YES|
+COLUMN|product_commands_response|19|tenant_id|bigint|NO|0
+COLUMN|product_commands_response|2|commands_id|bigint|NO|
+COLUMN|product_commands_response|3|service_id|bigint|YES|
+COLUMN|product_commands_response|4|datatype|character varying|NO|
+COLUMN|product_commands_response|5|enumlist|character varying|YES|
+COLUMN|product_commands_response|6|max|character varying|YES|
+COLUMN|product_commands_response|7|maxlength|character varying|YES|
+COLUMN|product_commands_response|8|min|character varying|YES|
+COLUMN|product_commands_response|9|parameter_description|character varying|YES|
+COLUMN|product_event|1|id|bigint|NO|nextval('product_event_id_seq'::regclass)
+COLUMN|product_event|10|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|product_event|11|update_by|character varying|YES|
+COLUMN|product_event|12|update_time|timestamp without time zone|YES|
+COLUMN|product_event|13|tenant_id|bigint|NO|0
+COLUMN|product_event|2|event_name|character varying|NO|
+COLUMN|product_event|3|event_code|character varying|NO|
+COLUMN|product_event|4|event_type|character varying|NO|
+COLUMN|product_event|5|template_identification|character varying|YES|
+COLUMN|product_event|6|product_identification|character varying|YES|
+COLUMN|product_event|7|status|character varying|YES|'0'::character varying
+COLUMN|product_event|8|description|character varying|YES|
+COLUMN|product_event|9|create_by|character varying|YES|
+COLUMN|product_event_response|1|id|bigint|NO|nextval('product_event_response_id_seq'::regclass)
+COLUMN|product_event_response|10|parameter_name|character varying|YES|
+COLUMN|product_event_response|11|required|character varying|NO|
+COLUMN|product_event_response|12|step|character varying|YES|
+COLUMN|product_event_response|13|unit|character varying|YES|
+COLUMN|product_event_response|14|create_by|character varying|YES|
+COLUMN|product_event_response|15|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|product_event_response|16|update_by|character varying|YES|
+COLUMN|product_event_response|17|update_time|timestamp without time zone|YES|
+COLUMN|product_event_response|18|tenant_id|bigint|NO|0
+COLUMN|product_event_response|2|event_id|bigint|NO|
+COLUMN|product_event_response|3|service_id|bigint|YES|
+COLUMN|product_event_response|4|datatype|character varying|NO|
+COLUMN|product_event_response|5|enumlist|character varying|YES|
+COLUMN|product_event_response|6|max|character varying|YES|
+COLUMN|product_event_response|7|maxlength|character varying|YES|
+COLUMN|product_event_response|8|min|character varying|YES|
+COLUMN|product_event_response|9|parameter_description|character varying|YES|
+COLUMN|product_properties|1|id|bigint|NO|nextval('product_properties_id_seq'::regclass)
+COLUMN|product_properties|10|min|character varying|YES|
+COLUMN|product_properties|11|required|integer|YES|
+COLUMN|product_properties|12|step|integer|YES|
+COLUMN|product_properties|13|unit|character varying|YES|
+COLUMN|product_properties|14|create_by|character varying|YES|
+COLUMN|product_properties|15|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|product_properties|16|update_by|character varying|YES|
+COLUMN|product_properties|17|update_time|timestamp without time zone|YES|
+COLUMN|product_properties|18|template_identification|character varying|YES|
+COLUMN|product_properties|19|product_identification|character varying|YES|
+COLUMN|product_properties|2|property_name|character varying|NO|
+COLUMN|product_properties|20|tenant_id|bigint|NO|0
+COLUMN|product_properties|3|property_code|character varying|NO|
+COLUMN|product_properties|4|datatype|character varying|NO|
+COLUMN|product_properties|5|description|character varying|YES|
+COLUMN|product_properties|6|enumlist|character varying|YES|
+COLUMN|product_properties|7|max|character varying|YES|
+COLUMN|product_properties|8|maxlength|bigint|YES|
+COLUMN|product_properties|9|method|character varying|YES|
+COLUMN|product_script|1|id|bigint|NO|nextval('product_script_id_seq'::regclass)
+COLUMN|product_script|10|update_time|timestamp without time zone|YES|
+COLUMN|product_script|11|tenant_id|bigint|NO|0
+COLUMN|product_script|2|product_id|bigint|NO|
+COLUMN|product_script|3|product_identification|character varying|NO|
+COLUMN|product_script|4|script_enabled|boolean|NO|false
+COLUMN|product_script|5|script_content|text|YES|
+COLUMN|product_script|6|script_version|integer|NO|1
+COLUMN|product_script|7|create_by|character varying|YES|
+COLUMN|product_script|8|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+COLUMN|product_script|9|update_by|character varying|YES|
+COLUMN|product_services|1|id|bigint|NO|nextval('product_services_id_seq'::regclass)
+COLUMN|product_services|10|update_by|character varying|YES|
+COLUMN|product_services|11|update_time|timestamp without time zone|YES|
+COLUMN|product_services|12|tenant_id|bigint|NO|0
+COLUMN|product_services|2|service_code|character varying|NO|
+COLUMN|product_services|3|service_name|character varying|NO|
+COLUMN|product_services|4|template_identification|character varying|YES|
+COLUMN|product_services|5|product_identification|character varying|YES|
+COLUMN|product_services|6|status|character varying|YES|'0'::character varying
+COLUMN|product_services|7|description|character varying|YES|
+COLUMN|product_services|8|create_by|character varying|YES|
+COLUMN|product_services|9|create_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+TABLE_SCHEMA_JSON|{"device": {"columnCount": 27, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "client_id|character varying|NULLABLE", "app_id|character varying|NULLABLE", "device_identification|character varying|NOT_NULL", "device_name|character varying|NULLABLE", "device_description|character varying|NULLABLE", "device_status|character varying|NULLABLE", "connect_status|character varying|NULLABLE", "is_will|character varying|NULLABLE", "product_identification|character varying|NOT_NULL", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "remark|character varying|NULLABLE", "device_version|character varying|NULLABLE", "device_sn|character varying|NOT_NULL", "ip_address|character varying|NULLABLE", "mac_address|character varying|NULLABLE", "active_status|smallint|NULLABLE", "extension|text|NULLABLE", "activated_time|timestamp without time zone|NULLABLE", "last_online_time|timestamp without time zone|NULLABLE", "parent_identification|character varying|NULLABLE", "device_type|character varying|NULLABLE", "tenant_id|bigint|NOT_NULL", "deleted|smallint|NOT_NULL"]}, "product": {"columnCount": 29, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "app_id|character varying|NOT_NULL", "template_identification|character varying|NULLABLE", "product_name|character varying|NOT_NULL", "product_identification|character varying|NOT_NULL", "product_type|character varying|NOT_NULL", "manufacturer_id|character varying|NOT_NULL", "manufacturer_name|character varying|NOT_NULL", "model|character varying|NOT_NULL", "data_format|character varying|NOT_NULL", "device_type|character varying|NOT_NULL", "protocol_type|character varying|NOT_NULL", "status|character varying|NOT_NULL", "remark|character varying|NULLABLE", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "auth_mode|character varying|NULLABLE", "user_name|character varying|NULLABLE", "password|character varying|NULLABLE", "connector|character varying|NULLABLE", "sign_key|character varying|NULLABLE", "encrypt_method|integer|NULLABLE", "encrypt_key|character varying|NULLABLE", "encrypt_vector|character varying|NULLABLE", "tenant_id|bigint|NOT_NULL", "public_key|text|NULLABLE", "private_key|text|NULLABLE"]}, "ota_packages": {"columnCount": 17, "hasTenantId": true, "tenantNotNull": false, "columnSignatures": ["id|bigint|NOT_NULL", "app_id|character varying|NOT_NULL", "package_name|character varying|NOT_NULL", "package_type|smallint|NOT_NULL", "product_identification|character varying|NOT_NULL", "version|character varying|NOT_NULL", "file_location|character varying|NOT_NULL", "status|smallint|NOT_NULL", "description|character varying|NULLABLE", "custom_info|text|NULLABLE", "remark|character varying|NULLABLE", "created_by|bigint|NULLABLE", "created_time|timestamp without time zone|NOT_NULL", "updated_by|bigint|NULLABLE", "updated_time|timestamp without time zone|NOT_NULL", "tenant_id|bigint|NULLABLE", "deleted|smallint|NOT_NULL"]}, "product_event": {"columnCount": 13, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "event_name|character varying|NOT_NULL", "event_code|character varying|NOT_NULL", "event_type|character varying|NOT_NULL", "template_identification|character varying|NULLABLE", "product_identification|character varying|NULLABLE", "status|character varying|NULLABLE", "description|character varying|NULLABLE", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "tenant_id|bigint|NOT_NULL"]}, "product_script": {"columnCount": 11, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "product_id|bigint|NOT_NULL", "product_identification|character varying|NOT_NULL", "script_enabled|boolean|NOT_NULL", "script_content|text|NULLABLE", "script_version|integer|NOT_NULL", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "tenant_id|bigint|NOT_NULL"]}, "product_commands": {"columnCount": 11, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "service_id|bigint|NOT_NULL", "name|character varying|NOT_NULL", "description|character varying|NULLABLE", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "command_code|character varying|NULLABLE", "remark|character varying|NULLABLE", "tenant_id|bigint|NOT_NULL"]}, "product_services": {"columnCount": 12, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "service_code|character varying|NOT_NULL", "service_name|character varying|NOT_NULL", "template_identification|character varying|NULLABLE", "product_identification|character varying|NULLABLE", "status|character varying|NULLABLE", "description|character varying|NULLABLE", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "tenant_id|bigint|NOT_NULL"]}, "product_properties": {"columnCount": 20, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "property_name|character varying|NOT_NULL", "property_code|character varying|NOT_NULL", "datatype|character varying|NOT_NULL", "description|character varying|NULLABLE", "enumlist|character varying|NULLABLE", "max|character varying|NULLABLE", "maxlength|bigint|NULLABLE", "method|character varying|NULLABLE", "min|character varying|NULLABLE", "required|integer|NULLABLE", "step|integer|NULLABLE", "unit|character varying|NULLABLE", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "template_identification|character varying|NULLABLE", "product_identification|character varying|NULLABLE", "tenant_id|bigint|NOT_NULL"]}, "product_event_response": {"columnCount": 18, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "event_id|bigint|NOT_NULL", "service_id|bigint|NULLABLE", "datatype|character varying|NOT_NULL", "enumlist|character varying|NULLABLE", "max|character varying|NULLABLE", "maxlength|character varying|NULLABLE", "min|character varying|NULLABLE", "parameter_description|character varying|NULLABLE", "parameter_name|character varying|NULLABLE", "required|character varying|NOT_NULL", "step|character varying|NULLABLE", "unit|character varying|NULLABLE", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "tenant_id|bigint|NOT_NULL"]}, "product_commands_requests": {"columnCount": 19, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "service_id|bigint|NOT_NULL", "commands_id|bigint|NOT_NULL", "datatype|character varying|NOT_NULL", "enumlist|character varying|NULLABLE", "max|character varying|NULLABLE", "maxlength|character varying|NULLABLE", "min|character varying|NULLABLE", "parameter_description|character varying|NULLABLE", "parameter_name|character varying|NULLABLE", "required|character varying|NULLABLE", "step|character varying|NULLABLE", "unit|character varying|NULLABLE", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "parameter_code|character varying|NULLABLE", "tenant_id|bigint|NOT_NULL"]}, "product_commands_response": {"columnCount": 19, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "commands_id|bigint|NOT_NULL", "service_id|bigint|NULLABLE", "datatype|character varying|NOT_NULL", "enumlist|character varying|NULLABLE", "max|character varying|NULLABLE", "maxlength|character varying|NULLABLE", "min|character varying|NULLABLE", "parameter_description|character varying|NULLABLE", "parameter_name|character varying|NULLABLE", "required|character varying|NULLABLE", "step|character varying|NULLABLE", "unit|character varying|NULLABLE", "create_by|character varying|NULLABLE", "create_time|timestamp without time zone|NULLABLE", "update_by|character varying|NULLABLE", "update_time|timestamp without time zone|NULLABLE", "parameter_code|character varying|NULLABLE", "tenant_id|bigint|NOT_NULL"]}, "device_service_invoke_response": {"columnCount": 15, "hasTenantId": true, "tenantNotNull": true, "columnSignatures": ["id|bigint|NOT_NULL", "message_id|character varying|NOT_NULL", "device_id|bigint|NOT_NULL", "device_identification|character varying|NULLABLE", "product_identification|character varying|NULLABLE", "service_identifier|character varying|NULLABLE", "request_id|character varying|NULLABLE", "method|character varying|NULLABLE", "response_data|text|NULLABLE", "response_code|integer|NULLABLE", "response_msg|character varying|NULLABLE", "topic|character varying|NULLABLE", "report_time|timestamp without time zone|NULLABLE", "tenant_id|bigint|NOT_NULL", "create_time|timestamp without time zone|NOT_NULL"]}}
+TABLE_CONTRACT_JSON|{"device": {"indexCount": 1, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "product": {"indexCount": 2, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "ota_packages": {"indexCount": 4, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "product_event": {"indexCount": 4, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "product_script": {"indexCount": 3, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 0, "businessUniqueCount": 0, "checkConstraintCount": 0}, "product_commands": {"indexCount": 3, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "product_services": {"indexCount": 4, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "product_properties": {"indexCount": 1, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "product_event_response": {"indexCount": 4, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "product_commands_requests": {"indexCount": 4, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "product_commands_response": {"indexCount": 4, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}, "device_service_invoke_response": {"indexCount": 6, "triggerCount": 0, "foreignKeyCount": 0, "primaryKeyCount": 1, "businessUniqueCount": 0, "checkConstraintCount": 0}}
+CONSTRAINT|device|_copy_52|p|PRIMARY KEY (id)
+CONSTRAINT|device|device_deleted_not_null|n|NOT NULL deleted
+CONSTRAINT|device|device_device_identification_not_null|n|NOT NULL device_identification
+CONSTRAINT|device|device_device_sn_not_null|n|NOT NULL device_sn
+CONSTRAINT|device|device_id_not_null|n|NOT NULL id
+CONSTRAINT|device|device_product_identification_not_null|n|NOT NULL product_identification
+CONSTRAINT|device|device_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|device_service_invoke_response|device_service_invoke_response_create_time_not_null|n|NOT NULL create_time
+CONSTRAINT|device_service_invoke_response|device_service_invoke_response_device_id_not_null|n|NOT NULL device_id
+CONSTRAINT|device_service_invoke_response|device_service_invoke_response_id_not_null|n|NOT NULL id
+CONSTRAINT|device_service_invoke_response|device_service_invoke_response_message_id_not_null|n|NOT NULL message_id
+CONSTRAINT|device_service_invoke_response|device_service_invoke_response_pkey|p|PRIMARY KEY (id)
+CONSTRAINT|device_service_invoke_response|device_service_invoke_response_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|ota_packages|_copy_42|p|PRIMARY KEY (id)
+CONSTRAINT|ota_packages|ota_packages_app_id_not_null|n|NOT NULL app_id
+CONSTRAINT|ota_packages|ota_packages_created_time_not_null|n|NOT NULL created_time
+CONSTRAINT|ota_packages|ota_packages_deleted_not_null|n|NOT NULL deleted
+CONSTRAINT|ota_packages|ota_packages_file_location_not_null|n|NOT NULL file_location
+CONSTRAINT|ota_packages|ota_packages_id_not_null|n|NOT NULL id
+CONSTRAINT|ota_packages|ota_packages_package_name_not_null|n|NOT NULL package_name
+CONSTRAINT|ota_packages|ota_packages_package_type_not_null|n|NOT NULL package_type
+CONSTRAINT|ota_packages|ota_packages_product_identification_not_null|n|NOT NULL product_identification
+CONSTRAINT|ota_packages|ota_packages_status_not_null|n|NOT NULL status
+CONSTRAINT|ota_packages|ota_packages_updated_time_not_null|n|NOT NULL updated_time
+CONSTRAINT|ota_packages|ota_packages_version_not_null|n|NOT NULL version
+CONSTRAINT|product|_copy_113|p|PRIMARY KEY (id)
+CONSTRAINT|product|product_app_id_not_null|n|NOT NULL app_id
+CONSTRAINT|product|product_data_format_not_null|n|NOT NULL data_format
+CONSTRAINT|product|product_device_type_not_null|n|NOT NULL device_type
+CONSTRAINT|product|product_id_not_null|n|NOT NULL id
+CONSTRAINT|product|product_manufacturer_id_not_null|n|NOT NULL manufacturer_id
+CONSTRAINT|product|product_manufacturer_name_not_null|n|NOT NULL manufacturer_name
+CONSTRAINT|product|product_model_not_null|n|NOT NULL model
+CONSTRAINT|product|product_product_identification_not_null|n|NOT NULL product_identification
+CONSTRAINT|product|product_product_name_not_null|n|NOT NULL product_name
+CONSTRAINT|product|product_product_type_not_null|n|NOT NULL product_type
+CONSTRAINT|product|product_protocol_type_not_null|n|NOT NULL protocol_type
+CONSTRAINT|product|product_status_not_null|n|NOT NULL status
+CONSTRAINT|product|product_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|product_commands|product_commands_id_not_null|n|NOT NULL id
+CONSTRAINT|product_commands|product_commands_name_not_null|n|NOT NULL name
+CONSTRAINT|product_commands|product_commands_pkey|p|PRIMARY KEY (id)
+CONSTRAINT|product_commands|product_commands_service_id_not_null|n|NOT NULL service_id
+CONSTRAINT|product_commands|product_commands_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|product_commands_requests|product_commands_requests_commands_id_not_null|n|NOT NULL commands_id
+CONSTRAINT|product_commands_requests|product_commands_requests_datatype_not_null|n|NOT NULL datatype
+CONSTRAINT|product_commands_requests|product_commands_requests_id_not_null|n|NOT NULL id
+CONSTRAINT|product_commands_requests|product_commands_requests_pkey|p|PRIMARY KEY (id)
+CONSTRAINT|product_commands_requests|product_commands_requests_service_id_not_null|n|NOT NULL service_id
+CONSTRAINT|product_commands_requests|product_commands_requests_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|product_commands_response|product_commands_response_commands_id_not_null|n|NOT NULL commands_id
+CONSTRAINT|product_commands_response|product_commands_response_datatype_not_null|n|NOT NULL datatype
+CONSTRAINT|product_commands_response|product_commands_response_id_not_null|n|NOT NULL id
+CONSTRAINT|product_commands_response|product_commands_response_pkey|p|PRIMARY KEY (id)
+CONSTRAINT|product_commands_response|product_commands_response_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|product_event|product_event_event_code_not_null|n|NOT NULL event_code
+CONSTRAINT|product_event|product_event_event_name_not_null|n|NOT NULL event_name
+CONSTRAINT|product_event|product_event_event_type_not_null|n|NOT NULL event_type
+CONSTRAINT|product_event|product_event_id_not_null|n|NOT NULL id
+CONSTRAINT|product_event|product_event_pkey|p|PRIMARY KEY (id)
+CONSTRAINT|product_event|product_event_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|product_event_response|product_event_response_datatype_not_null|n|NOT NULL datatype
+CONSTRAINT|product_event_response|product_event_response_event_id_not_null|n|NOT NULL event_id
+CONSTRAINT|product_event_response|product_event_response_id_not_null|n|NOT NULL id
+CONSTRAINT|product_event_response|product_event_response_pkey|p|PRIMARY KEY (id)
+CONSTRAINT|product_event_response|product_event_response_required_not_null|n|NOT NULL required
+CONSTRAINT|product_event_response|product_event_response_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|product_properties|_copy_37|p|PRIMARY KEY (id)
+CONSTRAINT|product_properties|product_properties_datatype_not_null|n|NOT NULL datatype
+CONSTRAINT|product_properties|product_properties_id_not_null|n|NOT NULL id
+CONSTRAINT|product_properties|product_properties_property_code_not_null|n|NOT NULL property_code
+CONSTRAINT|product_properties|product_properties_property_name_not_null|n|NOT NULL property_name
+CONSTRAINT|product_properties|product_properties_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|product_script|product_script_id_not_null|n|NOT NULL id
+CONSTRAINT|product_script|product_script_product_id_not_null|n|NOT NULL product_id
+CONSTRAINT|product_script|product_script_product_identification_not_null|n|NOT NULL product_identification
+CONSTRAINT|product_script|product_script_script_enabled_not_null|n|NOT NULL script_enabled
+CONSTRAINT|product_script|product_script_script_version_not_null|n|NOT NULL script_version
+CONSTRAINT|product_script|product_script_tenant_id_not_null|n|NOT NULL tenant_id
+CONSTRAINT|product_services|product_services_id_not_null|n|NOT NULL id
+CONSTRAINT|product_services|product_services_pkey|p|PRIMARY KEY (id)
+CONSTRAINT|product_services|product_services_service_code_not_null|n|NOT NULL service_code
+CONSTRAINT|product_services|product_services_service_name_not_null|n|NOT NULL service_name
+CONSTRAINT|product_services|product_services_tenant_id_not_null|n|NOT NULL tenant_id
+INDEX|device|_copy_52|CREATE UNIQUE INDEX _copy_52 ON public.device USING btree (id)
+INDEX|device_service_invoke_response|device_service_invoke_response_pkey|CREATE UNIQUE INDEX device_service_invoke_response_pkey ON public.device_service_invoke_response USING btree (id)
+INDEX|device_service_invoke_response|idx_device_service_invoke_response_create_time|CREATE INDEX idx_device_service_invoke_response_create_time ON public.device_service_invoke_response USING btree (create_time)
+INDEX|device_service_invoke_response|idx_device_service_invoke_response_device_id|CREATE INDEX idx_device_service_invoke_response_device_id ON public.device_service_invoke_response USING btree (device_id)
+INDEX|device_service_invoke_response|idx_device_service_invoke_response_device_identification|CREATE INDEX idx_device_service_invoke_response_device_identification ON public.device_service_invoke_response USING btree (device_identification)
+INDEX|device_service_invoke_response|idx_device_service_invoke_response_message_id|CREATE INDEX idx_device_service_invoke_response_message_id ON public.device_service_invoke_response USING btree (message_id)
+INDEX|device_service_invoke_response|idx_device_service_invoke_response_tenant_id|CREATE INDEX idx_device_service_invoke_response_tenant_id ON public.device_service_invoke_response USING btree (tenant_id)
+INDEX|ota_packages|_copy_42|CREATE UNIQUE INDEX _copy_42 ON public.ota_packages USING btree (id)
+INDEX|ota_packages|idx_app_id|CREATE INDEX idx_app_id ON public.ota_packages USING btree (app_id)
+INDEX|ota_packages|idx_product_identification|CREATE INDEX idx_product_identification ON public.ota_packages USING btree (product_identification)
+INDEX|ota_packages|idx_version|CREATE INDEX idx_version ON public.ota_packages USING btree (version)
+INDEX|product|_copy_113|CREATE UNIQUE INDEX _copy_113 ON public.product USING btree (id)
+INDEX|product|manufacturer_id|CREATE INDEX manufacturer_id ON public.product USING btree (manufacturer_id)
+INDEX|product_commands|idx_product_commands_service_id|CREATE INDEX idx_product_commands_service_id ON public.product_commands USING btree (service_id)
+INDEX|product_commands|idx_product_commands_tenant_id|CREATE INDEX idx_product_commands_tenant_id ON public.product_commands USING btree (tenant_id)
+INDEX|product_commands|product_commands_pkey|CREATE UNIQUE INDEX product_commands_pkey ON public.product_commands USING btree (id)
+INDEX|product_commands_requests|idx_product_commands_requests_commands_id|CREATE INDEX idx_product_commands_requests_commands_id ON public.product_commands_requests USING btree (commands_id)
+INDEX|product_commands_requests|idx_product_commands_requests_service_id|CREATE INDEX idx_product_commands_requests_service_id ON public.product_commands_requests USING btree (service_id)
+INDEX|product_commands_requests|idx_product_commands_requests_tenant_id|CREATE INDEX idx_product_commands_requests_tenant_id ON public.product_commands_requests USING btree (tenant_id)
+INDEX|product_commands_requests|product_commands_requests_pkey|CREATE UNIQUE INDEX product_commands_requests_pkey ON public.product_commands_requests USING btree (id)
+INDEX|product_commands_response|idx_product_commands_response_commands_id|CREATE INDEX idx_product_commands_response_commands_id ON public.product_commands_response USING btree (commands_id)
+INDEX|product_commands_response|idx_product_commands_response_service_id|CREATE INDEX idx_product_commands_response_service_id ON public.product_commands_response USING btree (service_id)
+INDEX|product_commands_response|idx_product_commands_response_tenant_id|CREATE INDEX idx_product_commands_response_tenant_id ON public.product_commands_response USING btree (tenant_id)
+INDEX|product_commands_response|product_commands_response_pkey|CREATE UNIQUE INDEX product_commands_response_pkey ON public.product_commands_response USING btree (id)
+INDEX|product_event|idx_product_event_event_code|CREATE INDEX idx_product_event_event_code ON public.product_event USING btree (event_code)
+INDEX|product_event|idx_product_event_product_identification|CREATE INDEX idx_product_event_product_identification ON public.product_event USING btree (product_identification)
+INDEX|product_event|idx_product_event_tenant_id|CREATE INDEX idx_product_event_tenant_id ON public.product_event USING btree (tenant_id)
+INDEX|product_event|product_event_pkey|CREATE UNIQUE INDEX product_event_pkey ON public.product_event USING btree (id)
+INDEX|product_event_response|idx_product_event_response_event_id|CREATE INDEX idx_product_event_response_event_id ON public.product_event_response USING btree (event_id)
+INDEX|product_event_response|idx_product_event_response_service_id|CREATE INDEX idx_product_event_response_service_id ON public.product_event_response USING btree (service_id)
+INDEX|product_event_response|idx_product_event_response_tenant_id|CREATE INDEX idx_product_event_response_tenant_id ON public.product_event_response USING btree (tenant_id)
+INDEX|product_event_response|product_event_response_pkey|CREATE UNIQUE INDEX product_event_response_pkey ON public.product_event_response USING btree (id)
+INDEX|product_properties|_copy_37|CREATE UNIQUE INDEX _copy_37 ON public.product_properties USING btree (id)
+INDEX|product_script|idx_product_script_product_id|CREATE INDEX idx_product_script_product_id ON public.product_script USING btree (product_id)
+INDEX|product_script|idx_product_script_product_identification|CREATE INDEX idx_product_script_product_identification ON public.product_script USING btree (product_identification)
+INDEX|product_script|idx_product_script_tenant_id|CREATE INDEX idx_product_script_tenant_id ON public.product_script USING btree (tenant_id)
+INDEX|product_services|idx_product_services_product_identification|CREATE INDEX idx_product_services_product_identification ON public.product_services USING btree (product_identification)
+INDEX|product_services|idx_product_services_service_code|CREATE INDEX idx_product_services_service_code ON public.product_services USING btree (service_code)
+INDEX|product_services|idx_product_services_tenant_id|CREATE INDEX idx_product_services_tenant_id ON public.product_services USING btree (tenant_id)
+INDEX|product_services|product_services_pkey|CREATE UNIQUE INDEX product_services_pkey ON public.product_services USING btree (id)
+ROW_COUNT|device|4
+ROW_COUNT|device_service_invoke_response|0
+ROW_COUNT|ota_packages|0
+ROW_COUNT|product|4
+ROW_COUNT|product_commands|0
+ROW_COUNT|product_commands_requests|0
+ROW_COUNT|product_commands_response|0
+ROW_COUNT|product_event|0
+ROW_COUNT|product_event_response|0
+ROW_COUNT|product_properties|17
+ROW_COUNT|product_script|0
+ROW_COUNT|product_services|0
+DUPLICATE_GROUPS|event_code_product_scope|0
+DUPLICATE_GROUPS|event_code_template_scope|0
+DUPLICATE_GROUPS|product_identification|0
+DUPLICATE_GROUPS|property_code_product_scope|0
+DUPLICATE_GROUPS|property_code_template_scope|0
+DUPLICATE_GROUPS|service_code_product_scope|0
+DUPLICATE_GROUPS|service_code_template_scope|0
+IDENTIFIER_SCOPE|events_both_null|0
+IDENTIFIER_SCOPE|events_both_set|0
+IDENTIFIER_SCOPE|properties_both_null|0
+IDENTIFIER_SCOPE|properties_both_set|0
+IDENTIFIER_SCOPE|services_both_null|0
+IDENTIFIER_SCOPE|services_both_set|0
+ORPHAN_COUNT|commands_without_service|0
+ORPHAN_COUNT|devices_without_product|0
+ORPHAN_COUNT|event_response_services_without_service|0
+ORPHAN_COUNT|event_responses_without_event|0
+ORPHAN_COUNT|events_without_product|0
+ORPHAN_COUNT|invoke_responses_without_device|0
+ORPHAN_COUNT|invoke_responses_without_product|0
+ORPHAN_COUNT|ota_packages_without_product|0
+ORPHAN_COUNT|properties_without_product|0
+ORPHAN_COUNT|requests_without_command|0
+ORPHAN_COUNT|responses_without_command|0
+ORPHAN_COUNT|scripts_without_exact_product|0
+ORPHAN_COUNT|services_without_product|0
+RELATIONSHIP_ANOMALY|invoke_device_identity_mismatch|0
+RELATIONSHIP_ANOMALY|ota_tenant_id_null|0
+RELATIONSHIP_ANOMALY|request_service_mismatch|0
+RELATIONSHIP_ANOMALY|response_service_id_null|0
+RELATIONSHIP_ANOMALY|response_service_mismatch|0
+PROFILE_FLAG|product_properties_has_service_id|false
+PROFILE_FLAG|all_profiled_tables_have_tenant_id|true
+PROFILE_FLAG|all_profiled_tenant_ids_not_null|false
+PROFILE_FLAG|business_unique_constraint_count|0
+PROFILE_FLAG|primary_key_count|11
+PROFILE_FLAG|check_constraint_count|0
+PROFILE_FLAG|index_count|40
+PROFILE_FLAG|foreign_key_count|0
+PROFILE_FLAG|trigger_count|0
+ROLLBACK
