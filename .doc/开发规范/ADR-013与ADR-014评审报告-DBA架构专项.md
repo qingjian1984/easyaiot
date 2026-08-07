@@ -245,4 +245,13 @@ ADR-013 的选型方向（受控步骤执行器、单事实基线、事务/非�
 - **备份/恢复**：runner 自动备份 → 人为损毁（DROP 审计表 + 删 product 行）→ 异库恢复，计数与对象逐项还原；
 - **回滚**：uninstall 后六张新表全部删除，history 5 行、`uq_product_tenant_identification` 约束、幂等表按设计保留。
 
-转 Accepted 剩余 OPEN 收敛为四项：完整 12 表画像生产重跑、standard 最低规格压测、幂等表经 runner 正式落库的步骤建模、DBA/代码 owner 复核签字。
+### 8.4 M05 幂等表建模补录（2026-08-07，ADR-013 升 1.4.2、migration 设计升 0.2.0）
+
+§8.3 剩余项"幂等表经 runner 正式落库的步骤建模"已关闭：新增 runner 步骤 `M05`（`steps/M05__power_idempotency_record.sql`，链首串行前置、单事务，DDL 与本报告评审通过的候选资产逐字一致），步骤链扩展为 M05 → M15 → M16 → V001 → V002，CLI `--step`/env.example/roles 候选同步。临时评审库（`td005_m05_review`，用后销毁，`iot-device20` 未触碰）演练全项 PASS：
+
+- 五步骤链 SUCCEEDED，history 五行 hash 与 dry-run manifest 一致；重跑五步全部 STEP_SKIPPED；
+- M05 资产篡改 → 校验阶段 `HASH_MISMATCH M05`（退出码 2，零变更），恢复后重跑全 SKIPPED；
+- 幂等语义烟测：24h 默认窗口、状态迁移、9 项约束/争抢反例全部按预期，SMOKE_RESULT=2；
+- MIG-009 九表注释门禁 PASS；U001 空表卸载保留幂等表（TD-004 资产）与 history。
+
+转 Accepted 剩余 OPEN 收敛为三项：完整 12 表画像生产重跑、standard 最低规格压测、DBA/代码 owner 复核签字。

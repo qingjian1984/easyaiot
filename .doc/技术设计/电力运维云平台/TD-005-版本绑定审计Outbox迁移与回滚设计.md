@@ -1,6 +1,6 @@
 # TD-005：版本、绑定、审计与 Outbox 迁移回滚设计
 
-> 版本：0.1.9
+> 版本：0.2.0
 > 状态：In Review / Migration Candidate
 > 日期：2026-08-07
 > 强制双基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.5.0](../../开发规范/EasyAIoT项目开发宪法.md)
@@ -20,6 +20,7 @@
 | 0.1.7 | 2026-08-06 | TD-004 `power_idempotency_record` 候选 DDL 形成并临时库烟测 PASS（争抢唯一、8 项反例、注释完整性）；12 表画像新鲜度重跑与 2026-08-05 基线一致；落库与 MIG-005 合同仍 OPEN |
 | 0.1.8 | 2026-08-07 | 处置 DBA/架构专项评审：V001 拆分为 V001（五表）/V002（binding）并新增 M16 约束附加步骤，runner 两阶段先校验后执行、超时/重试/强制备份/FAILED 落史，版本 trigger 身份列与生命周期加固，Outbox/审计有界 CHECK，注释门禁扩至九表，新增 roles_candidate.sql；MIG 证据与事件 strict 校验重跑 PASS；仍未在任何共享/生产库执行 DDL |
 | 0.1.9 | 2026-08-07 | 补演练证据：索引签名漂移反例与恢复、MIG-005 幂等表门禁双向、备份/恢复（损毁→异库恢复逐项一致）、回滚（六表清零、history/约束/幂等表保留）全部 PASS；转 Accepted 剩余 OPEN：生产画像重跑、压测、幂等表 runner 落库步骤建模、DBA 复核签字 |
+| 0.2.0 | 2026-08-07 | 幂等表落库步骤建模完成：新增 runner 步骤 `M05`（链首串行前置，单事务，DDL 与评审候选逐字一致），runner 步骤链扩展为 M05 → M15 → M16 → V001 → V002，roles 候选补幂等表授权；临时库演练 PASS（全链 SUCCEEDED、重跑全 SKIPPED、M05 篡改阻断零变更、语义烟测 9 反例 PASS、MIG-009 PASS、U001 保留幂等表）；转 Accepted 剩余 OPEN 收敛为：生产画像重跑、压测、DBA 复核签字 |
 
 ## 1. 结论
 
@@ -394,13 +395,16 @@ PUBLISHED 行 M1 至少保留一个完整发布周期且不少于 30 天；在�
 - `assets/td005-migration/V001__power_model_version_audit_outbox.sql`（模板/版本/成员索引/审计/Outbox 五表，单事务）；
 - `assets/td005-migration/V002__power_product_model_binding.sql`（binding 表 + 同租户 FK，独立事务阶段）；
 - `assets/td005-migration/U001__power_model_version_binding_audit_outbox.sql`（V001+V002 全量卸载，仅空表）；
-- `assets/td005-migration/roles_candidate.sql`（四角色最小授权候选，M-09 处置）。
+- `assets/td005-migration/roles_candidate.sql`（四角色最小授权候选，M-09 处置；0.2.0 起含幂等表授权）；
+- `.scripts/postgresql/td005-migration/steps/M05__power_idempotency_record.sql`（幂等记录表，单事务；DDL 与评审候选 `power_idempotency_record_candidate.sql` 逐字一致，0.2.0 新增）。
 
-执行步骤与迁移 ID 映射：M1（五表）→ `V001`；M1.5（product 并发唯一索引）→ runner 步骤 `M15`；约束附加（短锁 USING INDEX）→ runner 步骤 `M16`；M2（binding）→ `V002`。runner 两阶段执行：先完成全部资产 hash/INVALID index/索引签名校验，再按 M15 → M16 → V001 → V002 顺序执行未完成步骤（H-03/H-04 处置）。
+执行步骤与迁移 ID 映射：M0.5（幂等表）→ runner 步骤 `M05`；M1（五表）→ `V001`；M1.5（product 并发唯一索引）→ runner 步骤 `M15`；约束附加（短锁 USING INDEX）→ runner 步骤 `M16`；M2（binding）→ `V002`。runner 两阶段执行：先完成全部资产 hash/INVALID index/索引签名校验，再按 M05 → M15 → M16 → V001 → V002 顺序执行未完成步骤（H-03/H-04 处置；M05 于 0.2.0 加入链首，保持幂等表串行前置语义）。
 
 骨架资产路径为 `.doc/技术设计/电力运维云平台/assets/td005-migration/`，仅作 DBA 核对附件；最终资产必须在 runner/约束名/trigger/权限评审冻结后重新生成并进入 SHA-256 manifest。
 
 骨架烟测（2026-08-07，DBA/架构专项处置后重跑，本地临时评审库 PostgreSQL 18.4）：M15 → M16 → V001 → V002 全链路 PASS；二次 apply 全部 STEP_SKIPPED；篡改资产校验阶段阻断零变更；锁忙有界失败与重试；审计追加写 UPDATE/DELETE 拒绝；版本 trigger 反例（SemVer、DRAFT→RETIRED、身份列/发布事实篡改）全部按预期拒绝；U001 非空拒绝与空表卸载 PASS。临时库已清理。2026-08-06 旧组合骨架烟测结论由本轮取代。该结果只证明骨架可执行，不等同于 MIG/TX/OUT 自动合同或生产迁移证据。
+
+M05 建模演练（2026-08-07，0.2.0，本地临时评审库 PostgreSQL 18.4，目标库 `td005_m05_review` 已销毁，`iot-device20` 未触碰且 product=4 与画像基线一致）：五步骤链 M05 → M15 → M16 → V001 → V002 全链 SUCCEEDED，history 五行 hash 与 dry-run manifest 一致；二次 apply 五步全部 STEP_SKIPPED；M05 资产篡改在校验阶段 HASH_MISMATCH 阻断（退出码 2，零业务变更，history 无新增），恢复资产后重跑五步全部 SKIPPED；幂等语义烟测（24h 默认保留、状态迁移、9 项约束/争抢反例、注释完整性断言）PASS，SMOKE_RESULT=2；MIG-009 注释门禁 PASS；U001 空表卸载保留 `power_idempotency_record`（TD-004 资产，存运营数据，不属于 TD-005 卸载范围）与 history。
 
 `V001` 只能 additive 创建对象；`U001` 是带拒绝条件的受控卸载脚本，不作为日常应用回滚。两者进入 SHA-256 manifest，并记录目标 PostgreSQL 版本、执行人、审批单、开始/结束时间和输出。正式放入应用/安装目录前，必须先决定 migration runner；禁止由应用多副本启动时并发执行裸 SQL。
 
@@ -409,7 +413,7 @@ PUBLISHED 行 M1 至少保留一个完整发布周期且不少于 30 天；在�
 | 阶段 | 动作 | 失败处理 |
 |---|---|---|
 | M0 | 备份；重跑 12 表画像、重复/孤儿/tenant/列签名 precheck；确认 capability 关闭 | 任一非预期差异立即停止 |
-| M0.5 | 由 TD-004 migration 落地 `power_idempotency_record`，验证跨副本唯一争抢、同 key 异 hash、24 小时保留和清理恢复 | 表或合同未通过则所有版本写 API 保持关闭 |
+| M0.5 | 落地 `power_idempotency_record`（0.2.0 起由 runner 步骤 `M05` 在建链首步执行，不再依赖 TD-004 独立 migration），验证跨副本唯一争抢、同 key 异 hash、24 小时保留和清理恢复 | 表或合同未通过则所有版本写 API 保持关闭 |
 | M1 | 创建模板、版本、成员索引、审计、Outbox 表与本组内部约束 | 整个 DDL 事务回滚 |
 | M1.5 | 对生产 `product` 重跑重复 precheck；用 `CREATE UNIQUE INDEX CONCURRENTLY` 创建 `(tenant_id, product_identification)` 唯一索引，随后短锁附加稳定 UNIQUE 约束并进入画像基线 | 索引失败时保留/清理 INVALID index 后停止；禁止自动归并产品 |
 | M2 | 创建 binding 表；复合 FK 先 `NOT VALID`，独立扫描后 `VALIDATE CONSTRAINT` | unique/FK 未验证则不启用 binding 写路径 |
@@ -538,4 +542,4 @@ migration runner 以迁移 ID 和脚本 SHA-256 记录执行事实；同 ID 同 
 9. 完成备份、恢复、应用回滚、INVALID index 清理和空表卸载演练；
 10. 把评审结论追加到 TD-005 评审报告，并同步主 TD、运行模型设计与续作入口。
 
-当前 OPEN：ADR-013/ADR-014 仍为 Proposed、幂等表落库、product unique/binding FK、事件消费者/transport/Inbox 落地、Schema 双版本合同、容量和超时压测、审计/Outbox 保留政策、最终 SQL 资产及全部本设计自动证据。V001/U001 骨架仅用于评审，任何一项未关闭时，不得执行 DDL、接公开接口或宣称审计/Outbox 已完成。
+当前 OPEN：ADR-013/ADR-014 仍为 Proposed、事件消费者/transport/Inbox 落地、Schema 双版本合同、容量和超时压测、审计/Outbox 保留政策、最终 SQL 资产及全部本设计自动证据。幂等表落库已建模为 runner 步骤 M05（0.2.0 关闭）；product unique/binding FK 已有 M15/M16/V002 步骤与演练证据。V001/V002/U001/M05 资产仅用于评审，任何一项未关闭时，不得执行 DDL、接公开接口或宣称审计/Outbox 已完成。
