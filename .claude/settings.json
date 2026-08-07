@@ -10,7 +10,12 @@
       "Bash(git rm *)",
       "Bash(git push *)",
       "Bash(bash -n .scripts/postgresql/td005-migration/td005_migration.sh)",
-      "Bash(bash .scripts/postgresql/td005-migration/td005_migration.sh dry-run)"
+      "Bash(bash .scripts/postgresql/td005-migration/td005_migration.sh dry-run)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'docs\\(sdd\\): fix walkthrough command and measurement wording *)",
+      "Bash(git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 push origin cfdqiot)",
+      "Bash(awk '{print substr\\($1,1,8\\), $2}')",
+      "Bash(git commit -m 'docs\\(sdd\\): execute td005 production profile rerun per runbook \\(PASS\\) *)"
     ]
   }
 }
