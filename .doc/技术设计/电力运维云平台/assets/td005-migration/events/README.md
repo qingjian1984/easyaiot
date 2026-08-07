@@ -1,8 +1,8 @@
 # TD-005 事件 Schema/fixture 候选
 
 > 状态：Review Candidate（未冻结）
-> 日期：2026-08-06
-> 上游：TD-005 migration 0.1.2 §4.6
+> 日期：2026-08-07
+> 上游：TD-005 migration 0.1.8 §4.6
 
 本目录提供 4 个首批领域事件的 Draft 2020-12 JSON Schema 与示例 fixture，用于 DBA/架构评审事件 payload 契约；尚未进入 `iot-device-api` 代码资源，也未冻结消费者/transport/Inbox。
 
@@ -27,4 +27,6 @@
 
 ## 验证
 
-当前仓库未安装 `ajv-formats`，使用 Ajv Draft 2020-12 `strict:false` 对 4 个合法 fixture 校验均 PASS（`format: uuid/date-time` 在 strict 模式会因缺少 formats 插件被拒；正则/枚举约束本身已覆盖）。最终 CI 应引入 `ajv-formats` 或等价 validator 后以 strict 模式复跑。
+2026-08-07（DBA/架构专项 M-10 处置）：使用 Ajv Draft 2020-12 `strict:true` + `ajv-formats`（仓库外临时工具目录安装，ajv@8）对 4 个事件的合法 fixture 校验，4/4 PASS。CI 门禁接线（生产者/消费者合同任务）继续 OPEN。
+
+2026-08-06 历史记录：仓库当时未安装 `ajv-formats`，曾以 `strict:false` 校验 PASS；该结论已被上方 strict 复跑取代。

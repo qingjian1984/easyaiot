@@ -1,7 +1,9 @@
--- MIG-009：V001/U001 涉及表与字段的中文 COMMENT 完整性检查
+-- MIG-009：TD-005 迁移涉及表与字段的中文 COMMENT 完整性检查
 --
 -- 返回行数为 0 才通过；返回行列出缺失或非中文注释的表/字段。
 -- 表级注释按 objsubid=0，字段级注释按 objsubid=attnum。
+-- 清单包含 V001/V002 全部新表、runner 引导的 history 表，
+-- 以及待落库的 power_idempotency_record / power_model_event_inbox（未建表时自动跳过）。
 
 SELECT c.relname AS table_name, '<TABLE>' AS column_name,
        COALESCE(d.description, '<MISSING>') AS comment_text
@@ -17,7 +19,9 @@ WHERE n.nspname = 'public'
       'power_model_member_index',
       'power_model_audit',
       'power_model_release_outbox',
-      'power_product_model_binding'
+      'power_product_model_binding',
+      'power_idempotency_record',
+      'power_model_event_inbox'
   )
   AND (d.description IS NULL OR btrim(d.description) = '' OR d.description !~ '[一-龥]')
 
@@ -43,6 +47,9 @@ WHERE n.nspname = 'public'
       'power_model_member_index',
       'power_model_audit',
       'power_model_release_outbox',
-      'power_product_model_binding'
+      'power_product_model_binding',
+      'power_idempotency_record',
+      'power_model_event_inbox'
   )
   AND (d.description IS NULL OR btrim(d.description) = '' OR d.description !~ '[一-龥]');
+
