@@ -52,8 +52,8 @@
 
 | 指标 | 采集方式 | 候选阈值 |
 |---|---|---|
-| 五步骤全链 wall time | runner 结构化日志 `duration_ms` 之和 | ≤ 30 min |
-| M15 单独耗时 | history `duration_ms` + `pg_stat_progress_create_index` 采样（5s 间隔） | ≤ 20 min |
+| 五步骤全链 wall time | history `started_at`/`finished_at` 累计 + runner 日志时间戳（当前 Spike 未输出 `duration_ms` 字段，其为 ADR-013 日志契约目标值，不据此测量） | ≤ 30 min |
+| M15 单独耗时 | history 起止时间 + `pg_stat_progress_create_index` 采样（5s 间隔） | ≤ 20 min |
 | M15 期间磁盘增量 | 执行前后 `pg_database_size` + 文件系统余量 | ≤ 表体积 1.5× |
 | M15 期间 WAL 增量 | `pg_stat_wal` / LSN 差值 | 记录实测值（不设阈） |
 | 备份耗时/体积 | runner 备份步骤日志 + 文件大小 | 体积 ≤ 库体积 1.2× |
