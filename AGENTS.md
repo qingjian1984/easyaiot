@@ -220,7 +220,7 @@ iot (root)
 
 ## 部署档位
 
-安装时通过 `INSTALL_PROFILE` 环境变量选择（由 `.scripts/docker/deploy_profile.sh` 控制）：
+安装时通过 `EASYAIOT_DEPLOY_PROFILE` 环境变量选择（由 `.scripts/docker/deploy_profile.sh` 控制，默认 `full`）：
 
 | 档位 | 最低内存 | 适用场景 |
 |------|----------|----------|

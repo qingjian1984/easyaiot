@@ -1,8 +1,8 @@
 # TD-005：版本、绑定、审计与 Outbox 迁移回滚设计
 
-> 版本：0.1.7
+> 版本：0.1.9
 > 状态：In Review / Migration Candidate
-> 日期：2026-08-06
+> 日期：2026-08-07
 > 强制双基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.5.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 上游：[TD-005 1.0.16](./TD-005-物模型模板Schema版本差异与发布API.md)、[运行模型兼容与删除链设计 0.1.9](./TD-005-运行模型兼容与删除链技术设计.md)、[ADR-009](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)、[ADR-012 1.0.2](../../架构决策/电力运维云平台/ADR-012-产品根属性与服务参数单一事实.md)
 > 适用档位：`standard` / `full` 共用同一实现；`mini` 不建电力模板业务数据、不启动发布器并由 `power.device.model` fail-closed
@@ -18,6 +18,8 @@
 | 0.1.5 | 2026-08-06 | 同步 ADR-013 1.3.0：MIG-003/005 PARTIAL PASS、MIG-006/008 PASS；完整画像、幂等表 DDL、压测与演练仍 OPEN |
 | 0.1.6 | 2026-08-06 | 新增 ADR-014（Proposed）Kafka transport 与消费者 Inbox 候选（`power_model_event_inbox`），同步 `.scripts/postgresql` 运维文档与 runner env.example |
 | 0.1.7 | 2026-08-06 | TD-004 `power_idempotency_record` 候选 DDL 形成并临时库烟测 PASS（争抢唯一、8 项反例、注释完整性）；12 表画像新鲜度重跑与 2026-08-05 基线一致；落库与 MIG-005 合同仍 OPEN |
+| 0.1.8 | 2026-08-07 | 处置 DBA/架构专项评审：V001 拆分为 V001（五表）/V002（binding）并新增 M16 约束附加步骤，runner 两阶段先校验后执行、超时/重试/强制备份/FAILED 落史，版本 trigger 身份列与生命周期加固，Outbox/审计有界 CHECK，注释门禁扩至九表，新增 roles_candidate.sql；MIG 证据与事件 strict 校验重跑 PASS；仍未在任何共享/生产库执行 DDL |
+| 0.1.9 | 2026-08-07 | 补演练证据：索引签名漂移反例与恢复、MIG-005 幂等表门禁双向、备份/恢复（损毁→异库恢复逐项一致）、回滚（六表清零、history/约束/幂等表保留）全部 PASS；转 Accepted 剩余 OPEN：生产画像重跑、压测、幂等表 runner 落库步骤建模、DBA 复核签字 |
 
 ## 1. 结论
 
@@ -50,7 +52,7 @@ Outbox 发布器只在事务提交后异步投递。事件 ID 由应用在入事
 - 不引入 Flyway/Liquibase 作为本迁移窗口的主执行器，避免与现有 `*10.sql` 全量基线形成第二套 Schema 事实，并规避 `dynamic-datasource` 集成和 `CONCURRENTLY` 非事务步骤的框架适配风险；
 - 采用受控迁移步骤执行器：`schema_migration_history` + SHA-256 + advisory lock + dry-run/备份/破坏性拦截，事务步骤与非事务步骤分离；
 - 候选执行器决策见 [ADR-013 1.1.0（Proposed，宪法专项设计处置完成）](../../架构决策/电力运维云平台/ADR-013-受控数据库迁移执行器.md)，批准前不得据此实现或执行 DDL；
-- V001/U001 DDL 骨架已作为评审附件生成于 [assets/td005-migration](./assets/td005-migration/V001__power_model_version_binding_audit_outbox.sql)，仅用于 DBA/架构评审，不进入安装脚本。
+- V001（五表）/V002（binding）DDL 骨架与 M15/M16 步骤已作为评审附件生成于 [assets/td005-migration](./assets/td005-migration/)，仅用于 DBA/架构评审，不进入安装脚本。
 - 首批 4 个领域事件 V1 Schema 与合法 fixture 候选已生成于 [assets/td005-migration/events](./assets/td005-migration/events/README.md)，用于评审 payload 契约；尚未进入 `iot-device-api` 代码资源。
 
 ## 2. 范围与非目标
@@ -387,14 +389,18 @@ PUBLISHED 行 M1 至少保留一个完整发布周期且不少于 30 天；在�
 
 ### 7.1 资产与执行器门禁
 
-评审通过后生成最终两份 UTF-8 无 BOM 资产；当前已提供对应评审骨架：
+评审通过后生成最终 UTF-8 无 BOM 资产；当前已提供对应评审骨架：
 
-- `assets/td005-migration/V001__power_model_version_binding_audit_outbox.sql`；
-- `assets/td005-migration/U001__power_model_version_binding_audit_outbox.sql`。
+- `assets/td005-migration/V001__power_model_version_audit_outbox.sql`（模板/版本/成员索引/审计/Outbox 五表，单事务）；
+- `assets/td005-migration/V002__power_product_model_binding.sql`（binding 表 + 同租户 FK，独立事务阶段）；
+- `assets/td005-migration/U001__power_model_version_binding_audit_outbox.sql`（V001+V002 全量卸载，仅空表）；
+- `assets/td005-migration/roles_candidate.sql`（四角色最小授权候选，M-09 处置）。
+
+执行步骤与迁移 ID 映射：M1（五表）→ `V001`；M1.5（product 并发唯一索引）→ runner 步骤 `M15`；约束附加（短锁 USING INDEX）→ runner 步骤 `M16`；M2（binding）→ `V002`。runner 两阶段执行：先完成全部资产 hash/INVALID index/索引签名校验，再按 M15 → M16 → V001 → V002 顺序执行未完成步骤（H-03/H-04 处置）。
 
 骨架资产路径为 `.doc/技术设计/电力运维云平台/assets/td005-migration/`，仅作 DBA 核对附件；最终资产必须在 runner/约束名/trigger/权限评审冻结后重新生成并进入 SHA-256 manifest。
 
-骨架烟测（2026-08-06，本地临时评审库，PostgreSQL 18.4）：V001 空库执行 PASS；`power_model_audit` 追加写 UPDATE 拒绝 PASS；U001 面对非空审计表拒绝且零变更 PASS；U001 空表反向卸载 PASS。临时库已清理。该结果只证明骨架可执行，不等同于 MIG/TX/OUT 自动合同或生产迁移证据。
+骨架烟测（2026-08-07，DBA/架构专项处置后重跑，本地临时评审库 PostgreSQL 18.4）：M15 → M16 → V001 → V002 全链路 PASS；二次 apply 全部 STEP_SKIPPED；篡改资产校验阶段阻断零变更；锁忙有界失败与重试；审计追加写 UPDATE/DELETE 拒绝；版本 trigger 反例（SemVer、DRAFT→RETIRED、身份列/发布事实篡改）全部按预期拒绝；U001 非空拒绝与空表卸载 PASS。临时库已清理。2026-08-06 旧组合骨架烟测结论由本轮取代。该结果只证明骨架可执行，不等同于 MIG/TX/OUT 自动合同或生产迁移证据。
 
 `V001` 只能 additive 创建对象；`U001` 是带拒绝条件的受控卸载脚本，不作为日常应用回滚。两者进入 SHA-256 manifest，并记录目标 PostgreSQL 版本、执行人、审批单、开始/结束时间和输出。正式放入应用/安装目录前，必须先决定 migration runner；禁止由应用多副本启动时并发执行裸 SQL。
 

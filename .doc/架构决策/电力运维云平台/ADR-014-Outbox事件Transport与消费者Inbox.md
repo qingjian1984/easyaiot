@@ -1,8 +1,8 @@
 # ADR-014：Outbox 事件 Transport 与消费者 Inbox（TD-005）
 
-> 状态：Proposed（已完成宪法专项设计处置；转 Accepted 前仍须关闭压测、CI 合同门禁落地与消费者实现证据）
-> 版本：1.1.0
-> 日期：2026-08-06
+> 状态：Proposed（已完成宪法专项与 DBA/架构专项设计处置；转 Accepted 前仍须关闭压测、CI 合同门禁落地与消费者实现证据）
+> 版本：1.2.0
+> 日期：2026-08-07
 > 决策范围：TD-005 版本/绑定/审计 Outbox 的异步投递与消费幂等
 > 影响章节：《EasyAIoT 项目开发宪法》§2.1、§2.3、§5.4、§6.2、§6.3、§8、§10.2、§12、§14；TD-005 migration §4.6
 > 产品基线：平台功能计划 1.4.0 / 项目开发宪法 1.5.0
@@ -12,6 +12,7 @@
 |---|---|---|
 | 1.0.0 | 2026-08-06 | 首次形成 Kafka transport 与消费者 Inbox 候选 |
 | 1.1.0 | 2026-08-06 | 处置宪法专项评审 M-01～M-08/P-01～P-07：补目标用户与角色、档位行为、事件 Envelope 冻结引用、Schema 入 API 模块路径、CI 合同门禁、配置清单、可观测性与对账、重试/DLQ/保留值、Inbox 落库绑定 ADR-013、Kafka 安全态势声明、双 UNIQUE 收缩、文档同步计划 |
+| 1.2.0 | 2026-08-07 | 处置 [DBA/架构专项评审](../../开发规范/ADR-013与ADR-014评审报告-DBA架构专项.md)：本 ADR 无 HIGH/MEDIUM 设计变更；M-10 事件 fixture 已用 Ajv Draft 2020-12 strict + ajv-formats 复跑 4/4 PASS（仓库外临时工具目录，CI 接线继续 OPEN）；`power_model_event_inbox` 已纳入 check-comments 注释门禁清单 |
 
 ## 背景
 

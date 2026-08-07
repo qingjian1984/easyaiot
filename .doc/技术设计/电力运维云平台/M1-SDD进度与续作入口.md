@@ -77,6 +77,9 @@
 - ADR-013 已升级至 1.3.1：12 表画像 v1.2.0 在 `postgres-server / iot-device20` 完成新鲜度重跑（只读事务，原始输出与结果 JSON 已存档，结果 Schema 1.1.0 校验 PASS），与 2026-08-05 冻结基线逐项一致——行数不变、重复/孤儿/标识异常/关系不匹配全部为 0、无 blocking 条件触发；生产存量重跑（`productionRerunRequired=true`）、TD-004 幂等表、压测、演练与 DBA 核对继续 OPEN。
 - TD-004 `power_idempotency_record` 候选 DDL 已形成（`assets/td005-migration/power_idempotency_record_candidate.sql`）：完整覆盖 §7.12 列契约与 §7.10 索引基线，含唯一作用域争抢、状态-响应一致性、hash 长度、payload 16KiB 上限、expires_at 排序与 24 小时默认值约束，中文表/列注释齐全。临时评审库烟测 PASS：DDL 应用、默认 24h 窗口、状态迁移、8 项反例（hash 长度/状态-响应/枚举/过期排序/payload 超界/principal_type/同作用域争抢唯一冲突）全部按预期拒绝、跨租户同 key 不冲突、注释完整性 0 缺失；临时库已清理，未触碰共享库。落库仍受 ADR-013 批准与 MIG-005 合同门禁约束，继续 OPEN。
 - 运维文档同步已启动：新增 `.scripts/postgresql/README.md` 与 `td005-migration/env.example`；`.doc/架构设计` 与最终部署文档同步仍待 DBA/文档评审完成。
+- ADR-013/ADR-014 与 migration 资产的 DBA/架构专项评审已完成（2026-08-07，[评审报告](../../开发规范/ADR-013与ADR-014评审报告-DBA架构专项.md)）：架构方向可批准，但发现 4 HIGH / 10 MEDIUM / 5 LOW——runner 缺锁等待/语句超时/重试实现、apply 前备份被可选化、hash 校验与 DDL 执行交错、V001 三步拆分声明与单事务执行矛盾；另有版本 trigger 身份列未保护、DRAFT 可跳 RETIRED、注释门禁缺幂等/Inbox 两表等。
+- DBA/架构专项评审已全部处置（2026-08-07，同报告 §8，采纳 18/部分采纳 1）：ADR-013 升 1.4.0、ADR-014 升 1.2.0、migration 设计升 0.1.8。runner 重构为两阶段先校验后执行 + 超时/重试/强制备份/FAILED 落史；V001 拆分 V001/V002 并新增 M16 约束附加步骤；版本 trigger、SemVer/有界 CHECK、九表注释门禁、roles_candidate.sql 落地。临时库重跑：全链路 SUCCEEDED、幂等跳过、篡改阻断、锁忙有界失败、trigger 反例、空表卸载全部 PASS；事件 fixture strict+ajv-formats 4/4 PASS。两 ADR 维持 Proposed，未在任何共享/生产库执行 DDL。
+- 演练证据第二批已完成（2026-08-07，ADR-013 升 1.4.1、migration 升 0.1.9、评审报告 §8.3）：索引签名漂移反例与恢复、MIG-005 幂等表门禁双向 + 8 反例烟测复跑、备份/恢复演练（损毁→异库恢复逐项一致）、回滚演练（六表清零、history/约束/幂等表保留）全部 PASS。转 Accepted 剩余 OPEN 收敛为四项：生产画像重跑、standard 最低规格压测、幂等表 runner 落库步骤建模、DBA/代码 owner 复核签字。
 - TD-001/002/003 的 Envelope、configVersion、siteCode、dataPriority、requestId、Topic、5 分钟 ACK deadline 和健康语义已经对齐。
 - TD-001～004 四份评审报告均保留原始意见并附最终逐项处置，发生冲突时以报告末尾的“复核与最终处置”为准。
 
@@ -137,7 +140,8 @@
 
 继续 SDD 文档链，下一步优先执行 **TD-005 证据准备与冻结门禁关闭**：
 
-1. 读取 [TD-005 1.0.16](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计 0.1.9](./TD-005-运行模型兼容与删除链技术设计.md)、[migration 子设计 0.1.2](./TD-005-版本绑定审计Outbox迁移与回滚设计.md)和[TD-005 评审报告 §23](../../开发规范/TD-005评审报告.md)；
+0. **当前最优先：ADR-013/014 转 Accepted 的收尾**。可本机完成的证据（签名漂移反例、MIG-005 双向、备份/恢复/回滚演练）已全部 PASS（评审报告 §8.3）；剩余四项中两项需要人或环境：① 组织 **DBA/代码 owner 复核签字**（评审报告 + ADR-013 1.4.1 + 演练证据已就绪）；② 幂等表经 runner 正式落库的步骤建模（新增迁移 ID，参照 M15/M16 模式）；③ standard 最低规格压测；④ 生产画像重跑。签字通过且 ② 完成后 ADR-013/014 可转 Accepted；
+1. 读取 [TD-005 1.0.16](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计 0.1.9](./TD-005-运行模型兼容与删除链技术设计.md)、[migration 子设计 0.1.7](./TD-005-版本绑定审计Outbox迁移与回滚设计.md)和[TD-005 评审报告 §23](../../开发规范/TD-005评审报告.md)；
 2. Mapper/DO/VO、legacy adapters、Java golden、根属性 TEN-001～004/006、内部八表持久化/TEN-005/回滚、稳定错误和 TEN-007/008 已完成；先复跑 capability 4 项、只读 API 1 项与设备侧 19 项目标测试，禁止回退到 `product_properties.service_id` 或散落 profile 判断；
 3. 对 [版本/绑定/审计/Outbox migration 与 rollback 0.1.2 候选](./TD-005-版本绑定审计Outbox迁移与回滚设计.md)继续 DBA/架构评审，优先评审 [ADR-013（Proposed）](../../架构决策/电力运维云平台/ADR-013-受控数据库迁移执行器.md)与 [V001/U001 DDL 骨架](./assets/td005-migration/V001__power_model_version_binding_audit_outbox.sql)，关闭 runner 决策后再决定 TD-004 幂等表落库顺序、product unique/binding FK、事件 transport/消费者 Inbox 和压测/保留值；批准前不得启用 DDL；
 4. 上述决策通过后，先形成可供 DBA 核对的 V001/U001 DDL 骨架和事件 V1 Schema/fixture 候选，再生成 manifest/hash 并执行 MIG/TX/OUT/AUD/CFG/PERF 合同；全部通过后才实现公开接口原子边界；
