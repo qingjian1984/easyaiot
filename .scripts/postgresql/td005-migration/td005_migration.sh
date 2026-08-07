@@ -2,12 +2,12 @@
 # ============================================================================
 # TD-005 受控迁移执行器（候选实现 / Spike）
 #
-# 状态：Review Candidate；ADR-013 1.4.0 仍为 Proposed
+# 状态：Review Candidate；ADR-013 1.4.2 仍为 Proposed
 # 用途：仅在临时/评审库执行，不构成生产迁移授权；批准前不得对生产库执行
 #
 # 用法：
 #   ./td005_migration.sh dry-run [--db <database>]
-#   ./td005_migration.sh apply [--db <database>] [--step M15|M16|V001|V002] [--approval <id>] [--yes]
+#   ./td005_migration.sh apply [--db <database>] [--step M05|M15|M16|V001|V002] [--approval <id>] [--yes]
 #   ./td005_migration.sh uninstall [--db <database>] [--approval <id>] [--yes]
 #   ./td005_migration.sh check-comments [--db <database>]
 #
@@ -29,12 +29,12 @@
 #   RETRY_MAX / RETRY_BASE_DELAY / RETRY_MAX_DELAY
 #                        可重试错误（锁忙/连接/超时）的重试次数与退避（默认 3/1s/4s）
 #   SKIP_PRECHECK       1 时跳过运行时画像 precheck
-#   M15_SQL / M16_SQL / V001_SQL / V002_SQL / U001_SQL  步骤 SQL 路径覆盖
+#   M05_SQL / M15_SQL / M16_SQL / V001_SQL / V002_SQL / U001_SQL  步骤 SQL 路径覆盖
 #
-# 执行模型（ADR-013 1.4.0，DBA/架构专项处置 H-01～H-04）：
+# 执行模型（ADR-013 1.4.2，DBA/架构专项处置 H-01～H-04）：
 #   1. 单 psql 会话内先完成全部校验（hash、INVALID index、索引签名），
 #      任何校验失败零业务 DDL 变化（仅 history 引导表幂等建立）；
-#   2. 校验全部通过后才按依赖顺序执行 M15 → M16 → V001 → V002；
+#   2. 校验全部通过后才按依赖顺序执行 M05 → M15 → M16 → V001 → V002；
 #   3. 锁等待与语句超时通过 lock_timeout/statement_timeout 强制有界；
 #   4. 失败按错误码分类，仅可重试错误按有界退避重跑（步骤幂等跳过）；
 #   5. 成功/失败均落 schema_migration_history（FAILED 含脱敏错误摘要）。
@@ -67,6 +67,7 @@ YES="${YES:-0}"
 export PGCONNECT_TIMEOUT="${CONNECT_TIMEOUT}"
 
 ASSET_DIR="${REPO_ROOT}/.doc/技术设计/电力运维云平台/assets/td005-migration"
+M05_SQL="${M05_SQL:-${SCRIPT_DIR}/steps/M05__power_idempotency_record.sql}"
 M15_SQL="${M15_SQL:-${SCRIPT_DIR}/steps/M15__product_tenant_unique_concurrently.sql}"
 M16_SQL="${M16_SQL:-${SCRIPT_DIR}/steps/M16__product_tenant_unique_attach.sql}"
 V001_SQL="${V001_SQL:-${ASSET_DIR}/V001__power_model_version_audit_outbox.sql}"
@@ -75,7 +76,7 @@ U001_SQL="${U001_SQL:-${ASSET_DIR}/U001__power_model_version_binding_audit_outbo
 CHECK_SQL="${SCRIPT_DIR}/check_ddl_comments.sql"
 PREPROFILE_SQL="${SCRIPT_DIR}/precheck_runtime_profile.sql"
 
-APPLY_STEPS=(M15 M16 V001 V002)
+APPLY_STEPS=(M05 M15 M16 V001 V002)
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -94,6 +95,7 @@ fail_validation() { echo "[td005-migration][VALIDATION] $*" >&2; exit 2; }
 
 step_sql_path() {
     case "$1" in
+        M05) echo "${M05_SQL}" ;;
         M15) echo "${M15_SQL}" ;;
         M16) echo "${M16_SQL}" ;;
         V001) echo "${V001_SQL}" ;;
@@ -298,7 +300,7 @@ COMMIT;
 \endif
 SQL
                 ;;
-            V001|V002)
+            M05|V001|V002)
                 echo "BEGIN;"
                 cat "$(step_sql_path "${step}")"
                 echo "COMMIT;"
@@ -522,7 +524,7 @@ case "${MODE}" in
         for step in "${APPLY_STEPS[@]}" U001; do
             log "${step} sha256=$(sha256_file "$(step_sql_path "${step}")")"
         done
-        log "steps: M15 (concurrent) -> M16 (attach) -> V001 (txn) -> V002 (txn); U001 uninstall only"
+        log "steps: M05 (txn) -> M15 (concurrent) -> M16 (attach) -> V001 (txn) -> V002 (txn); U001 uninstall only"
         log "timeouts: connect=${CONNECT_TIMEOUT}s lock_wait=${LOCK_WAIT} statement=${STATEMENT_TIMEOUT} m15=${M15_STATEMENT_TIMEOUT}"
         exit 0
         ;;

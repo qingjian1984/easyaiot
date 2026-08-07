@@ -57,6 +57,11 @@ GRANT SELECT, INSERT, UPDATE ON public.power_product_model_binding TO power_mode
 GRANT INSERT, SELECT ON public.power_model_audit TO power_model_write;
 GRANT INSERT, SELECT ON public.power_model_release_outbox TO power_model_write;
 
+-- 幂等记录（TD-004 §7.12，经 M05 落库）：写身份争抢/状态迁移；
+-- DELETE 仅用于到期清理任务按 expires_at 分批删除已完成记录（同一业务写身份执行）
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.power_idempotency_record TO power_model_write;
+GRANT USAGE, SELECT ON SEQUENCE public.power_idempotency_record_id_seq TO power_model_write;
+
 -- 发布器：读取待发布行，仅更新状态/租约/结果列
 GRANT SELECT ON public.power_model_release_outbox TO power_model_outbox_pub;
 GRANT UPDATE (status, retry_count, next_attempt_at, lease_until, lease_owner,
@@ -70,4 +75,5 @@ GRANT SELECT ON public.power_model_member_index TO power_model_readonly;
 GRANT SELECT ON public.power_model_audit TO power_model_readonly;
 GRANT SELECT ON public.power_model_release_outbox TO power_model_readonly;
 GRANT SELECT ON public.power_product_model_binding TO power_model_readonly;
+GRANT SELECT ON public.power_idempotency_record TO power_model_readonly;
 GRANT SELECT ON public.schema_migration_history TO power_model_readonly;

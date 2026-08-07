@@ -1,16 +1,16 @@
--- TD-004 幂等记录表候选 DDL（仅供评审，禁止在生产/共享库执行）
+-- M05：power_idempotency_record 幂等记录表落库（单事务步骤）
 --
--- 上游：TD-004 §7.12 列契约与 §7.10 索引基线；TD-005 migration M0.5 串行前置；MIG-005 门禁
+-- 上游：TD-004 §7.12 列契约与 §7.10 索引基线（事实源）；TD-005 migration M0.5 串行前置；
+--       ADR-013 受控 runner（history + SHA-256 + advisory lock）。
+-- 说明：DDL 与评审通过的 power_idempotency_record_candidate.sql 逐字一致，
+--       仅头部由"候选"转为正式步骤；TD-004 契约（含 BIGSERIAL 主键）不在本步骤变更。
 -- 语义：跨副本以唯一约束争抢首个 insert 仲裁幂等；冲突方读取同一记录，
 --       同 key 异 request_hash 返回 409 IDEMPOTENCY_KEY_REUSED，
 --       同 hash 已完成则重放原响应，IN_PROGRESS 返回 IDEMPOTENCY_IN_PROGRESS。
--- 生命周期：默认保留 24 小时（expires_at 默认值），具体操作可延长但不得在仍可重试的
---       业务窗口内提前清理；定时任务按 expires_at 分批删除已完成（SUCCEEDED/FAILED_FINAL）
---       记录；IN_PROGRESS 只能在确认无活动事务且超过恢复阈值后转为可重试，不得直接删除。
--- 落库路径：ADR-013 受控 runner（history + SHA-256 + advisory lock），批准前不得执行；
---       已建模为 runner 正式步骤 M05（.scripts/postgresql/td005-migration/steps/M05__power_idempotency_record.sql，
---       DDL 主体与本候选逐字一致，链首串行前置执行）；注释门禁 check_ddl_comments.sql 已覆盖本表。
--- 应用侧责任（DDL 无法表达，评审时核对实现）：key_hash 为客户端 key 的服务端 HMAC，
+-- 生命周期：默认保留 24 小时（expires_at 默认值）；清理任务按 expires_at 分批删除
+--       已完成（SUCCEEDED/FAILED_FINAL）记录；IN_PROGRESS 只能在确认无活动事务且
+--       超过恢复阈值后转为可重试，不得直接删除。
+-- 应用侧责任（DDL 无法表达，实现评审时核对）：key_hash 为客户端 key 的服务端 HMAC，
 --       禁止存原文；request_hash 为 method/path/规范 payload 的 SHA-256；
 --       response_payload 必须有界且脱敏，二维码签发/轮换禁止保存 payload/shortCode 明文；
 --       updated_at 由应用在状态迁移时维护。
