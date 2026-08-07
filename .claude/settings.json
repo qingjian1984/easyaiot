@@ -4,7 +4,10 @@
       "Bash(python -c ' *)",
       "Bash(ls .venv/Scripts/python.exe)",
       "Bash(.venv/Scripts/python.exe rerun_profile_2026_08_06.py)",
-      "Bash(python rerun_profile_2026_08_06.py)"
+      "Bash(python rerun_profile_2026_08_06.py)",
+      "Bash(git -C \"d:/working/laoluopro/workspace/easyaiot\" log --oneline -20)",
+      "Bash(git -C \"d:/working/laoluopro/workspace/easyaiot\" show --stat 629f6ba9)",
+      "Bash(git rm *)"
     ]
   }
 }
