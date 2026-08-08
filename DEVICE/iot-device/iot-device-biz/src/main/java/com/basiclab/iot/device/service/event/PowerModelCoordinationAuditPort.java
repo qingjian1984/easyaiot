@@ -11,9 +11,10 @@ public interface PowerModelCoordinationAuditPort {
     /**
      * 写一条协调审计。
      *
+     * @param eventType 来源事件类型（含主版本，与 Envelope eventType 一致）
      * @param action 处置动作（稳定码，如 TEMPLATE_PUBLISHED_NOTED / LIFECYCLE_REFERENCE_MARKED /
      *               IMPACT_EMPTY / REGENERATION_DRAFTS_CREATED）
      * @param detail 脱敏有界摘要（≤512 字符）
      */
-    void record(String eventId, long tenantId, String action, String detail);
+    void record(String eventId, long tenantId, String eventType, String action, String detail);
 }

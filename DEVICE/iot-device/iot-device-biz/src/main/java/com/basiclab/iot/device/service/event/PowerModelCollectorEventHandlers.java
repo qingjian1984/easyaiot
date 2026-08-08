@@ -178,7 +178,7 @@ public final class PowerModelCollectorEventHandlers {
             String templateVersion = requiredText(data, "templateVersion");
             long tenantId = tenantIdOf(envelope);
             try {
-                auditPort.record(envelope.eventId(), tenantId, ACTION_PUBLISHED_NOTED,
+                auditPort.record(envelope.eventId(), tenantId, envelope.eventType(), ACTION_PUBLISHED_NOTED,
                         bounded("templateCode=" + templateCode + ", templateVersion="
                                 + templateVersion + "；发布本身不触发快照再生（noop-with-audit）"));
             } catch (RuntimeException e) {
@@ -212,8 +212,8 @@ public final class PowerModelCollectorEventHandlers {
             long tenantId = tenantIdOf(envelope);
             try {
                 referencePort.markLifecycleReference(tenantId, templateCode, templateVersion,
-                        fromLifecycle, toLifecycle);
-                auditPort.record(envelope.eventId(), tenantId, ACTION_LIFECYCLE_MARKED,
+                        fromLifecycle, toLifecycle, envelope.eventId());
+                auditPort.record(envelope.eventId(), tenantId, envelope.eventType(), ACTION_LIFECYCLE_MARKED,
                         bounded("templateCode=" + templateCode + ", templateVersion=" + templateVersion
                                 + ", " + fromLifecycle + "->" + toLifecycle
                                 + "；仅引用标记，不改写已发布快照"));
@@ -268,7 +268,7 @@ public final class PowerModelCollectorEventHandlers {
                             "impactPort 返回 null（合同违反：空集须以空 List 表达）", null);
                 }
                 if (workloads.isEmpty()) {
-                    auditPort.record(envelope.eventId(), tenantId, ACTION_IMPACT_EMPTY,
+                    auditPort.record(envelope.eventId(), tenantId, envelope.eventType(), ACTION_IMPACT_EMPTY,
                             bounded("productId=" + productId + ", bindingRevision=" + bindingRevision
                                     + "；无受影响活动 workload"));
                     return;
@@ -283,7 +283,7 @@ public final class PowerModelCollectorEventHandlers {
                             templateCode, templateVersion, bindingRevision, reasonCode);
                     created++;
                 }
-                auditPort.record(envelope.eventId(), tenantId, ACTION_DRAFTS_CREATED,
+                auditPort.record(envelope.eventId(), tenantId, envelope.eventType(), ACTION_DRAFTS_CREATED,
                         bounded("productId=" + productId + ", bindingRevision=" + bindingRevision
                                 + ", impacted=" + workloads.size() + ", draftsCreated=" + created
                                 + ", reasonCode=" + reasonCode));

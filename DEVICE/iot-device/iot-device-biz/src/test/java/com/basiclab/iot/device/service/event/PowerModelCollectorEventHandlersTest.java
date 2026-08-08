@@ -38,6 +38,8 @@ class PowerModelCollectorEventHandlersTest {
         FakeAudit.Record r = f.audit.records.get(0);
         assertEquals(EVENT_ID, r.eventId);
         assertEquals(1L, r.tenantId);
+        assertEquals(PowerModelEventEnvelope.EVENT_TEMPLATE_PUBLISHED_V1, r.eventType,
+                "eventType 透传审计记录（与 Inbox event_id 一致，幂等溯源）");
         assertEquals(PowerModelCollectorEventHandlers.ACTION_PUBLISHED_NOTED, r.action);
         assertTrue(r.detail.contains("templateCode=power.hv_cabinet"));
         assertTrue(f.impact.calls.isEmpty(), "发布事件绝不解析影响面");
@@ -82,6 +84,7 @@ class PowerModelCollectorEventHandlersTest {
         assertEquals("1.1.0", mark.templateVersion);
         assertEquals("PUBLISHED", mark.fromLifecycle);
         assertEquals("DEPRECATED", mark.toLifecycle);
+        assertEquals(EVENT_ID, mark.sourceEventId, "来源事件 ID 透传（幂等溯源）");
         assertEquals(PowerModelCollectorEventHandlers.ACTION_LIFECYCLE_MARKED,
                 f.audit.records.get(0).action);
         assertTrue(f.release.drafts.isEmpty(), "生命周期变更绝不生成发布单（不改写快照）");
@@ -300,11 +303,13 @@ class PowerModelCollectorEventHandlersTest {
 
         @Override
         public void markLifecycleReference(long tenantId, String templateCode, String templateVersion,
-                                           String fromLifecycle, String toLifecycle) {
+                                           String fromLifecycle, String toLifecycle,
+                                           String sourceEventId) {
             if (failWith != null) {
                 throw failWith;
             }
-            marks.add(new Mark(tenantId, templateCode, templateVersion, fromLifecycle, toLifecycle));
+            marks.add(new Mark(tenantId, templateCode, templateVersion, fromLifecycle, toLifecycle,
+                    sourceEventId));
         }
 
         static final class Mark {
@@ -313,14 +318,16 @@ class PowerModelCollectorEventHandlersTest {
             final String templateVersion;
             final String fromLifecycle;
             final String toLifecycle;
+            final String sourceEventId;
 
             Mark(long tenantId, String templateCode, String templateVersion,
-                 String fromLifecycle, String toLifecycle) {
+                 String fromLifecycle, String toLifecycle, String sourceEventId) {
                 this.tenantId = tenantId;
                 this.templateCode = templateCode;
                 this.templateVersion = templateVersion;
                 this.fromLifecycle = fromLifecycle;
                 this.toLifecycle = toLifecycle;
+                this.sourceEventId = sourceEventId;
             }
         }
     }
@@ -329,19 +336,21 @@ class PowerModelCollectorEventHandlersTest {
         final List<Record> records = new ArrayList<Record>();
 
         @Override
-        public void record(String eventId, long tenantId, String action, String detail) {
-            records.add(new Record(eventId, tenantId, action, detail));
+        public void record(String eventId, long tenantId, String eventType, String action, String detail) {
+            records.add(new Record(eventId, tenantId, eventType, action, detail));
         }
 
         static final class Record {
             final String eventId;
             final long tenantId;
+            final String eventType;
             final String action;
             final String detail;
 
-            Record(String eventId, long tenantId, String action, String detail) {
+            Record(String eventId, long tenantId, String eventType, String action, String detail) {
                 this.eventId = eventId;
                 this.tenantId = tenantId;
+                this.eventType = eventType;
                 this.action = action;
                 this.detail = detail;
             }
