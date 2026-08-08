@@ -15,7 +15,14 @@
       "Bash(git commit -m 'docs\\(sdd\\): fix walkthrough command and measurement wording *)",
       "Bash(git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 push origin cfdqiot)",
       "Bash(awk '{print substr\\($1,1,8\\), $2}')",
-      "Bash(git commit -m 'docs\\(sdd\\): execute td005 production profile rerun per runbook \\(PASS\\) *)"
+      "Bash(git commit -m 'docs\\(sdd\\): execute td005 production profile rerun per runbook \\(PASS\\) *)",
+      "Bash(node -e \"console.log\\(require\\('/d/working/laoluopro/workspace/easyaiot/WEB/node_modules/ajv/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\(require\\('/d/working/laoluopro/workspace/easyaiot/WEB/node_modules/ajv-formats/package.json'\\).version\\)\")",
+      "Bash(HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=http://127.0.0.1:7890 pnpm add -D ajv@^8.17.1 ajv-formats@^3.0.1)",
+      "Bash(grep -o '\"command\":\"[^\"]*mvn[^\"]*test[^\"]*\"' \"C:\\\\Users\\\\青见\\\\.claude\\\\projects\\\\d--working-laoluopro-workspace-easyaiot\\\\f5b26dcd-2c1c-423c-9710-fc442bc93300.jsonl\" 2>/dev/null | sort -u | head -8)",
+      "Read(//c/Users/青见/.claude/projects/d--working-laoluopro-workspace-easyaiot/**)",
+      "Bash(grep -o '94[^\"]*PASS\\\\|Tests run: 94[^\"]*\\\\|iot-device-biz .* SUCCESS\\\\|DesensitizeTest[^\"]*' \"C:\\\\Users\\\\青见\\\\.claude\\\\projects\\\\d--working-laoluopro-workspace-easyaiot\\\\f5b26dcd-2c1c-423c-9710-fc442bc93300.jsonl\" 2>/dev/null | sort -u | head -8)",
+      "Bash(git commit -m 'feat\\(sdd\\): land event contract layer and ci gate for adr-014 *)"
     ]
   }
 }

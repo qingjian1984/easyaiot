@@ -42,7 +42,8 @@
     "lint:lint-staged": "lint-staged",
     "reinstall": "rimraf pnpm-lock.yaml && rimraf node_modules && npm run bootstrap",
     "gen:icon": "esno ./build/generate/icon/index.ts",
-    "verify:jcs-golden": "esno ./build/script/verifyJcsGolden.ts"
+    "verify:jcs-golden": "esno ./build/script/verifyJcsGolden.ts",
+    "verify:event-contracts": "esno ./build/script/verifyEventContracts.ts"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
@@ -134,6 +135,8 @@
     "@vitejs/plugin-vue": "4.4.1",
     "@vitejs/plugin-vue-jsx": "^3.0.2",
     "@vue/compiler-sfc": "^3.3.8",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "cross-env": "^7.0.3",
     "cz-git": "^1.7.1",
     "czg": "^1.7.1",

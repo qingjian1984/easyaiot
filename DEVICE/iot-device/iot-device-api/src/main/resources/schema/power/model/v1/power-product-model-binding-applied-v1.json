@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/schemas/power-product-model-binding-applied-v1.json",
+  "title": "POWER_PRODUCT_MODEL_BINDING_APPLIED_V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "eventType",
+    "schemaVersion",
+    "tenantId",
+    "aggregateType",
+    "aggregateId",
+    "occurredAt",
+    "requestId",
+    "traceId",
+    "data"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "eventType": {
+      "const": "POWER_PRODUCT_MODEL_BINDING_APPLIED_V1"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "tenantId": {
+      "type": "string"
+    },
+    "aggregateType": {
+      "const": "power_product_model_binding"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "traceId": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productId",
+        "productIdentification",
+        "templateCode",
+        "templateVersion",
+        "bindingRevision",
+        "contentHash",
+        "effectiveFrom",
+        "appliedAt",
+        "appliedBy"
+      ],
+      "properties": {
+        "productId": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "productIdentification": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "templateCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "templateVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "bindingRevision": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "effectiveFrom": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "appliedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "appliedBy": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/schemas/power-model-template-published-v1.json",
+  "title": "POWER_MODEL_TEMPLATE_PUBLISHED_V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "eventType",
+    "schemaVersion",
+    "tenantId",
+    "aggregateType",
+    "aggregateId",
+    "occurredAt",
+    "requestId",
+    "traceId",
+    "data"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "eventType": {
+      "const": "POWER_MODEL_TEMPLATE_PUBLISHED_V1"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "tenantId": {
+      "type": "string"
+    },
+    "aggregateType": {
+      "const": "power_model_template"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "traceId": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "templateCode",
+        "templateVersion",
+        "semver",
+        "contentHash",
+        "lifecycle",
+        "publishedAt",
+        "publisherId"
+      ],
+      "properties": {
+        "templateCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "templateVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "semver": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "lifecycle": {
+          "const": "PUBLISHED"
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "publisherId": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

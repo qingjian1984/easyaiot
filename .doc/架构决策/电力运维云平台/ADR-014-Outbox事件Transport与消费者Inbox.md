@@ -1,7 +1,7 @@
 # ADR-014：Outbox 事件 Transport 与消费者 Inbox（TD-005）
 
-> 状态：**Accepted**（2026-08-08：随 ADR-013 一并处置的三项人工闭环全数关闭——① DBA/代码 owner 双签 2026-08-07；② standard 最低规格压测 owner 豁免 2026-08-07；③ 完整 12 表画像生产重跑 2026-08-07 执行 PASS、2026-08-08 owner 指定满足。消费者/transport/Inbox 实现与 CI 合同门禁接线为转 Accepted 后的 TD-005 冻结工作，继续 OPEN 跟踪）
-> 版本：1.3.0
+> 状态：**Accepted**（2026-08-08：随 ADR-013 一并处置的三项人工闭环全数关闭——① DBA/代码 owner 双签 2026-08-07；② standard 最低规格压测 owner 豁免 2026-08-07；③ 完整 12 表画像生产重跑 2026-08-07 执行 PASS、2026-08-08 owner 指定满足。实现证据第一批已落地：Schema 归位 iot-device-api、Inbox/Outbox 领域逻辑 31 合同测试 PASS、CI 事件合同门禁样例 24 项 PASS；持久化接线与双发对账继续 OPEN 跟踪）
+> 版本：1.3.1
 > 日期：2026-08-08
 > 决策范围：TD-005 版本/绑定/审计 Outbox 的异步投递与消费幂等
 > 影响章节：《EasyAIoT 项目开发宪法》§2.1、§2.3、§5.4、§6.2、§6.3、§8、§10.2、§12、§14；TD-005 migration §4.6
@@ -14,6 +14,7 @@
 | 1.1.0 | 2026-08-06 | 处置宪法专项评审 M-01～M-08/P-01～P-07：补目标用户与角色、档位行为、事件 Envelope 冻结引用、Schema 入 API 模块路径、CI 合同门禁、配置清单、可观测性与对账、重试/DLQ/保留值、Inbox 落库绑定 ADR-013、Kafka 安全态势声明、双 UNIQUE 收缩、文档同步计划 |
 | 1.2.0 | 2026-08-07 | 处置 [DBA/架构专项评审](../../开发规范/ADR-013与ADR-014评审报告-DBA架构专项.md)：本 ADR 无 HIGH/MEDIUM 设计变更；M-10 事件 fixture 已用 Ajv Draft 2020-12 strict + ajv-formats 复跑 4/4 PASS（仓库外临时工具目录，CI 接线继续 OPEN）；`power_model_event_inbox` 已纳入 check-comments 注释门禁清单 |
 | 1.3.0 | 2026-08-08 | **转 Accepted**：随 ADR-013 一并处置的三项人工闭环全数关闭（双签 / 压测豁免 / 画像生产重跑 PASS + owner 指定，记录见 ADR-013 1.5.0 与证据包 verdict.md）。消费者/transport/Inbox 实现、CI 合同门禁接线为转 Accepted 后的 TD-005 冻结工作，继续 OPEN 跟踪 |
+| 1.3.1 | 2026-08-08 | 实现证据第一批落地：① Schema 归位——4 个 V1 Schema 复制入 `iot-device-api` 资源 `schema/power/model/v1/`（与评审资产 sha256 逐项一致，单源运行时拷贝），新增共享合同类型 `PowerModelEventEnvelope`（Envelope 不变量校验、topicKey、payload_hash、topic/消费者组常量）；② 消费/投递领域逻辑——`InboxArbiter`（PROCEED/DUPLICATE/RETRYABLE/QUARANTINE_HASH_CONFLICT/REJECT_UNKNOWN_MAJOR_VERSION/AWAITING_DISPOSITION）与 `OutboxRelayPolicy`（claim 租约恢复、retryable/final 分流、1s→16s 指数退避、超限 DEAD_LETTER），合同测试 31/31 PASS；③ CI 门禁接线——`pnpm verify:event-contracts`（Ajv 2020-12 strict + ajv-formats，4 Schema + 4 fixture + OUT-008 未知主版本反例 + strict 反例 + 文档资产/API 资源字节一致性 + 双主版本目录扫描）样例运行 24 项全 PASS，ajv/ajv-formats 已入 WEB 显式 devDependencies。剩余 OPEN：持久化接线（Outbox/Inbox Mapper、发布器、collector 协调器）、双发对账演练、容量压测（维持豁免口径，候选值不冻结） |
 
 ## 背景
 
@@ -158,4 +159,4 @@ TD-005 migration 要求：发布/绑定业务事实、领域审计和 Outbox 同
 
 ## 开放项
 
-容量压测与 acks/retries/分区数冻结、CI 合同门禁任务接线、collector 配置发布协调器实现、双发对账演练仍 OPEN；本 ADR 转 Accepted 前不得接生产传输，`power_model_event_inbox` 不得在 ADR-013 runner 批准前落库。
+容量压测与 acks/retries/分区数冻结（维持 owner 豁免口径，候选值不冻结）、collector 配置发布协调器实现、Outbox/Inbox 持久化接线（Mapper、发布器、发送后回写）、双发对账演练仍 OPEN。~~CI 合同门禁任务接线~~已于 1.3.1 落地（`pnpm verify:event-contracts`，含样例运行证据）；`power_model_event_inbox` 落库仍 MUST 经 ADR-013 runner 在获批窗口执行。
