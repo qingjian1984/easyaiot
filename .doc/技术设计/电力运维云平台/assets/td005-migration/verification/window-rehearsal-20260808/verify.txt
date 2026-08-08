@@ -1,0 +1,12 @@
+ERROR:  column "step" does not exist
+LINE 1: SELECT 'history=' || string_agg(step || ':' || status, ',' O...
+                                        ^
+invalid_indexes=0
+outbox_table=1
+audit_trigger=1
+backup_files=see-dir
+ERROR:  column "script" does not exist
+LINE 1: SELECT 'history=' || string_agg(script || ':' || status, ','...
+                                        ^
+history=M05:SUCCEEDED,M15:SUCCEEDED,M16:SUCCEEDED,V001:SUCCEEDED,V002:SUCCEEDED
+mirror-db-exists=0
