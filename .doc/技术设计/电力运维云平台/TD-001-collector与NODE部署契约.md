@@ -1,7 +1,7 @@
 # TD-001：collector Profile 与 NODE 部署契约
 
 > TD ID：POWER-TD-001  
-> 版本：1.0.4  
+> 版本：1.0.5  
 > 状态：In Review  
 > 日期：2026-08-04  
 > 上游需求：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)  
@@ -242,6 +242,27 @@ WorkloadSpec 与 ConfigSnapshot 必须以仓库内 JSON Schema 作为唯一机�
 
 canonicalization 使用版本化 JCS 等价规则：UTF-8、对象键序、无无意义空白；十进制业务值因采用字符串而不参与 JSON number 规范化。schema 文件、canonicalizationVersion 和测试 fixture 必须同提交变更。
 
+### 6.2 电力物模型事件驱动的快照再生（ADR-014 消费者落地，1.0.5 新增）
+
+ADR-014 冻结的消费者 `iot-device-power-model-release` 即本节协调器：iot-device-biz 内
+`PowerModelEventHandlerRegistry` 注册四个 V1 事件处理器，Envelope/Inbox/编排器契约以
+ADR-014 1.3.6 为准（已实现并有合同测试）；本节只定义业务处理语义，**未经本节评审不得接线实现**。
+
+| 事件 | 处理语义 |
+|---|---|
+| `POWER_MODEL_TEMPLATE_PUBLISHED_V1` | 模板版本发布本身**不触发**快照再生（绑定未变）。校验 `data.templateCode/templateVersion` 存在后写协调审计（noop-with-audit）成功；字段缺失按 final 进 DLQ |
+| `POWER_MODEL_TEMPLATE_LIFECYCLE_CHANGED_V1` | 生命周期变更（DEPRECATED/RETIRED）只更新引用标记：引用该版本的活跃绑定所属 workload 的后续人工发布须在确认页提示；**不自动改写任何快照**（PRD-01 §4.2：已绑定设备不被未确认升级自动改变） |
+| `POWER_PRODUCT_MODEL_BINDING_APPLIED_V1` | 绑定应用 → 解析影响面 → 以新模型版本再生受影响 workload 的点表片段 → 经 §4.1/§8 既有管线生成**新的单调递增 configVersion** 发布单（DRAFT→VALIDATED→PUBLISHED）；静态校验冲突（串口独占/站号/轮询时长预算）→ FAILED 发布单 + 结构化错误码，**不得静默降频**（PRD-01 §4.3） |
+| `POWER_PRODUCT_MODEL_BINDING_ROLLED_BACK_V1` | 绑定回滚 → 同上，以回滚目标模型版本再生；configVersion 仍单调递增并记录 `rollbackFromVersion`，**版本号不倒退**（§4.1） |
+
+MUST：
+
+- 影响面解析顺序固定：product → 活动未软删 device → site → 活动 collector workload binding；解析结果为空集是合法结果，写协调审计后按成功结束（不产生发布单）。
+- 处理器自身幂等：再生输入以 `(workloadId, modelVersion, bindingRevision)` 派生；若该 workload 当前 desired 已是目标版本，幂等成功且不新建发布单。重复/乱序事件由 ADR-014 Inbox 与分区内顺序承担。
+- 失败分流：瞬态错误（数据库瞬断、发布管线锁冲突）抛 `PowerModelEventProcessingException(retryable=true)` 走 1s→16s 退避；业务终态（字段缺失、引用不存在、校验冲突）按 final 进 DLQ。任何路径不得静默吞错。
+- 事务边界：处理器只写发布单与协调审计（单事务提交），不产生新的 Outbox 事件；`markProcessed` 由消费编排器在处理器成功后执行（ADR-014 已落地契约）。
+- 处理器注册表在本节评审通过并完成实现任务前保持为空——空表下事件按「缺失处理器 → DLQ」处置（有持久证据，非静默丢弃）。
+
 ## 7. API 与 Agent 契约
 
 ### 7.1 平台管理 API
@@ -467,6 +488,7 @@ collector 发布不得自动创建或批准停运。发布请求 MAY 携带 `mai
 | 10 | 联合容量压测并冻结 manifest 配额 | `.scripts/docker`、测试环境 | 原始报告、配置、镜像 digest |
 
 TD-002 可以在任务 2 的卷与接口契约评审后并行设计，但持久队列代码不得在 TD-002 冻结前合入。
+- T-18：§6.2 协调器实现——四个 V1 事件处理器接入 `PowerModelEventHandlerRegistry`（影响面解析、快照再生、发布单管线接线、协调审计），合同测试沿用 ADR-014 fake 端口模式；前置：本节评审通过 + `power_model_event_inbox` 经 runner 增链落库。
 
 ## 19. 评审与完成门禁
 
