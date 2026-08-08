@@ -90,5 +90,10 @@ class PowerModelOutboxServiceTest {
         public void markDeadLetter(String eventId, String errorCode, String errorDigest) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public long countByStatus(String status) {
+            throw new UnsupportedOperationException();
+        }
     }
 }

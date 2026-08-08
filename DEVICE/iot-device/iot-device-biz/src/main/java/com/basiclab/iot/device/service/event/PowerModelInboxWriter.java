@@ -54,17 +54,20 @@ public class PowerModelInboxWriter {
 
     private final PowerModelInboxRepository repository;
     private final Set<Integer> supportedMajors;
+    private final PowerModelEventMetrics metrics;
 
     /**
      * @param supportedMajors 消费者支持的主版本集合（M1 为 {1}；双发窗口为 {1,2}）
      */
-    public PowerModelInboxWriter(PowerModelInboxRepository repository, Set<Integer> supportedMajors) {
+    public PowerModelInboxWriter(PowerModelInboxRepository repository, Set<Integer> supportedMajors,
+                                 PowerModelEventMetrics metrics) {
         this.repository = Objects.requireNonNull(repository, "repository");
         if (supportedMajors == null || supportedMajors.isEmpty()) {
             throw new IllegalArgumentException(
                     "MODEL_EVENT_RETRY_POLICY_INVALID: supportedMajors 不得为空");
         }
         this.supportedMajors = supportedMajors;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     /**
@@ -99,12 +102,14 @@ public class PowerModelInboxWriter {
             case QUARANTINE_HASH_CONFLICT:
                 repository.upsertQuarantined(eventId, tenantId, envelope.eventType(), payloadHash,
                         "MODEL_EVENT_HASH_CONFLICT", "same eventId different payload_hash");
+                metrics.inboxQuarantined();
                 log.error("power-model event quarantined critical eventId={} tenantId={} reason=hash-conflict",
                         eventId, tenantId);
                 return new IngestResult(Action.QUARANTINED, true);
             case REJECT_UNKNOWN_MAJOR_VERSION:
                 repository.upsertQuarantined(eventId, tenantId, envelope.eventType(), payloadHash,
                         "MODEL_EVENT_UNKNOWN_MAJOR_VERSION", "schemaVersion=" + envelope.schemaVersion());
+                metrics.inboxQuarantined();
                 log.error("power-model event quarantined critical eventId={} tenantId={} reason=unknown-major schemaVersion={}",
                         eventId, tenantId, envelope.schemaVersion());
                 return new IngestResult(Action.QUARANTINED, true);

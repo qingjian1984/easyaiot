@@ -1,14 +1,18 @@
 package com.basiclab.iot.device.config;
 
 import com.basiclab.iot.device.event.PowerModelEventEnvelope;
+import com.basiclab.iot.device.service.event.MicrometerPowerModelEventMetrics;
 import com.basiclab.iot.device.service.event.PowerModelEventConsumerCoordinator;
 import com.basiclab.iot.device.service.event.PowerModelEventHandlerRegistry;
+import com.basiclab.iot.device.service.event.PowerModelEventMetrics;
 import com.basiclab.iot.device.service.event.PowerModelEventTransport;
 import com.basiclab.iot.device.service.event.PowerModelInboxRepository;
 import com.basiclab.iot.device.service.event.PowerModelInboxWriter;
 import com.basiclab.iot.device.service.event.PowerModelOutboxRelay;
 import com.basiclab.iot.device.service.event.PowerModelOutboxRelayScheduler;
 import com.basiclab.iot.device.service.event.PowerModelOutboxRepository;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -63,10 +67,17 @@ public class PowerModelEventWiringConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public PowerModelInboxWriter powerModelInboxWriter(PowerModelInboxRepository inboxRepository) {
+    public PowerModelEventMetrics powerModelEventMetrics(MeterRegistry meterRegistry) {
+        return new MicrometerPowerModelEventMetrics(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public PowerModelInboxWriter powerModelInboxWriter(PowerModelInboxRepository inboxRepository,
+                                                       PowerModelEventMetrics metrics) {
         Set<Integer> supportedMajors = new HashSet<Integer>(
                 Collections.singletonList(PowerModelEventEnvelope.SUPPORTED_MAJOR_VERSION));
-        return new PowerModelInboxWriter(inboxRepository, supportedMajors);
+        return new PowerModelInboxWriter(inboxRepository, supportedMajors, metrics);
     }
 
     /**
@@ -95,8 +106,9 @@ public class PowerModelEventWiringConfiguration {
     @ConditionalOnMissingBean
     public PowerModelOutboxRelay powerModelOutboxRelay(
             PowerModelOutboxRepository outboxRepository,
-            PowerModelEventTransport transport) {
-        return new PowerModelOutboxRelay(outboxRepository, transport, topic, leaseOwner,
+            PowerModelEventTransport transport,
+            PowerModelEventMetrics metrics) {
+        return new PowerModelOutboxRelay(outboxRepository, transport, metrics, topic, leaseOwner,
                 Duration.ofMillis(leaseDurationMs), batchSize,
                 Duration.ofMillis(retryBaseDelayMs), Duration.ofMillis(retryMaxDelayMs));
     }
@@ -109,5 +121,33 @@ public class PowerModelEventWiringConfiguration {
     @ConditionalOnMissingBean
     public PowerModelOutboxRelayScheduler powerModelOutboxRelayScheduler(PowerModelOutboxRelay relay) {
         return new PowerModelOutboxRelayScheduler(relay, Clock.systemUTC());
+    }
+
+    /**
+     * ADR-014 §可观测性：Outbox 积压 gauge（PENDING+PUBLISHING）。
+     * 数据源为仓储计数 SQL，随 MeterRegistry 抓取时实时求值。
+     */
+    @Bean
+    public Gauge powerModelOutboxBacklogGauge(PowerModelOutboxRepository outboxRepository,
+                                              MeterRegistry meterRegistry) {
+        return Gauge.builder("power_model_outbox_backlog", outboxRepository,
+                        repository -> repository.countByStatus("PENDING")
+                                + repository.countByStatus("PUBLISHING"))
+                .description("Power model outbox backlog (PENDING+PUBLISHING)")
+                .register(meterRegistry);
+    }
+
+    /**
+     * ADR-014 §可观测性：死信深度 gauge（Outbox DEAD_LETTER 行数）。
+     * 边界声明：Kafka DLQ topic 自身的积压（消费 lag）需 broker 侧导出器，
+     * 不在本 gauge 覆盖范围（ADR-014 开放项如实记录）。
+     */
+    @Bean
+    public Gauge powerModelDlqDepthGauge(PowerModelOutboxRepository outboxRepository,
+                                         MeterRegistry meterRegistry) {
+        return Gauge.builder("power_model_dlq_depth", outboxRepository,
+                        repository -> repository.countByStatus("DEAD_LETTER"))
+                .description("Power model outbox dead-letter depth")
+                .register(meterRegistry);
     }
 }

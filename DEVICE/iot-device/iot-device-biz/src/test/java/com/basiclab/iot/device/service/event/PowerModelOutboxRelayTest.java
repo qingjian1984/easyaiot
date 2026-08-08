@@ -115,8 +115,31 @@ class PowerModelOutboxRelayTest {
         assertEquals(Arrays.asList("pub:e1", "dead:e2:MODEL_EVENT_SEND_FINAL"), repository.writes);
     }
 
+    @Test
+    void deliverRecordsMetrics() {
+        RecordingEventMetrics metrics = new RecordingEventMetrics();
+        FakeRepository repository = new FakeRepository();
+        repository.due.add(entry("e1", 0));
+        repository.due.add(entry("e2", 0));
+        repository.due.add(entry("e3", 4));
+        FakeTransport transport = new FakeTransport();
+        transport.queue = new ArrayList<PowerModelEventTransport.TransportResult>(Arrays.asList(
+                PowerModelEventTransport.TransportResult.success(),
+                PowerModelEventTransport.TransportResult.failure(true, "MODEL_EVENT_SEND_RETRYABLE", "x"),
+                PowerModelEventTransport.TransportResult.failure(false, "MODEL_EVENT_SEND_FINAL", "x")));
+        new PowerModelOutboxRelay(repository, transport, metrics,
+                "power-model-release-v1", "pmoutbox-test", LEASE, 100,
+                Duration.ofSeconds(1), Duration.ofSeconds(16)).relayOnce(NOW);
+
+        assertEquals(1, metrics.published("published"));
+        assertEquals(1, metrics.published("retry_scheduled"));
+        assertEquals(1, metrics.published("dead_letter"), "attempts=5 达到 maxRetries → dead_letter");
+        assertEquals(3, metrics.deliveryDurations.size(), "每次 send 都记录投递耗时");
+        assertEquals(0, metrics.quarantined);
+    }
+
     private static PowerModelOutboxRelay relay(FakeRepository repository, FakeTransport transport) {
-        return new PowerModelOutboxRelay(repository, transport,
+        return new PowerModelOutboxRelay(repository, transport, new RecordingEventMetrics(),
                 "power-model-release-v1", "pmoutbox-test", LEASE, 100,
                 Duration.ofSeconds(1), Duration.ofSeconds(16));
     }
@@ -166,6 +189,11 @@ class PowerModelOutboxRelayTest {
         @Override
         public void markDeadLetter(String eventId, String errorCode, String errorDigest) {
             writes.add("dead:" + eventId + ":" + errorCode);
+        }
+
+        @Override
+        public long countByStatus(String status) {
+            return 0L;
         }
     }
 

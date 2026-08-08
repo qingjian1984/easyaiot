@@ -23,6 +23,7 @@ public class PowerModelOutboxRelay {
 
     private final PowerModelOutboxRepository repository;
     private final PowerModelEventTransport transport;
+    private final PowerModelEventMetrics metrics;
     private final String topic;
     private final String leaseOwner;
     private final Duration leaseDuration;
@@ -32,10 +33,12 @@ public class PowerModelOutboxRelay {
 
     public PowerModelOutboxRelay(PowerModelOutboxRepository repository,
                                  PowerModelEventTransport transport,
+                                 PowerModelEventMetrics metrics,
                                  String topic, String leaseOwner, Duration leaseDuration,
                                  int batchSize, Duration retryBaseDelay, Duration retryMaxDelay) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.transport = Objects.requireNonNull(transport, "transport");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.topic = requireNonBlank(topic, "topic");
         this.leaseOwner = requireNonBlank(leaseOwner, "leaseOwner");
         this.leaseDuration = Objects.requireNonNull(leaseDuration, "leaseDuration");
@@ -67,10 +70,13 @@ public class PowerModelOutboxRelay {
     }
 
     private void deliver(ClaimedOutboxEntry entry, Instant now) {
+        long sendStartNanos = System.nanoTime();
         PowerModelEventTransport.TransportResult result =
                 transport.send(topic, entry.topicKey(), entry.payload());
+        metrics.recordDeliveryDuration(Duration.ofNanos(System.nanoTime() - sendStartNanos));
         if (result.isSuccess()) {
             repository.markPublished(entry.eventId(), now);
+            metrics.eventPublished("published");
             log.info("power-model event published eventId={} tenantId={} aggregate={}:{}",
                     entry.eventId(), entry.tenantId(), entry.aggregateType(), entry.aggregateId());
             return;
@@ -83,10 +89,12 @@ public class PowerModelOutboxRelay {
                     OutboxRelayPolicy.nextAttemptAt(attempts, retryBaseDelay, retryMaxDelay, now);
             repository.markRetry(entry.eventId(), attempts, nextAttempt,
                     result.errorCode(), result.errorDigest());
+            metrics.eventPublished("retry_scheduled");
             log.warn("power-model event publish retry eventId={} attempts={} nextAttemptAt={} errorCode={}",
                     entry.eventId(), attempts, nextAttempt, result.errorCode());
         } else {
             repository.markDeadLetter(entry.eventId(), result.errorCode(), result.errorDigest());
+            metrics.eventPublished("dead_letter");
             log.error("power-model event dead-lettered eventId={} tenantId={} errorCode={}",
                     entry.eventId(), entry.tenantId(), result.errorCode());
         }

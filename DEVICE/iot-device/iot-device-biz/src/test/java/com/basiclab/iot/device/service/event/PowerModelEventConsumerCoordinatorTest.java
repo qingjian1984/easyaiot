@@ -208,7 +208,7 @@ class PowerModelEventConsumerCoordinatorTest {
 
         PowerModelEventConsumerCoordinator coordinator() {
             return new PowerModelEventConsumerCoordinator(
-                    new PowerModelInboxWriter(inbox, Collections.singleton(1)),
+                    new PowerModelInboxWriter(inbox, Collections.singleton(1), new RecordingEventMetrics()),
                     new PowerModelEventHandlerRegistry(handlers),
                     dlq, "power-model-release-v1-dlq", 5,
                     Duration.ofSeconds(1), Duration.ofSeconds(16));

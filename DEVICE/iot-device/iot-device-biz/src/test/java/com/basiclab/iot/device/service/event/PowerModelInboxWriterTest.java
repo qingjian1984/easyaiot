@@ -103,7 +103,8 @@ class PowerModelInboxWriterTest {
     void dualWindowAcceptsNextMajor() {
         FakeRepository repository = new FakeRepository();
         PowerModelInboxWriter dualWriter =
-                new PowerModelInboxWriter(repository, new java.util.HashSet<Integer>(Arrays.asList(1, 2)));
+                new PowerModelInboxWriter(repository, new java.util.HashSet<Integer>(Arrays.asList(1, 2)),
+                new RecordingEventMetrics());
         PowerModelInboxWriter.IngestResult result = dualWriter.ingest(envelope(2), PAYLOAD, NOW);
 
         assertEquals(PowerModelInboxWriter.Action.PROCESS, result.action());
@@ -116,8 +117,26 @@ class PowerModelInboxWriterTest {
         assertEquals(Arrays.asList(EVENT_ID + "@" + NOW), repository.processed);
     }
 
+    @Test
+    void quarantinePathsIncrementMetric() {
+        RecordingEventMetrics metrics = new RecordingEventMetrics();
+
+        // 路径一：同 ID 异 hash 隔离（existing 记录 hash 与入站不同）。
+        FakeRepository conflictRepository = new FakeRepository();
+        conflictRepository.existing = view("{\"other\":true}", InboxArbiter.Status.PROCESSED);
+        new PowerModelInboxWriter(conflictRepository, Collections.singleton(1), metrics)
+                .ingest(envelope(1), PAYLOAD, NOW);
+        // 路径二：未知主版本隔离（无 existing 记录，按 schemaVersion 裁决）。
+        new PowerModelInboxWriter(new FakeRepository(), Collections.singleton(1), metrics)
+                .ingest(envelope(2), PAYLOAD, NOW);
+
+        assertEquals(2, metrics.quarantined, "两条 critical 隔离路径都必须计数");
+        assertEquals(0, metrics.published("published"));
+        assertTrue(metrics.deliveryDurations.isEmpty());
+    }
+
     private static PowerModelInboxWriter writer(FakeRepository repository) {
-        return new PowerModelInboxWriter(repository, Collections.singleton(1));
+        return new PowerModelInboxWriter(repository, Collections.singleton(1), new RecordingEventMetrics());
     }
 
     private static PowerModelEventEnvelope envelope(int schemaVersion) {

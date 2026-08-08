@@ -34,4 +34,10 @@ public interface PowerModelOutboxRepository {
 
     /** final 失败或重试超限回写：status=DEAD_LETTER、脱敏错误摘要、清空租约。 */
     void markDeadLetter(String eventId, String errorCode, String errorDigest);
+
+    /**
+     * 按状态计数（可观测性 gauge 数据源：backlog=PENDING+PUBLISHING、
+     * dlq_depth=DEAD_LETTER）。
+     */
+    long countByStatus(String status);
 }

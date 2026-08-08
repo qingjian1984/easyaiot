@@ -146,6 +146,14 @@ public class JdbcPowerModelOutboxRepository implements PowerModelOutboxRepositor
         jdbc.update(MARK_DEAD_LETTER_SQL, params);
     }
 
+    @Override
+    public long countByStatus(String status) {
+        Long count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM power_model_release_outbox WHERE status = :status",
+                new MapSqlParameterSource("status", status), Long.class);
+        return count == null ? 0L : count.longValue();
+    }
+
     private static String truncate(String value, int maxLength) {
         if (value == null) {
             return null;

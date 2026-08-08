@@ -62,7 +62,8 @@ class PowerModelOutboxRelaySchedulerTest {
         private RuntimeException toThrow;
 
         CountingRelay() {
-            super(new NoopRepository(), new NoopTransport(), "topic", "owner",
+            super(new NoopRepository(), new NoopTransport(), new RecordingEventMetrics(),
+                    "topic", "owner",
                     Duration.ofSeconds(60), 10, Duration.ofSeconds(1), Duration.ofSeconds(16));
         }
 
@@ -99,6 +100,11 @@ class PowerModelOutboxRelaySchedulerTest {
 
         @Override
         public void markDeadLetter(String eventId, String errorCode, String errorDigest) {
+        }
+
+        @Override
+        public long countByStatus(String status) {
+            return 0L;
         }
     }
 
