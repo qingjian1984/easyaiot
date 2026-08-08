@@ -269,3 +269,11 @@ ADR-013 的选型方向（受控步骤执行器、单事实基线、事务/非�
 - **判定**：**PASS**。证据包五件归档于 `assets/model-templates/verification/profile-rerun-prod-20260807/`（env.txt / 原始输出 / 结果 JSON / diff-vs-baseline.md / verdict.md）。
 - **证据诚实性边界**：执行环境为本地目标集成实例（非独立生产实例），执行账号 postgres（无专用只读角色，只读性由 PGOPTIONS 强制）；`productionRerunRequired=true` 是否由本次重跑满足**待 owner 指定**，指定前 ADR-013/014 维持 Proposed。指定满足则三项人工闭环全数关闭；不满足则本项保持 OPEN、本证据包作为预演证据保留。
 
+### 8.7 owner 指定与转 Accepted（2026-08-08，ADR-013 升 1.5.0、ADR-014 升 1.3.0）
+
+- **owner 指定**：青见（qingjian1984）审阅证据包后指定 2026-08-07 画像重跑满足 `productionRerunRequired=true`（指定记录见证据包 verdict.md「owner 指定记录」）。
+- **三项人工闭环全数关闭**：① DBA/代码 owner 复核签字 2026-08-07 双签通过；② standard 最低规格压测 2026-08-07 owner 豁免（候选预算保持未冻结）；③ 完整 12 表画像生产重跑 2026-08-07 执行 PASS + 2026-08-08 owner 指定满足。
+- **状态转换**：ADR-013 → **Accepted**（1.5.0）、ADR-014 → **Accepted**（1.3.0）。按 Runbook §5，2026-08-07 画像成为后续迁移 apply 的新前置基线。
+- **后续 OPEN（转 Accepted 后工作）**：事件消费者/transport/Inbox 实现、CI 双主版本门禁与事件合同门禁接线、候选预算值生产前人工评估。本报告 19 项发现处置至此全部闭环。
+
+
