@@ -22,7 +22,9 @@
       "Bash(grep -o '\"command\":\"[^\"]*mvn[^\"]*test[^\"]*\"' \"C:\\\\Users\\\\青见\\\\.claude\\\\projects\\\\d--working-laoluopro-workspace-easyaiot\\\\f5b26dcd-2c1c-423c-9710-fc442bc93300.jsonl\" 2>/dev/null | sort -u | head -8)",
       "Read(//c/Users/青见/.claude/projects/d--working-laoluopro-workspace-easyaiot/**)",
       "Bash(grep -o '94[^\"]*PASS\\\\|Tests run: 94[^\"]*\\\\|iot-device-biz .* SUCCESS\\\\|DesensitizeTest[^\"]*' \"C:\\\\Users\\\\青见\\\\.claude\\\\projects\\\\d--working-laoluopro-workspace-easyaiot\\\\f5b26dcd-2c1c-423c-9710-fc442bc93300.jsonl\" 2>/dev/null | sort -u | head -8)",
-      "Bash(git commit -m 'feat\\(sdd\\): land event contract layer and ci gate for adr-014 *)"
+      "Bash(git commit -m 'feat\\(sdd\\): land event contract layer and ci gate for adr-014 *)",
+      "Bash(grep -rn \"power.model.events\\\\|power\\\\\\\\.model\" /d/working/laoluopro/workspace/easyaiot/DEVICE/iot-device/iot-device-biz/src/main/resources/*.yaml)",
+      "Bash(git commit -m 'feat\\(sdd\\): wire outbox and inbox persistence for adr-014 *)"
     ]
   }
 }

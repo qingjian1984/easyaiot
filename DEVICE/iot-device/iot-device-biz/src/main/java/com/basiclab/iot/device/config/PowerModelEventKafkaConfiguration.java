@@ -60,4 +60,31 @@ public class PowerModelEventKafkaConfiguration {
             KafkaTemplate<String, String> powerModelKafkaTemplate) {
         return new KafkaPowerModelEventTransport(powerModelKafkaTemplate, sendTimeoutMs);
     }
+
+    /**
+     * 消费者容器工厂（ADR-014 P-07）：手动 offset（MANUAL_IMMEDIATE），
+     * 由监听适配层在 Inbox 写成功后才 ack；批量上限候选 100 条。
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "powerModelKafkaListenerContainerFactory")
+    public org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory<String, String>
+            powerModelKafkaListenerContainerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                bootstrapServers);
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                org.apache.kafka.common.serialization.StringDeserializer.class);
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                org.apache.kafka.common.serialization.StringDeserializer.class);
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 100);
+        org.springframework.kafka.core.DefaultKafkaConsumerFactory<String, String> consumerFactory =
+                new org.springframework.kafka.core.DefaultKafkaConsumerFactory<>(props);
+        org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory<String, String> factory =
+                new org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory);
+        factory.getContainerProperties().setAckMode(
+                org.springframework.kafka.listener.ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        return factory;
+    }
 }
