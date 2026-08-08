@@ -1,7 +1,7 @@
 # ADR-014：Outbox 事件 Transport 与消费者 Inbox（TD-005）
 
-> 状态：**Accepted**（2026-08-08：随 ADR-013 一并处置的三项人工闭环全数关闭——① DBA/代码 owner 双签 2026-08-07；② standard 最低规格压测 owner 豁免 2026-08-07；③ 完整 12 表画像生产重跑 2026-08-07 执行 PASS、2026-08-08 owner 指定满足。实现证据第一批已落地：Schema 归位 iot-device-api、Inbox/Outbox 领域逻辑 31 合同测试 PASS、CI 事件合同门禁样例 24 项 PASS；持久化接线与双发对账继续 OPEN 跟踪）
-> 版本：1.3.1
+> 状态：**Accepted**（2026-08-08：随 ADR-013 一并处置的三项人工闭环全数关闭——① DBA/代码 owner 双签 2026-08-07；② standard 最低规格压测 owner 豁免 2026-08-07；③ 完整 12 表画像生产重跑 2026-08-07 执行 PASS、2026-08-08 owner 指定满足。实现证据第一批（Schema 归位、领域逻辑、CI 门禁）与第二批（持久化接线：入列服务/发布器/Inbox 写入/JDBC/Kafka 装配，54 合同测试 PASS）已落地；collector 协调器、真实库合同测试与双发对账继续 OPEN 跟踪）
+> 版本：1.3.2
 > 日期：2026-08-08
 > 决策范围：TD-005 版本/绑定/审计 Outbox 的异步投递与消费幂等
 > 影响章节：《EasyAIoT 项目开发宪法》§2.1、§2.3、§5.4、§6.2、§6.3、§8、§10.2、§12、§14；TD-005 migration §4.6
@@ -15,6 +15,7 @@
 | 1.2.0 | 2026-08-07 | 处置 [DBA/架构专项评审](../../开发规范/ADR-013与ADR-014评审报告-DBA架构专项.md)：本 ADR 无 HIGH/MEDIUM 设计变更；M-10 事件 fixture 已用 Ajv Draft 2020-12 strict + ajv-formats 复跑 4/4 PASS（仓库外临时工具目录，CI 接线继续 OPEN）；`power_model_event_inbox` 已纳入 check-comments 注释门禁清单 |
 | 1.3.0 | 2026-08-08 | **转 Accepted**：随 ADR-013 一并处置的三项人工闭环全数关闭（双签 / 压测豁免 / 画像生产重跑 PASS + owner 指定，记录见 ADR-013 1.5.0 与证据包 verdict.md）。消费者/transport/Inbox 实现、CI 合同门禁接线为转 Accepted 后的 TD-005 冻结工作，继续 OPEN 跟踪 |
 | 1.3.1 | 2026-08-08 | 实现证据第一批落地：① Schema 归位——4 个 V1 Schema 复制入 `iot-device-api` 资源 `schema/power/model/v1/`（与评审资产 sha256 逐项一致，单源运行时拷贝），新增共享合同类型 `PowerModelEventEnvelope`（Envelope 不变量校验、topicKey、payload_hash、topic/消费者组常量）；② 消费/投递领域逻辑——`InboxArbiter`（PROCEED/DUPLICATE/RETRYABLE/QUARANTINE_HASH_CONFLICT/REJECT_UNKNOWN_MAJOR_VERSION/AWAITING_DISPOSITION）与 `OutboxRelayPolicy`（claim 租约恢复、retryable/final 分流、1s→16s 指数退避、超限 DEAD_LETTER），合同测试 31/31 PASS；③ CI 门禁接线——`pnpm verify:event-contracts`（Ajv 2020-12 strict + ajv-formats，4 Schema + 4 fixture + OUT-008 未知主版本反例 + strict 反例 + 文档资产/API 资源字节一致性 + 双主版本目录扫描）样例运行 24 项全 PASS，ajv/ajv-formats 已入 WEB 显式 devDependencies。剩余 OPEN：持久化接线（Outbox/Inbox Mapper、发布器、collector 协调器）、双发对账演练、容量压测（维持豁免口径，候选值不冻结） |
+| 1.3.2 | 2026-08-08 | 实现证据第二批（持久化接线）：① 入列服务 `PowerModelOutboxService`——`Propagation.MANDATORY` 结构化强制同事务提交（无活动事务即拒绝），capability `power.device.model` 未启用时 fail-closed（mini 档不产生待投递残留）；② 发布器 `PowerModelOutboxRelay`——claim（租约/批量参数透传）→ send → 回写编排，OUT-001～004 全路径；③ Inbox 写入 `PowerModelInboxWriter`——七路径（PROCESS/LOST_CONTENTION/DUPLICATE/RETRYABLE/异 hash 隔离 critical/未知主版本隔离 critical/维持隔离），offset 在 Inbox 写成功后提交的消费契约；④ 持久化端口与实现——`PowerModelOutboxRepository`/`PowerModelInboxRepository` 端口 + JDBC 实现（原子认领 `FOR UPDATE SKIP LOCKED` + UPDATE RETURNING、首插 `ON CONFLICT DO NOTHING`、隔离 upsert `ON CONFLICT DO UPDATE`）；⑤ Kafka 装配 `PowerModelEventKafkaConfiguration`（`power.model.events.enabled=true` 才装配，acks=all 候选、幂等 producer、有界重试/超时）+ `KafkaPowerModelEventTransport` 薄适配（retryable/final 分流、摘要脱敏不含 payload）。合同测试 23/23 PASS（fake 仓储/transport），设备域全量回归 148/148 PASS。JDBC 实现的真实库合同测试待 V001 经 ADR-013 runner 获批窗口落库后接入（沿用 TD005_PG_ENABLED 跳过模式）；collector 配置发布协调器与双发对账演练继续 OPEN |
 
 ## 背景
 
