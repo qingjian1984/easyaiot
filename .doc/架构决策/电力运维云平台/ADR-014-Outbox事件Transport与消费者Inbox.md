@@ -1,7 +1,7 @@
 # ADR-014：Outbox 事件 Transport 与消费者 Inbox（TD-005）
 
-> 状态：**Accepted**（2026-08-08：随 ADR-013 一并处置的三项人工闭环全数关闭——① DBA/代码 owner 双签 2026-08-07；② standard 最低规格压测 owner 豁免 2026-08-07；③ 完整 12 表画像生产重跑 2026-08-07 执行 PASS、2026-08-08 owner 指定满足。实现证据三批已落地：Schema 归位 + 领域逻辑 + CI 门禁（31 测试 / 24 项 PASS）、持久化接线（23 测试）、消费循环（18 测试）；设备域全量回归 166/166 PASS。剩余 OPEN：发布器调度驱动选型、TD-001 业务处理器接入、V001 落库后真实库合同测试、双发对账演练）
-> 版本：1.3.3
+> 状态：**Accepted**（2026-08-08：随 ADR-013 一并处置的三项人工闭环全数关闭——① DBA/代码 owner 双签 2026-08-07；② standard 最低规格压测 owner 豁免 2026-08-07；③ 完整 12 表画像生产重跑 2026-08-07 执行 PASS、2026-08-08 owner 指定满足。实现证据四批已落地：Schema 归位 + 领域逻辑 + CI 门禁（31 测试 / 24 项 PASS）、持久化接线（23 测试）、消费循环（18 测试）、发布器调度驱动（3 测试，Spring Scheduling 选型经 owner 部署评审裁定）；设备域全量回归 169/169 PASS。剩余 OPEN：TD-001 业务处理器接入、V001 落库后真实库合同测试、双发对账演练）
+> 版本：1.3.4
 > 日期：2026-08-08
 > 决策范围：TD-005 版本/绑定/审计 Outbox 的异步投递与消费幂等
 > 影响章节：《EasyAIoT 项目开发宪法》§2.1、§2.3、§5.4、§6.2、§6.3、§8、§10.2、§12、§14；TD-005 migration §4.6
@@ -17,6 +17,7 @@
 | 1.3.1 | 2026-08-08 | 实现证据第一批落地：① Schema 归位——4 个 V1 Schema 复制入 `iot-device-api` 资源 `schema/power/model/v1/`（与评审资产 sha256 逐项一致，单源运行时拷贝），新增共享合同类型 `PowerModelEventEnvelope`（Envelope 不变量校验、topicKey、payload_hash、topic/消费者组常量）；② 消费/投递领域逻辑——`InboxArbiter`（PROCEED/DUPLICATE/RETRYABLE/QUARANTINE_HASH_CONFLICT/REJECT_UNKNOWN_MAJOR_VERSION/AWAITING_DISPOSITION）与 `OutboxRelayPolicy`（claim 租约恢复、retryable/final 分流、1s→16s 指数退避、超限 DEAD_LETTER），合同测试 31/31 PASS；③ CI 门禁接线——`pnpm verify:event-contracts`（Ajv 2020-12 strict + ajv-formats，4 Schema + 4 fixture + OUT-008 未知主版本反例 + strict 反例 + 文档资产/API 资源字节一致性 + 双主版本目录扫描）样例运行 24 项全 PASS，ajv/ajv-formats 已入 WEB 显式 devDependencies。剩余 OPEN：持久化接线（Outbox/Inbox Mapper、发布器、collector 协调器）、双发对账演练、容量压测（维持豁免口径，候选值不冻结） |
 | 1.3.2 | 2026-08-08 | 实现证据第二批（持久化接线）：① 入列服务 `PowerModelOutboxService`——`Propagation.MANDATORY` 结构化强制同事务提交（无活动事务即拒绝），capability `power.device.model` 未启用时 fail-closed（mini 档不产生待投递残留）；② 发布器 `PowerModelOutboxRelay`——claim（租约/批量参数透传）→ send → 回写编排，OUT-001～004 全路径；③ Inbox 写入 `PowerModelInboxWriter`——七路径（PROCESS/LOST_CONTENTION/DUPLICATE/RETRYABLE/异 hash 隔离 critical/未知主版本隔离 critical/维持隔离），offset 在 Inbox 写成功后提交的消费契约；④ 持久化端口与实现——`PowerModelOutboxRepository`/`PowerModelInboxRepository` 端口 + JDBC 实现（原子认领 `FOR UPDATE SKIP LOCKED` + UPDATE RETURNING、首插 `ON CONFLICT DO NOTHING`、隔离 upsert `ON CONFLICT DO UPDATE`）；⑤ Kafka 装配 `PowerModelEventKafkaConfiguration`（`power.model.events.enabled=true` 才装配，acks=all 候选、幂等 producer、有界重试/超时）+ `KafkaPowerModelEventTransport` 薄适配（retryable/final 分流、摘要脱敏不含 payload）。合同测试 23/23 PASS（fake 仓储/transport），设备域全量回归 148/148 PASS。JDBC 实现的真实库合同测试待 V001 经 ADR-013 runner 获批窗口落库后接入（沿用 TD005_PG_ENABLED 跳过模式）；collector 配置发布协调器与双发对账演练继续 OPEN |
 | 1.3.3 | 2026-08-08 | 实现证据第三批（消费循环）：① `PowerModelEventEnvelopeCodec`——消费侧解析（畸形/缺字段/不变量违规全 fail-closed 稳定码），payload_hash 以原始消息正文计算与生产侧一致；② `PowerModelEventHandlerRegistry`——TD-001 collector 处理器注册表 + `PowerModelEventProcessingException`（retryable/final 分流），已知主版本未注册处理器按 final 进 DLQ 绝不静默丢弃；③ `PowerModelEventConsumerCoordinator`——单条裁决（P-07 全契约：markProcessed 后才 COMMIT offset、DUPLICATE/QUARANTINED/DLQ 处置后 COMMIT、LOST_CONTENTION 不提交等重投、retryable 1s→16s 退避超限 DLQ、DLQ 投递失败抛错不提交）；④ `PowerModelEventKafkaListener` 薄适配——手动 MANUAL_IMMEDIATE、nack 退避重投、`enabled=true` 门禁 + 消费容器工厂（批量上限候选 100）；⑤ `PowerModelEventWiringConfiguration`——编排 Bean 装配；发布器调度驱动（@Scheduled/Quartz）因 iot-device 无 @EnableScheduling 列为部署评审 OPEN（拒绝静默不触发），处理器注册表暂为空（TD-001 协调器实现时接入，空表下事件按缺失处理器进 DLQ）。合同测试 18/18 PASS，设备域全量回归 166/166 PASS |
+| 1.3.4 | 2026-08-08 | 实现证据第四批（发布器调度驱动）：选型经 owner 部署评审裁定为 **Spring Scheduling**——iot-device 运行时经 iot-common-mq 的 `YudaoRedisMQConsumerAutoConfiguration` 传递激活调度设施（无任何 auto-config exclude），Quartz/iot-common-job 会引入新依赖与 QRTZ_* 表、对单功能轮询属过度设计，且多实例并发安全已由认领 SQL 的 `FOR UPDATE SKIP LOCKED` + 租约承担，调度层无需集群协调。落地：`PowerModelOutboxRelayScheduler`（fixedDelay 轮询 `relayOnce`，注入 Clock 保证确定性，单轮异常只记录异常类型摘要、绝不外抛中断轮询、绝不含 payload）+ `PowerModelEventWiringConfiguration` 显式 `@EnableScheduling`（类级 `enabled=true` 门禁不变，mini 不装配不调度；显式声明防传递依赖变化导致轮询静默停转）。新增候选配置 `power.model.events.relay.poll-interval-ms`（1000）/`initial-delay-ms`（5000），压测后冻结。合同测试 3/3 PASS，设备域全量回归 169/169 PASS |
 
 ## 背景
 
@@ -120,6 +121,8 @@ TD-005 migration 要求：发布/绑定业务事实、领域审计和 Outbox 同
 | `power.model.events.topic.partitions` | 分区数 | integer | `6` | 是 | 压测后冻结 |
 | `power.model.events.inbox.retention` | Inbox 保留窗口 | duration | `90d` | 是 | 不小于重试/死信重放/双版本窗口 |
 | `power.model.events.inbox.cleanup-cron` | Inbox 清理任务 | cron | `0 0 3 * * ?` | 否 | 每日清理超窗 PROCESSED 记录 |
+| `power.model.events.relay.poll-interval-ms` | 发布器轮询间隔 | integer | `1000` | 是 | 压测后冻结 |
+| `power.model.events.relay.initial-delay-ms` | 发布器首次轮询延迟 | integer | `5000` | 否 | 避让启动期资源就绪 |
 
 ## 可观测性与对账
 
@@ -161,4 +164,4 @@ TD-005 migration 要求：发布/绑定业务事实、领域审计和 Outbox 同
 
 ## 开放项
 
-容量压测与 acks/retries/分区数冻结（维持 owner 豁免口径，候选值不冻结）、collector 配置发布协调器实现、Outbox/Inbox 持久化接线（Mapper、发布器、发送后回写）、双发对账演练仍 OPEN。~~CI 合同门禁任务接线~~已于 1.3.1 落地（`pnpm verify:event-contracts`，含样例运行证据）；`power_model_event_inbox` 落库仍 MUST 经 ADR-013 runner 在获批窗口执行。
+容量压测与 acks/retries/分区数/轮询间隔冻结（维持 owner 豁免口径，候选值不冻结）、collector 配置发布协调器业务处理器接入（处理器注册表 1.3.3 起就位但为空，空表下事件按缺失处理器进 DLQ）、双发对账演练、JDBC 真实库合同测试仍 OPEN。~~CI 合同门禁任务接线~~已于 1.3.1 落地（`pnpm verify:event-contracts`，含样例运行证据）；~~Outbox/Inbox 持久化接线~~已于 1.3.2 落地；~~发布器调度驱动选型与接线~~已于 1.3.4 落地（Spring Scheduling，owner 部署评审裁定）；`power_model_event_inbox` 落库仍 MUST 经 ADR-013 runner 在获批窗口执行，真实库合同测试沿用 TD005_PG_ENABLED 跳过模式。

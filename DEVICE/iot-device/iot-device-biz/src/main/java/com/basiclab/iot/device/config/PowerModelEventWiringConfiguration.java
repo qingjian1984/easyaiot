@@ -7,13 +7,16 @@ import com.basiclab.iot.device.service.event.PowerModelEventTransport;
 import com.basiclab.iot.device.service.event.PowerModelInboxRepository;
 import com.basiclab.iot.device.service.event.PowerModelInboxWriter;
 import com.basiclab.iot.device.service.event.PowerModelOutboxRelay;
+import com.basiclab.iot.device.service.event.PowerModelOutboxRelayScheduler;
 import com.basiclab.iot.device.service.event.PowerModelOutboxRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
@@ -21,13 +24,16 @@ import java.util.Set;
 
 /**
  * ADR-014：电力模型事件链路编排 Bean 装配（Inbox 写入、处理器注册表、
- * 消费编排器、Outbox 发布器）。仅 {@code power.model.events.enabled=true} 装配。
- * 注意：发布器的调度驱动（@Scheduled/Quartz）未在本类接线——iot-device 当前无
- * @EnableScheduling，静默不触发的 @Scheduled 违背失败关闭原则；调度器选型
- * （Spring Scheduling 或复用 iot-common-job Quartz）属部署评审 OPEN 项，
- * 选定后由单独配置类驱动 {@link PowerModelOutboxRelay#relayOnce}。
+ * 消费编排器、Outbox 发布器与调度驱动）。仅 {@code power.model.events.enabled=true} 装配。
+ * 调度驱动选型（2026-08-08 owner 部署评审裁定）：Spring Scheduling。
+ * 本类显式 {@code @EnableScheduling}——iot-device 运行时虽经 iot-common-mq
+ * 传递激活调度设施，但显式声明保证该传递依赖变化时发布器轮询不会静默停转
+ * （失败关闭原则）；类级门禁保证 mini 档不装配任何事件 Bean、不产生调度。
+ * Quartz/iot-common-job 不采用：引入新依赖与 QRTZ_* 表属过度设计，多实例并发
+ * 安全由认领 SQL 的 FOR UPDATE SKIP LOCKED + 租约承担。
  */
 @Configuration
+@EnableScheduling
 @ConditionalOnProperty(name = "power.model.events.enabled", havingValue = "true")
 public class PowerModelEventWiringConfiguration {
 
@@ -93,5 +99,15 @@ public class PowerModelEventWiringConfiguration {
         return new PowerModelOutboxRelay(outboxRepository, transport, topic, leaseOwner,
                 Duration.ofMillis(leaseDurationMs), batchSize,
                 Duration.ofMillis(retryBaseDelayMs), Duration.ofMillis(retryMaxDelayMs));
+    }
+
+    /**
+     * 发布器调度驱动：fixedDelay 轮询 {@code relayOnce}（轮询间隔
+     * {@code power.model.events.relay.poll-interval-ms} 候选 1000ms，压测后冻结）。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public PowerModelOutboxRelayScheduler powerModelOutboxRelayScheduler(PowerModelOutboxRelay relay) {
+        return new PowerModelOutboxRelayScheduler(relay, Clock.systemUTC());
     }
 }
