@@ -2,7 +2,7 @@
 --
 -- 返回行数为 0 才通过；返回行列出缺失或非中文注释的表/字段。
 -- 表级注释按 objsubid=0，字段级注释按 objsubid=attnum。
--- 清单包含 V001/V002 全部新表、runner 引导的 history 表，
+-- 清单包含 V001/V002/V003 全部新表、runner 引导的 history 表，
 -- 以及待落库的 power_idempotency_record / power_model_event_inbox（未建表时自动跳过）。
 
 SELECT c.relname AS table_name, '<TABLE>' AS column_name,
@@ -21,7 +21,10 @@ WHERE n.nspname = 'public'
       'power_model_release_outbox',
       'power_product_model_binding',
       'power_idempotency_record',
-      'power_model_event_inbox'
+      'power_model_event_inbox',
+      'iot_collector_config_release',
+      'power_model_template_reference_mark',
+      'power_model_coordination_audit'
   )
   AND (d.description IS NULL OR btrim(d.description) = '' OR d.description !~ '[一-龥]')
 
@@ -49,7 +52,10 @@ WHERE n.nspname = 'public'
       'power_model_release_outbox',
       'power_product_model_binding',
       'power_idempotency_record',
-      'power_model_event_inbox'
+      'power_model_event_inbox',
+      'iot_collector_config_release',
+      'power_model_template_reference_mark',
+      'power_model_coordination_audit'
   )
   AND (d.description IS NULL OR btrim(d.description) = '' OR d.description !~ '[一-龥]');
 

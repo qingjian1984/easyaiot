@@ -1,7 +1,7 @@
 # TD-001：collector Profile 与 NODE 部署契约
 
 > TD ID：POWER-TD-001  
-> 版本：1.0.6  
+> 版本：1.0.7  
 > 状态：In Review  
 > 日期：2026-08-04  
 > 上游需求：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)  
@@ -89,6 +89,8 @@ flowchart LR
 | `row_version` | bigint，非空 | 乐观锁 |
 
 发布快照不可原地修改。canonical 文本必须在应用层按 `canonicalizationVersion` 生成一次；写库、计算哈希、下发 Agent 和本地落盘均复用同一字节序列，禁止读取 `jsonb` 后重新序列化并比较哈希。写入事务必须校验 `payload_canonical` 可解析、与 `payload` 语义相同、字节长度和 SHA-256 一致。回滚创建一个新的发布版本，其内容复制自历史已应用版本，并记录 `rollbackFromVersion`，不得把版本号倒退。
+
+DDL 候选资产（1.0.7 登记）：`assets/td005-migration/V003__iot_collector_coordination.sql`——本表 + §6.2 引用标记表 + 协调审计表，经 ADR-013 runner 增链步骤 V003 落库（评审候选，未经新窗口批准不得对目标实例执行）；临时评审库烟测证据见 ADR-013 1.5.2。
 
 数据库以 bigint 保存内部主键；管理 API 中 `tenantId/siteId/nodeId/deviceId` 均按十进制字符串序列化，避免 JavaScript 超过 `2^53-1` 后丢失精度，同时返回 `siteCode`、`deviceIdentification` 等稳定业务标识。API/快照组装层负责 bigint 与十进制字符串的无损转换，collector 不解析为 Java `long` 以外的业务含义。发布历史按 `(tenant_id, site_id, config_version desc)` 和 `(tenant_id, site_code, config_version desc)` 建索引。
 
@@ -501,4 +503,4 @@ TD-001 转为 `Approved / Frozen` 前必须关闭：
 5. 完成第 13 节首轮资源压测，冻结 standard/full 生产 request/limit、串口/点位/周期配额；未完成不得形成销售承诺。
 6. TD-002/003 对 `TelemetryOutboxPort`、卷路径和健康摘要无冲突。
 
-当前无未决架构选型。评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则，1.0.5 新增 §6.2 事件驱动快照再生语义，1.0.6 登记 T-18 批次 1 落地（四协调端口 + 四处理器 + 条件装配 + 12 项合同测试）；未冻结项仍为需要实测证据的资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review，完成本节门禁后才能转为 Approved / Frozen。
+当前无未决架构选型。评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则，1.0.5 新增 §6.2 事件驱动快照再生语义，1.0.6 登记 T-18 批次 1 落地（四协调端口 + 四处理器 + 条件装配 + 12 项合同测试），1.0.7 登记 §4.1/§6.2 持久化候选资产（V003 三表 DDL + U002 卸载 + runner 增链，烟测 PASS，落库待新窗口批准）；未冻结项仍为需要实测证据的资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review，完成本节门禁后才能转为 Approved / Frozen。
