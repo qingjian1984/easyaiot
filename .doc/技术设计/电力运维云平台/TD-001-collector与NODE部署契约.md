@@ -1,7 +1,7 @@
 # TD-001：collector Profile 与 NODE 部署契约
 
 > TD ID：POWER-TD-001  
-> 版本：1.0.5  
+> 版本：1.0.6  
 > 状态：In Review  
 > 日期：2026-08-04  
 > 上游需求：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)  
@@ -488,7 +488,7 @@ collector 发布不得自动创建或批准停运。发布请求 MAY 携带 `mai
 | 10 | 联合容量压测并冻结 manifest 配额 | `.scripts/docker`、测试环境 | 原始报告、配置、镜像 digest |
 
 TD-002 可以在任务 2 的卷与接口契约评审后并行设计，但持久队列代码不得在 TD-002 冻结前合入。
-- T-18：§6.2 协调器实现——四个 V1 事件处理器接入 `PowerModelEventHandlerRegistry`（影响面解析、快照再生、发布单管线接线、协调审计），合同测试沿用 ADR-014 fake 端口模式；前置：本节评审通过 + `power_model_event_inbox` 经 runner 增链落库。
+- T-18：§6.2 协调器实现——四个 V1 事件处理器接入 `PowerModelEventHandlerRegistry`（影响面解析、快照再生、发布单管线接线、协调审计），合同测试沿用 ADR-014 fake 端口模式；前置：本节评审通过 + `power_model_event_inbox` 经 runner 增链落库。**批次 1（1.0.6，2026-08-08）已落地**：四个协调端口（`CollectorWorkloadImpactPort`/`CollectorConfigReleasePort`/`PowerModelTemplateReferencePort`/`PowerModelCoordinationAuditPort`）+ `PowerModelCollectorEventHandlers` 四处理器 + `PowerModelEventWiringConfiguration` 条件装配（端口齐备时填充注册表，先于空表回退），合同测试 12/12 PASS，设备域回归 197/197 PASS；JDBC 端口实现待 TD-001 DDL（`iot_collector_config_release` 等）经 ADR-013 runner 增链落库后提供，端口未装配时事件按「处理器缺失 → DLQ」处置，绝不静默丢弃。
 
 ## 19. 评审与完成门禁
 
@@ -501,4 +501,4 @@ TD-001 转为 `Approved / Frozen` 前必须关闭：
 5. 完成第 13 节首轮资源压测，冻结 standard/full 生产 request/limit、串口/点位/周期配额；未完成不得形成销售承诺。
 6. TD-002/003 对 `TelemetryOutboxPort`、卷路径和健康摘要无冲突。
 
-当前无未决架构选型。评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则；未冻结项仍为需要实测证据的资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review，完成本节门禁后才能转为 Approved / Frozen。
+当前无未决架构选型。评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则，1.0.5 新增 §6.2 事件驱动快照再生语义，1.0.6 登记 T-18 批次 1 落地（四协调端口 + 四处理器 + 条件装配 + 12 项合同测试）；未冻结项仍为需要实测证据的资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review，完成本节门禁后才能转为 Approved / Frozen。

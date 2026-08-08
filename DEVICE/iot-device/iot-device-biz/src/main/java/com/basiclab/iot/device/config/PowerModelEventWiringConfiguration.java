@@ -1,7 +1,11 @@
 package com.basiclab.iot.device.config;
 
 import com.basiclab.iot.device.event.PowerModelEventEnvelope;
+import com.basiclab.iot.device.service.event.CollectorConfigReleasePort;
+import com.basiclab.iot.device.service.event.CollectorWorkloadImpactPort;
 import com.basiclab.iot.device.service.event.MicrometerPowerModelEventMetrics;
+import com.basiclab.iot.device.service.event.PowerModelCollectorEventHandlers;
+import com.basiclab.iot.device.service.event.PowerModelCoordinationAuditPort;
 import com.basiclab.iot.device.service.event.PowerModelEventConsumerCoordinator;
 import com.basiclab.iot.device.service.event.PowerModelEventHandlerRegistry;
 import com.basiclab.iot.device.service.event.PowerModelEventMetrics;
@@ -11,9 +15,11 @@ import com.basiclab.iot.device.service.event.PowerModelInboxWriter;
 import com.basiclab.iot.device.service.event.PowerModelOutboxRelay;
 import com.basiclab.iot.device.service.event.PowerModelOutboxRelayScheduler;
 import com.basiclab.iot.device.service.event.PowerModelOutboxRepository;
+import com.basiclab.iot.device.service.event.PowerModelTemplateReferencePort;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -81,8 +87,26 @@ public class PowerModelEventWiringConfiguration {
     }
 
     /**
-     * 处理器注册表。当前为空注册表：TD-001 collector 配置发布协调器的业务处理器
-     * 随其实现接入；空注册表下事件按「处理器缺失 → DLQ」处置，绝不静默丢弃。
+     * TD-001 §6.2 处理器注册表（填充版）：四个协调端口全部装配时，注册四个 V1
+     * 事件处理器（发布 noop-with-audit / 生命周期引用标记 / 绑定影响面再生）。
+     * 必须声明在空注册表回退之前——{@code @ConditionalOnMissingBean} 按声明序判定。
+     */
+    @Bean
+    @ConditionalOnMissingBean(PowerModelEventHandlerRegistry.class)
+    @ConditionalOnBean({CollectorWorkloadImpactPort.class, CollectorConfigReleasePort.class,
+            PowerModelTemplateReferencePort.class, PowerModelCoordinationAuditPort.class})
+    public PowerModelEventHandlerRegistry powerModelCollectorEventHandlerRegistry(
+            CollectorWorkloadImpactPort impactPort,
+            CollectorConfigReleasePort releasePort,
+            PowerModelTemplateReferencePort referencePort,
+            PowerModelCoordinationAuditPort auditPort) {
+        return new PowerModelEventHandlerRegistry(PowerModelCollectorEventHandlers.create(
+                impactPort, releasePort, referencePort, auditPort));
+    }
+
+    /**
+     * 处理器注册表（空回退）。协调端口未全部就绪时注册空表：
+     * 空注册表下事件按「处理器缺失 → DLQ」处置，绝不静默丢弃（TD-001 §6.2 MUST）。
      */
     @Bean
     @ConditionalOnMissingBean

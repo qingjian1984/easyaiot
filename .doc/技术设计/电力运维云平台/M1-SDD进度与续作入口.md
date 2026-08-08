@@ -23,7 +23,7 @@
 | PRD-01 站点设备与数据采集 | 1.2.0 | Approved / Baselined（M1） |
 | SPEC-001～004 集合 | 1.4.0 | Approved / Frozen |
 | ADR-001～012（ADR-005 Superseded） | 当前索引基线 | Accepted / Superseded |
-| [TD-001 collector 与 NODE 部署契约](./TD-001-collector与NODE部署契约.md) | 1.0.5 | In Review |
+| [TD-001 collector 与 NODE 部署契约](./TD-001-collector与NODE部署契约.md) | 1.0.6 | In Review |
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
 | [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.1 | In Review |
@@ -99,6 +99,7 @@
 - TD-005 冻结第六批（JDBC 真实库合同测试）已落地（2026-08-08，ADR-014 升 1.3.6）：新增 Outbox（6 项）/Inbox（5 项）PostgreSQL 集成测试，覆盖首插/唯一裁决/hash CHECK/四态原子认领/批量顺序/双连接 SKIP LOCKED 互斥/三回写与防漂移守卫/截断/countByStatus/隔离 upsert 语义。执行环境如实声明：本地临时评审库 `td005_contract_review`（非 iot-device20），DDL 由测试用 V001/consumer_inbox 资产自检，11/11 PASS，outbox/inbox 残留 0、audit 残留 36（追加写设计使然），临时库已 DROP 并验证。跳过模式与既有 PG 测试一致（常规回归 21 项跳过全为设计内 PG 跳过）。V001 向目标实例落库仍待 ADR-013 runner 获批窗口。设备域全量回归 **185/185 PASS**。
 - **V001 落库窗口已批准并执行（2026-08-08，ADR-013 升 1.5.1）**：镜像演练（iot-device20 schema-only 镜像库全链 SUCCEEDED 后删库）→ 窗口申请单 → owner 批准并立即执行 → runner 对 iot-device20 执行 M05→M15→M16→V001→V002 **apply SUCCEEDED**（APPROVAL=V001-WINDOW-20260808，执行前自动 pg_dump 备份于仓库外）；执行后只读验证 history 五行 SUCCEEDED、invalid_indexes=0、MIG-009 注释门禁 PASS、业务计数不变（4/4/17）、Outbox 空表。证据归档 `assets/td005-migration/verification/window-rehearsal-20260808/` 与 `window-execution-20260808/`。如实记录：① runner 头注释 PG_CONTAINER 默认值与实现不符（须显式传参，修正列后续小版本）；② `power_model_event_inbox` 不在五步骤链内，落库需 runner 增链步骤 + 新窗口，保持 OPEN。
 - TD-001 协调器实现已启动（2026-08-08，TD-001 升 1.0.5 仍 In Review）：新增 §6.2「电力物模型事件驱动的快照再生」设计增补——四事件处理语义表（发布→审计 noop、生命周期→引用标记不改快照、绑定应用/回滚→影响面解析+单调递增 configVersion 发布单再生）、幂等派生键、retryable/final 分流、事务边界，以及 §18 新增实现任务 T-18。未经 §6.2 评审不得接线实现；处理器注册表在此之前保持为空（事件进 DLQ 有持久证据）。
+- **T-18 批次 1 已落地（2026-08-08，TD-001 升 1.0.6，owner 评审通过 §6.2 后实施）**：新增四个协调端口（`CollectorWorkloadImpactPort` 影响面解析空集合法绝不返回 null / `CollectorConfigReleasePort` 幂等判定+再生发布单 templateVersion 回滚时由端口按 bindingRevision 解析 / `PowerModelTemplateReferencePort` 只写引用标记绝不改写快照 / `PowerModelCoordinationAuditPort` detail 脱敏有界 ≤512）、`PowerModelCollectorEventHandlers` 四 V1 处理器（字段缺失/解析失败→final MODEL_* 稳定码、端口 IAE→final、其余 RuntimeException→retryable、空影响面写 IMPACT_EMPTY 审计、幂等 workload 跳过、审计 detail 有界化）、`PowerModelEventWiringConfiguration` 条件装配（`@ConditionalOnBean` 四端口齐备时填充注册表，声明先于 `@ConditionalOnMissingBean` 空表回退；端口未装配时事件按缺失处理器进 DLQ，绝不静默丢弃）。合同测试 12/12 PASS，设备域全量回归 **197/197 PASS**。批次 2 OPEN：TD-001 DDL（`iot_collector_config_release` 等）资产 → runner 增链落库 → JDBC 端口实现 → 点表片段再生。
 - TD-001/002/003 的 Envelope、configVersion、siteCode、dataPriority、requestId、Topic、5 分钟 ACK deadline 和健康语义已经对齐。
 - TD-001～004 四份评审报告均保留原始意见并附最终逐项处置，发生冲突时以报告末尾的“复核与最终处置”为准。
 
@@ -159,7 +160,7 @@
 
 继续 SDD 文档链，下一步优先执行 **TD-005 证据准备与冻结门禁关闭**：
 
-0. **ADR-013 1.5.1/ADR-014 1.3.6 已 Accepted，V001 落库窗口已执行（2026-08-08）**：三项人工闭环关闭 + 五步骤链对 iot-device20 apply SUCCEEDED；TD-005 冻结六批实现证据落地（185/185 PASS），**当前最优先：TD-001 §6.2 协调器设计评审 → T-18 实现接线，以及 manifest 真实 Git commit/hash 写入后 TD-005 Approved/Frozen 决策**；`power_model_event_inbox` 需 runner 增链步骤落库（新窗口）；
+0. **ADR-013 1.5.1/ADR-014 1.3.6 已 Accepted，V001 落库窗口已执行（2026-08-08）**：三项人工闭环关闭 + 五步骤链对 iot-device20 apply SUCCEEDED；TD-005 冻结六批实现证据落地 + T-18 批次 1（TD-001 §6.2 协调器四处理器，197/197 PASS）；**当前最优先：T-18 批次 2（TD-001 DDL 资产 → runner 增链 → JDBC 端口实现），以及 manifest 真实 Git commit/hash 写入后 TD-005 Approved/Frozen 决策**；`power_model_event_inbox` 需 runner 增链步骤落库（新窗口）；
 1. 读取 [TD-005 1.0.16](./TD-005-物模型模板Schema版本差异与发布API.md)、[TD-005 运行模型兼容与删除链设计 0.1.9](./TD-005-运行模型兼容与删除链技术设计.md)、[migration 子设计 0.1.7](./TD-005-版本绑定审计Outbox迁移与回滚设计.md)和[TD-005 评审报告 §23](../../开发规范/TD-005评审报告.md)；
 2. Mapper/DO/VO、legacy adapters、Java golden、根属性 TEN-001～004/006、内部八表持久化/TEN-005/回滚、稳定错误和 TEN-007/008 已完成；先复跑 capability 4 项、只读 API 1 项与设备侧 19 项目标测试，禁止回退到 `product_properties.service_id` 或散落 profile 判断；
 3. 对 [版本/绑定/审计/Outbox migration 与 rollback 0.1.2 候选](./TD-005-版本绑定审计Outbox迁移与回滚设计.md)继续 DBA/架构评审，优先评审 [ADR-013（Proposed）](../../架构决策/电力运维云平台/ADR-013-受控数据库迁移执行器.md)与 [V001/U001 DDL 骨架](./assets/td005-migration/V001__power_model_version_binding_audit_outbox.sql)，关闭 runner 决策后再决定 TD-004 幂等表落库顺序、product unique/binding FK、事件 transport/消费者 Inbox 和压测/保留值；批准前不得启用 DDL；
