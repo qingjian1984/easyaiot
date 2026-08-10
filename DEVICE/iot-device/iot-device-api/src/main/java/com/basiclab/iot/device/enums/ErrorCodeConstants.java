@@ -112,4 +112,14 @@ public interface ErrorCodeConstants {
     ErrorCode MODEL_RUNTIME_ID_DUPLICATE = new ErrorCode(1_003_023_010,
             "MODEL_RUNTIME_ID_DUPLICATE: 物模型运行标识重复，{}");
 
+    // ========== 电力对象快照 1-003-024-000 ==========
+    ErrorCode POWER_OBJECT_SNAPSHOT_REQUEST_INVALID = new ErrorCode(1_003_024_000,
+            "POWER_OBJECT_SNAPSHOT_REQUEST_INVALID: 电力对象快照请求无效，{}");
+    ErrorCode POWER_OBJECT_NOT_FOUND = new ErrorCode(1_003_024_001,
+            "POWER_OBJECT_NOT_FOUND: 当前租户下设备不存在，{}");
+    ErrorCode POWER_OBJECT_SCOPE_AMBIGUOUS = new ErrorCode(1_003_024_002,
+            "POWER_OBJECT_SCOPE_AMBIGUOUS: 当前租户下设备标识不唯一，{}");
+    ErrorCode POWER_CAPABILITY_UNAVAILABLE = new ErrorCode(1_003_024_003,
+            "POWER_CAPABILITY_UNAVAILABLE: 当前部署不支持电力对象能力，{}");
+
 }

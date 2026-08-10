@@ -1,7 +1,7 @@
 # TD-001：collector Profile 与 NODE 部署契约
 
 > TD ID：POWER-TD-001  
-> 版本：1.0.7  
+> 版本：1.0.19
 > 状态：In Review  
 > 日期：2026-08-04  
 > 上游需求：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)  
@@ -90,7 +90,7 @@ flowchart LR
 
 发布快照不可原地修改。canonical 文本必须在应用层按 `canonicalizationVersion` 生成一次；写库、计算哈希、下发 Agent 和本地落盘均复用同一字节序列，禁止读取 `jsonb` 后重新序列化并比较哈希。写入事务必须校验 `payload_canonical` 可解析、与 `payload` 语义相同、字节长度和 SHA-256 一致。回滚创建一个新的发布版本，其内容复制自历史已应用版本，并记录 `rollbackFromVersion`，不得把版本号倒退。
 
-DDL 候选资产（1.0.7 登记）：`assets/td005-migration/V003__iot_collector_coordination.sql`——本表 + §6.2 引用标记表 + 协调审计表，经 ADR-013 runner 增链步骤 V003 落库（评审候选，未经新窗口批准不得对目标实例执行）；临时评审库烟测证据见 ADR-013 1.5.2。
+DDL 资产（1.0.7 登记）：`assets/td005-migration/V003__iot_collector_coordination.sql`——本表 + §6.2 引用标记表 + 协调审计表；已于 2026-08-10 经 ADR-013 runner 受控落入本地目标集成实例，执行与验证证据见项目续作入口的 V003/V004/V005 窗口记录。
 
 数据库以 bigint 保存内部主键；管理 API 中 `tenantId/siteId/nodeId/deviceId` 均按十进制字符串序列化，避免 JavaScript 超过 `2^53-1` 后丢失精度，同时返回 `siteCode`、`deviceIdentification` 等稳定业务标识。API/快照组装层负责 bigint 与十进制字符串的无损转换，collector 不解析为 Java `long` 以外的业务含义。发布历史按 `(tenant_id, site_id, config_version desc)` 和 `(tenant_id, site_code, config_version desc)` 建索引。
 
@@ -254,16 +254,91 @@ ADR-014 1.3.6 为准（已实现并有合同测试）；本节只定义业务处
 |---|---|
 | `POWER_MODEL_TEMPLATE_PUBLISHED_V1` | 模板版本发布本身**不触发**快照再生（绑定未变）。校验 `data.templateCode/templateVersion` 存在后写协调审计（noop-with-audit）成功；字段缺失按 final 进 DLQ |
 | `POWER_MODEL_TEMPLATE_LIFECYCLE_CHANGED_V1` | 生命周期变更（DEPRECATED/RETIRED）只更新引用标记：引用该版本的活跃绑定所属 workload 的后续人工发布须在确认页提示；**不自动改写任何快照**（PRD-01 §4.2：已绑定设备不被未确认升级自动改变） |
-| `POWER_PRODUCT_MODEL_BINDING_APPLIED_V1` | 绑定应用 → 解析影响面 → 以新模型版本再生受影响 workload 的点表片段 → 经 §4.1/§8 既有管线生成**新的单调递增 configVersion** 发布单（DRAFT→VALIDATED→PUBLISHED）；静态校验冲突（串口独占/站号/轮询时长预算）→ FAILED 发布单 + 结构化错误码，**不得静默降频**（PRD-01 §4.3） |
-| `POWER_PRODUCT_MODEL_BINDING_ROLLED_BACK_V1` | 绑定回滚 → 同上，以回滚目标模型版本再生；configVersion 仍单调递增并记录 `rollbackFromVersion`，**版本号不倒退**（§4.1） |
+| `POWER_PRODUCT_MODEL_BINDING_APPLIED_V1` | 绑定应用事务先完成点表再生、四项策略显式确认与静态校验，并以同一 `sourceEventId` 写入 `VALIDATED` 发布单和 Outbox；消费者解析影响面后只精确推进该候选单至 PUBLISHED 并更新 desired 投影。不得复制上一版点表代替候选单 |
+| `POWER_PRODUCT_MODEL_BINDING_ROLLED_BACK_V1` | 回滚事务同样先生成新的 `VALIDATED` 候选单；消费者按 `toBindingRevision + sourceEventId` 精确推进。`configVersion` 仍单调递增并记录 `rollbackFromVersion`，版本号不倒退 |
 
 MUST：
 
 - 影响面解析顺序固定：product → 活动未软删 device → site → 活动 collector workload binding；解析结果为空集是合法结果，写协调审计后按成功结束（不产生发布单）。
-- 处理器自身幂等：再生输入以 `(workloadId, modelVersion, bindingRevision)` 派生；若该 workload 当前 desired 已是目标版本，幂等成功且不新建发布单。重复/乱序事件由 ADR-014 Inbox 与分区内顺序承担。
+- 处理器自身幂等：候选身份固定为 `(tenantId, workloadId, sourceEventId)`；语义核对同时要求 `productId/templateCode/templateVersion/bindingRevision` 一致。若 workload 当前 desired 已是目标修订则幂等成功；若事件找不到唯一 VALIDATED 候选或身份不一致，以 `COLLECTOR_CONFIG_SOURCE_FACT_MISSING` / 冲突稳定码终态失败，禁止按最新记录猜测。
+- `appliedBy/rolledBackBy` 是发布确认审计来源，必须是正 bigint 十进制字符串并传入 `published_by`。绑定应用/回滚已完成同一差异确认，消费者不得另造系统用户；事件 Schema 中 ID 均按字符串解析，回滚事件不携带 `templateCode/templateVersion`，由目标 `bindingRevision` 的候选身份解析。
 - 失败分流：瞬态错误（数据库瞬断、发布管线锁冲突）抛 `PowerModelEventProcessingException(retryable=true)` 走 1s→16s 退避；业务终态（字段缺失、引用不存在、校验冲突）按 final 进 DLQ。任何路径不得静默吞错。
 - 事务边界：处理器只写发布单与协调审计（单事务提交），不产生新的 Outbox 事件；`markProcessed` 由消费编排器在处理器成功后执行（ADR-014 已落地契约）。
 - 处理器注册表在本节评审通过并完成实现任务前保持为空——空表下事件按「缺失处理器 → DLQ」处置（有持久证据，非静默丢弃）。
+
+### 6.3 发布侧快照合同与事实来源门禁（1.0.8）
+
+机器基线已落在 `iot-device-api/src/main/resources/schema/collector/v1/collector-config-snapshot-v1.json`；
+发布侧 `CollectorConfigSnapshotContract` 对同一字段集合执行 fail-closed 校验并一次生成
+canonical UTF-8、64 位小写 SHA-256 与字节长度。生产快照必须至少有一条串口总线，object
+拒绝额外字段，内部 ID 使用十进制字符串，`scale/offset` 使用非指数十进制字符串；点位必须显式
+携带 `dataPriority/pollGroup`，设备必须显式携带 `requestTimeoutMs/maxRetries`。不得从当前 poller
+默认值、模板当前值或数据库 `jsonb` 重序列化结果补齐发布事实。
+
+2026-08-10 对本地目标集成实例 `iot-device20` 的只读画像确认：现有 `device` 表没有
+`site_id/site_code`，`device_location` 也只含行政位置；`device.extension.protocolConfig` 的现有 RTU
+样例缺少 `requestTimeoutMs/maxRetries/dataPriority/pollGroup`。`collector_workload_binding_projection`
+虽含站点与产品，但“同产品全部设备属于该站点”不是成立的不变量，同一产品可跨站点，禁止据此拼装
+快照。因此第四个 `CollectorConfigReleasePort` 的 JDBC Bean 继续不装配，四端口条件注册表保持空回退；
+缺失事实使用稳定码 `COLLECTOR_CONFIG_SOURCE_FACT_MISSING` 按业务终态失败，绝不生成空总线或伪默认
+发布单。`device→site` 不新建第二套模型，必须实现并复用 TD-004 已冻结的
+`power_device_assignment → power_site` 当前主关系及 `PowerCollectorObjectSnapshot` 内部查询契约，
+再与 workload 投影按同租户/同站点闭合。新增字段/表须提供带中文 COMMENT 的迁移、回滚和非空真实库合同。
+
+1.0.12 进展：`PowerObjectQueryApi`、响应 DTO、tenant-safe JDBC Mapper/Service/provider 已落地；
+READY/NOT_BOUND/INACTIVE、服务端 objectRevision、跨租户拒绝与目标 PG 回滚合同共 8 项 PASS，fixture
+残留 0。
+
+1.0.13 冻结四项策略事实：`requestTimeoutMs/maxRetries` 属于发布单内设备级策略，
+`dataPriority/pollGroup` 属于发布单内点位级策略；首次发布或绑定变更必须由 validate/导入事务显式提供并
+生成 `VALIDATED` canonical 快照，落库后该快照就是唯一不可变、版本化、可审计事实。策略变更必须生成
+更高 `configVersion`，不得修改旧单；`device.extension` 仅可作为 UI 草稿输入，不是权威事实；事件再生
+不得继承或猜测旧策略来补齐一个缺失候选。现表尚不能用事件精确关联候选，故形成未接 runner 的
+`V007__collector_release_derivation_identity.sql` / `U006` 评审候选，补
+`product_id/template_code/template_version/binding_revision/source_event_id/source_reason_code` 及不可变保护。
+处理器已对齐 V1 Schema 的十进制字符串 ID、回滚无模板字段事实，并透传 `sourceEventId/confirmedBy`。
+V007 已通过专项评审并接入 runner，但未经独立窗口批准前不得执行。1.0.14 已实现
+`JdbcCollectorConfigReleasePort`：精确锁定同事件 VALIDATED 候选，复核 canonical/hash/长度与站点事实，
+在单事务内 CAS 推进发布单和 workload 投影；缺失/漂移均 fail-closed。Bean 由
+`easyaiot.power-model.collector-release-port-enabled=true` 显式门禁，默认不装配；V007 未落库前禁止开启。
+schema-only 目标镜像静态门禁 1/1 + PG 合同 1/1 PASS、fixture 残留 0、invalid index=0，临时库已删除。
+
+1.0.15 目标窗口：owner 以 `USER-APPROVAL-20260810-V007` 独立授权后，runner 自动仓库外备份并
+仅执行 V007；history/hash、六列六约束、不可变函数、MIG-009、invalid index 与业务计数全部 PASS。
+目标 PG 事务合同 + 静态门禁 2/2、事件合同 13/13 PASS，fixture 回滚后五类表均为 0。
+数据库门禁已关闭，但仓库未配置 `collector-release-port-enabled=true`，第四端口继续不装配；
+1.0.16 已实现 `POST /api/v1/products/{productIdentification}/model-binding:apply`：服务端权限、
+capability、租户有效性和 `Idempotency-Key` 四重 fail-closed，按产品行锁与 workload advisory lock
+分配单调 `bindingRevision/configVersion`，同事务写产品绑定、领域审计、Outbox 和同事件
+`VALIDATED` canonical 候选，事务内不调用 NODE。幂等 key 仅保存服务端 HMAC-SHA-256；同 key 同请求
+重放原结果、异请求稳定拒绝。目标 PostgreSQL 成功/重放/冲突与最终插入强制失败整体回滚合同 2/2 PASS，
+专用租户八类 fixture 均为 0。第四端口仍默认不装配；启用前还需完成候选→事件消费→发布单/投影推进
+端到端合同和显式配置评审。
+
+1.0.17 端到端接线前事实核对发现首发闭环冲突：上述入口只提交 `VALIDATED + Outbox`，而现有
+`BindingImpactHandler` 先从 `collector_workload_binding_projection` 解析 ACTIVE workload；首次发布尚无
+投影，因此事件会被合法空集分支误记为 `IMPACT_EMPTY`，候选不会进入第四端口。这正是 ADR-015 否决
+方案 D 时登记的 CRITICAL 首发死循环。为避免幂等 secret 配置后误开放，Controller 新增独立
+`easyaiot.power-model.binding-apply-api-enabled=true` 门禁且默认关闭。ADR-015 对“人工首次发布同事务
+upsert 投影”与 TD-001 1.0.16 的“异步消费者推进候选”须先形成评审通过的单一写序；在此之前禁止启用
+绑定写 API 和第四端口，不得把 `IMPACT_EMPTY` 当成端到端 PASS。本次未执行 DDL、未调用 NODE。
+
+1.0.18 按 ADR-015 Accepted 路径关闭首发死循环：人工绑定 apply 事务在插入不可变候选后立即以 CAS
+推进为 `PUBLISHED`，并在同事务插入 revision=1 ACTIVE workload 投影；既有投影则在身份一致、产品无
+未覆盖 ACTIVE workload 的前提下单调推进，部分发布稳定拒绝。Outbox 消费解析到该投影后由
+`desiredMatches` 幂等跳过再生，仅落协调审计和 PROCESSED Inbox。目标 `iot-device20` 真实 PG 合同覆盖
+首发、重复投递、同 workload 不同事件 revision/configVersion 1→2、强制投影 CAS 失败保存点回滚和最终
+零残留；连同 API 默认关闭静态门禁共 4/4 PASS，业务计数保持 4/4/17。两项开关仍默认关闭；开启前仍须
+完成显式配置评审。本次未执行 DDL、未调用 NODE。
+
+1.0.19 完成启用配置专项评审但不执行启用。新增启动期 `PowerModelActivationGuard`，冻结四项事实：
+绑定 API、第四端口、事件总开关和幂等 HMAC secret。默认全部关闭；任一链路激活必须处于
+standard/full 且 capability `power.device.model` 已启用；事件总开关要求第四端口已装配；绑定 API 要求
+事件链与第四端口同时开启且 secret 不少于 32 UTF-8 字节。合法灰度顺序为“第四端口 → 事件链 → 写 API”，
+反向回滚顺序为“写 API → 待 Outbox 排空 → 事件链 → 第四端口”。application、Compose 和 env.example
+均显式暴露安全默认值，Compose `config --quiet` PASS，启动组合与静态部署合同 8/8 PASS。专项结论为
+`CONDITIONALLY_APPROVED / NOT_ACTIVATED`：实际开启仍需 owner 独立批准、运行密钥注入、Kafka/消费者健康
+和零积压灰度证据；本轮未修改运行环境、未执行 DDL、未调用 NODE。
 
 ## 7. API 与 Agent 契约
 
@@ -490,7 +565,7 @@ collector 发布不得自动创建或批准停运。发布请求 MAY 携带 `mai
 | 10 | 联合容量压测并冻结 manifest 配额 | `.scripts/docker`、测试环境 | 原始报告、配置、镜像 digest |
 
 TD-002 可以在任务 2 的卷与接口契约评审后并行设计，但持久队列代码不得在 TD-002 冻结前合入。
-- T-18：§6.2 协调器实现——四个 V1 事件处理器接入 `PowerModelEventHandlerRegistry`（影响面解析、快照再生、发布单管线接线、协调审计），合同测试沿用 ADR-014 fake 端口模式；前置：本节评审通过 + `power_model_event_inbox` 经 runner 增链落库。**批次 1（1.0.6，2026-08-08）已落地**：四个协调端口（`CollectorWorkloadImpactPort`/`CollectorConfigReleasePort`/`PowerModelTemplateReferencePort`/`PowerModelCoordinationAuditPort`）+ `PowerModelCollectorEventHandlers` 四处理器 + `PowerModelEventWiringConfiguration` 条件装配（端口齐备时填充注册表，先于空表回退），合同测试 12/12 PASS，设备域回归 197/197 PASS；JDBC 端口实现待 TD-001 DDL（`iot_collector_config_release` 等）经 ADR-013 runner 增链落库后提供，端口未装配时事件按「处理器缺失 → DLQ」处置，绝不静默丢弃。
+- T-18：§6.2 协调器实现——V003～V007 已受控落入本地目标集成实例；四个 JDBC 端口、ConfigSnapshot、PowerObjectQueryApi 与首次 VALIDATED 候选创建事务已实现并通过目标 PostgreSQL 原子合同。第四端口仍默认关闭；下一门禁是候选→Outbox 消费→发布单/投影推进端到端合同和显式配置评审。
 
 ## 19. 评审与完成门禁
 
@@ -503,4 +578,4 @@ TD-001 转为 `Approved / Frozen` 前必须关闭：
 5. 完成第 13 节首轮资源压测，冻结 standard/full 生产 request/limit、串口/点位/周期配额；未完成不得形成销售承诺。
 6. TD-002/003 对 `TelemetryOutboxPort`、卷路径和健康摘要无冲突。
 
-当前无未决架构选型。评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则，1.0.5 新增 §6.2 事件驱动快照再生语义，1.0.6 登记 T-18 批次 1 落地（四协调端口 + 四处理器 + 条件装配 + 12 项合同测试），1.0.7 登记 §4.1/§6.2 持久化候选资产（V003 三表 DDL + U002 卸载 + runner 增链，烟测 PASS，落库待新窗口批准）；未冻结项仍为需要实测证据的资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review，完成本节门禁后才能转为 Approved / Frozen。
+评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则，1.0.5 新增 §6.2 事件驱动快照再生语义，1.0.6 登记 T-18 批次 1 落地，1.0.7 登记 V003 持久化资产，1.0.8 登记 ConfigSnapshot 机器合同，1.0.9～1.0.15 完成 V006/V007、对象查询和第四端口闭环，1.0.16 完成首次候选创建原子事务，1.0.17 识别并隔离 ADR-015 首发死循环，1.0.18 完成人工首发与真实 PG 端到端合同，1.0.19 冻结启动组合和灰度顺序。当前 OPEN 是实际启用窗口、资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review。

@@ -209,3 +209,18 @@ iot:
     end-code: 9999 # 这里配置 9999 的原因是，测试方便。
 
 debug: false
+
+# 电力物模型写 API 的安全配置。空值保持 fail-closed；standard/full 部署必须通过
+# 环境变量或配置中心注入至少 32 UTF-8 字节的随机 secret，禁止提交真实 secret。
+easyaiot:
+  power-model:
+    # ADR-015 首发投影闭环完成专项评审前禁止开放写入口。
+    binding-apply-api-enabled: ${EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED:false}
+    collector-release-port-enabled: ${EASYAIOT_POWER_MODEL_COLLECTOR_RELEASE_PORT_ENABLED:false}
+    idempotency-hmac-secret: ${EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET:}
+
+# Outbox relay、Kafka listener 与消费协调器的总开关；默认不装配后台任务。
+power:
+  model:
+    events:
+      enabled: ${POWER_MODEL_EVENTS_ENABLED:false}

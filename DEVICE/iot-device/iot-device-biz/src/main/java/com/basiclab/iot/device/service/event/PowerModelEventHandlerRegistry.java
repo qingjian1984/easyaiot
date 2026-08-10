@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * ADR-014：事件业务处理器分发（消费侧）。
@@ -56,5 +57,10 @@ public final class PowerModelEventHandlerRegistry {
     /** 查找处理器；未注册返回 null（由编排器按 final 失败处置）。 */
     public PowerModelEventHandler find(String eventType) {
         return handlers.get(eventType);
+    }
+
+    /** 返回已装配的事件类型快照，供启动门禁验证，避免事件管道带空注册表运行。 */
+    public Set<String> registeredEventTypes() {
+        return handlers.keySet();
     }
 }

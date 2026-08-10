@@ -1,8 +1,8 @@
 # ADR-014：Outbox 事件 Transport 与消费者 Inbox（TD-005）
 
-> 状态：**Accepted**（2026-08-08：随 ADR-013 一并处置的三项人工闭环全数关闭——① DBA/代码 owner 双签 2026-08-07；② standard 最低规格压测 owner 豁免 2026-08-07；③ 完整 12 表画像生产重跑 2026-08-07 执行 PASS、2026-08-08 owner 指定满足。实现证据六批已落地：Schema 归位 + 领域逻辑 + CI 门禁（31 测试 / 24 项 PASS）、持久化接线（23 测试）、消费循环（18 测试）、发布器调度驱动（3 测试，Spring Scheduling 选型经 owner 部署评审裁定）、可观测性指标（5 测试）、JDBC 真实库合同测试（11 测试，本地临时评审库执行 PASS、用后删库）；设备域全量回归 185/185 PASS。剩余 OPEN：TD-001 业务处理器接入、V001 经 ADR-013 runner 获批窗口向目标实例落库、双发对账演练、Kafka DLQ topic 深度 broker 侧导出）
-> 版本：1.3.6
-> 日期：2026-08-08
+> 状态：**Accepted**（2026-08-10：V005 Inbox 版本资产已冻结并随 V003/V004 经 ADR-013 runner 落入本地目标集成实例；MIG-009 与目标实例真实 PostgreSQL 合同测试 PASS。剩余 OPEN：TD-001 `CollectorConfigReleasePort`/任务 7、双发对账演练、Kafka DLQ topic 深度 broker 侧导出）
+> 版本：1.3.7
+> 日期：2026-08-10
 > 决策范围：TD-005 版本/绑定/审计 Outbox 的异步投递与消费幂等
 > 影响章节：《EasyAIoT 项目开发宪法》§2.1、§2.3、§5.4、§6.2、§6.3、§8、§10.2、§12、§14；TD-005 migration §4.6
 > 产品基线：平台功能计划 1.4.0 / 项目开发宪法 1.5.0
@@ -20,6 +20,7 @@
 | 1.3.4 | 2026-08-08 | 实现证据第四批（发布器调度驱动）：选型经 owner 部署评审裁定为 **Spring Scheduling**——iot-device 运行时经 iot-common-mq 的 `YudaoRedisMQConsumerAutoConfiguration` 传递激活调度设施（无任何 auto-config exclude），Quartz/iot-common-job 会引入新依赖与 QRTZ_* 表、对单功能轮询属过度设计，且多实例并发安全已由认领 SQL 的 `FOR UPDATE SKIP LOCKED` + 租约承担，调度层无需集群协调。落地：`PowerModelOutboxRelayScheduler`（fixedDelay 轮询 `relayOnce`，注入 Clock 保证确定性，单轮异常只记录异常类型摘要、绝不外抛中断轮询、绝不含 payload）+ `PowerModelEventWiringConfiguration` 显式 `@EnableScheduling`（类级 `enabled=true` 门禁不变，mini 不装配不调度；显式声明防传递依赖变化导致轮询静默停转）。新增候选配置 `power.model.events.relay.poll-interval-ms`（1000）/`initial-delay-ms`（5000），压测后冻结。合同测试 3/3 PASS，设备域全量回归 169/169 PASS |
 | 1.3.5 | 2026-08-08 | 实现证据第五批（可观测性指标，§可观测性与对账 MUST 随消费者/发布器落地的缺口关闭）：① 指标端口 `PowerModelEventMetrics`（领域逻辑只依赖端口，测试手写 fake）+ Micrometer 适配 `MicrometerPowerModelEventMetrics`（指标名/tag 冻结，同 result 复用 Counter）；② 埋点——发布器记录 `power_model_event_publish_total{result∈published/retry_scheduled/dead_letter}` 与 `power_model_event_delivery_duration`（逐次 send 耗时），Inbox 写入器两条 critical 隔离路径计 `power_model_inbox_quarantined_total`；③ gauge 接线——`power_model_outbox_backlog`（仓储新增 `countByStatus`，PENDING+PUBLISHING 实时求值）、`power_model_dlq_depth`（DEAD_LETTER 行数；如实声明边界：Kafka DLQ topic 自身积压需 broker 侧导出器，列入开放项）；④ 全部 Bean 仍在 `enabled=true` 门禁内装配，mini 无指标残留。合同测试 5/5 新增 PASS（事件包 80/80），设备域全量回归 174/174 PASS |
 | 1.3.6 | 2026-08-08 | 实现证据第六批（JDBC 真实库合同测试）：新增 `JdbcPowerModelOutboxRepositoryPostgresIntegrationTest`（6 项：首插/UNIQUE(event_id) 数据库裁决/hash CHECK 拒绝/原子认领四态（到期、未到期、租约未过期、租约过期恢复）/批量上限与 ORDER BY created_at,id 顺序/双连接 SKIP LOCKED 并发互斥且回滚恢复/三种回写状态迁移与非 PUBLISHING 防漂移守卫/错误摘要 128 截断/countByStatus gauge 数据源）与 `JdbcPowerModelInboxRepositoryPostgresIntegrationTest`（5 项：首插 ON CONFLICT true→false/findByEventId 视图/hash CHECK/markProcessed/隔离 upsert 插入后更新且保留首次隔离 payload_hash）。执行环境如实声明：本地临时评审库 `td005_contract_review`（postgres-server PostgreSQL，非 iot-device20 目标实例），DDL 由测试用 V001/consumer_inbox 资产自检（V001 整文件单语句执行，含 PL/pgSQL 触发器），执行 11/11 PASS；残留核对 outbox=0/inbox=0/audit=36（审计表追加写设计使然），临时库已 DROP 并验证不存在。沿用 TD005_PG_ENABLED 跳过模式（常规回归 21 项跳过全为 PG 集成测试设计内跳过）。V001 向目标实例落库仍 MUST 经 ADR-013 runner 获批窗口，与此批测试证据分开跟踪。设备域全量回归 185/185 PASS |
+| 1.3.7 | 2026-08-10 | 冻结 V005 Inbox 与空表卸载入口 U004，runner 链扩至 V005；镜像评审库首次/幂等复跑、MIG-009、V004 反例和 8 项 PG 合同均 PASS 后，经用户窗口授权对 `iot-device20` 执行 V003/V004/V005 SUCCEEDED；目标测试 8/8 PASS 且五表残留 0 |
 
 ## 背景
 

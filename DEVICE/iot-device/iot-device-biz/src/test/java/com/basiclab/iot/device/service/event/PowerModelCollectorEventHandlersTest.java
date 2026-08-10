@@ -145,7 +145,11 @@ class PowerModelCollectorEventHandlersTest {
         assertEquals("1.3.0", first.templateVersion);
         assertEquals(7L, first.bindingRevision);
         assertEquals("BINDING_APPLIED", first.reasonCode);
+        assertEquals(EVENT_ID, first.sourceEventId);
+        assertEquals(9001L, first.confirmedBy);
         assertEquals("wl-c", f.release.drafts.get(1).workloadId);
+        assertEquals(Arrays.asList("1:wl-a", "1:wl-b", "1:wl-c"), f.release.desiredCalls,
+                "幂等查询必须携带租户边界，禁止仅按 workloadId 命中其他租户");
         FakeAudit.Record audit = f.audit.records.get(0);
         assertEquals(PowerModelCollectorEventHandlers.ACTION_DRAFTS_CREATED, audit.action);
         assertTrue(audit.detail.contains("impacted=3"));
@@ -158,15 +162,19 @@ class PowerModelCollectorEventHandlersTest {
         f.impact.workloads = Collections.singletonList("wl-a");
         handler(f, PowerModelEventEnvelope.EVENT_BINDING_ROLLED_BACK_V1)
                 .handle(envelope(PowerModelEventEnvelope.EVENT_BINDING_ROLLED_BACK_V1),
-                        "{\"productId\":2001,\"templateCode\":\"power.hv_cabinet\","
-                                + "\"fromBindingRevision\":7,\"toBindingRevision\":5,"
-                                + "\"reasonCode\":\"OPS_ROLLBACK\"}");
+                        "{\"productId\":\"2001\",\"productIdentification\":\"p-1\","
+                                + "\"fromBindingRevision\":\"7\",\"toBindingRevision\":\"5\","
+                                + "\"rolledBackAt\":\"2026-08-08T00:00:00Z\","
+                                + "\"rolledBackBy\":\"9002\",\"reasonCode\":\"OPS_ROLLBACK\"}");
 
         assertEquals(1, f.release.drafts.size());
         FakeRelease.Draft draft = f.release.drafts.get(0);
         assertNull(draft.templateVersion, "回滚事件不携带 templateVersion，由端口按 bindingRevision 解析");
+        assertNull(draft.templateCode, "回滚事件不携带 templateCode，由端口按 bindingRevision 解析");
         assertEquals(5L, draft.bindingRevision, "回滚目标版本取 toBindingRevision");
-        assertEquals("BINDING_ROLLED_BACK:OPS_ROLLBACK", draft.reasonCode);
+        assertEquals("BINDING_ROLLED_BACK", draft.reasonCode,
+                "用户自由原因只保留在原事件，不得拼入发布单稳定码或协调审计");
+        assertEquals(9002L, draft.confirmedBy);
     }
 
     @Test
@@ -194,6 +202,22 @@ class PowerModelCollectorEventHandlersTest {
                                 "{\"templateCode\":\"c\",\"templateVersion\":\"1.0.0\"}"));
         assertFalse(e.isRetryable());
         assertEquals(PowerModelCollectorEventHandlers.CODE_TENANT_INVALID, e.errorCode());
+    }
+
+    @Test
+    void nonNumericBindingConfirmationActorIsFinalBeforePortCall() {
+        Fixture f = new Fixture();
+        f.impact.workloads = Collections.singletonList("wl-a");
+        String invalidActor = appliedJson().replace("\"appliedBy\":\"9001\"",
+                "\"appliedBy\":\"system\"");
+
+        PowerModelEventProcessingException e = assertThrows(PowerModelEventProcessingException.class,
+                () -> handler(f, PowerModelEventEnvelope.EVENT_BINDING_APPLIED_V1)
+                        .handle(envelope(PowerModelEventEnvelope.EVENT_BINDING_APPLIED_V1), invalidActor));
+
+        assertFalse(e.isRetryable());
+        assertEquals(PowerModelCollectorEventHandlers.CODE_DATA_FIELD_MISSING, e.errorCode());
+        assertTrue(f.release.drafts.isEmpty());
     }
 
     @Test
@@ -234,8 +258,12 @@ class PowerModelCollectorEventHandlersTest {
     }
 
     private static String appliedJson() {
-        return "{\"productId\":2001,\"templateCode\":\"power.hv_cabinet\","
-                + "\"templateVersion\":\"1.3.0\",\"bindingRevision\":7}";
+        return "{\"productId\":\"2001\",\"productIdentification\":\"p-1\","
+                + "\"templateCode\":\"power.hv_cabinet\",\"templateVersion\":\"1.3.0\","
+                + "\"bindingRevision\":\"7\",\"contentHash\":\"sha256:"
+                + "0000000000000000000000000000000000000000000000000000000000000000\","
+                + "\"effectiveFrom\":\"2026-08-08T00:00:00Z\","
+                + "\"appliedAt\":\"2026-08-08T00:00:00Z\",\"appliedBy\":\"9001\"}";
     }
 
     private static final class Fixture {
@@ -259,20 +287,23 @@ class PowerModelCollectorEventHandlersTest {
 
     private static final class FakeRelease implements CollectorConfigReleasePort {
         final List<String> alreadyDesired = new ArrayList<String>();
+        final List<String> desiredCalls = new ArrayList<String>();
         final List<Draft> drafts = new ArrayList<Draft>();
 
         @Override
-        public boolean desiredMatches(String workloadId, String templateCode,
+        public boolean desiredMatches(long tenantId, String workloadId, String templateCode,
                                       String templateVersion, long bindingRevision) {
+            desiredCalls.add(tenantId + ":" + workloadId);
             return alreadyDesired.contains(workloadId);
         }
 
         @Override
         public void createRegenerationDraft(String workloadId, long tenantId, long productId,
                                             String templateCode, String templateVersion,
-                                            long bindingRevision, String reasonCode) {
+                                            long bindingRevision, String reasonCode,
+                                            String sourceEventId, long confirmedBy) {
             drafts.add(new Draft(workloadId, tenantId, productId, templateCode,
-                    templateVersion, bindingRevision, reasonCode));
+                    templateVersion, bindingRevision, reasonCode, sourceEventId, confirmedBy));
         }
 
         static final class Draft {
@@ -283,9 +314,12 @@ class PowerModelCollectorEventHandlersTest {
             final String templateVersion;
             final long bindingRevision;
             final String reasonCode;
+            final String sourceEventId;
+            final long confirmedBy;
 
             Draft(String workloadId, long tenantId, long productId, String templateCode,
-                  String templateVersion, long bindingRevision, String reasonCode) {
+                  String templateVersion, long bindingRevision, String reasonCode,
+                  String sourceEventId, long confirmedBy) {
                 this.workloadId = workloadId;
                 this.tenantId = tenantId;
                 this.productId = productId;
@@ -293,6 +327,8 @@ class PowerModelCollectorEventHandlersTest {
                 this.templateVersion = templateVersion;
                 this.bindingRevision = bindingRevision;
                 this.reasonCode = reasonCode;
+                this.sourceEventId = sourceEventId;
+                this.confirmedBy = confirmedBy;
             }
         }
     }

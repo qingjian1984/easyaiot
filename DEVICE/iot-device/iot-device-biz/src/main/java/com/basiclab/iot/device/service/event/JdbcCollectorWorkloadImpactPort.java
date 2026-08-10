@@ -12,9 +12,9 @@ import java.util.Objects;
 /**
  * TD-001 §6.2 + ADR-015：{@link CollectorWorkloadImpactPort} 的 JDBC 实现
  * （collector_workload_binding_projection 可变投影表，由 iot-device 发布单
- * 状态机同事务 upsert，ADR-015 Proposed 决策，不依赖 iot-node 事件同步）。
+ * 状态机同事务 upsert，ADR-015 1.1.0 Accepted，不依赖 iot-node 事件同步）。
  * 查询 lifecycle_status='ACTIVE' 的 workload_id 列表；空集合法（绝不返回 null）。
- * 投影表 DDL 候选见 ADR-015，待评审通过后经 ADR-013 runner 增链落库；
+ * 投影表 DDL 见 V004，由 ADR-013 runner 受控落库；
  * 落库前本 bean 虽装配但不会被协调器调用——PowerModelEventWiringConfiguration
  * 的 @ConditionalOnBean 要求四端口齐备才填充处理器注册表，当前 Release 端口
  * 未实现，注册表仍空，事件按缺失处理器进 DLQ（有持久证据，非静默丢弃）。

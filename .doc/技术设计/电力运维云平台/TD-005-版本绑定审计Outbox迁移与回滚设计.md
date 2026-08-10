@@ -1,12 +1,12 @@
 # TD-005：版本、绑定、审计与 Outbox 迁移回滚设计
 
-> 版本：0.2.0
-> 状态：In Review / Migration Candidate
-> 日期：2026-08-07
+> 版本：0.2.4
+> 状态：In Review / Controlled Migration Executed
+> 日期：2026-08-10
 > 强制双基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.5.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 上游：[TD-005 1.0.16](./TD-005-物模型模板Schema版本差异与发布API.md)、[运行模型兼容与删除链设计 0.1.9](./TD-005-运行模型兼容与删除链技术设计.md)、[ADR-009](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)、[ADR-012 1.0.2](../../架构决策/电力运维云平台/ADR-012-产品根属性与服务参数单一事实.md)
 > 适用档位：`standard` / `full` 共用同一实现；`mini` 不建电力模板业务数据、不启动发布器并由 `power.device.model` fail-closed
-> 执行限制：本文只形成 migration/rollback 候选；完成独立评审、目标库 precheck 和自动合同前，不得在任何共享或生产数据库执行 DDL
+> 执行限制：任何新增步骤仍须完成独立评审、目标库 precheck、自动合同与单独窗口授权；已授权执行事实见各窗口证据包
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
@@ -21,6 +21,10 @@
 | 0.1.8 | 2026-08-07 | 处置 DBA/架构专项评审：V001 拆分为 V001（五表）/V002（binding）并新增 M16 约束附加步骤，runner 两阶段先校验后执行、超时/重试/强制备份/FAILED 落史，版本 trigger 身份列与生命周期加固，Outbox/审计有界 CHECK，注释门禁扩至九表，新增 roles_candidate.sql；MIG 证据与事件 strict 校验重跑 PASS；仍未在任何共享/生产库执行 DDL |
 | 0.1.9 | 2026-08-07 | 补演练证据：索引签名漂移反例与恢复、MIG-005 幂等表门禁双向、备份/恢复（损毁→异库恢复逐项一致）、回滚（六表清零、history/约束/幂等表保留）全部 PASS；转 Accepted 剩余 OPEN：生产画像重跑、压测、幂等表 runner 落库步骤建模、DBA 复核签字 |
 | 0.2.0 | 2026-08-07 | 幂等表落库步骤建模完成：新增 runner 步骤 `M05`（链首串行前置，单事务，DDL 与评审候选逐字一致），runner 步骤链扩展为 M05 → M15 → M16 → V001 → V002，roles 候选补幂等表授权；临时库演练 PASS（全链 SUCCEEDED、重跑全 SKIPPED、M05 篡改阻断零变更、语义烟测 9 反例 PASS、MIG-009 PASS、U001 保留幂等表）；转 Accepted 剩余 OPEN 收敛为：生产画像重跑、压测、DBA 复核签字 |
+| 0.2.1 | 2026-08-10 | runner 链扩至 V003/V004/V005；V005 将 Accepted ADR-014 Inbox 候选冻结为版本资产并新增 U004 空表卸载入口；镜像评审库与目标 `iot-device20` 窗口均执行 PASS，目标 V003/V004/V005 history SUCCEEDED、MIG-009 PASS、8 项 PG 合同 PASS、fixture 残留 0 |
+| 0.2.2 | 2026-08-10 | runner apply 链扩至 TD-004 V006 核心五表，新增 U005 空表卸载候选并扩展 env/MIG-009；仅临时评审库全项 PASS，目标实例未执行 V006，API/存量导入/全量安装基线仍 OPEN |
+| 0.2.3 | 2026-08-10 | V006 专项评审关闭两项 HIGH：对象身份与 assignment 历史不可覆写，合法关闭强制 version+1；最终 hash 与第二临时库证据、待批窗口申请单同步 |
+| 0.2.4 | 2026-08-10 | owner 明确批准后仅执行 V006；runner 自动仓库外备份，目标 history/hash、五张空表、trigger、MIG-009、invalid index 与既有业务计数验收通过 |
 
 ## 1. 结论
 

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/schema/collector/v1/collector-config-snapshot-v1.json",
+  "title": "EasyAIoT Collector ConfigSnapshot 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "workloadId", "tenantId", "siteId", "siteCode", "configVersion", "generatedAt", "serialBuses"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "workloadId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "tenantId": {"$ref": "#/$defs/decimalId"},
+    "siteId": {"$ref": "#/$defs/decimalId"},
+    "siteCode": {"type": "string", "minLength": 1, "maxLength": 64},
+    "configVersion": {"type": "integer", "minimum": 1},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "serialBuses": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/serialBus"}}
+  },
+  "$defs": {
+    "decimalId": {"type": "string", "pattern": "^[0-9]+$"},
+    "decimal": {"type": "string", "pattern": "^[+]?(0|[1-9][0-9]*)([.][0-9]+)?$|^-(0[.]([0-9]*[1-9][0-9]*)|[1-9][0-9]*([.][0-9]+)?)$"},
+    "serialBus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["busId", "serialPort", "baudRate", "dataBits", "stopBits", "parity", "transmitDelayMs", "rs485Mode", "devices"],
+      "properties": {
+        "busId": {"type": "string", "minLength": 1},
+        "serialPort": {"type": "string", "minLength": 1},
+        "baudRate": {"type": "integer", "minimum": 1, "maximum": 4000000},
+        "dataBits": {"type": "integer", "minimum": 5, "maximum": 8},
+        "stopBits": {"enum": ["1", "1.5", "2"]},
+        "parity": {"enum": ["NONE", "EVEN", "ODD"]},
+        "transmitDelayMs": {"type": "integer", "minimum": 0, "maximum": 60000},
+        "rs485Mode": {"type": "boolean"},
+        "devices": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/device"}}
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deviceId", "deviceIdentification", "unitId", "pollIntervalMs", "requestTimeoutMs", "maxRetries", "points"],
+      "properties": {
+        "deviceId": {"$ref": "#/$defs/decimalId"},
+        "deviceIdentification": {"type": "string", "minLength": 1},
+        "unitId": {"type": "integer", "minimum": 1, "maximum": 247},
+        "pollIntervalMs": {"type": "integer", "minimum": 1, "maximum": 86400000},
+        "requestTimeoutMs": {"type": "integer", "minimum": 1, "maximum": 60000},
+        "maxRetries": {"type": "integer", "minimum": 0, "maximum": 20},
+        "points": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/point"}}
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["propertyCode", "function", "address", "quantity", "dataType", "byteOrder", "wordOrder", "scale", "offset", "dataPriority", "writable", "pollGroup"],
+      "properties": {
+        "propertyCode": {"type": "string", "minLength": 1},
+        "function": {"enum": ["COIL", "DISCRETE_INPUT", "HOLDING_REGISTER", "INPUT_REGISTER"]},
+        "address": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "quantity": {"type": "integer", "minimum": 1, "maximum": 120},
+        "dataType": {"type": "string", "minLength": 1},
+        "byteOrder": {"enum": ["BIG_ENDIAN", "LITTLE_ENDIAN"]},
+        "wordOrder": {"enum": ["BIG_ENDIAN", "LITTLE_ENDIAN"]},
+        "scale": {"$ref": "#/$defs/decimal"},
+        "offset": {"$ref": "#/$defs/decimal"},
+        "dataPriority": {"enum": ["SAFETY", "ALARM", "METERING_TOTAL", "CONTROL_FEEDBACK", "NORMAL_TELEMETRY"]},
+        "writable": {"type": "boolean"},
+        "pollGroup": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

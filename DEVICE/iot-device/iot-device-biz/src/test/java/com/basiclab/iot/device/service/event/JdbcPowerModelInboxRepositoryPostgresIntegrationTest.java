@@ -25,15 +25,15 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * ADR-014：{@link JdbcPowerModelInboxRepository} 的真实 PostgreSQL 合同。
- * 表结构由本测试用 consumer_inbox_candidate.sql 资产在临时评审库自检
- * （禁止在共享/生产库执行；执行环境为本地临时评审库，用后删除）。覆盖：
+ * 表结构由版本化 V005 迁移资产提供；测试仍可在临时评审库自检资产可重入。
+ * 对目标实例运行时必须通过独立迁移窗口先落库。覆盖：
  * 首插 ON CONFLICT 裁决、findByEventId 视图、hash CHECK、markProcessed、
  * 隔离 upsert（未知主版本直落隔离行 / 同 ID 更新既有行）。
  */
 class JdbcPowerModelInboxRepositoryPostgresIntegrationTest {
 
     private static final String INBOX_DDL =
-            ".doc/技术设计/电力运维云平台/assets/td005-migration/consumer_inbox_candidate.sql";
+            ".doc/技术设计/电力运维云平台/assets/td005-migration/V005__power_model_event_inbox.sql";
     private static final long TENANT = 910_005_202L;
     private static final Instant NOW = Instant.parse("2026-08-08T00:00:00Z");
     private static final String HASH_A =

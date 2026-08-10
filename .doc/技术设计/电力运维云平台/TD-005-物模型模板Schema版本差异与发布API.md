@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.16
+> 版本：1.0.21
 > 日期：2026-08-06
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -29,6 +29,11 @@
 | 1.0.14 | 完成内部八表聚合持久化/导出、TEN-005 应用校验和数据库失败回滚；公开接口、约束及其余交付门禁仍 OPEN |
 | 1.0.15 | 落地 ADR-011 capability manifest/共享服务/只读 API，补稳定业务错误并完成 TEN-007/008；审计/Outbox 与公开模型接口仍 OPEN |
 | 1.0.16 | 形成并处置版本/绑定/审计/Outbox migration 0.1.1 宪法专项评审，补双版本事件、资源配置、幂等及 product unique/FK 前置；DDL 仍未执行 |
+| 1.0.17 | 与 TD-001 1.0.13 对齐 RTUPointBindings 四项策略事实、VALIDATED 候选单派生身份与事件确认人审计；V007 仍为未执行评审候选 |
+| 1.0.18 | 落地首个产品绑定 apply API：权限/capability/租户/幂等 fail-closed，同事务写绑定、领域审计、Outbox 与 VALIDATED collector 候选；目标 PostgreSQL 原子合同 2/2 PASS |
+| 1.0.19 | 端到端核对识别 ADR-015 首发投影死循环；绑定 apply Controller 增加独立默认关闭门禁，首发单一写序完成专项决策前禁止开放 |
+| 1.0.20 | 按 ADR-015 落地人工首发 PUBLISHED+投影同事务写序；真实 PG 首发/重复/不同事件/CAS 回滚合同与默认关闭门禁 4/4 PASS |
+| 1.0.21 | 冻结写链四项启动门禁与三阶段灰度顺序；配置组合 8/8、Compose 解析 PASS，实际开关仍未启用 |
 
 ## 1. 结论
 
@@ -462,7 +467,44 @@ MINOR/PATCH 不自动升级；MAJOR 必须包含映射/迁移说明、双读或�
 | `easyaiot-power-model-import-v1.xlsx` | Templates/Properties/Events/Services/参数/标准映射/RTU 点表统一导入 | Review candidate |
 | `model-template-assets.manifest.json` | 文件大小和 SHA-256；冻结时更新 Git commit | Review candidate |
 
-Excel 中模板页与 `RTUPointBindings` 页分别版本化。导入发布事务在 `iot-device` 先同时完成模板和点表静态校验；事务提交模板版本、产品绑定候选及 `iot_collector_config_release=VALIDATED`，不会在事务内调用 NODE。后续异步发布/应用状态按 TD-001 演进。任一静态校验失败时不产生 PUBLISHED 模板或 collector 发布单。
+Excel 中模板页与 `RTUPointBindings` 页分别版本化。`RTUPointBindings` 必须逐设备显式提供
+`requestTimeoutMs/maxRetries`，逐点显式提供 `dataPriority/pollGroup`；不得从 poller 默认值、
+`device.extension` 当前值或上一发布单补齐。导入发布事务在 `iot-device` 先同时完成模板和点表静态校验；
+事务提交模板版本、产品绑定候选、带同一 Outbox `sourceEventId` 和确认人的
+`iot_collector_config_release=VALIDATED`，不会在事务内调用 NODE。canonical 发布单是这四项策略唯一的
+版本化与审计事实，任何变更都生成更高 `configVersion`，旧单不可原地修改。后续消费者只能按
+`tenantId + workloadId + sourceEventId` 精确推进候选，禁止复制上一版点表代替缺失候选；所需派生身份
+列登记于 TD-001 V007 评审候选，未批准落库前第四协调端口保持不装配。任一静态校验失败时不产生
+PUBLISHED 模板或 collector 发布单。
+
+1.0.18 首个生产事务入口已落地为
+`POST /api/v1/products/{productIdentification}/model-binding:apply`。客户端必须提供
+`Idempotency-Key`、`X-Request-Id`、精确已发布模板版本、绑定快照和缺少服务端分配字段的 collector
+源快照；tenant/actor/eventId/bindingRevision/configVersion/generatedAt 由服务端取得或生成。服务端使用
+产品行锁与 workload advisory lock 串行化，以 JCS 单次生成绑定及 collector canonical/hash，并按
+binding→audit→Outbox→VALIDATED candidate 的外键顺序同事务提交，不调用 NODE。幂等 secret 只允许从
+`EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET`/配置中心注入，空值或少于 32 UTF-8 字节时 fail-closed。
+
+1.0.19 更正可用性结论：该事务的数据库原子性合同仍为 PASS，但尚不能判定为可开放的生产闭环。
+消费者当前先读取 ACTIVE workload 投影，首次候选提交时投影不存在，会走 `IMPACT_EMPTY` 而不推进
+`VALIDATED` 候选，与 ADR-015 “首次发布在发布单进入 PUBLISHED/APPLIED 的同事务创建 revision=1 投影”
+冲突。Controller 因此增加 `EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED=false` 独立门禁；该开关与
+第四端口开关均不得启用，直至首发同步发布或异步精确候选发布被专项评审冻结并完成真实 PostgreSQL
+端到端合同。本更正不修改 V001～V007，不执行 DDL，也不改变 mini 禁用语义。
+
+1.0.20 选择并实现 ADR-015 已接受的同步人工首发写序：同一 `apply` 数据库事务仍先生成经过完整静态
+校验的 `VALIDATED` 不可变候选，随后 CAS 为 `PUBLISHED`，并创建 revision=1 ACTIVE 投影；后续同
+workload 人工发布在身份不漂移且无未覆盖活动 workload 时推进投影 revision。Outbox 仍用于可靠通知，
+消费端看到 desired 已一致后只写协调审计与 PROCESSED Inbox，不重复生成发布单。目标 PostgreSQL 已验证
+首发、幂等重投、不同 event 的 1→2 单调推进、强制投影 CAS 失败时绑定/审计/Outbox/发布单整体回滚，
+fixture 八类均为 0，业务计数 4/4/17 未变化。API 与第四端口开关仍默认关闭，待显式启用评审；mini 不变。
+
+1.0.21 启用评审确认写链实际包含四项运行事实：绑定 API、第四端口、事件总开关和服务端幂等 HMAC
+secret。`PowerModelActivationGuard` 在 Spring 启动期拒绝不完整组合、mini/unconfigured 档位、capability
+关闭、事件开启但第四端口关闭，以及 API 开启但 secret 少于 32 UTF-8 字节。Compose 只向 iot-device
+传递这些变量，env.example 与 application 均默认关闭且不包含真实 secret。合法灰度顺序为先第四端口、
+再事件链、最后写 API；回滚时先关 API，待 Outbox 排空后再关事件链和第四端口。评审状态为有条件通过但
+未激活，实际环境修改仍需独立批准与 Kafka/积压/消费者健康证据。
 
 当前 manifest 的 `gitCommit=UNCOMMITTED` 是明确门禁：只有评审冻结、文件哈希复算并写入真实 Git commit 后，才能作为正式 release package。
 

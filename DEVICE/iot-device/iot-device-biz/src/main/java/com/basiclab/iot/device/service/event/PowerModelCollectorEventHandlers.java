@@ -120,13 +120,22 @@ public final class PowerModelCollectorEventHandlers {
         return node.asText();
     }
 
-    private static long requiredLong(JsonNode root, String field) {
+    private static long requiredDecimalId(JsonNode root, String field) {
         JsonNode node = root.get(field);
-        if (node == null || !node.isIntegralNumber()) {
+        if (node == null || !node.isTextual() || !node.asText().matches("^[0-9]+$")) {
             throw new PowerModelEventProcessingException(false, CODE_DATA_FIELD_MISSING,
-                    "data." + field + " 缺失或非整数", null);
+                    "data." + field + " 缺失或不是十进制 ID 字符串", null);
         }
-        return node.longValue();
+        try {
+            long value = Long.parseLong(node.asText());
+            if (value <= 0) {
+                throw new NumberFormatException("non-positive");
+            }
+            return value;
+        } catch (NumberFormatException e) {
+            throw new PowerModelEventProcessingException(false, CODE_DATA_FIELD_MISSING,
+                    "data." + field + " 超出正 bigint 范围", e);
+        }
     }
 
     private static long tenantIdOf(PowerModelEventEnvelope envelope) {
@@ -248,18 +257,13 @@ public final class PowerModelCollectorEventHandlers {
         @Override
         public void handle(PowerModelEventEnvelope envelope, String dataJson) {
             JsonNode data = parseData(dataJson);
-            long productId = requiredLong(data, "productId");
-            String templateCode = requiredText(data, "templateCode");
-            String templateVersion = applied
-                    ? requiredText(data, "templateVersion") : null;
-            long bindingRevision = requiredLong(data,
+            long productId = requiredDecimalId(data, "productId");
+            String templateCode = applied ? requiredText(data, "templateCode") : null;
+            String templateVersion = applied ? requiredText(data, "templateVersion") : null;
+            long bindingRevision = requiredDecimalId(data,
                     applied ? "bindingRevision" : "toBindingRevision");
+            long confirmedBy = requiredDecimalId(data, applied ? "appliedBy" : "rolledBackBy");
             String reasonCode = applied ? "BINDING_APPLIED" : "BINDING_ROLLED_BACK";
-            JsonNode reasonNode = data.get("reasonCode");
-            if (!applied && reasonNode != null && reasonNode.isTextual()
-                    && !reasonNode.asText().trim().isEmpty()) {
-                reasonCode = "BINDING_ROLLED_BACK:" + reasonNode.asText().trim();
-            }
             long tenantId = tenantIdOf(envelope);
             try {
                 List<String> workloads = impactPort.resolveActiveWorkloads(tenantId, productId);
@@ -275,12 +279,13 @@ public final class PowerModelCollectorEventHandlers {
                 }
                 int created = 0;
                 for (String workloadId : workloads) {
-                    if (releasePort.desiredMatches(workloadId, templateCode, templateVersion,
-                            bindingRevision)) {
+                    if (releasePort.desiredMatches(tenantId, workloadId, templateCode,
+                            templateVersion, bindingRevision)) {
                         continue;
                     }
                     releasePort.createRegenerationDraft(workloadId, tenantId, productId,
-                            templateCode, templateVersion, bindingRevision, reasonCode);
+                            templateCode, templateVersion, bindingRevision, reasonCode,
+                            envelope.eventId(), confirmedBy);
                     created++;
                 }
                 auditPort.record(envelope.eventId(), tenantId, envelope.eventType(), ACTION_DRAFTS_CREATED,

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ============================================================================
-# TD-005 受控迁移执行器（候选实现 / Spike）
+# TD-005 受控迁移执行器
 #
-# 状态：Review Candidate；ADR-013 1.4.2 仍为 Proposed
-# 用途：仅在临时/评审库执行，不构成生产迁移授权；批准前不得对生产库执行
+# 状态：ADR-013 1.5.4 Accepted；每次目标实例 apply/uninstall 仍须独立审批
+# 用途：支持临时/评审库演练与受控目标实例执行；无批准单不得 apply/uninstall
 #
 # 用法：
 #   ./td005_migration.sh dry-run [--db <database>]
-#   ./td005_migration.sh apply [--db <database>] [--step M05|M15|M16|V001|V002|V003] [--approval <id>] [--yes]
+#   ./td005_migration.sh apply [--db <database>] [--step M05|M15|M16|V001|V002|V003|V004|V005|V006|V007] [--approval <id>] [--yes]
 #   ./td005_migration.sh uninstall [--db <database>] [--approval <id>] [--yes]
 #   ./td005_migration.sh check-comments [--db <database>]
 #
@@ -29,18 +29,29 @@
 #   RETRY_MAX / RETRY_BASE_DELAY / RETRY_MAX_DELAY
 #                        可重试错误（锁忙/连接/超时）的重试次数与退避（默认 3/1s/4s）
 #   SKIP_PRECHECK       1 时跳过运行时画像 precheck
-#   M05_SQL / M15_SQL / M16_SQL / V001_SQL / V002_SQL / V003_SQL / U001_SQL  步骤 SQL 路径覆盖
+#   M05_SQL / M15_SQL / M16_SQL / V001_SQL / V002_SQL / V003_SQL / V004_SQL / V005_SQL / V006_SQL / V007_SQL / U001_SQL  步骤 SQL 路径覆盖
 #
 # 执行模型（ADR-013 1.4.2，DBA/架构专项处置 H-01～H-04）：
 #   1. 单 psql 会话内先完成全部校验（hash、INVALID index、索引签名），
 #      任何校验失败零业务 DDL 变化（仅 history 引导表幂等建立）；
-#   2. 校验全部通过后才按依赖顺序执行 M05 → M15 → M16 → V001 → V002 → V003；
+#   2. 校验全部通过后才按依赖顺序执行 M05 → M15 → M16 → V001 → V002 → V003 → V004 → V005 → V006 → V007；
 #   3. 锁等待与语句超时通过 lock_timeout/statement_timeout 强制有界；
 #   4. 失败按错误码分类，仅可重试错误按有界退避重跑（步骤幂等跳过）；
 #   5. 成功/失败均落 schema_migration_history（FAILED 含脱敏错误摘要）。
 # ============================================================================
 
 set -uo pipefail
+
+for required_tool in dirname date awk; do
+    command -v "${required_tool}" >/dev/null 2>&1 || {
+        echo "[td005-migration][ERROR] required tool missing: ${required_tool}" >&2
+        exit 1
+    }
+done
+if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+    echo "[td005-migration][ERROR] required SHA-256 tool missing: sha256sum or shasum" >&2
+    exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
@@ -73,11 +84,15 @@ M16_SQL="${M16_SQL:-${SCRIPT_DIR}/steps/M16__product_tenant_unique_attach.sql}"
 V001_SQL="${V001_SQL:-${ASSET_DIR}/V001__power_model_version_audit_outbox.sql}"
 V002_SQL="${V002_SQL:-${ASSET_DIR}/V002__power_product_model_binding.sql}"
 V003_SQL="${V003_SQL:-${ASSET_DIR}/V003__iot_collector_coordination.sql}"
+V004_SQL="${V004_SQL:-${ASSET_DIR}/V004__collector_workload_binding_projection.sql}"
+V005_SQL="${V005_SQL:-${ASSET_DIR}/V005__power_model_event_inbox.sql}"
+V006_SQL="${V006_SQL:-${ASSET_DIR}/V006__power_object_assignment_core.sql}"
+V007_SQL="${V007_SQL:-${ASSET_DIR}/V007__collector_release_derivation_identity.sql}"
 U001_SQL="${U001_SQL:-${ASSET_DIR}/U001__power_model_version_binding_audit_outbox.sql}"
 CHECK_SQL="${SCRIPT_DIR}/check_ddl_comments.sql"
 PREPROFILE_SQL="${SCRIPT_DIR}/precheck_runtime_profile.sql"
 
-APPLY_STEPS=(M05 M15 M16 V001 V002 V003)
+APPLY_STEPS=(M05 M15 M16 V001 V002 V003 V004 V005 V006 V007)
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -102,6 +117,10 @@ step_sql_path() {
         V001) echo "${V001_SQL}" ;;
         V002) echo "${V002_SQL}" ;;
         V003) echo "${V003_SQL}" ;;
+        V004) echo "${V004_SQL}" ;;
+        V005) echo "${V005_SQL}" ;;
+        V006) echo "${V006_SQL}" ;;
+        V007) echo "${V007_SQL}" ;;
         U001) echo "${U001_SQL}" ;;
         *) fail "unknown step: $1" ;;
     esac
@@ -113,10 +132,13 @@ step_selected() {
 }
 
 sha256_file() {
+    [ -f "$1" ] || fail "SQL asset not found: $1"
     if command -v sha256sum >/dev/null 2>&1; then
         sha256sum "$1" | awk '{print $1}'
-    else
+    elif command -v shasum >/dev/null 2>&1; then
         shasum -a 256 "$1" | awk '{print $1}'
+    else
+        fail "required SHA-256 tool missing: sha256sum or shasum"
     fi
 }
 
@@ -302,7 +324,7 @@ COMMIT;
 \endif
 SQL
                 ;;
-            M05|V001|V002|V003)
+            M05|V001|V002|V003|V004|V005|V006|V007)
                 echo "BEGIN;"
                 cat "$(step_sql_path "${step}")"
                 echo "COMMIT;"
@@ -526,7 +548,7 @@ case "${MODE}" in
         for step in "${APPLY_STEPS[@]}" U001; do
             log "${step} sha256=$(sha256_file "$(step_sql_path "${step}")")"
         done
-        log "steps: M05 (txn) -> M15 (concurrent) -> M16 (attach) -> V001 (txn) -> V002 (txn) -> V003 (txn); U001 uninstall only"
+        log "steps: M05 (txn) -> M15 (concurrent) -> M16 (attach) -> V001 (txn) -> V002 (txn) -> V003 (txn) -> V004 (txn) -> V005 (txn) -> V006 (txn) -> V007 (txn); U001 uninstall only"
         log "timeouts: connect=${CONNECT_TIMEOUT}s lock_wait=${LOCK_WAIT} statement=${STATEMENT_TIMEOUT} m15=${M15_STATEMENT_TIMEOUT}"
         exit 0
         ;;

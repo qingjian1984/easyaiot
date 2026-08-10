@@ -11,12 +11,12 @@ package com.basiclab.iot.device.service.event;
 public interface CollectorConfigReleasePort {
 
     /**
-     * 当前 desired 是否已是目标再生结果（幂等判定）。
-     * templateVersion 为 null（绑定回滚事件不携带目标模板版本）时，
-     * 由实现从绑定表的 bindingRevision 解析目标模板版本后判定。
+     * 当前 desired 是否已是目标再生结果（tenantId + workloadId 租户安全幂等判定）。
+     * templateCode/templateVersion 为 null（绑定回滚事件不携带目标模板）时，
+     * 由实现从候选单的 bindingRevision 解析目标模板后判定，禁止按最新绑定猜测。
      */
-    boolean desiredMatches(String workloadId, String templateCode, String templateVersion,
-                           long bindingRevision);
+    boolean desiredMatches(long tenantId, String workloadId, String templateCode,
+                           String templateVersion, long bindingRevision);
 
     /**
      * 生成快照再生发布单（新单调递增 configVersion，走 DRAFT→VALIDATED→PUBLISHED 管线）。
@@ -26,8 +26,10 @@ public interface CollectorConfigReleasePort {
      *
      * @param templateVersion 目标模板版本；绑定回滚事件为 null，由实现按 bindingRevision 解析
      * @param reasonCode      再生原因（BINDING_APPLIED / BINDING_ROLLED_BACK 或事件原因码）
+     * @param sourceEventId   与 VALIDATED 候选单同事务创建的 Outbox 事件 UUID
+     * @param confirmedBy     完成绑定应用/回滚差异确认的正 bigint 用户 ID
      */
     void createRegenerationDraft(String workloadId, long tenantId, long productId,
                                  String templateCode, String templateVersion, long bindingRevision,
-                                 String reasonCode);
+                                 String reasonCode, String sourceEventId, long confirmedBy);
 }
