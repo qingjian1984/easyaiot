@@ -11,9 +11,11 @@
 --   3. power_model_coordination_audit  —— 协调审计（PowerModelCoordinationAuditPort）
 --
 -- 说明：
---   1. CollectorWorkloadImpactPort 只读既有表（V002 binding / device / 站点），
---      不需要新 DDL；「活动 collector workload binding」的设备侧可见性
---      （iot-node 查询或设备侧投影）为 TD-001 后续设计 OPEN 项，不在本步骤；
+--   1. CollectorWorkloadImpactPort 数据源（productId→活动 workload 的设备侧可见性）
+--      经 ADR-015 处置：新建 collector_workload_binding_projection 投影表（可变，
+--      iot-device 发布单状态机 upsert，不依赖 iot-node 事件同步）。ADR-015 当前
+--      Proposed，待评审通过后增链本文件（第四张表）或独立 V004，落库 MUST 经
+--      ADR-013 runner；本文件当前不包含该投影表 DDL；
 --   2. 业务表主键统一为 BIGINT：ID 由应用统一 ID 生成策略赋值，数据库不兜底生成；
 --   3. 本文件必须整体在单事务内执行，任一步失败全部回滚；
 --   4. 全部 additive，不触碰任何既有表。
