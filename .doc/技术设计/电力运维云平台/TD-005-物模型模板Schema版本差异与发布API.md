@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.37
+> 版本：1.0.38
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -50,6 +50,7 @@
 | 1.0.35 | owner 独立批准并在新备份校验成功后，仅向 tenant 122 / role 111 授予 read/edit/publish；禁止权限为 0，API/Secret/容器/Canary 均未变化 |
 | 1.0.36 | 补默认只读、失败自动回退的 template API 执行器；owner 精确批准后仅重建 iot-device，最终 template=true/binding=false/Secret 保留/未写 Canary |
 | 1.0.37 | Canary 前检发现网关未路由 `/api/v1/power/**` 且候选用户无活动令牌；补原样转发路由与静态合同，构建 PASS，尚未部署或写 Canary |
+| 1.0.38 | owner 批准无现存网关基线下首次部署；仅创建 healthy 的 `iot-gateway`，JAR 哈希一致且其他容器未重建，未调用 API 或写 Canary |
 
 ## 1. 结论
 
@@ -638,6 +639,17 @@ template-api 阶段 16/16 PASS，role 111 精确三项权限且 tenant 122 业�
 gateway 的双基线，新增 `device-power-model-api`，将 `/api/v1/power/**` 原样转发到 `device-server`，不做
 StripPrefix/RewritePath；Canary 资产/路由合同 3/3 PASS，`iot-gateway` Java 17 package BUILD SUCCESS。
 路由尚未部署，未重建网关、未生成/读取 token、未调用 API 或写 Canary；网关部署和真实用户登录仍是 OPEN。
+
+1.0.38 执行网关窗口前发现运行态没有 `iot-gateway` 容器或 `iot-gateway:latest` 镜像，原“保留当前镜像并
+重建”前提不成立，故先 fail-closed 停止。owner 随后以
+`USER-APPROVAL-20260811-TD005-POWER-API-GATEWAY-FIRST-DEPLOY` 明确批准无网关基线下首次部署及失败时删除
+新网关恢复原状态。执行仅从冻结 gateway JAR 构建镜像并以 `--no-deps` 创建 `iot-gateway`；容器 healthy，
+容器内 `/app/app.jar` 与宿主构建 JAR SHA-256 均为
+`2A91097BD2AC616E5CD82A6A15D55901C07B7EBB5E0CDB31CD153B615C96992E`。`iot-device`、`iot-system`、
+`iot-infra`、PostgreSQL、Kafka 的容器 ID 与启动时间均未变化；template-api 阶段 17 项 PASS，role 111
+仍精确拥有 3900～3902、3903～3906 为 0，tenant 122 的 14 类事实仍为 0。未获取 token、未调用任何
+业务 API、未写 Canary，回退未触发；当前剩余运行门禁仅为候选用户正常登录取得短时令牌及独立 Canary
+写入批准。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

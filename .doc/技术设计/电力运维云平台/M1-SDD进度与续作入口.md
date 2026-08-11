@@ -425,3 +425,11 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   package BUILD SUCCESS，自动化目标集合更新为 **62/62 PASS、0 skipped**。本轮未重建网关、未读取或
   生成 token、未调用 API、未写 Canary。下一步必须先独立批准仅部署该网关路由；随后由 user 113 正常登录
   取得短时令牌，最后才可申请单次 Canary 写入。
+- **公共网关路由已完成首次部署（2026-08-11，TD-005 1.0.38）**：首次窗口预检确认运行态不存在
+  `iot-gateway` 容器或 `iot-gateway:latest` 镜像，原回退标签前提不成立并安全停止；owner 随后以
+  `USER-APPROVAL-20260811-TD005-POWER-API-GATEWAY-FIRST-DEPLOY` 批准无网关基线下首次部署。仅构建并以
+  `--no-deps` 创建 `iot-gateway`，最终 healthy；容器内 JAR 与冻结构建 JAR SHA-256 一致。`iot-device`、
+  `iot-system`、`iot-infra`、PostgreSQL、Kafka 容器 ID/启动时间均未变化，template-api 阶段 **17 项
+  PASS**，role 111 仍仅 3900～3902，tenant 122 残留 0。未获取 token、未调用业务 API、未写 Canary。
+  下一步由 `user 113 / aoteman` 正常登录取得未过期短时令牌；登录/token 不属于本窗口，完成后再申请
+  identity→draft→validate→publish 单次 Canary 写入批准。
