@@ -417,3 +417,11 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   template API=true、binding API=false、release/events=true、Config Tree Secret=64 字节、明文=0，
   template-api 阶段 **16/16 PASS**、消费组 6 分区在线 lag=0。role 111 仍仅 3900～3902，tenant 122
   残留仍为 0；未调用任何 API、未写 Canary 数据。下一步是独立的单次隔离模板 Canary 写入批准。
+- **Canary 前检发现并修复网关路由代码缺口（2026-08-11，TD-005 1.0.37，未部署）**：冻结三请求与
+  `af41b515` 基准提交、manifest 和生产 Schema hash 全部一致；template-api 阶段 16/16、角色三项、禁止
+  权限 0、tenant 122 残留 0。只读认证画像确认唯一活动用户为 `113/aoteman`，未过期 token 数量为 0；
+  同时确认现行网关没有 `/api/v1/power/**` 路由。新增 `device-power-model-api` 原样转发到
+  `device-server`，明确无 StripPrefix/RewritePath；资产/路由合同 **3/3 PASS**，`iot-gateway` Java 17
+  package BUILD SUCCESS，自动化目标集合更新为 **62/62 PASS、0 skipped**。本轮未重建网关、未读取或
+  生成 token、未调用 API、未写 Canary。下一步必须先独立批准仅部署该网关路由；随后由 user 113 正常登录
+  取得短时令牌，最后才可申请单次 Canary 写入。

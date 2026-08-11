@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.36
+> 版本：1.0.37
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -49,6 +49,7 @@
 | 1.0.34 | owner 独立批准后完成 Config Tree Secret 注入与仅重建 iot-device；补 Kafka 重新入组有界等待，最终挂载 64/明文 0/API false/阶段 2 PASS |
 | 1.0.35 | owner 独立批准并在新备份校验成功后，仅向 tenant 122 / role 111 授予 read/edit/publish；禁止权限为 0，API/Secret/容器/Canary 均未变化 |
 | 1.0.36 | 补默认只读、失败自动回退的 template API 执行器；owner 精确批准后仅重建 iot-device，最终 template=true/binding=false/Secret 保留/未写 Canary |
+| 1.0.37 | Canary 前检发现网关未路由 `/api/v1/power/**` 且候选用户无活动令牌；补原样转发路由与静态合同，构建 PASS，尚未部署或写 Canary |
 
 ## 1. 结论
 
@@ -630,6 +631,13 @@ tenant 122 / role 111 到菜单 3900～3902 的三条关系。独立 verify 精�
 template API=true、binding API=false、Config Tree Secret=64 字节、明文 Secret=0，template-api 阶段
 16/16 PASS；角色仍精确为 3900～3902，tenant 122 业务事实为 0。未调用任何 API、未写 Canary 数据，
 自动回退未触发。
+
+1.0.37 在单次 Canary 只读前检中确认：三个请求资产与 `af41b515` 基准提交及 manifest hash 均逐字节一致，
+template-api 阶段 16/16 PASS，role 111 精确三项权限且 tenant 122 业务事实为 0；但当前网关没有
+`/api/v1/power/**` 路由，候选用户 113（`aoteman`）未过期 OAuth2 token 数量为 0。为遵守对外 API 统一经
+gateway 的双基线，新增 `device-power-model-api`，将 `/api/v1/power/**` 原样转发到 `device-server`，不做
+StripPrefix/RewritePath；Canary 资产/路由合同 3/3 PASS，`iot-gateway` Java 17 package BUILD SUCCESS。
+路由尚未部署，未重建网关、未生成/读取 token、未调用 API 或写 Canary；网关部署和真实用户登录仍是 OPEN。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

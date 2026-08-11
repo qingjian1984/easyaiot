@@ -111,6 +111,11 @@ spring:
           filters:
             - StripPrefix=1
             - RewritePath=/admin-api/device/v3/api-docs, /v3/api-docs # 配置，保证转发到 /v3/api-docs
+        # TD-005 versioned power model API：保留 /api/v1 前缀原样转发到 device-server。
+        - id: device-power-model-api
+          uri: lb://device-server
+          predicates:
+            - Path=/api/v1/power/**
         ## system-server 服务
         - id: system-admin-api # 路由的编号
           uri: lb://system-server

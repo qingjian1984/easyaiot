@@ -71,6 +71,21 @@ class PowerModelCanaryAssetContractTest {
                 manifest.path("schema").path("path").asText())));
     }
 
+    @Test
+    void gatewayRoutesVersionedPowerApiWithoutRemovingOrRewritingPrefix() throws Exception {
+        String gateway = Files.readString(root().resolve(
+                "DEVICE/iot-gateway/src/main/resources/application.yaml"));
+        int routeStart = gateway.indexOf("- id: device-power-model-api");
+        int routeEnd = gateway.indexOf("## system-server", routeStart);
+        assertTrue(routeStart >= 0);
+        assertTrue(routeEnd > routeStart);
+        String route = gateway.substring(routeStart, routeEnd);
+        assertTrue(route.contains("uri: lb://device-server"));
+        assertTrue(route.contains("Path=/api/v1/power/**"));
+        assertFalse(route.contains("StripPrefix"));
+        assertFalse(route.contains("RewritePath"));
+    }
+
     private static String sha256(Path path) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(Files.readAllBytes(path)));
