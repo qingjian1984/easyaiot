@@ -38,3 +38,17 @@
   同时包含 harness、`TD005_AUTH_ALLOWLIST_SURFACE_UNPATCHABLE` 与 `TD005_AUTH_WINDOW_BLOCKED`；
 - 当前运行中的 web-service **尚未重建**，因此不能申请再次认证。下一步须独立批准仅部署该 WEB 构建，
   部署验收后再申请新的单次认证；Canary 写入继续保持 OPEN。
+
+## 4. 网络门禁 WEB 部署结果
+
+- owner 以 `USER-APPROVAL-20260811-TD005-AUTH-HARNESS-NETWORK-GATE-WEB-DEPLOY` 精确批准仅部署 WEB；
+- 部署前 `web-service` 容器 `7f1b877fe479…`、镜像 `sha256:6789fb7c…c89e` healthy/restartCount=0；
+  旧镜像已保留为 `web-service:rollback-td005-network-gate-predeploy-20260811`；
+- Docker 构建日志明确 `VITE_GLOB_DEPLOY_PROFILE=full`、`VITE_TD005_AUTH_HARNESS=true`，Vite/postBuild PASS；
+  新镜像为 `sha256:fd7c5887…c1e3a`；
+- 仅以 Compose `--no-deps` 重建 web-service；新容器 `f96616cd0756…` healthy、restartCount=0；其他 20 个
+  容器 ID 20/20 未变化；
+- 容器运行资产 `/usr/share/nginx/html/assets/index-c6336efc.js` 同时包含
+  `TD005_AUTH_ALLOWLIST_SURFACE_UNPATCHABLE` 与 `TD005_AUTH_WINDOW_BLOCKED`；harness 路由资产存在；
+- 未打开浏览器、未登录、未调用 API、未改数据库/Secret/角色/Topic/Nacos/capability，未写 Canary；
+  回退未触发。下一步必须另批新的单次认证窗口。

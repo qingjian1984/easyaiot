@@ -521,3 +521,9 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   部分安装失败合同 PASS，full+harness 生产构建 PASS。当前 WEB 尚未部署修复；下一步须先独立批准仅重建
   web-service，之后另批单次认证，Canary 写入继续 OPEN。详见
   [`auth-harness-reauth-failure-containment-20260811.md`](./assets/td005-canary/auth-harness-reauth-failure-containment-20260811.md)。
+- **页面内置认证网络门禁 WEB 已受控部署（2026-08-11，TD-005 1.0.46）**：owner 以
+  `USER-APPROVAL-20260811-TD005-AUTH-HARNESS-NETWORK-GATE-WEB-DEPLOY` 精确批准，仅以 full+harness=true
+  构建并 `--no-deps` 重建 web-service。旧镜像 `6789fb7c…c89e` 保留专用回退标签；新镜像
+  `fd7c5887…c1e3a`、新容器 `f96616cd0756…` healthy/restartCount=0。运行资产 `index-c6336efc.js` 命中
+  fail-closed 与 blocked 常量，其他 20 个容器 ID 20/20 未变化。未打开浏览器、未登录、未调用 API、未改
+  数据库或配置、未写 Canary。下一步是新的单次认证批准；认证成功也仍不等同于 Canary 写入批准。
