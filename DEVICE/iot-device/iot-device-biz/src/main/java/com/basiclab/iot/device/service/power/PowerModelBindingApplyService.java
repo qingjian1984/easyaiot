@@ -11,6 +11,7 @@ import com.basiclab.iot.device.service.event.CollectorConfigSnapshotContract;
 import com.basiclab.iot.device.service.event.OutboxEntry;
 import com.basiclab.iot.device.service.event.PowerModelOutboxService;
 import com.basiclab.iot.device.service.idempotency.IdempotencyArbiter;
+import com.basiclab.iot.device.service.idempotency.JdbcPowerIdempotencyStore;
 import com.basiclab.iot.device.service.model.JcsCanonicalizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,7 +33,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 
 /**
  * TD-005 §11.4/§17：首次绑定与 VALIDATED collector 候选的原子创建事务。
@@ -56,6 +56,7 @@ public class PowerModelBindingApplyService {
     private final CapabilityService capabilityService;
     private final TenantFrameworkService tenantFrameworkService;
     private final PowerModelOutboxService outboxService;
+    private final JdbcPowerIdempotencyStore idempotencyStore;
     private final byte[] idempotencySecret;
     private final CollectorConfigSnapshotContract collectorContract =
             new CollectorConfigSnapshotContract();
@@ -65,6 +66,7 @@ public class PowerModelBindingApplyService {
                                          CapabilityService capabilityService,
                                          TenantFrameworkService tenantFrameworkService,
                                          PowerModelOutboxService outboxService,
+                                         JdbcPowerIdempotencyStore idempotencyStore,
                                          @Value("${easyaiot.power-model.idempotency-hmac-secret:}")
                                          String idempotencySecret) {
         this.jdbc = new NamedParameterJdbcTemplate(Objects.requireNonNull(dataSource, "dataSource"));
@@ -73,6 +75,7 @@ public class PowerModelBindingApplyService {
         this.tenantFrameworkService = Objects.requireNonNull(
                 tenantFrameworkService, "tenantFrameworkService");
         this.outboxService = Objects.requireNonNull(outboxService, "outboxService");
+        this.idempotencyStore = Objects.requireNonNull(idempotencyStore, "idempotencyStore");
         this.idempotencySecret = Objects.requireNonNull(idempotencySecret, "idempotencySecret")
                 .getBytes(StandardCharsets.UTF_8);
     }
@@ -201,33 +204,15 @@ public class PowerModelBindingApplyService {
             fail("IDEMPOTENCY_SECRET_UNAVAILABLE",
                     "幂等 HMAC secret 未配置或少于 32 UTF-8 字节");
         }
-        MapSqlParameterSource params = idempotencyParams(tenantId, actorId, keyHash)
-                .addValue("requestHash", requestHash);
-        int inserted = jdbc.update("INSERT INTO public.power_idempotency_record"
-                        + " (tenant_id,principal_type,principal_id,operation,key_hash,request_hash,state)"
-                        + " VALUES (:tenantId,'USER',:actor,:operation,:keyHash,:requestHash,'IN_PROGRESS')"
-                        + " ON CONFLICT (tenant_id,principal_type,principal_id,operation,key_hash)"
-                        + " DO NOTHING", params);
-        if (inserted == 1) return null;
-
-        List<IdempotencyFact> rows = jdbc.query(
-                "SELECT request_hash,state,response_payload::text AS response_payload"
-                        + " FROM public.power_idempotency_record"
-                        + " WHERE tenant_id=:tenantId AND principal_type='USER'"
-                        + " AND principal_id=:actor AND operation=:operation AND key_hash=:keyHash"
-                        + " FOR UPDATE", params,
-                (rs, rowNum) -> new IdempotencyFact(rs.getBytes("request_hash"),
-                        rs.getString("state"), rs.getString("response_payload")));
-        if (rows.size() != 1) fail("IDEMPOTENCY_STATE_CORRUPT", "幂等记录不存在或不唯一");
-        IdempotencyFact fact = rows.get(0);
-        if (!MessageDigest.isEqual(fact.requestHash, requestHash)) {
-            fail("IDEMPOTENCY_KEY_REUSED", "相同 key 被用于不同请求，绝不覆盖");
-        }
-        if (!"SUCCEEDED".equals(fact.state) || fact.responsePayload == null) {
-            fail("IDEMPOTENCY_IN_PROGRESS", "相同请求仍在处理，可稍后重试");
+        JdbcPowerIdempotencyStore.Claim claim = idempotencyStore.claim(
+                idempotencyScope(tenantId, actorId, keyHash), requestHash);
+        if (claim.outcome() == JdbcPowerIdempotencyStore.Claim.Outcome.PROCEED) return null;
+        if (!"SUCCEEDED".equals(claim.state()) || claim.httpStatus() == null
+                || claim.httpStatus().intValue() != 200 || claim.responsePayload() == null) {
+            fail("IDEMPOTENCY_RESPONSE_INVALID", "已存终态不是可重放的成功响应");
         }
         try {
-            JsonNode value = mapper.readTree(fact.responsePayload);
+            JsonNode value = mapper.readTree(claim.responsePayload());
             return new PowerModelBindingApplyResponse(
                     text(value, "bindingId"), Long.parseLong(text(value, "bindingRevision")),
                     text(value, "collectorConfigReleaseId"),
@@ -241,23 +226,14 @@ public class PowerModelBindingApplyService {
     private void completeIdempotency(long tenantId, long actorId, byte[] keyHash,
                                      PowerModelBindingApplyResponse response) {
         String canonicalResponse = canonicalizer.canonicalize(mapper.valueToTree(response));
-        int updated = jdbc.update("UPDATE public.power_idempotency_record"
-                        + " SET state='SUCCEEDED',http_status=200,response_payload=CAST(:response AS jsonb),"
-                        + " result_ref=:resultRef,updated_at=CURRENT_TIMESTAMP"
-                        + " WHERE tenant_id=:tenantId AND principal_type='USER' AND principal_id=:actor"
-                        + " AND operation=:operation AND key_hash=:keyHash AND state='IN_PROGRESS'",
-                idempotencyParams(tenantId, actorId, keyHash)
-                        .addValue("response", canonicalResponse)
-                        .addValue("resultRef", response.getCollectorConfigReleaseId()));
-        if (updated != 1) fail("IDEMPOTENCY_STATE_CORRUPT", "幂等成功状态推进失败");
+        idempotencyStore.completeSuccess(idempotencyScope(tenantId, actorId, keyHash), 200,
+                canonicalResponse, response.getCollectorConfigReleaseId());
     }
 
-    private static MapSqlParameterSource idempotencyParams(long tenantId, long actorId,
-                                                            byte[] keyHash) {
-        return new MapSqlParameterSource("tenantId", tenantId)
-                .addValue("actor", Long.toString(actorId))
-                .addValue("operation", IDEMPOTENCY_OPERATION)
-                .addValue("keyHash", keyHash);
+    private static JdbcPowerIdempotencyStore.Scope idempotencyScope(long tenantId, long actorId,
+                                                                    byte[] keyHash) {
+        return new JdbcPowerIdempotencyStore.Scope(tenantId, "USER", Long.toString(actorId),
+                IDEMPOTENCY_OPERATION, keyHash);
     }
 
     private ProductFact lockProduct(long tenantId, String identification) {
@@ -571,13 +547,6 @@ public class PowerModelBindingApplyService {
         final long id; final long revision; final String snapshotHash;
         ActiveBinding(long id, long revision, String snapshotHash) {
             this.id = id; this.revision = revision; this.snapshotHash = snapshotHash;
-        }
-    }
-
-    private static final class IdempotencyFact {
-        final byte[] requestHash; final String state; final String responsePayload;
-        IdempotencyFact(byte[] requestHash, String state, String responsePayload) {
-            this.requestHash = requestHash; this.state = state; this.responsePayload = responsePayload;
         }
     }
 

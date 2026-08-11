@@ -23,7 +23,7 @@ class PowerModelActivationGuardTest {
     @Test
     void allDisabledIsSafeForMini() {
         assertDoesNotThrow(() -> PowerModelActivationGuard.verify(
-                ManifestCapabilityService.disabled("mini"), false, false, false, ""));
+                ManifestCapabilityService.disabled("mini"), false, false, false, false, ""));
     }
 
     @Test
@@ -31,31 +31,32 @@ class PowerModelActivationGuardTest {
         CapabilityService standard = load("electric-standard.json");
         IllegalStateException noRelease = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        standard, true, false, true, TEST_SECRET));
+                        standard, true, true, false, true, TEST_SECRET));
         assertTrue(noRelease.getMessage().startsWith("POWER_MODEL_ACTIVATION_INCOMPLETE"));
         IllegalStateException noEvents = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        standard, true, true, false, TEST_SECRET));
+                        standard, true, true, true, false, TEST_SECRET));
         assertTrue(noEvents.getMessage().startsWith("POWER_MODEL_ACTIVATION_INCOMPLETE"));
     }
 
     @Test
     void completeWriteChainIsAllowedForStandardAndFull() throws Exception {
         assertDoesNotThrow(() -> PowerModelActivationGuard.verify(
-                load("electric-standard.json"), true, true, true, TEST_SECRET));
+                load("electric-standard.json"), true, true, true, true, TEST_SECRET));
         assertDoesNotThrow(() -> PowerModelActivationGuard.verify(
-                load("electric-full.json"), true, true, true, TEST_SECRET));
+                load("electric-full.json"), true, true, true, true, TEST_SECRET));
     }
 
     @Test
     void bindingApiRejectsMissingOrShortIdempotencySecret() throws Exception {
         CapabilityService standard = load("electric-standard.json");
         IllegalStateException missing = assertThrows(IllegalStateException.class,
-                () -> PowerModelActivationGuard.verify(standard, true, true, true, ""));
+                () -> PowerModelActivationGuard.verify(
+                        standard, true, true, true, true, ""));
         assertTrue(missing.getMessage().startsWith("POWER_MODEL_IDEMPOTENCY_SECRET_INVALID"));
         IllegalStateException shortSecret = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        standard, true, true, true, "不足三十二字节"));
+                        standard, true, true, true, true, "不足三十二字节"));
         assertTrue(shortSecret.getMessage().startsWith("POWER_MODEL_IDEMPOTENCY_SECRET_INVALID"));
     }
 
@@ -63,11 +64,12 @@ class PowerModelActivationGuardTest {
     void anyActivationRejectsMiniAndDisabledCapability() {
         IllegalStateException mini = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        ManifestCapabilityService.disabled("mini"), false, false, true, ""));
+                        ManifestCapabilityService.disabled("mini"), false, false,
+                        false, true, ""));
         assertTrue(mini.getMessage().startsWith("POWER_MODEL_PROFILE_NOT_SUPPORTED"));
         IllegalStateException disabled = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        ManifestCapabilityService.disabled("standard"), true, true, true,
+                        ManifestCapabilityService.disabled("standard"), true, true, true, true,
                         TEST_SECRET));
         assertTrue(disabled.getMessage().startsWith("POWER_MODEL_CAPABILITY_DISABLED"));
     }
@@ -76,13 +78,29 @@ class PowerModelActivationGuardTest {
     void standardMayStageReleasePortButRejectsEventsWithoutIt() throws Exception {
         CapabilityService standard = load("electric-standard.json");
         assertDoesNotThrow(() -> PowerModelActivationGuard.verify(
-                standard, false, true, false, ""));
+                standard, false, false, true, false, ""));
         assertDoesNotThrow(() -> PowerModelActivationGuard.verify(
-                standard, false, true, true, ""));
+                standard, false, false, true, true, ""));
         IllegalStateException eventsOnly = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        standard, false, false, true, ""));
+                        standard, false, false, false, true, ""));
         assertTrue(eventsOnly.getMessage().startsWith("POWER_MODEL_ACTIVATION_INCOMPLETE"));
+    }
+
+    @Test
+    void templateApiIsAnIndependentSecretProtectedStageBeforeBindingApi() throws Exception {
+        CapabilityService standard = load("electric-standard.json");
+        assertDoesNotThrow(() -> PowerModelActivationGuard.verify(
+                standard, true, false, true, true, TEST_SECRET));
+        IllegalStateException noSecret = assertThrows(IllegalStateException.class,
+                () -> PowerModelActivationGuard.verify(
+                        standard, true, false, true, true, ""));
+        assertTrue(noSecret.getMessage().startsWith("POWER_MODEL_IDEMPOTENCY_SECRET_INVALID"));
+        IllegalStateException bindingWithoutTemplate = assertThrows(IllegalStateException.class,
+                () -> PowerModelActivationGuard.verify(
+                        standard, false, true, true, true, TEST_SECRET));
+        assertTrue(bindingWithoutTemplate.getMessage()
+                .startsWith("POWER_MODEL_ACTIVATION_INCOMPLETE"));
     }
 
     @Test
@@ -90,6 +108,8 @@ class PowerModelActivationGuardTest {
         Path root = findRepositoryRoot();
         String application = Files.readString(root.resolve(
                 "DEVICE/iot-device/iot-device-biz/src/main/resources/application.yaml"));
+        assertTrue(application.contains(
+                "EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED:false"));
         assertTrue(application.contains(
                 "EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED:false"));
         assertTrue(application.contains(
@@ -101,6 +121,7 @@ class PowerModelActivationGuardTest {
         int nextService = compose.indexOf("\n  iot-", deviceService + 3);
         String deviceBlock = compose.substring(deviceService,
                 nextService < 0 ? compose.length() : nextService);
+        assertTrue(deviceBlock.contains("EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED"));
         assertTrue(deviceBlock.contains("EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED"));
         assertTrue(deviceBlock.contains("EASYAIOT_POWER_MODEL_COLLECTOR_RELEASE_PORT_ENABLED"));
         assertTrue(deviceBlock.contains("EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET"));
@@ -108,6 +129,7 @@ class PowerModelActivationGuardTest {
         assertTrue(deviceBlock.contains("SPRING_KAFKA_BOOTSTRAP_SERVERS=Kafka:9092"));
 
         String example = Files.readString(root.resolve(".scripts/docker/env.example"));
+        assertTrue(example.contains("EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED=false"));
         assertTrue(example.contains("EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED=false"));
         assertTrue(example.contains("EASYAIOT_POWER_MODEL_COLLECTOR_RELEASE_PORT_ENABLED=false"));
         assertTrue(example.contains("POWER_MODEL_EVENTS_ENABLED=false"));

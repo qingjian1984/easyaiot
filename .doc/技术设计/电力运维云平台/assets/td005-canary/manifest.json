@@ -1,0 +1,26 @@
+{
+  "assetVersion": "1.0.0",
+  "tdVersion": "1.0.30",
+  "status": "REVIEW_CANDIDATE",
+  "gitCommit": "UNCOMMITTED",
+  "tenantCandidate": "122",
+  "templateCode": "canary-meter-122",
+  "schema": {
+    "path": "DEVICE/iot-device/iot-device-biz/src/main/resources/schemas/power-model/easyaiot-power-model-template.schema.json",
+    "sha256": "2431b8e7f25414aff89468d1b1daced2d10ce064d80b0816791912c7272bbae5"
+  },
+  "files": [
+    {
+      "path": "draft-request.json",
+      "sha256": "1269d9caa5bcf38cedc9118f8e97f324c8fa1251fa7035f4a564e58821b8c795"
+    },
+    {
+      "path": "identity-request.json",
+      "sha256": "91e239e421af9e34db9960c2b206120b3d0d737c0407b792906774fd3a278750"
+    },
+    {
+      "path": "publish-request.json",
+      "sha256": "a00d6e5e1a28d7cfb0bd3c379c14af75d00c2b551450eb42f16680532f76c279"
+    }
+  ]
+}

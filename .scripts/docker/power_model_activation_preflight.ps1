@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('baseline', 'release-port', 'events', 'api')]
+    [ValidateSet('baseline', 'release-port', 'events', 'template-api', 'api')]
     [string]$Stage = 'baseline',
     [ValidateSet('standard', 'full')]
     [string]$ExpectedProfile,
@@ -147,34 +147,45 @@ if ($null -ne $device) {
         Add-Check 'RUNTIME_CAPABILITY' 'PASS' "profile=$profile manifestConfigured=true"
     }
 
-    $api = Get-BooleanEnvironment $environment 'EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED'
+    $templateApi = Get-BooleanEnvironment $environment 'EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED'
+    $bindingApi = Get-BooleanEnvironment $environment 'EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED'
     $release = Get-BooleanEnvironment $environment 'EASYAIOT_POWER_MODEL_COLLECTOR_RELEASE_PORT_ENABLED'
     $events = Get-BooleanEnvironment $environment 'POWER_MODEL_EVENTS_ENABLED'
     $expected = switch ($Stage) {
-        'baseline' { @($false, $false, $false) }
-        'release-port' { @($false, $true, $false) }
-        'events' { @($false, $true, $true) }
-        'api' { @($true, $true, $true) }
+        'baseline' { @($false, $false, $false, $false) }
+        'release-port' { @($false, $false, $true, $false) }
+        'events' { @($false, $false, $true, $true) }
+        'template-api' { @($true, $false, $true, $true) }
+        'api' { @($true, $true, $true, $true) }
     }
-    if ($api -eq $expected[0] -and $release -eq $expected[1] -and $events -eq $expected[2]) {
-        Add-Check 'ACTIVATION_STAGE' 'PASS' "stage=$Stage api=$api releasePort=$release events=$events"
+    if ($templateApi -eq $expected[0] -and $bindingApi -eq $expected[1] -and
+        $release -eq $expected[2] -and $events -eq $expected[3]) {
+        Add-Check 'ACTIVATION_STAGE' 'PASS' "stage=$Stage templateApi=$templateApi bindingApi=$bindingApi releasePort=$release events=$events"
     } else {
-        Add-Check 'ACTIVATION_STAGE' 'BLOCKED' "stage=$Stage api=$api releasePort=$release events=$events"
+        Add-Check 'ACTIVATION_STAGE' 'BLOCKED' "stage=$Stage templateApi=$templateApi bindingApi=$bindingApi releasePort=$release events=$events"
     }
 
-    if ($Stage -eq 'api') {
+    if ($Stage -in @('template-api', 'api')) {
         $secret = if ($environment.ContainsKey('EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET')) {
             [string]$environment['EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET']
         } else { '' }
-        $valid = [Text.Encoding]::UTF8.GetByteCount($secret) -ge 32
+        $environmentBytes = [Text.Encoding]::UTF8.GetByteCount($secret)
+        $secretFileResult = Invoke-Docker -Arguments @('exec', $DeviceContainer, 'sh', '-c',
+            'p=/run/secrets/easyaiot.power-model.idempotency-hmac-secret-file-content; if [ -f "$p" ]; then wc -c < "$p"; else echo 0; fi')
+        $secretFileBytes = 0
+        if ($secretFileResult.Code -eq 0 -and $secretFileResult.Text.Trim() -match '^\d+$') {
+            $secretFileBytes = [int]$secretFileResult.Text.Trim()
+        }
+        $valid = $environmentBytes -ge 32 -or $secretFileBytes -ge 32
         if ($valid) {
-            Add-Check 'IDEMPOTENCY_SECRET' 'PASS' 'configured=true utf8BytesGe32=true'
+            $source = if ($secretFileBytes -ge 32) { 'configtree-file' } else { 'environment-compatibility' }
+            Add-Check 'IDEMPOTENCY_SECRET' 'PASS' "configured=true source=$source utf8BytesGe32=true"
         } else {
-            Add-Check 'IDEMPOTENCY_SECRET' 'BLOCKED' 'configured=false-or-short utf8BytesGe32=false'
+            Add-Check 'IDEMPOTENCY_SECRET' 'BLOCKED' 'configured=false-or-short sources=environment,configtree-file'
         }
         $secret = $null
     } else {
-        Add-Check 'IDEMPOTENCY_SECRET' 'PASS' 'not required before api stage; value not read or printed'
+        Add-Check 'IDEMPOTENCY_SECRET' 'PASS' 'not required before write API stages; value not read or printed'
     }
 }
 
@@ -269,7 +280,7 @@ if ($null -ne $kafka -and [bool]$kafka.State.Running) {
         @($groupResult.Text -split "`r?`n") -contains 'iot-device-power-model-release'
     if ($groupResult.Code -ne 0) {
         Add-Check 'KAFKA_CONSUMER_GROUP' 'ERROR' 'consumer group list failed'
-    } elseif ($Stage -notin @('events', 'api')) {
+    } elseif ($Stage -notin @('events', 'template-api', 'api')) {
         Add-Check 'KAFKA_CONSUMER_GROUP' 'PASS' "required=false stage=$Stage exists=$groupExists"
     } elseif ($groupExists) {
         $describeGroup = Invoke-Docker -Arguments @('exec', $KafkaContainer,

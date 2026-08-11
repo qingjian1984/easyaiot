@@ -50,7 +50,10 @@ public final class TemplateDiffEngine {
             {"services", "serviceName", "description"},
     };
 
-    private static final String[] ROOT_DISPLAY_FIELDS = {"templateName", "description"};
+    private static final String[] ROOT_NON_SEMANTIC_FIELDS = {
+            "schemaVersion", "templateCode", "templateName", "deviceType", "templateKind",
+            "version", "base", "description", "tags"
+    };
 
     public DiffResult diff(JsonNode base, JsonNode target) {
         List<String> changes = new ArrayList<>();
@@ -163,7 +166,7 @@ public final class TemplateDiffEngine {
             return template;
         }
         ObjectNode stripped = ((ObjectNode) template).deepCopy();
-        for (String field : ROOT_DISPLAY_FIELDS) {
+        for (String field : ROOT_NON_SEMANTIC_FIELDS) {
             stripped.remove(field);
         }
         for (String[] memberType : MEMBER_TYPES) {

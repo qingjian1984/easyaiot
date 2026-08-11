@@ -107,6 +107,22 @@ class TemplateDiffEngineTest {
     }
 
     @Test
+    void versionAndTemplateIdentityMetadataDoNotForceMajor() throws IOException {
+        JsonNode base = objectMapper.readTree("{\"schemaVersion\":\"1.0.0\","
+                + "\"templateCode\":\"std-meter\",\"templateKind\":\"STANDARD\","
+                + "\"deviceType\":\"METER\",\"version\":\"1.0.0\","
+                + "\"properties\":[{\"propertyCode\":\"voltage-a\","
+                + "\"dataType\":\"FLOAT\",\"required\":false}]}");
+        JsonNode target = objectMapper.readTree("{\"schemaVersion\":\"1.0.0\","
+                + "\"templateCode\":\"vendor-meter\",\"templateKind\":\"VENDOR\","
+                + "\"deviceType\":\"METER\",\"version\":\"2.0.0\","
+                + "\"base\":{\"templateCode\":\"std-meter\",\"version\":\"1.0.0\"},"
+                + "\"properties\":[{\"propertyCode\":\"voltage-a\","
+                + "\"dataType\":\"FLOAT\",\"required\":false}]}");
+        assertEquals(ModelSemVer.Bump.PATCH, diffEngine.diff(base, target).minimumBump());
+    }
+
+    @Test
     void highestSeverityWinsAcrossMemberTypes() throws IOException {
         JsonNode base = objectMapper.readTree(
                 "{\"properties\":[{\"propertyCode\":\"voltage-a\",\"dataType\":\"FLOAT\",\"required\":false}],"

@@ -19,6 +19,7 @@ import com.basiclab.iot.device.service.event.PowerModelEventMetrics;
 import com.basiclab.iot.device.service.event.PowerModelEventTransport;
 import com.basiclab.iot.device.service.event.PowerModelInboxWriter;
 import com.basiclab.iot.device.service.event.PowerModelOutboxService;
+import com.basiclab.iot.device.service.idempotency.JdbcPowerIdempotencyStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;
 import org.junit.jupiter.api.Test;
@@ -266,6 +267,7 @@ class PowerModelBindingApplyPostgresIntegrationTest {
                 new JdbcPowerModelOutboxRepository(dataSource), capability);
         PowerModelBindingApplyService service = new PowerModelBindingApplyService(
                 dataSource, mapper, capability, tenantFramework, outbox,
+                new JdbcPowerIdempotencyStore(dataSource),
                 "td008-review-secret-must-be-at-least-32-bytes");
         return new TestContext(dataSource, jdbc, manager, mapper, service);
     }

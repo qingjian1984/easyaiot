@@ -84,6 +84,8 @@
         <reflections.version>0.10.2</reflections.version>
         <vertx.version>4.5.13</vertx.version>
         <jackson.version>2.13.3</jackson.version>
+        <!-- TD-005：1.0.74 是首个支持 Draft 2020-12 的 1.x 版本；Jackson 仍由平台 BOM 统一锁定。 -->
+        <json-schema-validator.version>1.0.74</json-schema-validator.version>
         <openfeign.version>3.1.2</openfeign.version>
         <tdEngine.version>3.1.0</tdEngine.version>
         <pagehelper.boot.version>1.4.1</pagehelper.boot.version>
@@ -116,6 +118,11 @@
                 <version>${spring.boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.networknt</groupId>
+                <artifactId>json-schema-validator</artifactId>
+                <version>${json-schema-validator.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework.cloud</groupId>

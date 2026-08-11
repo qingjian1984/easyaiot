@@ -1,8 +1,8 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.21
-> 日期：2026-08-06
+> 版本：1.0.30
+> 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
 > 评审处置：[TD-005 评审报告](../../开发规范/TD-005评审报告.md)，运行模型以 §22 为准，版本/绑定/审计/Outbox migration 以 §23 为准
@@ -34,6 +34,15 @@
 | 1.0.19 | 端到端核对识别 ADR-015 首发投影死循环；绑定 apply Controller 增加独立默认关闭门禁，首发单一写序完成专项决策前禁止开放 |
 | 1.0.20 | 按 ADR-015 落地人工首发 PUBLISHED+投影同事务写序；真实 PG 首发/重复/不同事件/CAS 回滚合同与默认关闭门禁 4/4 PASS |
 | 1.0.21 | 冻结写链四项启动门禁与三阶段灰度顺序；配置组合 8/8、Compose 解析 PASS，实际开关仍未启用 |
+| 1.0.22 | 登记模板编排 API 独立默认关闭开关；灰度顺序细化为第四端口→事件链→模板 API→绑定 API，任一写 API 均要求 capability 与至少 32 UTF-8 字节 HMAC secret |
+| 1.0.23 | 补目标系统库权限画像与 seed/rollback 候选：七个冻结权限当前为 0，权限 seed 与 canary 角色授权分离，目标库执行仍需独立批准 |
+| 1.0.24 | owner 独立批准后完成系统库自动备份与七项权限 seed；精确七行验收 PASS、角色关联为 0，API/secret/容器/canary 均未变更 |
+| 1.0.25 | 形成隔离 canary 角色授权候选：测试租户 122 的 14 类业务事实均为 0，仅拟向角色 111 增量授予 read/edit/publish；双库只读 preflight PASS，仍待独立批准 |
+| 1.0.26 | 形成 HMAC secret 仓库外文件 + Compose secret + Spring Config Tree 注入候选；明文环境变量在安全覆盖层中清空，API 与运行容器均未变更 |
+| 1.0.27 | 补宿主机 secret 文件只读预检：拒绝仓库内/相对/reparse、BOM/换行/非法 UTF-8/短值/NUL/宽泛读取 ACL，且不输出路径、值或摘要 |
+| 1.0.28 | 冻结 HMAC 注入窗口前阶段 2 运行基线：full、Topic 6/1/30 天、消费组 lag=0、数据库积压 0、业务 4/4/17；全量只读预检 16/16 PASS |
+| 1.0.29 | 形成默认只读的 Secret 注入窗口执行器：双因子执行门禁、仅重建 iot-device、健康/挂载/阶段 2 复验及基础 Compose 自动回退 |
+| 1.0.30 | 形成 tenant 122 隔离模板 Canary 三请求资产与独立窗口：单只读测点、无产品/设备/绑定，运行标识服务端或窗口生成，未执行 API 写入 |
 
 ## 1. 结论
 
@@ -505,6 +514,77 @@ secret。`PowerModelActivationGuard` 在 Spring 启动期拒绝不完整组合�
 传递这些变量，env.example 与 application 均默认关闭且不包含真实 secret。合法灰度顺序为先第四端口、
 再事件链、最后写 API；回滚时先关 API，待 Outbox 排空后再关事件链和第四端口。评审状态为有条件通过但
 未激活，实际环境修改仍需独立批准与 Kafka/积压/消费者健康证据。
+
+1.0.22 补充模板编排入口的独立运行事实：`EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED` 默认 false，
+控制 §11.1 当前已实现的 identity、草稿、校验和发布 Controller，不与产品绑定入口共享开关。启动门禁在
+模板 API 或绑定 API 任一开启时均要求 standard/full、`power.device.model` capability 和至少 32 UTF-8
+字节的服务端 HMAC secret；绑定 API 还要求模板 API、第四端口和事件链均已开启。合法灰度顺序细化为
+第四端口→事件链→模板 API→绑定 API；回滚反向执行，先关绑定 API，再关模板 API，待 Outbox 排空后
+再关事件链和第四端口。模板 API 开启只授权编排已批准 canary 所需的模板事实，不自动授权产品绑定或
+任何实际 canary 写入；两个 API 的实际环境变更均需独立批准。
+
+1.0.23 只读画像确认权限事实位于 `ruoyi-vue-pro20.public.system_menu`，目标实例中 §16 七个权限点均为
+0，源码注解不能替代权限事实。权限 seed 候选固定在
+`.scripts/postgresql/td005-permissions/`：只创建七个 `type=3` 权限按钮并挂到已存在的
+`产品管理(id=2931)`，不创建页面、不自动绑定任何角色；错误数据库、父节点漂移、部分既有权限、ID 占用
+或重复语义必须 fail-closed。rollback 只删除 seed 精确创建且没有活动角色关联的七行。seed 目标库窗口、
+canary 角色选择和 `system_role_menu` 授权是三个独立动作；均需备份/只读复核和独立批准，
+`power:system-template:manage` 不得默认授予 canary 角色。冻结目录已补只读 preflight 与落库后 verify，
+执行范围、资产 hash、备份、验收和回滚边界见
+[TD-005 权限 Seed 窗口申请单](./TD-005权限Seed窗口申请单-20260811.md)。1.0.24 记录该窗口已按
+`USER-APPROVAL-20260811-TD005-PERMISSION-SEED` 执行完成：自动备份校验通过，七行精确验收 PASS，
+活动角色关联为 0；角色授权、API、secret、容器运行态和 canary 仍保持独立 OPEN。
+
+1.0.25 只读画像选择 tenant 122 作为模板 API canary 候选：该测试租户在 iot-device20 的产品、设备、
+模板、绑定、事件、幂等与 collector 共 14 类事实均为 0。候选操作角色 111 是该租户现有租户管理员并关联
+1 个活动用户；它已有 180 项菜单，不是全局最小权限角色，因此授权设计只保证“增量最小化”，仅新增
+3900～3902 的 read/edit/publish，明确拒绝 3903～3906。双库冻结 preflight 已实跑 PASS 并回滚，授权范围、
+资产 hash、备份与精确撤销见
+[TD-005 Canary 角色授权窗口申请单](./TD-005Canary角色授权窗口申请单-20260811.md)；当前待批准、未授权。
+
+1.0.26 将服务端 HMAC secret 的推荐运行时保管方式冻结为“仓库外绝对路径文件 → Compose secret →
+`/run/secrets/` → Spring Config Tree”。安全覆盖层
+`DEVICE/docker-compose.power-model-secret.yml` 清空基础 Compose 中的兼容环境变量，避免 secret 出现在
+容器环境元数据；`application.yaml` 明确让 Config Tree 属性优先，直接环境变量只保留给非 Compose 场景
+兼容。文件不得进入仓库、Nacos 或 `.env`，内容须无 BOM、无换行且至少 32 UTF-8 字节；预检只报告字节数
+与来源，不打印值或摘要。Compose 合并解析、PowerShell 语法、静态契约测试均 PASS。具体执行、验收和
+回退边界见 [TD-005 HMAC Secret 注入窗口申请单](./TD-005HMAC-Secret注入窗口申请单-20260811.md)；
+当前未生成/注入真实 secret、未重建容器、未启用 API，窗口仍待独立批准。
+
+1.0.27 为上述窗口增加 `power_model_secret_file_preflight.ps1`。脚本在 Compose 解析和容器重建之前读取
+owner 指定文件，仅输出稳定门禁代码与布尔结果；相对路径、仓库内路径、目录/reparse point、UTF-8 BOM、
+非法 UTF-8、CR/LF、少于 32 字节、空白/NUL 内容或 Everyone/Authenticated Users/Builtin Users 宽泛读取
+权限均失败关闭。脚本不生成、修改或删除文件，不输出路径、内容、摘要或字节样本。该静态合同已纳入
+Java 契约测试 2/2 PASS、0 skipped；相对路径反例按退出码 2 拒绝，仓库外 48 字节严格 UTF-8、收紧 ACL
+临时假数据正例全门禁 PASS 且已清理。运行窗口、API 与角色门禁状态不变。
+
+1.0.28 使用 `full / 6 partitions / replication factor 1 / retention.ms=2592000000` 精确参数对当前阶段 2
+执行全量只读激活预检，16/16 PASS。除容器与 capability 健康外，冻结事实包括 template/binding API
+均关闭、release/events 开启、V001～V007 7/7 SUCCEEDED、数据库写链四表积压为 0、invalid index=0、
+业务基线 4/4/17、主 Topic 与 DLQ 参数一致、消费组 6 分区在线且 lag=0。HMAC 注入窗口必须在重建前后
+使用同一参数集复验，且不得借该窗口调整 Topic、capability、API、数据库或消费者配置。本次仍只读，
+未注入 secret、未重建容器。
+
+1.0.29 增加 `power_model_secret_injection_window.ps1` 作为冻结执行入口。脚本默认只执行 secret 文件、
+Compose 和阶段 2 基线检查；只有同时给出 `-Execute` 与固定批准令牌才进入变更路径。变更范围固定为
+`docker compose up -d --no-deps --force-recreate iot-device`，禁止连带重建依赖；重建后等待 healthy，验证
+Config Tree 挂载不少于 32 字节、容器明文环境 secret 为 0，再复跑 1.0.28 的 16 项基线。任何失败均用
+基础 Compose 仅重建 `iot-device` 并复验，不执行 `compose down`，不删除 owner 的仓库外文件。执行器静态
+合同已纳入测试；本次仅形成候选，未运行带 `-Execute` 路径。
+
+执行器契约测试 3/3 PASS、0 skipped。仓库外临时假数据的完整 `READY_ONLY` 演练同时通过文件门禁与
+阶段 2 的 16 项预检，返回 `runtimeChanged=false`，执行前后 `iot-device` 容器 ID 一致；临时文件已清理。
+演练中发现并修复阶段 2 子脚本把诊断文本混入布尔返回管道的误判风险，现仅以单一布尔值决定门禁。
+
+1.0.30 形成 `assets/td005-canary/`：identity、draft、publish 三个唯一允许请求体使用专用
+`canary-meter-122`，内容仅有一个只读 A 相电压测点，events/services 为空，不携带 tenant、actor、
+draftId、ETag、幂等键、requestId 或 secret。未来执行顺序固定为 identity→draft→validate→publish，
+且发布必须另获单次 Canary 写入批准；不得调用产品绑定或创建产品/设备。执行边界见
+[TD-005 隔离模板 Canary 窗口申请单](./TD-005隔离模板Canary窗口申请单-20260811.md)。当前仅离线候选，
+角色授权、Secret 注入、template API 开启和 Canary 写入仍为独立 OPEN 门禁。
+
+请求语义与 manifest 逐字节 hash 契约 2/2 PASS、0 skipped；生产 Schema hash 同时精确匹配。manifest
+保持 `status=REVIEW_CANDIDATE`、`gitCommit=UNCOMMITTED`，因此资产尚不可执行。
 
 当前 manifest 的 `gitCommit=UNCOMMITTED` 是明确门禁：只有评审冻结、文件哈希复算并写入真实 Git commit 后，才能作为正式 release package。
 
