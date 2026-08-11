@@ -201,3 +201,6 @@ AI/yolov*.names.json
 .scripts/docker/.env
 
 # ZLMediaKit 挂载目录（与 docker-compose 中 ../zlmediakit 对应）；运行时数据
+
+# opc-ua-demo 本地 Python 虚拟环境（demo 运行时生成，不随仓库分发）
+.scripts/opc-ua-demo/.venv/
