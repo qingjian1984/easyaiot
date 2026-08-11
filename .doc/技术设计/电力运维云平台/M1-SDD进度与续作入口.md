@@ -440,3 +440,10 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   构建 `VITE_GLOB_DEPLOY_PROFILE=full`，无需改源码。已形成仅构建并首次创建 WEB 的独立窗口申请；本轮
   未部署 WEB、未登录、未读取密码/token、未调用业务 API、未写 Canary。下一步先批准 WEB 首次部署，
   再由用户本人在浏览器输入现有凭据完成独立认证窗口。
+- **Canary WEB 登录面已首次部署（2026-08-11，TD-005 1.0.40）**：owner 以
+  `USER-APPROVAL-20260811-TD005-CANARY-WEB-FIRST-DEPLOY` 精确批准后，仅以 full 构建
+  `web-service:latest` 并用 `--no-deps` 首次创建容器；Vite/postBuild 成功，容器 healthy，8888→80 映射
+  生效。gateway/system/device/PostgreSQL/Kafka 均未重建，template-api 阶段 **17 项 PASS**，token 仍为
+  0、允许权限 3、禁止权限 0、tenant 122 残留 0。未打开页面、未登录、未调用 API、未写 Canary。已形成
+  独立浏览器认证窗口，要求用户本人输入现有凭据、`rememberMe=false`、token 仅留浏览器且不导出；下一步
+  先取得该认证窗口批准，仍不等同于 Canary 写入批准。
