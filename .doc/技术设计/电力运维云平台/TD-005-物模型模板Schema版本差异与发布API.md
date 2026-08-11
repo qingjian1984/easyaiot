@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.38
+> 版本：1.0.39
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -51,6 +51,7 @@
 | 1.0.36 | 补默认只读、失败自动回退的 template API 执行器；owner 精确批准后仅重建 iot-device，最终 template=true/binding=false/Secret 保留/未写 Canary |
 | 1.0.37 | Canary 前检发现网关未路由 `/api/v1/power/**` 且候选用户无活动令牌；补原样转发路由与静态合同，构建 PASS，尚未部署或写 Canary |
 | 1.0.38 | owner 批准无现存网关基线下首次部署；仅创建 healthy 的 `iot-gateway`，JAR 哈希一致且其他容器未重建，未调用 API 或写 Canary |
+| 1.0.39 | Canary 认证前检确认账户、角色、30 分钟 token 策略就绪，但本机无 WEB 镜像/容器；形成 full 档位 WEB 首次部署独立窗口，未登录或取 token |
 
 ## 1. 结论
 
@@ -650,6 +651,15 @@ StripPrefix/RewritePath；Canary 资产/路由合同 3/3 PASS，`iot-gateway` Ja
 仍精确拥有 3900～3902、3903～3906 为 0，tenant 122 的 14 类事实仍为 0。未获取 token、未调用任何
 业务 API、未写 Canary，回退未触发；当前剩余运行门禁仅为候选用户正常登录取得短时令牌及独立 Canary
 写入批准。
+
+1.0.39 继续执行认证准备的只读画像：tenant 122 “测试租户”与 `113/aoteman` 均启用且未删除，用户仅有
+一个活动角色；role 111 仍精确拥有 3900～3902、禁止权限为 0，未过期访问令牌为 0。默认 OAuth2 client
+启用，普通登录访问令牌有效期为 1800 秒；窗口必须设置 `rememberMe=false`，禁止扩大为 30 天访问令牌。
+`iot-gateway` 与 `iot-system` healthy，但运行态没有 `web-service` 容器或 `web-service:latest` 镜像，本机
+也没有 8888 登录面。Dockerfile 已冻结 `VITE_GLOB_DEPLOY_PROFILE=full` 默认构建参数并在生产环境文件末尾
+覆盖仓库通用默认值，因此无需修改源码；但构建和首次创建 WEB 仍属于独立运行变更，已形成
+`TD-005Canary登录面部署窗口申请单-20260811.md`，未获批准前不得部署。该前检未登录、未读取密码或 token、
+未调用业务 API、未写 Canary。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

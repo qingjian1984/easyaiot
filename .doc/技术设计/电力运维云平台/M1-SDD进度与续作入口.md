@@ -433,3 +433,10 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   PASS**，role 111 仍仅 3900～3902，tenant 122 残留 0。未获取 token、未调用业务 API、未写 Canary。
   下一步由 `user 113 / aoteman` 正常登录取得未过期短时令牌；登录/token 不属于本窗口，完成后再申请
   identity→draft→validate→publish 单次 Canary 写入批准。
+- **Canary 登录面前检与独立窗口已形成（2026-08-11，TD-005 1.0.39，未部署）**：只读画像确认
+  tenant 122、user 113 均启用，用户仅有 role 111；允许权限仍为 3、禁止权限 0、未过期 token 0。默认
+  OAuth2 client 的访问令牌有效期为 1800 秒，后续必须 `rememberMe=false`。网关和系统服务 healthy，但
+  当前无 `web-service` 容器、无 `web-service:latest` 镜像、无 8888 登录面。WEB Dockerfile 默认并可显式
+  构建 `VITE_GLOB_DEPLOY_PROFILE=full`，无需改源码。已形成仅构建并首次创建 WEB 的独立窗口申请；本轮
+  未部署 WEB、未登录、未读取密码/token、未调用业务 API、未写 Canary。下一步先批准 WEB 首次部署，
+  再由用户本人在浏览器输入现有凭据完成独立认证窗口。
