@@ -1,0 +1,6 @@
+# TD-005 template API 独立激活覆盖层；必须同时使用基础 Compose 与 HMAC Secret 覆盖层。
+services:
+  iot-device:
+    environment:
+      EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED: "true"
+      EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED: "false"

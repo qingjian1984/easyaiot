@@ -81,6 +81,39 @@ class PowerModelSecretMountContractTest {
         assertFalse(script.contains("[void](Invoke-BaseRollback)"));
     }
 
+    @Test
+    void templateApiWindowDefaultsToReadOnlyAndKeepsBindingApiClosed() throws Exception {
+        Path root = root();
+        String overlay = Files.readString(root.resolve(
+                "DEVICE/docker-compose.power-model-template-api.yml"));
+        String script = Files.readString(root.resolve(
+                ".scripts/docker/power_model_template_api_activation_window.ps1"));
+        assertTrue(overlay.contains("EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED: \"true\""));
+        assertTrue(overlay.contains("EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED: \"false\""));
+        assertTrue(script.contains("USER-APPROVAL-20260811-TD005-TEMPLATE-API-ACTIVATION"));
+        assertTrue(script.contains("if (-not $Execute)"));
+        assertTrue(script.contains("WINDOW_RESULT=READY_ONLY execute=false runtimeChanged=false targetStage=template-api"));
+        assertTrue(script.contains("-Stage template-api"));
+        assertTrue(script.contains("bindingApi=false"));
+        assertTrue(script.contains("canaryWritten=false"));
+        assertFalse(script.contains("compose', 'down"));
+        assertFalse(script.contains("Invoke-WebRequest"));
+        assertFalse(script.contains("Invoke-RestMethod"));
+    }
+
+    @Test
+    void templateApiRollbackPreservesSecretAndRevalidatesStageTwo() throws Exception {
+        String script = Files.readString(root().resolve(
+                ".scripts/docker/power_model_template_api_activation_window.ps1"));
+        assertTrue(script.contains("function Invoke-SafeRollback"));
+        assertTrue(script.contains("templateApi=false preserveSecret=true"));
+        assertTrue(script.contains("'-f', $secretCompose"));
+        assertTrue(script.contains("Wait-ActivationStage -Stage events"));
+        assertTrue(script.contains("Test-RuntimeInvariants -ExpectedTemplateApi $false"));
+        assertTrue(script.contains("Test-CanaryReadiness"));
+        assertFalse(script.contains("[void](Invoke-SafeRollback)"));
+    }
+
     private static Path root() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
         while (current != null) {

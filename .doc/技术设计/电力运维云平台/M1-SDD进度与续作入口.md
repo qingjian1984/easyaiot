@@ -410,3 +410,10 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   `pg_restore -l` 1024 条目 PASS。apply 单事务 `INSERT 0 3`；verify 精确返回 read/edit/publish，3903～3906
   为 0，tenant 122 残留仍为 0。template/binding API=false、Secret 未修改、`iot-device` 未重启、阶段 2
   **16/16 PASS**。下一步仍需独立批准 template API 启用；本授权不允许执行任何 Canary 请求。
+- **Template API 独立启用窗口已完成（2026-08-11，TD-005 1.0.36）**：新增独立 Compose 覆盖层和
+  默认只读、失败自动回退的执行器；Java 17 reactor 构建及合同 **6/6 PASS**，`READY_ONLY` 验证容器
+  ID/启动时间不变，自动化目标集合更新为 **61/61 PASS、0 skipped**。owner 以
+  `USER-APPROVAL-20260811-TD005-TEMPLATE-API-ACTIVATION` 精确批准仅重建 `iot-device`；最终 healthy、
+  template API=true、binding API=false、release/events=true、Config Tree Secret=64 字节、明文=0，
+  template-api 阶段 **16/16 PASS**、消费组 6 分区在线 lag=0。role 111 仍仅 3900～3902，tenant 122
+  残留仍为 0；未调用任何 API、未写 Canary 数据。下一步是独立的单次隔离模板 Canary 写入批准。
