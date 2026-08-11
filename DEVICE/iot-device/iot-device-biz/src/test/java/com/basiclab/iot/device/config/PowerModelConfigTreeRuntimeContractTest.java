@@ -39,9 +39,24 @@ class PowerModelConfigTreeRuntimeContractTest {
         }
     }
 
+    @Test
+    void repositoryMultiDocumentApplicationYamlImportsTheFinalConfigTreeProperty(@TempDir Path tempDir)
+            throws Exception {
+        Path secretsDir = Files.createDirectory(tempDir.resolve("secrets"));
+        Files.writeString(secretsDir.resolve(PROPERTY), TEST_SECRET, StandardCharsets.UTF_8);
+        String repositoryYaml = Files.readString(repositoryRoot().resolve(
+                "DEVICE/iot-device/iot-device-biz/src/main/resources/application.yaml"));
+        String runtimeYaml = repositoryYaml.replace(
+                "optional:configtree:/run/secrets/",
+                "optional:configtree:" + configTreePath(secretsDir));
+
+        try (ConfigurableApplicationContext context = startWithYaml(tempDir, runtimeYaml)) {
+            assertEquals(TEST_SECRET, context.getEnvironment().getRequiredProperty(PROPERTY));
+        }
+    }
+
     private static ConfigurableApplicationContext startWithConfigTree(Path tempDir, Path secretsDir)
             throws Exception {
-        Path configDir = Files.createDirectory(tempDir.resolve("config"));
         String applicationYaml = """
                 spring:
                   config:
@@ -50,6 +65,12 @@ class PowerModelConfigTreeRuntimeContractTest {
                   power-model:
                     idempotency-hmac-secret: '${EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET:}'
                 """.formatted(configTreePath(secretsDir));
+        return startWithYaml(tempDir, applicationYaml);
+    }
+
+    private static ConfigurableApplicationContext startWithYaml(Path tempDir, String applicationYaml)
+            throws Exception {
+        Path configDir = Files.createDirectory(tempDir.resolve("config"));
         Files.writeString(configDir.resolve("application.yaml"), applicationYaml, StandardCharsets.UTF_8);
 
         SpringApplication application = new SpringApplication(ProbeConfiguration.class);
@@ -67,6 +88,17 @@ class PowerModelConfigTreeRuntimeContractTest {
     private static String configTreePath(Path directory) {
         String path = directory.toAbsolutePath().normalize().toString().replace('\\', '/');
         return path.endsWith("/") ? path : path + "/";
+    }
+
+    private static Path repositoryRoot() {
+        Path current = Path.of(System.getProperty("user.dir")).toAbsolutePath();
+        while (current != null) {
+            if (Files.isDirectory(current.resolve("DEVICE")) && Files.isDirectory(current.resolve(".scripts"))) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        throw new IllegalStateException("repository root not found");
     }
 
     @Configuration(proxyBeanMethods = false)

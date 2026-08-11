@@ -27,7 +27,7 @@
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
 | [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.3 | In Review |
-| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.52 | In Review |
+| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.53 | In Review |
 | [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.9 | In Review |
 | [TD-005 版本、绑定、审计与 Outbox 迁移回滚设计](./TD-005-版本绑定审计Outbox迁移与回滚设计.md) | 0.1.7 | In Review / Migration Candidate |
 | [TD-005 孤儿属性处置方案](./TD-005-孤儿属性处置方案.md) | 0.2.0 | Executed / Verified |
@@ -566,3 +566,11 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   旧中间键。本轮未读取/修改仓库外 Secret，未构建镜像、重建容器、调用 API 或修改数据库。当前 iot-device
   仍为回退旧镜像且 healthy；下一步申请新的仅 iot-device 部署审批，旧批准不得复用。证据见
   [`iot-device-configtree-runtime-repair-preflight-20260811.md`](./assets/td005-canary/iot-device-configtree-runtime-repair-preflight-20260811.md)。
+- **Config Tree 最终键部署仍失败并安全回退（2026-08-11，TD-005 1.0.53）**：owner 以
+  `USER-APPROVAL-20260811-TD005-IOT-DEVICE-CONFIGTREE-RUNTIME-REPAIR-DEPLOY` 精确批准；部署前候选 hash、
+  Secret 形状、运行开关与双库只读门禁 PASS。仅重建 iot-device 后，新容器仍因 ActivationGuard 取得空
+  Secret 而未 healthy，故未执行路由探针或任何 API。自动以旧镜像专用旧键覆盖层恢复 `4fa86930…705b`；
+  当前 iot-device healthy/restartCount=0，其他容器未变化，回退后权限 3/0、十四类残留 0。真实仓库多文档
+  application YAML 动态合同 3/3 PASS，实际容器属性源差异仍 OPEN。下一步实现 fail-closed 直接文件 provider，
+  完成测试和新候选后再另批部署；同一候选与本次批准均不得复用。证据见
+  [`iot-device-configtree-runtime-repair-deploy-attempt-20260811.md`](./assets/td005-canary/iot-device-configtree-runtime-repair-deploy-attempt-20260811.md)。

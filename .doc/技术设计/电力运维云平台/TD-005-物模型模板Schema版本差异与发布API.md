@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.52
+> 版本：1.0.53
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -65,6 +65,7 @@
 | 1.0.50 | 定位旧暂存 JAR 与本机 Maven Java 8 覆盖；显式 Java 17 构建新候选，四类存在且聚焦合同 11/11 PASS，待独立部署 |
 | 1.0.51 | 新镜像因真实 Config Tree Secret 未绑定而启动失败并仅回退 iot-device；旧镜像恢复 healthy、权限 3/0、十四类残留 0 |
 | 1.0.52 | 将 Config Tree 挂载文件直接映射最终 Secret 属性，新增真实 Spring Config Data 有挂载/无挂载启动合同；聚焦测试 16/16 PASS，待新部署审批 |
+| 1.0.53 | 最终键候选仍在实际容器解析为空并自动回退；前后双库均 3/0/零残留，下一步改为 fail-closed 直接文件 provider |
 
 ## 1. 结论
 
@@ -778,6 +779,15 @@ BUILD SUCCESS；新暂存 JAR 为 279,652,971 字节，SHA-256
 且不含旧中间键。运行态仍是已回退的旧镜像；下一步须申请新的仅 iot-device 部署窗口，1.0.51 的批准不得
 复用。前检证据见
 [`iot-device-configtree-runtime-repair-preflight-20260811.md`](./assets/td005-canary/iot-device-configtree-runtime-repair-preflight-20260811.md)。
+
+1.0.53 按 `USER-APPROVAL-20260811-TD005-IOT-DEVICE-CONFIGTREE-RUNTIME-REPAIR-DEPLOY` 仅构建并重建
+iot-device。部署前 JAR hash、仓库外 Secret 形状、非敏感运行开关和双库 READ ONLY 前检全部 PASS。候选镜像
+`3e0ff7d4…83bbdb` 的新容器仍在 150 秒窗口内因 ActivationGuard 得到空 Secret 而未 healthy，因此未执行
+运行类检查、activation preflight、路由探针或任何 API。脚本使用旧镜像专用旧键覆盖层恢复
+`4fa86930…705b`，当前 iot-device healthy/restartCount=0，其他容器未变化；回退后双库仍为权限 3/0、残留 0。
+补充的真实仓库多文档 application YAML 动态合同 3/3 PASS，但实际容器属性源差异仍未关闭。下一步不得复用
+同一候选，须实现不依赖属性源优先级的 fail-closed 直接文件 provider 后再另批部署。证据见
+[`iot-device-configtree-runtime-repair-deploy-attempt-20260811.md`](./assets/td005-canary/iot-device-configtree-runtime-repair-deploy-attempt-20260811.md)。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 
