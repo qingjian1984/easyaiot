@@ -6,14 +6,17 @@ services:
   #     不声明 platform 时 Docker 优先使用本地缓存架构 → 若本地仅有 amd64 镜像则 QEMU 模拟运行，
   #     ARM 主机上性能极差且可能因 JVM 参数不兼容而启动失败
   #   - 不使用 slim 版：slim 内嵌 Java 8 + Derby 在 cgroup v2 宿主机上会 NPE 崩溃
-  #   - 声明 ${NACOS_PLATFORM:-linux/amd64} 允许通过环境变量覆盖架构
+  #   - 声明 ${NACOS_PLATFORM:-linux/amd64}；桌面端 install_middleware_desktop 会按本机架构写入
+  #   - Docker Desktop（尤其 Apple Silicon）上 JVM 冷启动较慢，healthcheck 放宽以免误杀
   Nacos:
     image: nacos/nacos-server:v2.5.1
     platform: ${NACOS_PLATFORM:-linux/amd64}
     container_name: nacos-server
-    restart: always
+    hostname: nacos-server
+    restart: unless-stopped
     environment:
-      - PREFER_HOST_MODE=hostname
+      # Desktop / bridge 网络下用 ip 更稳；Linux host 模式同样可用
+      - PREFER_HOST_MODE=ip
       - MODE=standalone
       - NACOS_AUTH_ENABLE=true
       - NACOS_AUTH_IDENTITY_KEY=nacos
@@ -38,8 +41,8 @@ services:
         ]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 60s
+      retries: 30
+      start_period: 300s
     networks:
       - easyaiot-network
 
@@ -343,8 +346,8 @@ services:
     volumes:
       - "./srs_data/conf:/usr/local/srs/conf:rw"
       - "./srs_data/conf:/opt/srs/trunk/conf:rw"
-      # 宿主机数据目录映射为容器内录像与日志目录（统一 ~/easyaiot/data）
-      - "~/easyaiot/data:/data:rw"
+      # NFS 媒体根挂载为容器 /data（playbacks/logs 与 sink/VIDEO 同根）
+      - "${EASYAIOT_MEDIA_ROOT:-/mnt/easyaiot-media}:/data:rw"
       - "./srs-entrypoint.sh:/usr/local/bin/srs-entrypoint.sh:ro"
       - "./srs-healthcheck.sh:/usr/local/bin/srs-healthcheck.sh:ro"
     entrypoint: ["/bin/bash", "/usr/local/bin/srs-entrypoint.sh"]
@@ -357,7 +360,8 @@ services:
       retries: 5
       start_period: 30s
 
-  # Node-RED Server
+  # Node-RED Server（页面标题 EasyAIoT；演示规则链只读，见 .scripts/node-red/）
+  # 编辑器: http://localhost:1880  恢复演示: bash .scripts/node-red/seed_nodered_demo.sh
   NodeRED:
     image: nodered/node-red:latest
     container_name: nodered-server
@@ -370,6 +374,10 @@ services:
     user: "1000:1000"
     volumes:
       - "./nodered_data/data:/data:rw"
+      # EasyAIoT 标题 + 演示规则链只读中间件
+      - "../node-red/settings.js:/data/settings.js:ro"
+      - "../node-red/easyaiot_flows_demo.json:/data/easyaiot_flows_demo.json:ro"
+      - "../node-red/public:/data/public:ro"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:1880/ || exit 1"]
       interval: 30s
@@ -381,9 +389,10 @@ services:
 
   # FUXA Web SCADA / HMI（组态编辑器 + 运行态；仅 full 形态启动，mini/standard 跳过且不拉取镜像）
   # 编辑器: http://localhost:1881/editor  运行态: http://localhost:1881/home
-  # 默认经 proxy.vvvv.ee 拉取（实测 docker.1ms.run 对 FUXA 易卡住/401）
+  # FUXA：compose 固定用 1panel 路径名；实际拉取见 pull_fuxa.sh（1ms 优先，DaoCloud 常 403）
+  # 也可 export FUXA_IMAGE=... 覆盖
   FUXA:
-    image: ${FUXA_IMAGE:-frangoteam/fuxa:1.3.3}
+    image: ${FUXA_IMAGE:-docker.1panel.live/frangoteam/fuxa:1.3.3}
     container_name: fuxa-server
     restart: always
     ports:
@@ -495,7 +504,7 @@ services:
       - "host.docker.internal:host-gateway"
     # 健康检查需带 secret（与 config.ini [api] secret 一致），否则 ZLM 返回 Required parameter missed: "secret"
     healthcheck:
-      test: ["CMD-SHELL", "SECRET=$$(grep '^[[:space:]]*secret=' /conf/config.ini 2>/dev/null | head -1 | cut -d= -f2); if [ -n \"$$SECRET\" ]; then curl -f \"http://localhost:80/index/api/getServerConfig?secret=$$SECRET\"; else curl -f http://localhost:80/index/api/getServerConfig; fi || exit 1"]
+      test: ["CMD-SHELL", "SECRET=$$(grep '^[[:space:]]*secret=' /conf/config.ini 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]'); if [ -n \"$$SECRET\" ]; then curl -fsS -o /dev/null \"http://localhost:80/index/api/getServerConfig?secret=$$SECRET\"; else curl -fsS -o /dev/null http://localhost:80/index/api/getServerConfig; fi || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

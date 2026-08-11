@@ -148,3 +148,5 @@ iot:
     public-url: ${IOT_FUXA_PUBLIC_URL:http://14.18.122.2:1881}
     username: ${IOT_FUXA_USERNAME:admin}
     password: ${IOT_FUXA_PASSWORD:123456}
+    demo-read-only: ${IOT_FUXA_DEMO_READ_ONLY:true}
+    force-preview: ${IOT_FUXA_FORCE_PREVIEW:false}

@@ -34,6 +34,8 @@ cd "$SCRIPT_DIR"
 EASYAIOT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=../.scripts/docker/init-build-cache-dirs.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/init-build-cache-dirs.sh"
+# shellcheck source=../.scripts/docker/gpu_compose_helpers.sh
+source "${EASYAIOT_ROOT}/.scripts/docker/gpu_compose_helpers.sh"
 # shellcheck source=../.scripts/docker/deploy_profile.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/deploy_profile.sh"
 
@@ -183,8 +185,16 @@ check_docker_compose() {
 compose_up_or_fail() {
     local compose_log
     local -a compose_args=()
-    if [ -f "$GPU_COMPOSE_OVERRIDE" ]; then
-        compose_args=(-f docker-compose.yaml -f "$GPU_COMPOSE_OVERRIDE")
+    # 显式 -f 时会忽略 COMPOSE_FILE，需手动拼上桌面端 / GPU / source-free override
+    if [ -f "$GPU_COMPOSE_OVERRIDE" ] || [ -f docker-compose.desktop.yaml ] || should_use_source_free_compose; then
+        compose_args=(-f docker-compose.yaml)
+        if [ -f docker-compose.desktop.yaml ] && { [ -n "${EASYAIOT_DESKTOP_OS:-}" ] || [ "${EASYAIOT_COMPOSE_DESKTOP:-0}" = "1" ]; }; then
+            compose_args+=(-f docker-compose.desktop.yaml)
+        fi
+        if [ -f "$GPU_COMPOSE_OVERRIDE" ]; then
+            compose_args+=(-f "$GPU_COMPOSE_OVERRIDE")
+        fi
+        append_source_free_compose_file compose_args
     fi
     compose_log=$(mktemp)
     if ! $COMPOSE_CMD "${compose_args[@]}" up "$@" >"$compose_log" 2>&1; then
@@ -236,6 +246,18 @@ detect_architecture() {
             print_info "使用 PyTorch CUDA 镜像: $BASE_IMAGE"
             ;;
         aarch64|arm64|armv7l|armv6l)
+            # 桌面端（macOS Apple Silicon）或已拉取预构建镜像：允许 CPU 模式容器部署
+            if [ -n "${EASYAIOT_DESKTOP_OS:-}" ] || [ "${EASYAIOT_COMPOSE_DESKTOP:-0}" = "1" ] \
+              || [ "${EASYAIOT_SKIP_BUILD:-0}" = "1" ]; then
+                ARCH="aarch64"
+                DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/arm64}"
+                BASE_IMAGE="${BASE_IMAGE:-pytorch/pytorch:2.1.0-cpu}"
+                print_success "检测到 ARM 架构: $ARCH（桌面/镜像部署，CPU 模式）"
+                print_info "平台: $DOCKER_PLATFORM，基础镜像: $BASE_IMAGE"
+                export DOCKER_PLATFORM
+                export BASE_IMAGE
+                return 0
+            fi
             print_error "检测到 ARM 架构 ($ARCH)"
             print_error "NVIDIA 官方的 CUDA 容器化只支持 x86_64 架构"
             print_error "ARM 服务器不支持容器化部署，部署已终止"
@@ -243,6 +265,7 @@ detect_architecture() {
             print_info "如需在 ARM 服务器上运行，请考虑："
             print_info "1. 使用原生 Python 环境直接运行（非容器化）"
             print_info "2. 使用支持 ARM 的 CPU 版本 PyTorch（性能较低）"
+            print_info "3. macOS 请使用: .scripts/docker/install_mac.sh（预构建镜像）"
             exit 1
             ;;
         *)
@@ -268,9 +291,9 @@ configure_architecture() {
         echo "BASE_IMAGE=$BASE_IMAGE" >> .env.arch
         print_success "已创建架构配置文件 .env.arch"
     else
-        # 更新现有配置
-        sed -i "s|^DOCKER_PLATFORM=.*|DOCKER_PLATFORM=$DOCKER_PLATFORM|" .env.arch
-        sed -i "s|^BASE_IMAGE=.*|BASE_IMAGE=$BASE_IMAGE|" .env.arch
+        # 更新现有配置（临时文件方式，兼容 macOS BSD sed）
+        _set_env_docker_kv .env.arch DOCKER_PLATFORM "$DOCKER_PLATFORM"
+        _set_env_docker_kv .env.arch BASE_IMAGE "$BASE_IMAGE"
         print_info "已更新架构配置文件 .env.arch"
     fi
 
@@ -421,6 +444,16 @@ EOF
 
 check_gpu() {
     if check_command nvidia-smi; then
+        local smi_indexes
+        smi_indexes=$(nvidia-smi --query-gpu=index --format=csv,noheader,nounits 2>/dev/null \
+            | awk '{$1=$1; print}' | paste -sd, -)
+        if ! echo "$smi_indexes" | grep -qE '^[0-9]+(,[0-9]+)*$'; then
+            print_warning "检测到 nvidia-smi，但无法与 NVIDIA 驱动通信，将使用 CPU 模式"
+            print_warning "$(nvidia-smi 2>&1 | head -n 1 || true)"
+            GPU_HARDWARE_DETECTED=false
+            GPU_AVAILABLE=false
+            return
+        fi
         GPU_HARDWARE_DETECTED=true
         print_info "检测到 NVIDIA GPU:"
         nvidia-smi --query-gpu=name,driver_version --format=csv,noheader,nounits 2>/dev/null | while IFS=, read -r name version; do
@@ -465,9 +498,9 @@ check_gpu() {
                 print_success "NVIDIA Container Toolkit 已正确配置"
                 GPU_AVAILABLE=true
             else
-                print_warning "Docker 支持 NVIDIA，但测试运行失败"
-                print_info "可能是镜像下载问题或权限问题，尝试启用 GPU 配置"
-                GPU_AVAILABLE=true
+                print_warning "Docker 支持 NVIDIA，但测试运行失败，回退 CPU 模式"
+                print_info "常见原因：驱动未加载、权限不足或 CUDA 测试镜像拉取失败"
+                GPU_AVAILABLE=false
             fi
         else
             print_warning "Docker daemon.json 中未配置 NVIDIA runtime"
@@ -479,12 +512,12 @@ check_gpu() {
                     print_success "Docker NVIDIA runtime 配置成功"
                     GPU_AVAILABLE=true
                 else
-                    print_warning "配置后仍无法检测到 NVIDIA runtime，尝试强制启用 GPU 配置"
-                    GPU_AVAILABLE=true
+                    print_warning "配置后仍无法检测到 NVIDIA runtime，将使用 CPU 模式"
+                    GPU_AVAILABLE=false
                 fi
             else
-                print_warning "配置失败，尝试强制启用 GPU 配置"
-                GPU_AVAILABLE=true
+                print_warning "配置失败，将使用 CPU 模式"
+                GPU_AVAILABLE=false
             fi
         fi
     else
@@ -530,11 +563,26 @@ write_gpu_compose_override() {
     mv "$temp_file" "$GPU_COMPOSE_OVERRIDE"
 }
 
+write_cpu_compose_override() {
+    local temp_file="${GPU_COMPOSE_OVERRIDE}.tmp"
+    # daemon 若 default-runtime=nvidia，而驱动未加载时，带 com.nvidia.volumes.needed
+    # 标签的 PyTorch 镜像会在 CDI 阶段失败；强制 runc 才能纯 CPU 启动。
+    {
+        echo 'services:'
+        echo '  ai-service:'
+        echo '    runtime: runc'
+        echo '    environment:'
+        echo '      USE_GPU: "False"'
+        echo '      NVIDIA_VISIBLE_DEVICES: ""'
+    } > "$temp_file"
+    mv "$temp_file" "$GPU_COMPOSE_OVERRIDE"
+}
+
 configure_gpu() {
 
     if [ "$GPU_AVAILABLE" != true ]; then
-        rm -f "$GPU_COMPOSE_OVERRIDE"
-        print_success "未启用 GPU，容器将使用 CPU 模式"
+        write_cpu_compose_override
+        print_success "未启用 GPU，容器将使用 CPU 模式（runtime: runc）"
         return 0
     fi
 
@@ -542,8 +590,10 @@ configure_gpu() {
     host_devices=$(nvidia-smi --query-gpu=index --format=csv,noheader,nounits 2>/dev/null \
         | awk '{$1=$1; print}' | paste -sd, -)
     if ! echo "$host_devices" | grep -qE '^[0-9]+(,[0-9]+)*$'; then
-        print_error "无法读取有效的宿主机 GPU 列表: ${host_devices:-空}"
-        return 1
+        print_warning "无法读取有效的宿主机 GPU 列表，回退 CPU 模式: ${host_devices:-空}"
+        GPU_AVAILABLE=false
+        write_cpu_compose_override
+        return 0
     fi
 
     override_devices=$(resolve_gpu_override_devices)
@@ -698,24 +748,14 @@ create_env_file() {
             cp env.example .env.docker
             print_success ".env.docker 文件已从 env.example 创建"
 
-            # 自动配置中间件连接信息（使用localhost，因为docker-compose.yaml使用host网络模式）
+            # 自动配置中间件连接信息（临时文件写回，兼容 macOS BSD sed）
             print_info "自动配置中间件连接信息..."
-
-            # 更新数据库连接（使用localhost，因为使用host网络模式，中间件端口已映射到宿主机）
-            sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:iot45722414822@localhost:5432/iot-ai20|' .env.docker
-
-            # 更新Nacos配置（使用localhost，因为使用host网络模式）
-            sed -i 's|^NACOS_SERVER=.*|NACOS_SERVER=localhost:8848|' .env.docker
-
-            # 更新MinIO配置（使用localhost，因为使用host网络模式）
-            sed -i 's|^MINIO_ENDPOINT=.*|MINIO_ENDPOINT=localhost:9000|' .env.docker
-            sed -i 's|^MINIO_SECRET_KEY=.*|MINIO_SECRET_KEY=basiclab@iot975248395|' .env.docker
-
-            # 更新Nacos密码
-            sed -i 's|^NACOS_PASSWORD=.*|NACOS_PASSWORD=basiclab@iot78475418754|' .env.docker
-
-            # 确保Nacos命名空间为空（使用默认命名空间）
-            sed -i 's|^NACOS_NAMESPACE=.*|NACOS_NAMESPACE=|' .env.docker
+            _set_env_docker_kv .env.docker DATABASE_URL "postgresql://postgres:iot45722414822@localhost:5432/iot-ai20"
+            _set_env_docker_kv .env.docker NACOS_SERVER "localhost:8848"
+            _set_env_docker_kv .env.docker MINIO_ENDPOINT "localhost:9000"
+            _set_env_docker_kv .env.docker MINIO_SECRET_KEY "basiclab@iot975248395"
+            _set_env_docker_kv .env.docker NACOS_PASSWORD "basiclab@iot78475418754"
+            _set_env_docker_kv .env.docker NACOS_NAMESPACE ""
 
             print_success "中间件连接信息已自动配置"
             print_info "如需修改其他配置，请编辑 .env.docker 文件"
@@ -725,29 +765,36 @@ create_env_file() {
         fi
     else
         print_info ".env.docker 文件已存在"
-        print_info "检查并更新中间件连接信息..."
+        if [ -n "${EASYAIOT_DESKTOP_OS:-}" ] || [ "${EASYAIOT_COMPOSE_DESKTOP:-0}" = "1" ]; then
+            print_info "桌面端部署：使用容器网络中间件地址（postgres-server / iot-system）"
+            _set_env_docker_kv .env.docker DATABASE_URL "postgresql://postgres:iot45722414822@postgres-server:5432/iot-ai20"
+            _set_env_docker_kv .env.docker JAVA_BACKEND_URL "http://iot-system:48099"
+            _set_env_docker_kv .env.docker REDIS_HOST "redis-server"
+        else
+            print_info "检查并更新中间件连接信息..."
 
-        # 检查并更新数据库连接（如果使用Docker服务名，改为localhost，因为使用host网络模式）
-        if grep -q "DATABASE_URL=.*PostgresSQL" .env.docker || grep -q "DATABASE_URL=.*postgres-server" .env.docker; then
-            sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:iot45722414822@localhost:5432/iot-ai20|' .env.docker
-            print_info "已更新数据库连接为 localhost:5432（host网络模式）"
-        fi
+            # 检查并更新数据库连接（如果使用Docker服务名，改为localhost，因为使用host网络模式）
+            if grep -q "DATABASE_URL=.*PostgresSQL" .env.docker || grep -q "DATABASE_URL=.*postgres-server" .env.docker; then
+                _set_env_docker_kv .env.docker DATABASE_URL "postgresql://postgres:iot45722414822@localhost:5432/iot-ai20"
+                print_info "已更新数据库连接为 localhost:5432（host网络模式）"
+            fi
 
-        # 检查并更新Nacos配置（如果使用Docker服务名或IP地址，改为localhost，因为使用host网络模式）
-        if grep -q "NACOS_SERVER=.*Nacos" .env.docker || grep -q "NACOS_SERVER=.*14\.18\.122\.2" .env.docker || grep -q "NACOS_SERVER=.*nacos-server" .env.docker; then
-            sed -i 's|^NACOS_SERVER=.*|NACOS_SERVER=localhost:8848|' .env.docker
-            print_info "已更新Nacos连接为 localhost:8848（host网络模式）"
-        fi
+            # 检查并更新Nacos配置（如果使用Docker服务名或IP地址，改为localhost，因为使用host网络模式）
+            if grep -q "NACOS_SERVER=.*Nacos" .env.docker || grep -q "NACOS_SERVER=.*14\.18\.122\.2" .env.docker || grep -q "NACOS_SERVER=.*nacos-server" .env.docker; then
+                _set_env_docker_kv .env.docker NACOS_SERVER "localhost:8848"
+                print_info "已更新Nacos连接为 localhost:8848（host网络模式）"
+            fi
 
-        # 检查并更新MinIO配置（如果使用Docker服务名，改为localhost，因为使用host网络模式）
-        if grep -q "MINIO_ENDPOINT=.*MinIO" .env.docker || grep -q "MINIO_ENDPOINT=.*minio-server" .env.docker; then
-            sed -i 's|^MINIO_ENDPOINT=.*|MINIO_ENDPOINT=localhost:9000|' .env.docker
-            print_info "已更新MinIO连接为 localhost:9000（host网络模式）"
+            # 检查并更新MinIO配置（如果使用Docker服务名，改为localhost，因为使用host网络模式）
+            if grep -q "MINIO_ENDPOINT=.*MinIO" .env.docker || grep -q "MINIO_ENDPOINT=.*minio-server" .env.docker; then
+                _set_env_docker_kv .env.docker MINIO_ENDPOINT "localhost:9000"
+                print_info "已更新MinIO连接为 localhost:9000（host网络模式）"
+            fi
         fi
 
         # 检查并更新Nacos命名空间（如果设置为local或其他非空值，则重置为空，使用默认命名空间）
         if grep -q "^NACOS_NAMESPACE=.*" .env.docker && ! grep -q "^NACOS_NAMESPACE=$" .env.docker; then
-            sed -i 's|^NACOS_NAMESPACE=.*|NACOS_NAMESPACE=|' .env.docker
+            _set_env_docker_kv .env.docker NACOS_NAMESPACE ""
             print_info "已更新Nacos命名空间为空（使用默认命名空间）"
         fi
     fi

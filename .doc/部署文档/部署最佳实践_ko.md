@@ -12,6 +12,7 @@
 - [배포 프로필 선택](#배포-프로필-선택)
 - [환경 요구 사항 및 배포 전 점검](#환경-요구-사항-및-배포-전-점검)
 - [원클릭 및 단계별 배포](#원클릭-및-단계별-배포)
+- [RUNTIME 원자 모드(경량 연산 노드)](#runtime-원자-모드경량-연산-노드)
 - [일반 운영](#일반-운영)
 - [사전 빌드 이미지](#사전-빌드-이미지)
 - [GPU 구성](#gpu-구성)
@@ -27,7 +28,7 @@
 
 ## 두 가지 사용 모드 (상세)
 
-통합 진입 스크립트(`install_linux.sh` / `install_linux_arm.sh` / `install_linux_kylin.sh`)는 **두 가지 동등한 사용 패턴**을 지원합니다:
+통합 진입 스크립트(`install_linux.sh` / `install_linux_centos.sh` / `install_linux_centos_arm.sh` / `install_linux_openeuler.sh` / `install_linux_arm.sh` / `install_linux_kylin.sh`)는 **두 가지 동등한 사용 패턴**을 지원합니다:
 
 | 모드 | 진입 | 대상 | 특징 |
 |------|------|------|------|
@@ -186,7 +187,7 @@ sudo .scripts/docker/install_linux.sh         # 1 Deploy → 1 Install → 7 Ver
 
 | 프로필 | 별칭 | 권장 RAM | 사용 사례 |
 |--------|------|----------|-----------|
-| **mini** | `1` / `4g` | ≥ 4 GB | 엣지 노드, PoC |
+| **mini** | `1` / `4g` | ≥ 8 GB | 엣지 노드, PoC |
 | **standard** | `2` / `16g` | ≥ 16 GB | 일반 프로덕션 |
 | **full** | `3` (기본값) | ≥ 20 GB | 전체 기능 + APP H5 |
 
@@ -198,14 +199,16 @@ sudo .scripts/docker/install_linux.sh         # 1 Deploy → 1 Install → 7 Ver
 
 **mini**
 
-- 비즈니스: `iot-system`, VIDEO, AI, WEB
-- 미들웨어: PostgreSQL, Redis, SRS
-- 미시작: Nacos, Gateway, Kafka, iot-sink, MinIO, Milvus, ZLMediaKit, Node-RED, TDengine, EMQX 및 대부분의 DEVICE 하위 모듈
-- API 라우팅: nginx가 `/admin-api` 및 `/dev-api`를 `iot-system:48099`로 프록시
+- 비즈니스: `iot-system`, `iot-gateway`, `iot-sink`, `iot-infra`, VIDEO, AI, WEB
+- 미들웨어: Nacos, PostgreSQL, Redis, Kafka, MinIO, SRS, EMQX
+- 미시작: `iot-device`, `iot-dataset`, `iot-node`, `iot-visualize`, `iot-file`, `iot-message`, `iot-gb28181`, `iot-tdengine`, Milvus, ZLMediaKit, Node-RED, FUXA, TDengine, APP / VISUALIZE / TRANSFORM 등
+- 이벤트 평면: standard/full과 동일 — MQTT → Gateway → iot-sink
+- 미디어: 설치 시 NFS 미디어 스택 자동 준비 (`EASYAIOT_MEDIA_ROOT`)
+- API 라우팅: Gateway(48080) 통합 진입
 
 **standard**
 
-- 미시작: TDengine, Node-RED, `iot-device`, `iot-tdengine`（EMQX 포함）
+- 미시작: TDengine, Node-RED, `iot-device`, `iot-tdengine`
 - 나머지 모두 시작
 
 **full**
@@ -236,7 +239,7 @@ sudo .scripts/docker/install_linux.sh         # 1 Deploy → 1 Install → 7 Ver
 
 | 소프트웨어 | 요구 사항 |
 |------------|-----------|
-| OS | Ubuntu 24.04+ (26.04 권장); Kylin, ARM64도 지원 |
+| OS | Ubuntu 24.04+ (26.04 권장); CentOS/RHEL, **Kylin (麒麟) / openEuler (欧拉)**, ARM64도 지원 |
 | Docker | 설치 및 데몬 접근 가능 |
 | Docker Compose | **v2.35.0+** (`docker compose` 플러그인) |
 | NVIDIA Driver / Container Toolkit | GPU 시나리오만 |
@@ -357,6 +360,28 @@ cd .scripts/docker
 
 ---
 
+## RUNTIME 원자 모드(경량 연산 노드)
+
+센터 풀스택과 경량 연산 노드를 분리 계획하세요:
+
+| 역할 | 배포 내용 | 진입점 |
+|------|-----------|--------|
+| **센터 / 일체형** | 미들웨어 + DEVICE/AI/VIDEO/WEB…; VIDEO가 RUNTIME 자동 마운트 | `install_linux.sh install` |
+| **연산 노드** | **RUNTIME만** | `VIDEO_BASE_URL=… install_linux.sh runtime` |
+| **다중 노드** | SSH 일괄 배포 | WEB 「업무 런타임 배포」→ RUNTIME(C++) |
+
+```bash
+VIDEO_BASE_URL=http://<센터VIDEO>:6000 \
+  sudo -E bash .scripts/docker/install_linux.sh runtime
+
+./RUNTIME/install_linux.sh status
+source /opt/easyaiot/RUNTIME/env.sh
+```
+
+필수 `VIDEO_BASE_URL`. 원자 ≠ 미푸시. mini/standard/full과 무관 — 연산 박스에서 전체 `install`을 다시 실행하지 마세요. 상세: [`RUNTIME/README.md`](../../RUNTIME/README.md).
+
+---
+
 ## 일반 운영
 
 ### 통합 스크립트
@@ -426,11 +451,27 @@ docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu24.04 nvidia-smi
 ## 특수 환경
 
 ```bash
+# CentOS / RHEL / Rocky / Alma x86 (Docker CE 자동 업그레이드, firewalld 포트 개방)
+sudo .scripts/docker/install_linux_centos.sh install
+# Docker만 준비: sudo .scripts/docker/install_linux_centos.sh --upgrade-docker-only
+
+# CentOS / RHEL ARM (환경 준비 후 install_linux_arm.sh 위임)
+sudo .scripts/docker/install_linux_centos_arm.sh install
+# Docker만 준비: sudo .scripts/docker/install_linux_centos_arm.sh --upgrade-docker-only
+
+# openEuler
+sudo .scripts/docker/install_linux_openeuler.sh install
+# Docker만 준비: sudo .scripts/docker/install_linux_openeuler.sh --upgrade-docker-only
+
 # Kylin OS
 sudo .scripts/docker/install_linux_kylin.sh install
 
-# ARM64
+# ARM64 (일반)
 sudo .scripts/docker/install_linux_arm.sh install
+
+# macOS / Windows
+bash .scripts/docker/install_mac.sh install
+bash .scripts/docker/install_windows.sh install
 ```
 
 ---
@@ -549,7 +590,7 @@ cd WEB && ./install_linux.sh build
 | `.scripts/docker/logs/` | 설치 스크립트 로그; `merged_logs_*`, `disk_usage_*` 보고서 |
 | `.scripts/docker/standalone-logs/` | Nacos 및 기타 미들웨어 디스크 로그 |
 | `.build-cache/device/logs/` | DEVICE 마이크로서비스 Spring 로그 |
-| `~/easyaiot/data/srs.log` | SRS 스트리밍 |
+| `${EASYAIOT_MEDIA_ROOT:-/mnt/easyaiot-media}/srs.log` | SRS 스트리밍 (`deploy_profile`이 미디어 루트 해석) |
 | `WEB/logs/runtime.log` | WEB 런타임 로그 |
 | `docker logs <container>` | 컨테이너 stdout (AI/VIDEO에서 일반적) |
 

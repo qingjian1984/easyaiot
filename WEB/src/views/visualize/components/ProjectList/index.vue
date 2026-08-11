@@ -19,9 +19,14 @@
               {
                 icon: 'ant-design:fund-projection-screen-outlined',
                 tooltip: {
-                  title: record.projectType === 'scada' ? '打开组态编辑器' : '打开编辑器',
+                  title: isFuxaDemoProject(record)
+                    ? '演示组态只读，请使用预览'
+                    : record.projectType === 'scada'
+                      ? '打开组态编辑器'
+                      : '打开编辑器',
                   placement: 'top',
                 },
+                ifShow: !isFuxaDemoProject(record),
                 onClick: handleOpenEditor.bind(null, record),
               },
               {
@@ -105,7 +110,7 @@ import {
   getVisualizeProjectPage,
   publishVisualizeProject,
 } from '@/api/device/visualize'
-import { getProjectTypeLabel, openVisualizeEditor } from '@/utils/visualizeEditor'
+import { getProjectTypeLabel, isFuxaDemoProject, openVisualizeEditor } from '@/utils/visualizeEditor'
 import { Button } from '@/components/Button'
 
 defineOptions({ name: 'VisualizeProjectList' })
@@ -133,6 +138,11 @@ function handleEdit(record) {
 }
 
 function handleOpenEditor(record) {
+  if (isFuxaDemoProject(record)) {
+    createMessage.info('演示组态为只读，已打开运行态预览')
+    handleOpenPreview(record)
+    return
+  }
   try {
     openVisualizeEditor(record.id, 'edit', {
       projectType: record.projectType,

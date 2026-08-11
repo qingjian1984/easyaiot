@@ -35,10 +35,13 @@ EasyAIoT는 **Docker 컨테이너와 통합 설치 스크립트**를 통해 배�
 | OS | 스크립트 |
 |----|--------|
 | Linux x86 | `.scripts/docker/install_linux.sh` |
-| Linux ARM | `.scripts/docker/install_linux_arm.sh` |
-| Kylin | `.scripts/docker/install_linux_kylin.sh` |
+| CentOS / RHEL (x86) | `.scripts/docker/install_linux_centos.sh` |
+| **CentOS / RHEL · ARM** | `.scripts/docker/install_linux_centos_arm.sh` |
+| **Kylin (麒麟)** | `.scripts/docker/install_linux_kylin.sh` |
+| **openEuler (欧拉)** | `.scripts/docker/install_linux_openeuler.sh` |
+| Linux ARM (일반) | `.scripts/docker/install_linux_arm.sh` |
 | macOS | `.scripts/docker/install_mac.sh` |
-| Windows | `.scripts/docker/install_win.ps1` |
+| Windows | `.scripts/docker/install_windows.ps1` / `install_windows.sh` |
 
 ---
 
@@ -116,8 +119,8 @@ sudo .scripts/docker/install_linux.sh install
 
 ### 사전 요건
 
-- OS: **Ubuntu 24.04+** (26.04 권장)
-- Docker + Docker Compose **v2.35+**
+- OS: **Ubuntu 24.04+** (26.04 권장); **CentOS/RHEL**, ARM, **Kylin (麒麟) / openEuler (欧拉)**도 지원
+- Docker + Docker Compose **v2.35+** (CentOS / **openEuler (欧拉)**에서는 OS 전용 진입 스크립트로 Docker CE 설치/업그레이드 가능)
 - **≥ 300 GB** 여유 디스크 공간
 
 ```bash
@@ -131,6 +134,9 @@ git clone https://gitee.com/volara/easyaiot.git
 cd easyaiot
 
 sudo .scripts/docker/install_linux.sh
+# CentOS / RHEL x86: sudo .scripts/docker/install_linux_centos.sh
+# CentOS / RHEL ARM: sudo .scripts/docker/install_linux_centos_arm.sh
+# openEuler: sudo .scripts/docker/install_linux_openeuler.sh
 # 1 Deploy → 1 First install → 7 Health verify
 ```
 
@@ -144,10 +150,29 @@ cd easyaiot
 
 # 선택: 사전 빌드 이미지를 가져와 설치 시간 단축
 sudo .scripts/docker/install_linux.sh pull
+# CentOS x86: sudo .scripts/docker/install_linux_centos.sh pull
+# CentOS ARM: sudo .scripts/docker/install_linux_centos_arm.sh pull
+# openEuler: sudo .scripts/docker/install_linux_openeuler.sh pull
 
 sudo .scripts/docker/install_linux.sh install
+# CentOS x86: sudo .scripts/docker/install_linux_centos.sh install
+# CentOS ARM: sudo .scripts/docker/install_linux_centos_arm.sh install
+# openEuler: sudo .scripts/docker/install_linux_openeuler.sh install
+
 .scripts/docker/install_linux.sh verify
 ```
+
+### CentOS / RHEL 참고
+
+`.scripts/docker/install_linux_centos.sh` 사용 (CentOS 7/8/Stream, Rocky, Alma, RHEL · x86). 상세(ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#centos--rhel-系说明).
+
+### CentOS / RHEL · ARM 참고
+
+`.scripts/docker/install_linux_centos_arm.sh` 사용 (aarch64/arm64 CentOS/RHEL). Docker CE / 미러 / firewalld 준비 후 `install_linux_arm.sh`에 위임. 상세(ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#centos--rhel-系--arm-说明).
+
+### **openEuler (欧拉)** 참고
+
+`.scripts/docker/install_linux_openeuler.sh` 사용 (openEuler 24.03 LTS / 24.x). 시스템 `docker-engine` 제거, Docker CE 저장소 `$releasever` 수정, 미러/firewalld 구성 후 `install_linux.sh`에 위임. 상세(ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#openeuler-24x-说明).
 
 ### 설치 소요 시간
 
@@ -160,13 +185,24 @@ sudo .scripts/docker/install_linux.sh install
 
 ---
 
+## macOS / Windows 이미지 전용 배포
+
+데스크톱은 **사전 빌드 이미지**만 지원합니다 (`install_mac.sh` / `install_windows.ps1` / `install_windows.sh`). 로컬 `build` / `build-runtime` 불가. 상세: [macOS](./平台macOS部署文档_ko.md), [Windows](./平台Windows部署文档_ko.md). 개요(ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#macos--windows-镜像部署).
+
+```bash
+bash .scripts/docker/install_mac.sh install
+bash .scripts/docker/install_windows.sh install
+```
+
+---
+
 ## 배포 프로필
 
 첫 `install` 시 대화형으로 선택되며 `.scripts/docker/.deploy_profile`에 저장됩니다. 이후 `start` / `stop` / `update`에서 재사용됩니다.
 
 | 옵션 | 이름 | 권장 RAM | 사용 사례 |
 |:------:|------|-----------------|----------|
-| 1 | **mini** | ≥ 4 GB | 엣지 노드, PoC |
+| 1 | **mini** | ≥ 8 GB | 엣지 노드, PoC |
 | 2 | **standard** | ≥ 16 GB | 일반 프로덕션 |
 | 3 | **full** (기본값) | ≥ 20 GB | 전체 기능 + APP H5 |
 
@@ -193,6 +229,8 @@ export EASYAIOT_DEPLOY_PROFILE=full && sudo .../install_linux.sh install  # 비�
 | `check` | Docker 환경 확인 |
 | `update` | 이미지 업데이트 및 재시작 |
 | `pull` | 사전 빌드 이미지 가져오기 |
+| `build` |
+| `runtime` / `runtime-atomic` | **RUNTIME 원자 모드**(실행기만 설치, `VIDEO_BASE_URL` 필요) |
 | `build` | 로컬에서 이미지 재빌드 |
 | `profile` | 배포 프로필 보기 |
 | `analyze-logs` | 다중 모듈 로그 병합 |
@@ -231,6 +269,33 @@ cd .scripts/docker && ./install_middleware_linux.sh install   # 미들웨어만
 cd .scripts/docker && ./install_business_linux.sh install     # 비즈니스 모듈만
 cd AI && ./install_linux.sh install                           # 단일 모듈
 ```
+
+---
+
+---
+
+## RUNTIME 원자 모드(연산 노드)
+
+**엣지 박스 / 클러스터 워커**용: 로컬에 VIDEO / WEB / DEVICE 없이 **C++ 실행기만** 설치. 경보·하트비트는 센터 VIDEO로 집약; 정식 `realtime` 작업은 기본으로 센터/클러스터 SRS `ai/`에 박스 검출 스트림을 푸시.
+
+> **원자 ≠ 영상 미푸시.** 원자는 로컬 비즈니스 스택이 없다는 뜻. 상세: [`RUNTIME/README.md`](../../RUNTIME/README.md).
+
+```bash
+VIDEO_BASE_URL=http://<센터VIDEO>:6000 \
+  bash .scripts/docker/install_linux.sh runtime
+
+VIDEO_BASE_URL=http://192.168.1.10:6000 ./RUNTIME/install_linux.sh atomic
+```
+
+| 항목 | 설명 |
+|------|------|
+| 필수 | `VIDEO_BASE_URL` |
+| 설치 경로 | 기본 `/opt/easyaiot/RUNTIME` |
+| 산출물 | `bin/RUNTIME`, `node.env`, `env.sh`, `config/atomic.example.ini` |
+| 정식 작업 | 센터 WEB에서 `executor=cpp` 알고리즘 작업 생성 |
+| 스모크 | `source /opt/easyaiot/RUNTIME/env.sh && $RUNTIME_BIN …/atomic.example.ini` |
+
+전체 스택은 계속 `install`; 로컬 VIDEO 설치의 RUNTIME 마운트와 원자 모드는 별개입니다.
 
 ---
 
@@ -293,7 +358,7 @@ cd .scripts/docker && ./analyze_merge_logs.sh --non-interactive --modules all --
 
 | 항목 | 요구사항 |
 |------|----------|
-| OS | Ubuntu 24.04+ (26.04 권장); macOS, Windows, ARM, Kylin도 지원 |
+| OS | Ubuntu 24.04+ (26.04 권장); macOS, Windows, CentOS/RHEL, ARM, **Kylin (麒麟) / openEuler (欧拉)**도 지원 |
 | CPU | 최소 4코어, 8코어 이상 권장 |
 | RAM | 프로필에 따라 다름 (full ≥ 20 GB, 32 GB 권장) |
 | 디스크 | 최소 300 GB 여유, 500 GB+ SSD 권장 |

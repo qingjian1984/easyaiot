@@ -25,6 +25,12 @@ My vision is for this system to be accessible worldwide, achieving truly zero ba
   <a href="./README_ko.md">한국어</a>
 </h4>
 
+## 🌐 Official Website
+
+EasyAIoT Official Website: [http://36.111.47.113:8090/](http://36.111.47.113:8090/)
+
+Product introduction, feature overview, three hardware tiers, installer downloads, and documentation entry—so you can quickly understand the platform and start deploying.
+
 ## 📖 Project Overview
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
@@ -36,7 +42,7 @@ Many smart IoT projects hit the same wall at deployment: video systems, device p
 </p>
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
-The platform comprises nine core modules—<strong>WEB, APP, DEVICE, NODE, VIDEO, AI, TASK, EDGE, and VISUALIZE</strong>—with Java as the stable control foundation, Python for AI and networking, and C++ for high-performance compute tasks, each language playing to its strengths. On the capability side, the platform covers GB28181 / ONVIF multi-protocol camera access, <strong>DJI dock and drone aerial view access</strong>, real-time and snapshot algorithm tasks, YOLO object detection and SAM zero-shot auto-annotation, face/plate recognition, orchestrable business post-processing, federated compute cluster scheduling, and <strong>Infinite Federated Edge Cluster mode</strong> (ordinary development boards ready out of the box, on-site intelligence for local decisions, alerts and evidence automatically aggregated to the cloud, compute scaling with business as needed), plus MQTT / TCP / HTTP / Modbus-TCP / Modbus-RTU / OPC UA IoT device lifecycle management, and <strong>visualization dashboards and Web SCADA configuration</strong>, so device data can be displayed as command-center situational awareness and mapped back to process screens. On the experience side, the Web console and mobile App / mini-program are capability-aligned, so command centers and field inspections share the same business logic—handle incidents anytime, anywhere.
+The platform comprises core modules including <strong>WEB, APP, DEVICE, NODE, VIDEO, RTC, AI, RUNTIME, VISUALIZE, TRANSFORM, PANEL, and SITE</strong>, with <strong>COMPILE</strong> handling multi-platform packaging and delivery (including Ubuntu / CentOS·RHEL <strong>7–9</strong> (x86 + <strong>CentOS ARM</strong>, packages per el7/el8/el9) / <strong>Kylin (麒麟) / openEuler (欧拉)</strong> / Windows / macOS / ARM). On the capability side, the platform covers GB28181 / ONVIF multi-protocol camera access, <strong>RTC consumer-camera P2P bridging</strong> (based on go2rtc, covering <strong>Tapo, Tuya, Ring, Nest, Xiaomi, Wyze, DoorBird, GoPro, and Roborock</strong>—store Tapo fill-in, Tuya white-label onboarding, overseas Ring/Nest doorbells, Xiaomi reuse, Wyze low-cost scale-out, DoorBird intercom, GoPro mobile views, Roborock vacuum cameras—with one-click Web onboarding into unified video and AI judgment), <strong>DJI dock and drone aerial view access</strong>, real-time / snapshot / patrol algorithm tasks, <strong>RUNTIME native high-speed execution layer</strong> (compiled binary owns pull/decode, YOLO inference, boxed push, and multi-channel raw forward—lower CPU/memory and steadier latency than interpreted paths; one binary covers realtime / snap / patrol / forward), YOLO object detection and SAM zero-shot auto-annotation, face/plate recognition, orchestrable business post-processing, federated compute cluster scheduling, and <strong>Infinite Federated Edge Cluster mode</strong> (ordinary development boards ready out of the box, on-site intelligence for local decisions, alerts and evidence automatically aggregated to the cloud, compute scaling with business as needed), plus MQTT / TCP / HTTP / Modbus-TCP / Modbus-RTU / OPC UA IoT device lifecycle management, and <strong>visualization dashboards and Web SCADA configuration</strong>, so device data can be displayed as command-center situational awareness and mapped back to process screens; plus the new <strong>TRANSFORM multidirectional data-flow engine</strong>, which delivers platform-side business events to external systems such as MES / ERP / CRM / WMS by contract—multi-party integration that is configurable, traceable, and reusable; and the companion <strong>PANEL delivery & watch entry</strong>, so appliances can be installed and accepted on arrival day, and watch/troubleshooting no longer wait on developers running remote commands every time; plus the <strong>SITE official website</strong> to present product value, three hardware tiers, and installer entry—so visitors understand first, then download and deploy. On the experience side, the Web console and mobile App / mini-program are capability-aligned, so command centers and field inspections share the same business logic—handle incidents anytime, anywhere.
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #444; margin: 16px 0 8px 0;">
@@ -44,7 +50,7 @@ The platform comprises nine core modules—<strong>WEB, APP, DEVICE, NODE, VIDEO
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-📄 For a more complete illustrated introduction, see <a href=".doc/项目介绍/EasyAIoT项目介绍 V2.0.pptx" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT Project Introduction V2.0 (PPT)</a>.
+📄 For a more complete illustrated introduction, see <a href=".doc/项目介绍/EasyAIoT项目介绍 V2.0.pptx" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT Project Introduction V2.0 (PPT)</a>, and <a href=".doc/项目介绍/AI视频监控分析平台.pdf" style="color: #3498db; text-decoration: none; font-weight: 600;">AI Video Surveillance Analytics Platform (PDF)</a>.
 </p>
 
 ## 🌟 Some Thoughts on the Project
@@ -55,6 +61,68 @@ The platform comprises nine core modules—<strong>WEB, APP, DEVICE, NODE, VIDEO
 EasyAIoT is a cloud-edge-device integrated intelligent IoT platform that focuses on the deep integration of AI and IoT. Through core capabilities such as algorithm task management, real-time stream analysis, and model service cluster inference, the platform achieves a complete closed-loop from device access to data collection, AI analysis, and intelligent decision-making, truly realizing interconnected everything and intelligent control of everything.
 </p>
 
+### 🎛️ PANEL: Install & Accept on Arrival Day—Watch Duty Without Waiting for Remote Devs
+
+<p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
+Smart IoT projects most often stall at the last mile: the machine is on site, yet <strong>it won't install, won't pass acceptance, and when something breaks you can only wait for developers to run remote commands</strong>—on-site cost and acceptance cycles are held hostage by people. PANEL is an <strong>independent delivery and watch entry</strong> for integrators and field ops—one-click install by tier, see whole-machine health and dependencies, start/stop services and inspect logs on the spot; <strong>even before the business console is ready, you can bring up, hold, and hand over the appliance</strong>, turning “machine on site → platform usable → acceptance-ready” from waiting on people into a same-day closed loop.
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">
+  <li><strong>Shorter acceptance cycles</strong>: On arrival pick mini / standard / full, install, and see progress and results on the spot—fewer “stuck halfway, unsure where” cases from incomplete commands or skipped steps; PoC and production delivery clear acceptance faster</li>
+  <li><strong>Lower on-site and remote cost</strong>: Whether containers are running, resources are tight, and where logs stall is obvious at a glance—restart, clean cache, and pull images without first hunting docs or waiting for developer support; watch staff can self-serve common faults</li>
+  <li><strong>One playbook across projects</strong>: The same install and ops entry reuses across appliances and rooms—delivery, watch, and handoff share one standard, avoiding “each site has its own oral tradition”</li>
+</ul>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0 8px 0;">
+📦 <strong>Installer download</strong>: Packages for Ubuntu / Debian, CentOS / RHEL <strong>7–9</strong> (x86 + <strong>CentOS ARM</strong>, el7/el8/el9 RPMs), Windows, macOS, and ARM / <strong>Kylin (麒麟) / openEuler (欧拉)</strong> targets are on <a href="https://gitee.com/volara/easyaiot/releases" style="color: #3498db; text-decoration: none; font-weight: 600;">Gitee Releases</a>.
+</p>
+
+| | | |
+|:---:|:---:|:---:|
+| ![Overview](.image/banner/panel/panel_1000.png) | ![Containers](.image/banner/panel/panel_1001.png) | ![Logs](.image/banner/panel/panel_1002.png) |
+| ![Deploy](.image/banner/panel/panel_1003.png) | ![Images](.image/banner/panel/panel_1004.png) | ![Pull](.image/banner/panel/panel_1005.png) |
+| ![Diagnose](.image/banner/panel/panel_1006.png) | ![Maintain](.image/banner/panel/panel_1007.png) | ![Topology](.image/banner/panel/panel_1008.png) |
+
+### 📡 RTC: Consumer-Camera P2P Bridging—Bring "No RTSP" Devices Into the Platform
+
+<p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
+In homes, retail stores, and light-security deployments, many devices already in use come from <strong>Tapo, Tuya, Ring, Nest, Xiaomi, Wyze, DoorBird, GoPro, and Roborock</strong>—they rely on vendor-private P2P protocols and <strong>do not expose standard RTSP</strong>. Traditional VMS platforms often push users toward Micam, Home Assistant, or other middleware, leaving long integration chains, fragmented ops, and no path to AI judgment. EasyAIoT adds a dedicated <strong>RTC module</strong> built on <a href="https://github.com/AlexxIT/go2rtc" style="color: #3498db; text-decoration: none; font-weight: 600;">go2rtc</a>, that <strong>unifies streaming and two-way audio for all nine brands</strong>—consumer devices can register, preview, relay, run AI tasks, and trigger alerts just like GB28181/ONVIF cameras.
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0 8px 0;">
+<strong>Supported brands and typical value:</strong>
+</p>
+
+<table style="width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px;">
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600; width: 14%;">Brand</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600; width: 18%;">Vendor</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600; width: 28%;">Typical devices</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600;">Value</td>
+</tr>
+<tr><td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><strong>Tapo</strong></td><td style="padding: 10px 12px; border: 1px solid #e0e0e0;">TP-Link</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444;">Home/store IPC, indoor/outdoor cams</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444; line-height: 1.7;"><strong>Low-cost blind-spot fill</strong> for shops; cloud-password connect; <strong>two-way audio</strong></td></tr>
+<tr><td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><strong>Tuya</strong></td><td style="padding: 10px 12px; border: 1px solid #e0e0e0;">Tuya Smart</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444;">Tuya-ecosystem IPC, doorbells</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444; line-height: 1.7;"><strong>Mass white-label/OEM onboarding</strong>; one integration for countless rebranded cameras</td></tr>
+<tr><td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><strong>Ring</strong></td><td style="padding: 10px 12px; border: 1px solid #e0e0e0;">Amazon</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444;">Doorbells, outdoor cams</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444; line-height: 1.7;"><strong>Overseas doorbell monitoring</strong> in platform; local P2P after OAuth; remote talk</td></tr>
+<tr><td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><strong>Nest</strong></td><td style="padding: 10px 12px; border: 1px solid #e0e0e0;">Google</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444;">Nest Cam, Doorbell</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444; line-height: 1.7;"><strong>Google-ecosystem premium sites</strong> unified with pro cameras on one screen</td></tr>
+<tr><td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><strong>Xiaomi</strong></td><td style="padding: 10px 12px; border: 1px solid #e0e0e0;">Mi Home</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444;">Mi Home cams, doorbells</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444; line-height: 1.7;"><strong>Reuse installed Mi Home fleet</strong>; no Micam middleware; attach AI directly</td></tr>
+<tr><td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><strong>Wyze</strong></td><td style="padding: 10px 12px; border: 1px solid #e0e0e0;">Wyze</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444;">Wyze Cam v3/v4, doorbells</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444; line-height: 1.7;"><strong>Ultra-low-cost scale-out</strong>; local P2P; two-way audio for pilots</td></tr>
+<tr><td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><strong>DoorBird</strong></td><td style="padding: 10px 12px; border: 1px solid #e0e0e0;">DoorBird</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444;">Smart doorbells, door stations</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444; line-height: 1.7;"><strong>Premium entry intercom</strong> + video; MJPEG/audio/talk in one bridge</td></tr>
+<tr><td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><strong>GoPro</strong></td><td style="padding: 10px 12px; border: 1px solid #e0e0e0;">GoPro</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444;">HERO9–12 (USB / Wi-Fi)</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444; line-height: 1.7;"><strong>Mobile tactical views</strong> for patrol and emergency survey</td></tr>
+<tr><td style="padding: 10px 12px; border: 1px solid #e0e0e0;"><strong>Roborock</strong></td><td style="padding: 10px 12px; border: 1px solid #e0e0e0;">Roborock</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444;">S6/S7/Qrevo MaxV vacuums with cameras</td><td style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #444; line-height: 1.7;"><strong>Moving under-furniture views</strong> fixed cameras cannot reach; talk on supported models</td></tr>
+</table>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">
+  <li><strong>One-click Web onboarding</strong>: "Connect RTC camera" in the console with per-brand dynamic forms; OAuth brands (Ring/Nest/Xiaomi/Wyze/Roborock) bind via go2rtc WebUI then paste stream URL</li>
+  <li><strong>Full pipeline wired</strong>: WEB → VIDEO <code>/register/device/rtc-live</code> → RTC API → go2rtc P2P → RTSP → SRS relay → Jessibuca + AI—<strong>same flow for all nine brands</strong></li>
+  <li><strong>Two-way audio</strong>: Tapo, Tuya, Ring, Wyze, DoorBird, Roborock support go2rtc intercom for remote talk and doorbell scenarios</li>
+  <li><strong>Lifecycle sync</strong>: Deleting a device cleans up go2rtc streams; works with device tree, map pins, and algorithm tasks</li>
+  <li><strong>Docker all-in-one</strong>: <code>bash RTC/install_linux.sh start</code> runs go2rtc + management API; host network for P2P LAN</li>
+</ul>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0 8px 0;">
+📖 See <a href="RTC/README.md" style="color: #3498db; text-decoration: none; font-weight: 600;">RTC module README</a> for details.
+</p>
+
 ### 🎯 Three Hardware Tiers, One Platform
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
@@ -63,7 +131,7 @@ Many intelligent IoT projects stall at deployment: <strong>full features won't f
 
 | Tier | Typical hardware (examples) | Recommended RAM | What you can do | Verified |
 | :-- | :-- | :--: | :-- | :--: |
-| **mini** Edge Lite | <strong>Edge box</strong> (4 GB industrial PC, store security all-in-one, site gateway) | ≥ 4 GB | <strong>Intelligence at one point</strong>: camera access, real-time analysis, smart alerts, model inference—visual AI at lowest cost | ~2 GB used, ample headroom |
+| **mini** Edge Lite | <strong>Edge box</strong> (8 GB industrial PC, store security all-in-one, site gateway) | ≥ 8 GB | <strong>Intelligence at one point</strong>: camera access, real-time analysis, smart alerts, model inference; event plane same as standard/full (Gateway + iot-sink + EMQX) | ~4–6 GB used, ample headroom |
 | **standard** Standard | <strong>AI all-in-one camera</strong> (smart camera terminal, AI surveillance camera with compute, multi-sensor AI analyzer) | ≥ 16 GB | <strong>Each camera is a smart node</strong>: multiple cameras on the wall cover a floor/campus; devices, rules, and compute orchestrated together | ~10 GB, stable with headroom |
 | **full** Full (default) | <strong>AIoT full-stack all-in-one</strong> (enterprise full-stack control all-in-one, industry IoT full-stack host, cloud-edge-device smart platform all-in-one) | ≥ 20 GB | <strong>IoT + video + AI in one box</strong>: device management, massive access, intelligent analysis, command and judgment unified—full capabilities long-term | ~14 GB, full features with headroom |
 
@@ -71,28 +139,15 @@ Many intelligent IoT projects stall at deployment: <strong>full features won't f
 <strong>Install tier selection and resource compliance (verified):</strong>
 </p>
 
-<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 12px 0;">
-  <div style="flex: 1 1 22%; min-width: 160px; text-align: center;">
-    <img src=".image/deploy-profile-menu.png" alt="Deploy tier selection" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <p style="font-size: 12px; color: #888; margin: 8px 4px 0;">Pick one tier for your field hardware</p>
-  </div>
-  <div style="flex: 1 1 22%; min-width: 160px; text-align: center;">
-    <img src=".image/deploy-profile-mini.png" alt="mini verified compliance" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <p style="font-size: 12px; color: #888; margin: 8px 4px 0;"><strong>Edge box (mini)</strong>: ~2 GB verified—intelligence at one point</p>
-  </div>
-  <div style="flex: 1 1 22%; min-width: 160px; text-align: center;">
-    <img src=".image/deploy-profile-standard.png" alt="standard verified compliance" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <p style="font-size: 12px; color: #888; margin: 8px 4px 0;"><strong>AI all-in-one camera (standard)</strong>: ~10 GB verified—network coverage with headroom</p>
-  </div>
-  <div style="flex: 1 1 22%; min-width: 160px; text-align: center;">
-    <img src=".image/deploy-profile-full.png" alt="full verified compliance" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <p style="font-size: 12px; color: #888; margin: 8px 4px 0;"><strong>AIoT full-stack all-in-one (full)</strong>: ~14 GB verified—full stack ready for production</p>
-  </div>
-</div>
+| | | |
+|:---:|:---:|:---:|
+| ![Edge box mini](.image/deploy-profile-mini.png) | ![AI all-in-one camera standard](.image/deploy-profile-standard.png) | ![Full-stack all-in-one full](.image/deploy-profile-full.png) |
 
 #### 🧠 AI Capabilities
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">
+  <li><strong>RUNTIME High-Speed Execution Layer</strong>: Pulls “watch / compute / push” out of interpreted-language paths into a <strong>native binary</strong> that owns <strong>pull → decode → infer → alert callback → boxed push</strong>. Versus Python executors, it avoids GIL and multi-process orchestration overhead—on the same hardware you get <strong>more channels per box, lower end-to-end latency, and less CPU/memory</strong>. Realtime / snap / patrol and multi-channel raw forward share one execution stack; default <code>executor=cpp</code>. In practice: keep dozens of NVR channels clear first, then enable AI only on critical channels; switch raw preview and boxed judgment without either path dragging the other down; VIDEO/WEB keep orchestration, archiving, and access control while RUNTIME focuses on throughput and latency—scale channels without replacing the whole appliance</li>
+  <li><strong>High-Performance Stream Forwarding</strong>: Built for the real delivery need to “fill the video wall / split view first, without turning AI on for every channel”—batch NVR channels and building endpoints can create forwarding tasks in one click. Default path is <strong>RUNTIME</strong> high-performance (compatibility mode still available) so multi-channel raw video stays on wall at lower resource cost. Raw viewing and AI judgment can run on the same device in parallel; when algorithm tasks start/stop, forwarding policy follows automatically. Side-by-side preview shortens acceptance by comparing latency and overlay quality directly</li>
   <li><strong>Custom Platform Name &amp; Logo Across All Touchpoints</strong>: After deploying EasyAIoT on site, users should see <em>their</em> platform—not a generic product name. The monitoring dashboard includes a visual "Platform Branding" panel where administrators can rebrand in the UI: update the admin console name and logo (synced to the sidebar and browser tab); set an independent command-center title on the big screen; and customize the login page name, logo, form title, plus light/dark background images—all three touchpoints stay visually consistent, take effect immediately, and can be saved or reset with one click.
     <ul style="margin: 5px 0; padding-left: 20px;">
       <li><strong>For system integrators and solution providers</strong>: Eliminates front-end reskinning, custom development, and release cycles; switch branding quickly between PoC demos and production delivery, reuse one codebase across multiple customers, shorten payment cycles, and improve solution reuse</li>
@@ -101,41 +156,42 @@ Many intelligent IoT projects stall at deployment: <strong>full features won't f
     </ul>
   </li>
   <li><strong>YOLO26 Next-Generation Object Detection</strong>: Built-in next-generation object detection, ready out of the box for real-time feed analysis and snapshot recognition. On the same hardware, connect more camera streams with faster response and fewer false alarms. Supports the full loop from data collection, annotation, and training to deployment and inference—helping users iteratively build custom detection models at lower cost and quickly cover common security and industrial scenarios such as hard hat compliance, unauthorized entry, and fire hazards, making "see accurately, compute fast, scale easily" the default capability</li>
-  <li><strong>YOLO26 Human Pose Analysis</strong>: Builds on object detection with human keypoint and skeleton pose analysis, ready out of the box with the YOLO26 Pose model. Supports three input modes—images, videos, and real-time camera streams. Image mode outputs skeleton annotations and person counts synchronously; video mode uses async task processing with pollable progress and downloadable results; camera mode connects to RTSP/RTMP live streams and overlays pose results on relayed output for remote monitoring and behavior analysis. The model inference page offers one-click switching between "Pose Analysis" and "Object Detection" with adjustable confidence, seamlessly integrated with existing model management, history, and side-by-side preview. Suitable for construction site compliance, fitness form assessment, crowd gathering awareness, and other scenarios that require understanding human structure and motion—moving the platform from "boxing targets" to "understanding poses"</li>
-  <li><strong>Multi-Protocol Camera Access Support</strong>: Comprehensive support for GB28181 and ONVIF, two mainstream video surveillance protocols, enabling standardized device access and management. GB28181, as China's national standard, perfectly adapts to mainstream domestic surveillance equipment; ONVIF, as an international universal standard, is widely compatible with global mainstream camera brands. Through dual-protocol support, the platform seamlessly integrates with existing surveillance systems, achieving plug-and-play device access, automatic discovery, and unified management, significantly reducing device access barriers, enhancing system compatibility and scalability, and providing a solid technical foundation for large-scale camera deployment. In addition, NVR batch scan, registration, and unified management across same-segment and cross-segment networks are supported, covering mainstream brands including Hikvision, Dahua, Huawei, Ezviz, and Xiaomi, with native-protocol subnet discovery, one-click registration, and batch channel import, further reducing the cost of large-scale surveillance device onboarding and operations</li>
-  <li><strong>DJI dock / drone aerial view access</strong>: Breaks fixed-camera “ground-only, hard to cover wide areas” limits; brings DJI FlightHub dock and drone aerial video into the platform’s unified video and AI judgment loop. Streaming module offers “Connect DJI livestream”: supports <strong>FlightHub API start livestream</strong> and <strong>manual livestream source</strong> — API mode configures FlightHub Host, project ID, start-livestream API, X-User-Token, workspace and platform name; by dock or drone type fill device SN, camera_index, dock/drone SN, clarity and Token validity, one-click pull vendor livestream and auto-register device; manual mode accepts RTSP / RTMP / HTTP-FLV / HLS sources. After connect, vendor return URL is upstream, redistributed via local SRS; frontend plays stably via Volcengine RTC etc.; supports auto-create relay tasks so aerial views share the same screen as GB28181/ONVIF fixed points. Operators can view dock/aircraft live like fixed cameras, and attach real-time AI analysis, alarm linkage and evidence retention—covering wide-area patrol, emergency survey, perimeter fill-in that fixed points cannot reach; shortens “detect—locate—respond”; upgrades security from planar deployment to sky–ground collaborative sensing.</li>
+  <li><strong>YOLO26 Human Pose Analysis</strong>: Builds on object detection with human keypoint and skeleton pose analysis, ready out of the box. Supports three input modes—images, videos, and real-time camera streams. Image mode can synchronously output skeleton annotations and person counts; video mode supports progress tracking and result download; camera mode can connect to RTSP/RTMP live streams and overlay pose recognition results on relayed output for remote monitoring and behavior analysis. The model inference page provides one-click switching between "Pose Analysis" and "Object Detection", suitable for construction site compliance, fitness form assessment, crowd gathering awareness, and other scenarios that require understanding human structure and motion—moving the platform from "boxing targets" to "understanding poses"</li>
+  <li><strong>Multi-Protocol Camera Access Support</strong>: Comprehensive support for GB28181 and ONVIF, two mainstream video surveillance protocols, enabling standardized device access and management. GB28181, as China's national standard, perfectly adapts to mainstream domestic surveillance equipment; ONVIF, as an international universal standard, is widely compatible with global mainstream camera brands. Through dual-protocol support, the platform seamlessly integrates with existing surveillance systems, achieving plug-and-play device access, automatic discovery, and unified management, significantly reducing device access barriers, enhancing system compatibility and scalability, and providing a solid technical foundation for large-scale camera deployment. In addition, NVR batch scan, registration, and unified management across same-segment and cross-segment networks are supported, covering mainstream brands including Hikvision, Dahua, Huawei, Ezviz, and Xiaomi, with native-protocol subnet discovery, one-click registration, and batch channel import. For consumer cameras such as Mi Home that natively lack RTSP, the <strong>RTC module (go2rtc bridge)</strong> brings them into the same platform, further reducing large-scale surveillance onboarding and ops costs</li>
+  <li><strong>DJI dock / drone aerial view access</strong>: Breaks fixed-camera “ground-only, hard to cover wide areas” limits; brings DJI FlightHub dock and drone aerial video into the platform’s unified video and AI judgment loop. Streaming module offers “Connect DJI livestream”: supports <strong>FlightHub API start livestream</strong> and <strong>manual livestream source</strong> — API mode one-click pulls vendor livestream and auto-registers device; manual mode accepts RTSP / RTMP / HTTP-FLV / HLS sources. After connect, aerial views can share the same screen as GB28181/ONVIF fixed points. Operators can view dock/aircraft live like fixed cameras, and attach real-time AI analysis, alarm linkage and evidence retention—covering wide-area patrol, emergency survey, perimeter fill-in that fixed points cannot reach; shortens “detect—locate—respond”; upgrades security from planar deployment to sky–ground collaborative sensing.</li>
+  <li><strong>RTC Consumer-Camera P2P Bridging</strong>: One integration for <strong>Tapo (TP-Link home/store IPC), Tuya (mass white-label devices), Ring / Nest (overseas doorbell ecosystems), Xiaomi Mi Home (domestic reuse), Wyze (low-cost fill-in), DoorBird (premium entry intercom), GoPro (mobile patrol views), Roborock (vacuum mobile cameras)</strong>—all nine brands natively lack standard RTSP. The RTC module, built on go2rtc, provides P2P bridging and a unified management API. Web console "Connect RTC camera" guides per-brand form fill or OAuth binding, one-click go2rtc stream registration, VIDEO device enrollment, and SRS relay; after bridging, consumer and GB28181/ONVIF pro cameras <strong>share one screen, AI tasks, and alert linkage</strong>, bringing home/store cameras and project-grade devices into one video judgment system at lower integration and reuse cost</li>
   <li><strong>Real-Time Intercom & PTZ Remote Control</strong>: Breaks through traditional surveillance's "watch-only, can't act" limitation. Operators can conduct voice broadcasting and PTZ control on the same real-time preview screen—no system switching, no on-site presence required. Remotely communicate, guide evacuations, or stop violations, compressing response from "dispatch personnel" to "speak and reach instantly." PTZ control lets cameras pan, tilt, and zoom on demand—quickly aim at incident areas and magnify details during emergencies, forming an integrated on-site response loop of "see clearly, aim precisely, speak and reach." Fully compatible with GB28181 and ONVIF devices, leveraging existing surveillance assets without additional intercom hardware or third-party software, instantly upgrading deployed cameras with remote communication and flexible dispatch capabilities, significantly reducing system silos and monitoring costs</li>
   <li><strong>Orchestrable Algorithm Post-Processing</strong>: Breaks through the "detect but can't judge" bottleneck by adding an independent business judgment layer on top of object detection, transforming visual perception results into operable, accountable, and statistically trackable business events. Supports flexible per-task definition of scenario rules such as people counting, line-crossing, dwell timeout, area loitering, and multi-condition composite alerts—quickly adapting to differentiated needs in construction site safety supervision, campus security, and traffic control without repeatedly tuning models, forging general vision capabilities into field-ready management tools. Post-processing and real-time analysis run independently and in parallel—monitoring feeds continue smooth judgment while business logic scales elastically on demand; judgment results are automatically archived and drive precise alerts, significantly reducing false positives/negatives and manual review costs. Business users focus on rule expression while the platform handles distribution, execution, and scale—truly moving from "being able to see" to "judge clearly, control effectively, and put it to use"</li>
-  <li><strong>Multi-Central-Node × Multi-Worker-Node Federated Cluster</strong>: Designed for cross-region, multi-datacenter, and cloud-edge collaborative deployments, the platform adopts an "N central nodes + N worker nodes" federated architecture—central nodes serve as the unified control plane while worker nodes act as the compute and media execution plane, building a horizontally scalable distributed scheduling system. Each central node manages its own worker cluster, supporting runtime distribution and one-click remote deployment of monitoring agents, distributed storage, streaming engines, FFmpeg transcoding, video analytics runtimes, and model inference/training workloads. Multiple central nodes can interconnect and synchronize; the cluster swimlane view intuitively presents "central—worker" topology and resource levels, with lane-level batch maintenance and component distribution. Algorithm tasks, auto-labeling pipelines, and stream relay workloads are intelligently scheduled by node role and GPU capability with elastic queue dispatch—enabling massive stream ingestion, high-concurrency inference, and distributed training to run together in one cluster, truly delivering "onboard easily, schedule clearly, scale openly, govern completely"</li>
-  <li><strong>SAM Zero-Start Auto-Labeling Orchestration Pipeline</strong>: Built for cold-start scenarios with no annotated samples and no usable detection model, the platform integrates SAM open-vocabulary segmentation with an intelligent orchestration engine to deliver a one-click, unattended labeling pipeline. Per strategy, the system automatically chains camera frame extraction, SAM text-prompt bootstrap labeling, YOLO fine-tuning once thresholds are met, production-phase YOLO high-speed inference with intelligent SAM fallback for missed detections, periodic iterative training, and automatic dataset packaging and export—closing the full "capture-annotate-train-export" loop. The orchestration hub continuously tracks pipeline phase and labeling progress, autonomously deciding among SAM, YOLO, and hybrid supplement modes and when to trigger training; supports pause/resume and elastic scheduling on local or cluster compute queues. With visual strategy configuration and run logs, users can grow a custom detection capability from zero samples and zero models, making "define categories in words, watch the model take shape" the default path for dataset building</li>
-  <li><strong>Ten-Thousand-Node Elastic Compute Cluster & Horizontal Scaling Pool</strong>: Built for hyperscale AI and video workloads, the platform provides a cloud-edge-end distributed compute foundation that unifies algorithm tasks, stream relay, algorithm services, model training, and inference under one horizontal load-balancing and elastic scaling fabric. New servers join the fleet with one-click onboarding and immediately become schedulable compute units—the control plane automatically dispatches work and balances load based on resource levels and business pressure, enabling linear scaling from hundreds to tens of thousands of camera streams and from a single machine to ten-thousand-node clusters without redeployment or manual tuning. Massive stream ingestion, high-concurrency inference, and distributed training run together in a shared compute pool—truly delivering "scale on demand, run reliably, govern with confidence"</li>
-  <li><strong>Infinite Federated Edge Cluster Mode</strong>: For wide-area deployment, weak-network sites, and phased scale-out, intelligence is deployed where the business is—ordinary development boards and edge compute nodes can become on-duty units at any time. The center distributes tasks and policies uniformly; the field performs perception and judgment locally, with alerts and evidence automatically reported and aggregated back—no need to stack heavy servers and complex ops at every site. As business grows, add nodes on demand to linearly extend coverage—"add a little, gain a lot; add a stream, gain more assurance"—truly achieving compute that grows with the scenario and intelligence that spreads with the business</li>
+  <li><strong>Multi-Central-Node × Multi-Worker-Node Federated Cluster</strong>: Designed for cross-region, multi-datacenter, and cloud-edge collaborative deployments, the platform adopts an "N central nodes + N worker nodes" federated architecture—central nodes provide unified orchestration while worker nodes carry compute and media execution, scaling horizontally. Each central node manages its domain worker nodes, supporting remote distribution and one-click deployment of streaming, AV transcoding, video analytics, model inference, and training capabilities; multiple central nodes can interconnect and synchronize; the cluster swimlane view intuitively presents "central—worker" topology and resource levels. Algorithm tasks, auto-labeling pipelines, and stream relay workloads are intelligently scheduled by node role and GPU capability—enabling massive stream ingestion, high-concurrency inference, and distributed training to run together in one cluster, truly delivering "onboard easily, schedule clearly, scale openly, govern completely"</li>
+  <li><strong>SAM Zero-Start Auto-Labeling Orchestration Pipeline</strong>: Built for cold-start scenarios with no annotated samples and no usable detection model, the platform integrates SAM open-vocabulary segmentation to deliver a one-click, unattended labeling pipeline. Per strategy, the system automatically chains camera frame extraction, SAM text-prompt bootstrap labeling, YOLO fine-tuning once thresholds are met, production-phase YOLO high-speed inference with intelligent SAM fallback for missed detections, periodic iterative training, and automatic dataset packaging and export—closing the full "capture-annotate-train-export" loop. Supports pause/resume and elastic scheduling on local or cluster compute queues. With visual strategy configuration and run logs, users can grow a custom detection capability from zero samples and zero models, making "define categories in words, watch the model take shape" the default path for dataset building</li>
+  <li><strong>Ten-Thousand-Node Elastic Compute Cluster & Horizontal Scaling Pool</strong>: Built for hyperscale AI and video workloads, the platform provides a cloud-edge-end distributed compute foundation that unifies algorithm tasks, stream relay, algorithm services, model training, and inference under one horizontal load-balancing and elastic scaling fabric. New servers join the fleet with one-click onboarding and immediately become schedulable compute units—the scheduling hub automatically dispatches tasks and balances load based on resource levels and business pressure, enabling linear scaling from hundreds to tens of thousands of camera streams and from a single machine to ten-thousand-node clusters without redeployment or manual tuning. Massive stream ingestion, high-concurrency inference, and distributed training run together in a shared compute pool—truly delivering "scale on demand, run reliably, govern with confidence"</li>
   <li><strong>Tianditu Spatial Visualization & Map-Based Analysis</strong>: Integrated with China's national Tianditu map service, the platform brings cameras, alerts, and person/vehicle recognition onto a single map—upgrading surveillance from "watching feeds" to "seeing the big picture." Both the streaming media and alert modules offer a "Map Distribution" view with a device directory tree for regional focus, giving instant visibility into checkpoint layout and online status. Map click-to-pin, location search, and batch coordinate import help GB channels, NVR channels, and direct-connect cameras get mapped quickly so every feed has clear spatial context. Alerts are automatically placed on the map via linked camera coordinates; filter by time, event type, task, and business tags, then open snapshots and recordings in one click—helping operators move fast from "where did it happen" to action. Combined with face and plate libraries, hits across multiple sites can be woven into spatial trails—<strong>trace by person</strong> to reconstruct movement and presence within a monitored area; <strong>trace by vehicle</strong> to link passing records and pinpoint routes and stop zones for find-person/find-vehicle, patrol deployment, and post-incident review. Mobile devices also support track playback to replay patrol and travel paths on a timeline. Switch freely between vector and satellite basemaps with auto-fit view, so managers use the map as the anchor to spot anomalies, lock onto targets, and coordinate response faster</li>
-  <li><strong>Qwen / DeepSeek Multi-GPU Deployment</strong>: Supports deploying Qwen, DeepSeek, and other large language models across multiple GPUs in parallel. GPU resources can be scheduled flexibly at the cluster and Worker level, enabling elastic scaling and load balancing of model instances to deliver stable inference under high concurrency and long-context workloads</li>
+  <li><strong>Qwen / DeepSeek Multi-GPU Deployment</strong>: Supports deploying Qwen, DeepSeek, and other large language models across multiple GPUs in parallel. GPU resources can be scheduled flexibly at the cluster level, enabling elastic scaling and load balancing of model instances to deliver stable inference under high concurrency and long-context workloads</li>
   <li><strong>Vision Large Model Intelligent Understanding</strong>: Integrated with QwenVL3 vision large model, supports deep visual reasoning and semantic understanding of real-time video frames, enabling intelligent analysis and scene comprehension of frame content, providing richer visual cognitive capabilities, achieving a leap from pixel-level perception to semantic-level understanding</li>
-  <li><strong>Real-Time Camera Feed AI Analysis</strong>: For RTSP/RTMP real-time video streams, builds a full-chain analysis pipeline of "stream pull & decode → intelligent frame extraction → model inference → structured output → alert linkage", converting frame changes into searchable, analyzable structured detection events with millisecond response. Viewing chain and algorithm chain are architecturally decoupled, with tiered bitrates and multi-GPU collaborative scheduling balanced together, balancing preview clarity and high-concurrency throughput. Analysis results seamlessly connect with detection regions, defense time periods, face/plate recognition, and orchestrable post-processing rules, upgrading the traditional "human staring at screens, reviewing after the fact" duty model to "machines monitor 24/7, anomalies pushed in seconds, evidence auto-archived", turning real-time video from passive viewing into infrastructure for active perception and intelligent judgment</li>
-  <li><strong>Intelligent Camera Patrol</strong>: Designed for monitoring scenarios with many camera streams but limited staffing, the platform provides split-screen patrol and device-directory batch patrol capabilities, performing rotational AI analysis across large-scale camera fleets under limited concurrent connections. Supports three scheduling modes—rotation, connection pool, and hybrid—automatically capturing frames at set intervals, running detection models, and linking alerts with face/plate recognition. In hybrid mode, focus streams stay permanently monitored while background streams rotate via pooled connections, balancing priority surveillance and full-area coverage. Patrol progress is pushed in real time, captured frames are automatically archived, and patrol sessions for hundreds of cameras can be launched in one click from split-screen views or device directories—upgrading traditional manual screen-by-screen monitoring to intelligent automated patrol with "fewer connections, broader coverage, faster discovery"</li>
+  <li><strong>Real-Time Camera Feed AI Analysis</strong>: For RTSP/RTMP real-time video streams, provides full-chain analysis from stream pull, frame extraction, model inference, structured output, and alert linkage—converting frame changes into searchable, analyzable structured detection events with millisecond response. Viewing and algorithm chains operate independently, balancing preview clarity with high-concurrency throughput. Analysis results seamlessly connect with detection regions, defense time periods, face/plate recognition, and orchestrable post-processing rules, upgrading the traditional "human staring at screens, reviewing after the fact" duty model to "machines monitor 24/7, anomalies pushed in seconds, evidence auto-archived", turning real-time video from passive viewing into infrastructure for active perception and intelligent judgment</li>
+  <li><strong>Intelligent Camera Patrol</strong>: Designed for monitoring scenarios with many camera streams but limited staffing, the platform provides split-screen patrol and device-directory batch patrol capabilities, performing rotational AI analysis across large-scale camera fleets under limited concurrent connections. Supports three scheduling modes—rotation, connection pool, and hybrid—automatically capturing frames at set intervals, running detection models, and linking alerts with face/plate recognition. In hybrid mode, focus streams stay permanently monitored while background streams rotate on schedule, balancing priority surveillance and full-area coverage. Patrol progress is pushed in real time, captured frames are automatically archived, and patrol sessions for hundreds of cameras can be launched in one click from split-screen views or device directories—upgrading traditional manual screen-by-screen monitoring to intelligent automated patrol with "fewer connections, broader coverage, faster discovery"</li>
   <li><strong>Cloud-Edge-Device Integrated Algorithm Alert Monitoring Dashboard</strong>: Provides a unified cloud-edge-device integrated algorithm alert monitoring dashboard that displays key information in real-time, including device status, algorithm task operations, alarm event statistics, and video stream analysis results. Supports multi-dimensional data visualization, achieving unified monitoring and management of cloud, edge, and device layers, providing decision-makers with a global perspective intelligent monitoring command center</li>
-  <li><strong>Face Recognition and Face Library Management</strong>: Supports flexibly enabling face recognition in camera tasks. Built on Milvus for face library and facial feature vector management, it provides create/query/update/delete capabilities for face samples and feature vectors, as well as high-performance vector retrieval. It supports efficient face comparison and identity retrieval on captured frames, while fully recording match results, snapshots, camera location information, and device context for personnel trajectory tracing, security forensics, and multidimensional statistical analysis.</li>
+  <li><strong>Face Recognition and Face Library Management</strong>: Supports flexibly enabling face recognition in camera tasks. Provides face library and facial feature management with create/query/update/delete capabilities for face samples and feature vectors, as well as high-performance vector retrieval. Supports efficient face comparison and identity retrieval on captured frames, while fully recording match results, snapshots, camera location information, and device context for personnel trajectory tracing, security forensics, and multidimensional statistical analysis.</li>
   <li><strong>License Plate Recognition and Plate Library Management</strong>: Enable license plate recognition in monitoring tasks with one click. Automatically reads plate information from passing vehicles and compares against your own plate libraries in real time. Flexibly maintain whitelists, blacklists, and business tags; trigger instant alerts when vehicles match rules—supporting access control at entrances and exits, targeted vehicle watchlists, and visitor vs. registered vehicle management. Automatically registers newly seen plates and keeps complete capture and match records for post-incident lookups, trace verification, and evidence retention. Recognition runs in parallel with existing video analytics without affecting monitoring and alert stability or real-time performance</li>
   <li><strong>Device Detection Region Drawing</strong>: Provides a visual device detection region drawing tool that supports drawing rectangular and polygonal detection regions on device snapshot images, supports flexible association configuration between regions and algorithm models, supports visual management, editing, and deletion of regions, supports keyboard shortcuts to improve drawing efficiency, enabling precise region detection configuration and providing accurate detection range definitions for algorithm tasks</li>
   <li><strong>Intelligent Linked Alert Mechanism</strong>: Supports a triple-link mechanism between detection regions, defense time periods, and event alerts. The system intelligently determines whether a detected event simultaneously meets the specified detection region range, falls within the defense time period, and matches the alert event type. Alerts are only triggered when all three conditions are met, achieving precise spatiotemporal condition filtering, significantly reducing false positive rates, and improving the accuracy and practicality of the alert system</li>
   <li><strong>Large-Scale Camera Management</strong>: Supports access to hundreds of cameras, providing end-to-end services including collection, annotation, training, inference, export, analysis, alerting, recording, storage, and deployment</li>
-  <li><strong>Algorithm Task Management</strong>: Supports creation and management of two types of algorithm tasks, each task can flexibly bind frame extractors and sorters to achieve precise video frame extraction and result sorting
+  <li><strong>Algorithm Task Management</strong>: Supports creation and management of real-time, snapshot, and patrol algorithm tasks; each task can flexibly bind frame extractors and sorters for precise video frame extraction and result sorting
     <ul style="margin: 5px 0; padding-left: 20px;">
-      <li><strong>Real-Time Algorithm Tasks</strong>: Used for real-time video analysis, supporting RTSP/RTMP stream real-time processing with millisecond-level response capabilities, suitable for monitoring, security, and other real-time scenarios</li>
-      <li><strong>Snapshot Algorithm Tasks</strong>: Used for snapshot image analysis, performing intelligent recognition and analysis on captured images, suitable for event backtracking, image retrieval, and other scenarios</li>
+      <li><strong>Real-Time Algorithm Tasks</strong>: Real-time video analysis with RTSP/RTMP processing; default backend <code>executor=cpp</code> (starts <strong>RUNTIME</strong>, default-pushes boxed AI streams and returns alerts/heartbeats), optional <code>python</code> compatibility path</li>
+      <li><strong>Snapshot Algorithm Tasks</strong>: Captured-image analysis; default can also use <code>executor=cpp</code> (RUNTIME SnapScheduler / Cron)</li>
+      <li><strong>Patrol Algorithm Tasks</strong>: Multi-stream rotation and connection-pool scheduling; default can also use <code>executor=cpp</code> (RUNTIME PatrolScheduler) for “fewer connections, wider coverage”</li>
     </ul>
   </li>
   <li><strong>Dataset Annotation and Multi-Format Dataset Management</strong>: Provides a visual image annotation workspace supporting rectangle and polygon labeling, category management, and progress tracking; fully supports flexible import and export of mainstream dataset formats including YOLO, COCO, and ImageFolder, with cloud platform dataset integration enabling one-click import and synchronized export of cloud-hosted datasets—seamlessly connecting data collection, annotation, training, and deployment across the full pipeline</li>
   <li><strong>Multi-GPU Training, Checkpoint Resume, and Node-Side Deployment</strong>: Breaks through the training bottlenecks of “GPUs available but unused, tasks hard to control, and progress lost on interruption” by systematically connecting multi-GPU utilization, controllable task scheduling, and node-side deployment—so on-site GPUs are truly usable and training jobs are truly manageable. The platform automatically discovers and schedules all server GPUs; users can select single- or multi-GPU on the training page instead of being limited to “only one card visible.” It supports common dataset formats and directory layouts, large local dataset uploads, and keeps original data after failed runs for quick retry—greatly reducing data-prep and rework costs. Training progress is fully visible, and jobs can be stopped and resumed—avoiding lost results after interruption or “stop clicked but still spinning in the background.” Local and remote training schedulers also roll back promptly on failure with clear feedback. Front-end GPU selection, resume training, and stop-state display are improved in parallel, and issues such as false failure on model publish, custom preview images being overwritten, models not found by name/version, and dataset sync timeouts/conflicts are fixed—making the train–publish–use loop smoother and more reliable</li>
-  <li><strong>Stream Forwarding</strong>: Supports direct viewing of camera real-time feeds without enabling AI analysis functionality. By creating stream forwarding tasks, multiple cameras can be batch-pushed, enabling synchronous viewing of multiple video streams to meet pure video monitoring scenario requirements</li>
+  <li><strong>Stream Forwarding</strong>: View live camera feeds without enabling AI; batch push and auto NVR channel tasks work out of the box. Default <strong>RUNTIME</strong> high-performance path keeps multi-channel raw video cheaper on wall—“fill the wall first, AI on critical channels”; special sites can switch to Python/FFmpeg compatibility mode</li>
   <li><strong>GPU Discovery, Load-Aware Allocation, and Multi-GPU Collaboration</strong>: The platform provides GPU resource discovery and intelligent scheduling: it detects the number of available GPUs and dynamically assigns video encode/decode and algorithm inference work across cards according to per-GPU load, running tasks in parallel where appropriate to raise multi-stream throughput and utilization while keeping the pipeline stable—coordinating frame processing and model inference in multi-GPU deployments</li>
-  <li><strong>Smart Transport Selection and Resilient Stream Pull</strong>: On RTSP and similar pull paths, the system can evaluate URL/path and related signals to choose and switch transport-layer modes; camera pulls default to UDP for lower latency. When consecutive frames indicate gray screen, decode errors, or stream collapse (decode stall), RTSP reconnect and link recovery run automatically to limit prolonged artifacts or frozen video</li>
-  <li><strong>Separate Viewing vs Algorithm Pipelines and Tiered Bitrates</strong>: Live preview and wall viewing are decoupled from algorithm analysis frame extraction in both data path and control policy, with two independent control planes. The viewing path uses about 6500 Kbps to prioritize sharp, smooth monitoring; the algorithm path uses about 3500 Kbps to balance detection quality with compute and bandwidth, avoiding analysis and viewing competing on one high-bitrate channel—so operators get clear, fluid video while analysis stays scalable</li>
+  <li><strong>Smart Transport Selection and Resilient Stream Pull</strong>: On RTSP and similar pull paths, the system can automatically select appropriate transport modes based on scenario to balance latency and stability. When consecutive frames indicate gray screen, decode errors, or stream stall, automatic reconnect and link recovery run to limit prolonged artifacts or frozen video</li>
+  <li><strong>Dual Pathways for Watching and Judgment</strong>: Split “raw video on wall / split view” from “algorithm results”—duty side prioritizes clarity and smoothness; judgment side outputs boxed results independently, so neither starves the other. The same camera can keep both live and analyzed views, making shift switches natural and channel scale-out no longer a choice between “see clearly” and “analyze enough”</li>
   <li><strong>Model Service Cluster Inference</strong>: Supports distributed model inference service clusters, achieving intelligent load balancing, automatic failover, and high availability guarantees, significantly improving inference throughput and system stability</li>
   <li><strong>Defense Time Period Management</strong>: Supports two defense strategies: full defense mode and half defense mode, allowing flexible configuration of defense rules for different time periods, achieving precise time-based intelligent monitoring and alerting</li>
-  <li><strong>OCR and Speech Recognition</strong>: High-precision text recognition based on PaddleOCR with speech-to-text functionality, providing multi-language recognition capabilities</li>
+  <li><strong>OCR and Speech Recognition</strong>: Provides high-precision text recognition and speech-to-text capabilities, supporting multi-language recognition</li>
   <li><strong>Multimodal Vision Large Models</strong>: Supports various vision tasks including object recognition and text recognition, providing powerful image understanding and scene analysis capabilities</li>
   <li><strong>LLM Large Language Models</strong>: Supports intelligent analysis and understanding of multiple input formats including RTSP streams, video, images, audio, and text, achieving multimodal content understanding</li>
   <li><strong>Model Deployment and Version Management</strong>: Supports rapid deployment and version management of AI models, enabling one-click model deployment, version rollback, and gray release</li>
@@ -167,8 +223,8 @@ Many projects reduce IoT to a "device ledger + message relay"—devices connect 
   <li><strong>Product Model Management</strong>: The costliest part of IoT rollout is often not buying devices, but rebuilding profiles for every new device class. Products serve as templates for similar devices—create, enable/disable, search, and switch between table/card views; configure application scenarios, vendor, and model once—then scale by reusing the product template instead of filling each unit from scratch. Define once, reuse many times, and turn linear access cost into a reusable asset</li>
   <li><strong>Multi-Type Product Modeling</strong>: When direct terminals, edge gateways, gateway sub-devices, and video devices coexist, forcing one access path mixes topology and breaks protocols. Model four forms separately—direct-connected, gateway, gateway sub-device, and video—so edge aggregation, direct terminals, and video devices each follow their own path. Topology stays clean, protocols stay correct, and large-scale onboarding starts from the right product skeleton</li>
   <li><strong>Product Access Protocol & Auth Configuration</strong>: Agreeing protocol and auth per device is a classic source of integration rework. Finalize access protocol (MQTT / TCP / HTTP / Modbus-TCP / Modbus-RTU / OPC UA), data format, authentication, and encryption/decryption at the product level; child devices inherit the same rules—no more per-device auth or payload negotiations. Access norms shift from “oral tradition” to an inheritable product-level contract</li>
-  <li><strong>Modbus-TCP industrial Ethernet access</strong>: For meters, PLCs, VFDs and other Ethernet-side industrial devices, built-in Modbus-TCP master acquisition—configure host, port, slave ID, register points and poll interval at product/device level to go live; polled reads flow into device shadow and online status; register writes and property downlink are connected, so industrial points share the same closed loop as IoT thing models, rule engine and alarms—no separate SCADA/acquisition tool required.</li>
-  <li><strong>Modbus-RTU serial field access</strong>: Many field instruments remain on RS-485; TCP-gateway-only paths double cost and failure points. Platform supports Modbus-RTU serial master acquisition—configure serial params, slave address, register map and R/W cycle; works with virtual and real serial ports—bus-side devices enter unified management and uplink/downlink control, filling the gap where Ethernet cannot reach and serial was unmanaged.</li>
+  <li><strong>Modbus-TCP industrial Ethernet access</strong>: For meters, PLCs, VFDs and other Ethernet-side industrial devices, built-in Modbus-TCP master acquisition—configure access parameters and measurement points at product/device level to go live; polled reads flow into device shadow and online status; register writes and property downlink are connected, so industrial points share the same closed loop as IoT thing models, rule engine and alarms—no separate SCADA/acquisition tool required.</li>
+  <li><strong>Modbus-RTU serial field access</strong>: Many field instruments remain on RS-485; TCP-gateway-only paths double cost and failure points. Platform supports Modbus-RTU serial master acquisition, works with virtual and real serial ports—bus-side devices enter unified management and uplink/downlink control, filling the gap where Ethernet cannot reach and serial was unmanaged.</li>
   <li><strong>OPC UA industrial interconnect access</strong>: For modern industrial control and upper-system interconnect, OPC UA client access—configure node address, namespace and point mapping for subscribe/read/write; complex device models map to platform thing-model properties; uplink acquisition and downlink write points seamlessly connect to device shadow, rule chains and message push—bringing OPC UA field assets into an AIoT ops system that can “see, control, and link”.</li>
   <li><strong>Thing Model Property Definition</strong>: If dashboards, rules, and alerts each invent their own metric names, they will never understand each other. Define reportable/readable-writable properties first, with standard templates and custom ones; edit as draft, publish to take effect—dashboards, rules, and alerts then share one field set. “What can be observed” has unified semantics, and inconsistent metric-name rework is cut at the root</li>
   <li><strong>Thing Model Service Definition</strong>: Writing a one-off API for every remote start/stop or reset fragments the control plane. Define callable services with input/output parameters as a contract; edit as draft, publish to take effect—“what can be done remotely” is invoked by filling contract parameters, without stacking one-off control APIs. Control becomes reusable and auditable</li>
@@ -210,6 +266,7 @@ Many projects reduce IoT to a "device ledger + message relay"—devices connect 
   <li><strong>Message Push</strong>: Even perfect detection and complete device events are worthless if stuck inside the system waiting for someone to open it. Create push tasks by channel; test first, then start—alerts and business events land in owners’ daily work tools, not trapped in the system</li>
   <li><strong>Push History</strong>: Without records of whether notices were sent or delivered, audit and optimization are guesswork. Review push records by channel—sent or not, delivered or not, with evidence for audit and reach-strategy improvement</li>
   <li><strong>Notification Users & Groups</strong>: All-hands critical alerts cause fatigue; missing the right people causes misses. Maintain notification users and groups for precise reach by role/shift—the right people get them, all-hands spam fatigue drops, and sense—judge—notify—act finally closes to the person</li>
+  <li><strong>TRANSFORM Multidirectional Business Flow</strong>: If platform-side alerts, device events, and business results stay trapped inside EasyAIoT, integrating MES / ERP / CRM / WMS still means per-project custom APIs—delivery cycles and rework costs explode. TRANSFORM turns “who to send to, by which rules, how fields map, and whether it arrived” into configurable capability: destinations, forwarding rules, and mapping templates are set once and reused; delivery is monitorable and reviewable—multi-system integration shifts from “custom API per partner” to “wire by contract, accept by trail,” so platform data truly enters the customer’s existing business loop</li>
 </ul>
 
 #### 📱 Mobile APP
@@ -218,7 +275,7 @@ Many projects reduce IoT to a "device ledger + message relay"—devices connect 
   <li><strong>Multi-Channel Access</strong>: Available on phones, mini programs, and apps—ops and management are no longer tied to a desk; handle issues on-site in real time</li>
   <li><strong>Capability Parity</strong>: Mobile matches the PC admin console feature-for-feature; switch devices without losing control</li>
   <li><strong>Device Management</strong>: Unified management across access methods; browse channels at a glance and tap for live view—stay informed during field inspections</li>
-  <li><strong>Stream Forwarding</strong>: Create and stop forwarding tasks anytime; monitor cluster nodes and stream status—schedule video resources remotely</li>
+  <li><strong>Stream Forwarding</strong>: Create and stop forwarding anytime; see node and channel status; multi-channel raw video can go on screen efficiently—even while away from the desk</li>
   <li><strong>Algorithm Tasks</strong>: Start and stop real-time and snapshot tasks on the go; track detection results without waiting to get back to the office</li>
   <li><strong>Alert Center</strong>: Search alerts instantly; tap to view snapshots and recordings—verify and follow up while on mobile duty</li>
   <li><strong>Model Management</strong>: Deployment status at a glance; always know what's live</li>
@@ -253,11 +310,11 @@ The platform is ready to use out of the box, with multiple pre-trained models bu
 ### 💡 Technical Philosophy
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-We believe no single programming language excels at everything, but through the deep integration of three programming languages, EasyAIoT leverages the strengths of each to build a powerful technical ecosystem.
+We believe no single programming language excels at everything, but through the deep integration of five programming languages, EasyAIoT leverages the strengths of each to build a powerful technical ecosystem.
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-Java excels at building stable and reliable platform architectures but is not suitable for network programming and AI development; Python excels at network programming and AI algorithm development but has bottlenecks in high-performance task execution; C++ excels at high-performance task execution but is less suitable than the other two for platform development and AI programming. EasyAIoT adopts a tri-lingual mixed programming architecture, fully leveraging the strengths of each language to build an AIoT platform that's challenging to implement but extremely easy to use.
+Java excels at building stable and reliable platform architectures, but is a poor fit for network programming and AI development; Python excels at network programming and AI algorithms, but hits GIL and process-overhead bottlenecks on high-channel, low-latency frame execution; C++ excels at high-performance task execution, but is ill-suited to platform architecture and algorithm orchestration—so the platform sinks <strong>pull/decode, inference, boxed push, and multi-channel raw forward</strong> into <strong>RUNTIME</strong>, while WEB/VIDEO keep orchestration and the business surface. Go excels at high-concurrency networking and protocol implementation, but is ill-suited to platform control planes and AI algorithms; TypeScript excels at complex front-end interactions and type-safe engineered UIs, but is ill-suited to high-performance backend computing and AI inference. EasyAIoT adopts a five-in-one mixed-language architecture, letting each language do what it does best—building an AIoT platform that's challenging to implement yet extremely easy to use.
 </p>
 
 ![EasyAIoT Platform Architecture.jpg](.image/iframe2.jpg)
@@ -277,7 +334,7 @@ Innovatively leveraging large models to construct a zero-shot labeling technical
 ### 🏗️ Project Architecture Features
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-EasyAIoT is not actually one project; it is nine distinct projects.
+EasyAIoT is not actually one project; it comprises multiple independently deployable sub-projects (WEB, DEVICE, VIDEO, RTC, AI, and more).
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
@@ -296,7 +353,7 @@ What's the benefit? Suppose you are on a resource-constrained device (like an RK
 ### 🌍 Localization Support
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
-EasyAIoT actively responds to localization strategies, providing comprehensive support for localized hardware and operating systems, delivering secure and controllable AIoT solutions for users:
+EasyAIoT actively responds to localization strategies, providing comprehensive support for localized hardware and operating systems, delivering secure and controllable AIoT solutions for users. Deployment and PANEL packaging already cover domestic OS targets such as <strong>Kylin (麒麟) / openEuler (欧拉)</strong>.
 </p>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
@@ -324,7 +381,7 @@ EasyAIoT actively responds to localization strategies, providing comprehensive s
 <div style="padding: 20px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); border-radius: 10px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
 <h4 style="margin-top: 0; color: white; font-size: 18px;">🖱️ Operating System Support</h4>
 <ul style="font-size: 14px; line-height: 1.8; margin: 10px 0; padding-left: 20px;">
-  <li>Compatible with Kylin operating system</li>
+  <li>Compatible with <strong>Kylin (麒麟) / openEuler (欧拉)</strong></li>
   <li>Support for localized Linux distributions like Founder</li>
   <li>Adaptation to mainstream localized operating systems like UOS</li>
   <li>Provides complete localized deployment solutions</li>
@@ -340,7 +397,7 @@ EasyAIoT actively responds to localization strategies, providing comprehensive s
 ## 🧩 Project Structure
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
-EasyAIoT consists of nine core projects:
+EasyAIoT comprises core modules including WEB, APP, DEVICE, NODE, VIDEO, RTC, AI, RUNTIME, VISUALIZE, TRANSFORM, PANEL, and SITE, plus COMPILE multi-platform packaging and delivery:
 </p>
 
 <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
@@ -349,8 +406,25 @@ EasyAIoT consists of nine core projects:
 <td style="padding: 15px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600; color: #2c3e50;">Description</td>
 </tr>
 <tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>SITE Module</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>Official value entry</strong>: Standalone official website for visitors, integrators, and end customers—explain cloud-edge-device integration clearly, then guide people to download and deploy</li>
+    <li><strong>Shorter learning path</strong>: Features, three hardware tiers, installer entry, and docs on one site—less time hunting the repo or asking around for packages</li>
+    <li><strong>Supports tier selection</strong>: Present mini / standard / full for edge boxes, AI cameras, and full-stack appliances so sites pick the right tier once</li>
+    <li><strong>From interest to install</strong>: Website, demo, open-source repos, and Releases form one loop—understand → try → download → install</li>
+  </ul>
+</td>
+</tr>
+<tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>WEB Module</strong></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">Frontend management interface based on Vue, providing a unified user interaction experience</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>Unified Admin UI</strong>: Frontend management interface with a consistent user experience</li>
+    <li><strong>Multi-Protocol Onboarding Wizard</strong>: Tabbed guides for IPC / NVR / GB28181 / RTC platforms; ONVIF scan, cross-subnet scan, manual RTSP, DJI livestream, and consumer-camera P2P access</li>
+    <li><strong>RTC Platform Access</strong>: "Connect RTC camera" shortcut with dynamic forms for <strong>Tapo / Tuya / Ring / Nest / Xiaomi / Wyze / DoorBird / GoPro / Roborock</strong>; OAuth platforms guided to go2rtc WebUI for binding</li>
+  </ul>
+</td>
 </tr>
 <tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>APP Module</strong></td>
@@ -358,8 +432,8 @@ EasyAIoT consists of nine core projects:
   <ul style="margin: 5px 0; padding-left: 20px;">
     <li><strong>Multi-Channel Access</strong>: One build, multiple touchpoints—phones, mini programs, and apps</li>
     <li><strong>Capability Parity</strong>: Matches PC admin console capabilities with multi-tenant switching</li>
-    <li><strong>Device Management</strong>: Unified management for direct cameras, GB28181, and NVR; online status and channel browsing with one-tap live preview in device details</li>
-    <li><strong>Stream Forwarding</strong>: Task creation, start/stop, cluster node status, and multi-stream URL viewing</li>
+    <li><strong>Device Management</strong>: Unified management for direct cameras, GB28181, NVR, and RTC consumer cameras; online status and channel browsing with one-tap live preview in device details</li>
+    <li><strong>Stream Forwarding</strong>: Task create/start/stop, node status, and multi-channel viewing; switch high-performance / compatibility mode by site</li>
     <li><strong>Algorithm Tasks</strong>: Real-time/snapshot algorithm task list, start/stop control, and detection/frame stats</li>
     <li><strong>Alert Center</strong>: Alert search, snapshot preview, and alarm recording VOD playback</li>
     <li><strong>Models & AI</strong>: Model list and deployment status, mobile image inference workbench, training task progress monitoring and stop</li>
@@ -371,15 +445,14 @@ EasyAIoT consists of nine core projects:
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>DEVICE Module</strong></td>
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
-    <li><strong>Technical Advantages</strong>: Based on JDK21, providing better performance and modern features</li>
     <li><strong>Device Management</strong>: Device registration, authentication, status monitoring, lifecycle management</li>
     <li><strong>Product Management</strong>: Product definition, thing model management, product configuration</li>
     <li><strong>Protocol Support</strong>: Multiple IoT and industrial protocols including MQTT, TCP, HTTP, Modbus-TCP, Modbus-RTU, OPC UA</li>
     <li><strong>Device Authentication</strong>: Device dynamic registration, identity authentication, secure access</li>
     <li><strong>Rule Engine</strong>: Data flow rules, message routing, data transformation</li>
     <li><strong>Data Collection</strong>: Device data collection, storage, query, and analysis</li>
-    <li><strong>Node Control Plane</strong>: Built-in <code>iot-node</code> microservice providing unified control plane for compute/media node CRUD, SSH connectivity testing, Agent registration and heartbeat, workload scheduling, and media node pool allocation</li>
-    <li><strong>Visualization Backend</strong>: Built-in <code>iot-visualize</code> microservice (database <code>iot-visualize20</code>), unified management of dashboard/SCADA projects, templates, assets, data sources, and service deployment, providing project metadata and publishing for the VISUALIZE editor and FUXA SCADA</li>
+    <li><strong>Node Orchestration</strong>: Compute/media node onboarding, connectivity testing, workload scheduling, and media node pool allocation</li>
+    <li><strong>Visualization Backend</strong>: Unified management of dashboard/SCADA projects, templates, assets, data sources, and service deployment, providing project management and publishing for the visualization editor and Web SCADA</li>
   </ul>
 </td>
 </tr>
@@ -387,12 +460,12 @@ EasyAIoT consists of nine core projects:
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>NODE Module</strong></td>
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
-    <li><strong>Node Agent</strong>: Python-based edge/remote node Agent; one-click install via <code>install.sh</code> as a systemd service, automatically joining the platform when deployed on target servers</li>
-    <li><strong>Control Plane Communication</strong>: Registers with the <code>iot-node</code> control plane and sends periodic heartbeats, reporting CPU, memory, disk, GPU utilization, and active workload status in real time</li>
-    <li><strong>Remote Workloads</strong>: Receives deploy/stop commands from the control plane via HTTP API (default port 9100), launching AI model services, algorithm tasks, FFmpeg transcoding, and other workloads locally on the node</li>
-    <li><strong>Media Node Pool</strong>: Supports remote <code>docker compose</code> deployment of SRS/ZLM streaming stacks on nodes, working with the control plane for sticky device-to-media-node binding and stream URL generation</li>
-    <li><strong>Node Roles</strong>: Supports compute, media, and hybrid roles, enabling cross-node scheduling and elastic scaling for AI inference, algorithm tasks, and streaming services</li>
-    <li><strong>Offline-Friendly</strong>: Provides pip wheels offline dependency bundling and Agent hot-update capabilities, suitable for batch node onboarding in air-gapped or restricted network environments</li>
+    <li><strong>Node Agent</strong>: Edge/remote node Agent; one-click install deploys and automatically joins the platform</li>
+    <li><strong>Status Reporting</strong>: Periodic heartbeats reporting CPU, memory, disk, GPU utilization, and active workload status in real time</li>
+    <li><strong>Remote Workloads</strong>: Receives deploy/stop commands from the platform, launching AI model services, algorithm tasks, FFmpeg transcoding, and other workloads locally on the node</li>
+    <li><strong>Media Node Pool</strong>: Supports remote deployment of streaming capabilities on nodes, enabling device-to-media-node binding and stream URL generation</li>
+    <li><strong>Node Roles</strong>: Supports compute, media, and hybrid roles for cross-node scheduling and elastic scaling; compute nodes can take center-dispatched realtime / snap / patrol and high-performance forward</li>
+    <li><strong>Offline-Friendly</strong>: Provides offline dependency bundling and Agent hot-update capabilities, suitable for batch node onboarding in air-gapped or restricted network environments</li>
   </ul>
 </td>
 </tr>
@@ -401,9 +474,38 @@ EasyAIoT consists of nine core projects:
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
     <li><strong>Stream Processing</strong>: Supports RTSP/RTMP stream real-time processing and transmission</li>
-    <li><strong>Algorithm Task Management</strong>: Supports real-time algorithm tasks and snapshot algorithm tasks, used for real-time video analysis and snapshot image analysis respectively</li>
+    <li><strong>Multi-Protocol Camera Access</strong>: Unified management for GB28181, ONVIF, NVR batch scan, DJI FlightHub livestream, and RTC consumer cameras</li>
+    <li><strong>RTC Integration API</strong>: <code>/register/device/rtc-live</code> one-click go2rtc stream registration and device enrollment; auto-cleanup of RTC streams on device delete</li>
+    <li><strong>Algorithm Task Management</strong>: Supports realtime / snapshot / patrol; high-performance execution is the default with boxed judgment views, and compatibility mode remains available</li>
+    <li><strong>Stream Forwarding Orchestration</strong>: Multi-channel raw wall display defaults to high performance; special sites can use compatibility mode; start/stop and policy changes follow automatically to cut manual rework</li>
     <li><strong>Frame Extractor and Sorter</strong>: Supports flexible frame extraction strategies and result sorting mechanisms, each algorithm task can bind independent frame extractors and sorters</li>
     <li><strong>Defense Time Period</strong>: Supports time-based configuration for full defense mode and half defense mode</li>
+    <li><strong>Orchestration vs Execution</strong>: VIDEO owns device orchestration, raw preview, alert archiving, and start/stop; heavy lifting goes to <strong>RUNTIME</strong> (inference and high-performance forward)—“governed” and “fast” stay separate so channel count and latency are not dragged by Python orchestration</li>
+    <li><strong>Acceptance Preview</strong>: Side-by-side raw vs judgment views for faster on-site checks of latency and overlay quality</li>
+  </ul>
+</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>RTC Module</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>go2rtc</strong>: Built on <a href="https://github.com/AlexxIT/go2rtc">go2rtc</a> source; vendor pulled by install script</li>
+    <li><strong>Nine-Brand P2P Bridging</strong>:
+      <ul style="margin: 4px 0; padding-left: 18px; line-height: 1.7;">
+        <li><strong>Tapo</strong> (TP-Link) — home/store IPC, cloud-password connect + two-way audio</li>
+        <li><strong>Tuya</strong> — mass white-label/OEM camera onboarding</li>
+        <li><strong>Ring</strong> (Amazon) — doorbells/outdoor cams for overseas sites</li>
+        <li><strong>Nest</strong> (Google) — Nest Cam / Doorbell for premium projects</li>
+        <li><strong>Xiaomi</strong> (Mi Home) — domestic fleet reuse without Micam</li>
+        <li><strong>Wyze</strong> — ultra-low-cost IPC for pilots and wide fill-in</li>
+        <li><strong>DoorBird</strong> — smart doorbell entry intercom + video</li>
+        <li><strong>GoPro</strong> — HERO9–12 mobile views / emergency patrol</li>
+        <li><strong>Roborock</strong> — vacuum cameras for moving under-furniture views</li>
+      </ul>
+    </li>
+    <li><strong>Unified Management API</strong>: Platform registry, stream URL builder, go2rtc REST proxy; default ports 6100 (mgmt) / 1984 (WebUI) / 8554 (RTSP)</li>
+    <li><strong>Full VIDEO Pipeline</strong>: P2P ingest → standard RTSP → SRS relay → Web playback and AI analysis—consumer and pro cameras under one ops model</li>
+    <li><strong>Docker All-in-One</strong>: Single container runs go2rtc core + Python management service; host network for P2P LAN access</li>
   </ul>
 </td>
 </tr>
@@ -419,18 +521,20 @@ EasyAIoT consists of nine core projects:
 </td>
 </tr>
 <tr>
-<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>TASK Module</strong></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">C++-based high-performance task processing module responsible for compute-intensive task execution</td>
-</tr>
-<tr>
-<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>EDGE Module</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>RUNTIME Module</strong></td>
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
-    <li><strong>Infinite Federated Edge Cluster Mode</strong>: The eighth core module—extends intelligence from the center to the field; ordinary development boards and edge nodes can join the watch network at any time, compute scales with business, alerts and evidence automatically aggregate to the cloud</li>
-    <li><strong>Lightweight On-Site Watch</strong>: Focuses on nearby perception and judgment with feedback—without carrying heavy control UI or local business systems, lowering edge deployment barriers and long-term ops burden</li>
-    <li><strong>Out-of-the-Box Access, Unified Management</strong>: Field nodes join quickly and are orchestrated by the center for tasks and policies, reducing manual configuration and per-site build costs</li>
-    <li><strong>Seamless Business Extension</strong>: The center sees the big picture and sets rules; edges watch the field and respond fast; node count grows with coverage, supporting horizontal scale-out for real-time analysis, patrol, and snapshot scenarios</li>
-    <li><strong>Lightweight Deployment</strong>: Edge focuses on "doing the work" rather than "stacking equipment," making wide-area deployment easier to land and replicate</li>
+    <li><strong>High-Performance Native Execution</strong>: One binary owns pull, decode, ONNX inference, alert/heartbeat callbacks, and boxed push; default <code>executor=cpp</code>—more channels per box, lower latency, leaner resources than Python paths</li>
+    <li><strong>Four Field Shapes</strong>: Realtime watch, scheduled snapshot, rotating patrol, and raw-only forwarding—pick by business need so “just want video” does not pay full AI cost</li>
+    <li><strong>Raw + Judgment Dual Views</strong>: Realtime tasks default-output boxed detection streams, presented separately from VIDEO raw preview—paths do not steal from each other</li>
+    <li><strong>Resource-Efficient Multi-Channel Raw Wall</strong>: Stream forward defaults to the high-performance path so “many channels watch raw, few channels run AI” can coexist on NVR sites</li>
+    <li><strong>Alerts &amp; Status Back to Center</strong>: Alerts and run status aggregate to VIDEO for persistence and notification; nodes do not stack business data locally</li>
+    <li><strong>Keep Realtime Under Load</strong>: When compute is tight, prioritize current picture and alert freshness—avoid “busier means more lag, more lag means more misses”</li>
+    <li><strong>Prefer Acceleration, Keep Running on Fallback</strong>: Use accelerators when available; automatically continue when not—tasks do not stop</li>
+    <li><strong>One-Click Distribute</strong>: WEB “workload distribute” or install scripts batch-deploy; center VIDEO install auto-mounts the local executor</li>
+    <li><strong>Event plane MQTT</strong>: Alerts/snapshots/post-process via EMQX algo bus; <strong>iot-sink</strong> persists, archives, and enriches notifications</li>
+    <li><strong>Management plane HTTP heartbeat</strong>: Task liveness reports to VIDEO; start/stop and task table managed by VIDEO</li>
+    <li><strong>NFS media root</strong>: Alert images and SRS DVR unified to <strong>NFS shared media root</strong> (<code>EASYAIOT_MEDIA_ROOT</code>, default <code>/mnt/easyaiot-media</code>; falls back to <code>$HOME/easyaiot/media</code> without sudo); MQTT carries paths only; <strong>iot-sink</strong> reads disk and archives to MinIO</li>
   </ul>
 </td>
 </tr>
@@ -438,24 +542,52 @@ EasyAIoT consists of nine core projects:
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>VISUALIZE Module</strong></td>
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
-    <li><strong>Drag-and-Drop Dashboard Editor</strong>: The ninth core module—a high-performance low-code visualization editor based on GoView, focused on canvas editing and preview, without standalone login or project management</li>
-    <li><strong>Integrated with WEB</strong>: Project creation, templates, assets, data sources, publishing, and deployment are done in the admin console "Visualization" menu; click "Open Editor" to jump to this module (default <code>:8002</code>) with Token for canvas editing</li>
+    <li><strong>Drag-and-Drop Dashboard Editor</strong>: A high-performance low-code visualization editor focused on canvas editing and preview</li>
+    <li><strong>Integrated with WEB</strong>: Project creation, templates, assets, data sources, publishing, and deployment are done in the admin console "Visualization" menu; click "Open Editor" to enter the canvas</li>
     <li><strong>Dashboard Delivery</strong>: Drag-and-drop charts, metrics, and layouts; components can connect to platform data sources and IoT metrics, supporting rapid command dashboards for campus situational awareness, production-line KPIs, equipment ops, energy consumption, and more</li>
-    <li><strong>Clear Division with SCADA</strong>: Dashboards use this module; process SCADA uses FUXA Web SCADA; project metadata is unified under DEVICE <code>iot-visualize</code></li>
+    <li><strong>Clear Division with SCADA</strong>: Dashboards use this module; process SCADA uses Web SCADA capability; project metadata is unified under the DEVICE visualization backend</li>
     <li><strong>Deployment Profile</strong>: Same as APP as a full-edition capability; mini / standard can skip per field hardware, reducing edge lite deployment size</li>
+  </ul>
+</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>TRANSFORM Module</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>Multidirectional Business Flow</strong>: Delivers platform-side alerts, device events, and business results to external systems such as MES / ERP / CRM / WMS by contract, closing the last mile from “the platform has data” to “business systems can use it”</li>
+    <li><strong>Configurable Integration</strong>: Configure destinations, forwarding rules, and field mappings once and reuse them—cutting the cost of “custom APIs for every customer system”</li>
+    <li><strong>Delivery You Can Accept</strong>: Runtime clusters and delivery trails are monitorable and reviewable, so integration and acceptance can answer “did it arrive, and where did it stall”—less verbal reconciliation</li>
+    <li><strong>Horizontal Scale-Out</strong>: As traffic grows, expand consume and delivery capacity by business contract—supporting parallel integration across lines, plants, and systems</li>
+  </ul>
+</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>PANEL Module</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>Delivery & Watch Entry</strong>: Independent of the business console: install, accept, and watch on arrival—shorten acceptance cycles and cut on-site / remote support cost</li>
+    <li><strong>Same-Day Closed Loop</strong>: UI-driven install by tier with progress and results on the spot; bring up and hand over the appliance even before the business console is ready</li>
+    <li><strong>Self-Serve Troubleshooting</strong>: Container health, resource levels, task logs, and image readiness at a glance—common start/stop, pull, and cache cleanup without waiting for developer commands</li>
+    <li><strong>Reuse Across Sites</strong>: One entry across appliances and machine rooms—PoC and production delivery share the same playbook</li>
+  </ul>
+</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>COMPILE Packaging</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>Multi-Platform Artifacts</strong>: Package PANEL and related capabilities into installers or binaries for Ubuntu / Debian, CentOS / RHEL <strong>7–9</strong> (x86 + <strong>CentOS ARM</strong>, packages per el7/el8/el9), Windows, macOS, and ARM / <strong>Kylin (麒麟) / openEuler (欧拉)</strong> targets—so customers can install without compiling from source on site</li>
+    <li><strong>Shorter Delivery Chain</strong>: Integrators pick the matching package for the target environment to deploy and upgrade—unified install, start/stop, and uninstall paths reduce cross-OS delivery variance</li>
+    <li><strong>Paired with PANEL</strong>: Build outputs land the on-site ops entry directly, connecting “package it out” with “install and watch on arrival” on one delivery chain</li>
   </ul>
 </td>
 </tr>
 </table>
 
-<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-For an in-depth analysis of each module's tech stack, microservice decomposition, middleware topology, and data flows, see <a href=".doc/架构设计/项目架构设计分析.md" style="color: #3498db; text-decoration: none; font-weight: 600;">Project Architecture Analysis</a>.
-</p>
-
 ## 🖥️ Cross-Platform Deployment Advantages
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
-EasyAIoT supports deployment on Linux, Mac, and Windows, providing flexible and convenient deployment solutions for users in different environments:
+EasyAIoT supports deployment on Linux, Mac, and Windows, providing flexible and convenient deployment solutions for users in different environments; with <strong>COMPILE</strong> producing installers and binaries per target OS, and <strong>PANEL</strong> completing on-site install and day-to-day watch:
 </p>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
@@ -467,6 +599,7 @@ EasyAIoT supports deployment on Linux, Mac, and Windows, providing flexible and 
   <li>Supports Docker containerized deployment with one-click service startup</li>
   <li>Perfect compatibility with servers and edge computing devices (such as RK3588 and other ARM architecture devices)</li>
   <li>Provides complete automated installation scripts to simplify deployment</li>
+  <li>Covers mainstream server distros including Ubuntu, CentOS/RHEL <strong>7–9</strong> (incl. <strong>CentOS ARM</strong>), <strong>Kylin (麒麟) / openEuler (欧拉)</strong></li>
 </ul>
 </div>
 
@@ -508,7 +641,7 @@ Supports thousands of vertical scenarios, with customizable AI models and algori
 EasyAIoT constructs an efficient access and management network for IoT devices (especially massive cameras). We deeply integrate real-time streaming technology with cutting-edge AI to create a unified service core. This solution not only enables interoperability across heterogeneous devices but also deeply integrates HD video streams with powerful AI analytics engines, giving surveillance systems "intelligent eyes" – accurately enabling facial recognition, abnormal behavior analysis, risk personnel monitoring, and perimeter intrusion detection.
 </p>
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 10px 0;">
-The platform supports two types of algorithm tasks: real-time algorithm tasks for real-time video analysis of RTSP/RTMP streams, providing millisecond-level response capabilities; snapshot algorithm tasks for intelligent analysis of captured images, supporting event backtracking and image retrieval. Through algorithm task management, flexible frame extraction and sorting strategies are achieved, with each task able to bind independent frame extractors and sorters. Combined with model service cluster inference capabilities, millisecond-level response and high availability are ensured. Additionally, two defense strategies are provided: full defense mode and half defense mode, allowing flexible configuration of monitoring rules for different time periods, achieving precise time-based intelligent monitoring and alerting.
+The platform supports real-time, snapshot, and patrol algorithm tasks: all three can default to the <strong>RUNTIME high-speed execution layer</strong> (<code>executor=cpp</code>)—a native binary for long-lived pull, decode, YOLO inference, and result callbacks; realtime <strong>default-pushes boxed AI detection streams</strong>; snap uses Cron capture; patrol rotates multi-channel coverage; stream forward can use the same high-performance path for resource-efficient raw walls. Versus the Python compatibility backend, RUNTIME holds up better under high channel counts and low latency. Alerts and heartbeats return to VIDEO. Algorithm task management keeps frame extraction and sorting flexible; model-service cluster inference ensures millisecond response and high availability. Full and half defense modes support precise time-based monitoring and alerting.
 </p>
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 10px 0;">
 In terms of IoT device management, EasyAIoT provides comprehensive device lifecycle management capabilities, supporting multiple IoT and industrial protocols (MQTT, TCP, HTTP, Modbus-TCP, Modbus-RTU, OPC UA) to achieve rapid device access, secure authentication, real-time monitoring, and intelligent control. Through the rule engine, intelligent data flow and processing of device data are realized, combined with AI capabilities for in-depth analysis of device data, achieving full-process automation from device access, data collection, intelligent analysis to decision execution, truly realizing interconnected everything and intelligent control of everything.
@@ -526,8 +659,10 @@ compensate third parties for damages caused by usage. All EasyAIoT-related resou
 
 ## 📚 Deployment Documentation
 
-- [Platform Deployment Documentation](.doc/部署文档/平台部署文档_zh.md) — Step-by-step deployment guide for Linux / Mac / Windows
-- [Deployment Best Practices](.doc/部署文档/部署最佳实践.md) — Environment requirements, one-click deployment, troubleshooting, and production recommendations
+- [Platform Deployment Documentation](.doc/部署文档/平台部署文档.md) — Step-by-step guide for Linux (Ubuntu / CentOS·RHEL **7–9** / **CentOS ARM** / ARM / **Kylin (麒麟) / openEuler (欧拉)**) / Mac / Windows
+- [macOS Image Deploy](.doc/部署文档/平台macOS部署文档.md) — One-click pull of pre-built images with Docker Desktop
+- [Windows Image Deploy](.doc/部署文档/平台Windows部署文档.md) — `install_windows.ps1` recommended entry
+- [Deployment Best Practices](.doc/部署文档/部署最佳实践_en.md) — Profiles, environment requirements, one-click deploy (incl. CentOS **7–9** / **CentOS ARM** / **Kylin (麒麟) / openEuler (欧拉)**), troubleshooting, and production recommendations
 
 ## 🎮 Demo Environment
 
@@ -798,11 +933,11 @@ The following are outstanding contributors who have made major contributions to 
 </tr>
 <tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>雨落流殇</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT in ultra-large-scale streaming media delivery, contributed the deployment architecture and scheduling approach for heterogeneous SRS and ZLMediaKit streaming media server clusters, proposing scalable solutions including multi-node pool coordination, decoupling of the streaming media control plane from the business layer, storage and upload pipelines, and node registration scheduling—laying an important architectural foundation for the platform to support concurrent access of tens of thousands of camera streams with stable distribution and elastic scaling.</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT in ultra-large-scale streaming media delivery, contributed deployment and scheduling approaches for heterogeneous streaming media server clusters, proposing scalable solutions including multi-node pool coordination, decoupling of streaming from the business layer, and node registration scheduling—laying an important architectural foundation for the platform to support concurrent access of tens of thousands of camera streams with stable distribution and elastic scaling.</td>
 </tr>
 <tr style="background-color: #f8f9fa;">
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>常康</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT in intelligent transportation and vehicle management, independently contributed the license plate recognition algorithm and complete code implementation, covering ONNX-based plate detection, plate number and color recognition, double-layer plate merging and tilt/perspective correction, plate library management and multi-library sequential matching, one-click integration with algorithm tasks, and Kafka asynchronous matching—supporting mainstream plate types including blue, yellow, green, white, and new energy vehicle plates—bringing the platform's "license plate recognition and plate library management" capability from planning to production-ready, closed-loop application.</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT in intelligent transportation and vehicle management, independently contributed the license plate recognition algorithm and complete code implementation, covering plate detection, plate number and color recognition, double-layer plate merging and tilt/perspective correction, plate library management and multi-library sequential matching, one-click integration with algorithm tasks, and asynchronous matching—supporting mainstream plate types including blue, yellow, green, white, and new energy vehicle plates—bringing the platform's "license plate recognition and plate library management" capability from planning to production-ready, closed-loop application.</td>
 </tr>
 <tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>Li</nobr></td>
@@ -810,21 +945,29 @@ The following are outstanding contributors who have made major contributions to 
 </tr>
 <tr style="background-color: #f8f9fa;">
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>陈家林</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT in IoT device interoperability, industrial protocol access, and air–ground video fusion, delivered a closed loop for device commands and status so the platform can truly “send commands down, see status, and stay in control”; systematically contributed Modbus-TCP, Modbus-RTU, and OPC UA industrial protocol access—unified acquisition of Ethernet- and serial-side industrial devices and OPC UA nodes, register/point read–write and thing-model mapping—so meters, sensors, PLCs, controllers and other industrial equipment data can be aggregated, monitored and linked on the platform, completing the key puzzle of “seeing the scene and hearing the devices”; also contributed DJI FlightHub dock and drone video integration, bringing aerial inspection into the unified video and alarm system, significantly expanding value in industrial data acquisition, production-line intelligence, wide-area patrol, emergency survey, and sky–ground collaborative sensing.</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT in IoT device interoperability, industrial protocol access, and air–ground video fusion, delivered a closed loop for device commands and status so the platform can truly “send commands down, see status, and stay in control”; systematically contributed Modbus-TCP, Modbus-RTU, and OPC UA industrial protocol access—unified acquisition of Ethernet- and serial-side industrial devices and OPC UA nodes, with measurement read/write and thing-model mapping—so meters, sensors, PLCs, controllers and other industrial equipment data can be aggregated, monitored and linked on the platform, completing the key puzzle of “seeing the scene and hearing the devices”; also contributed DJI FlightHub dock and drone video integration, bringing aerial inspection into the unified video and alarm system, significantly expanding value in industrial data acquisition, production-line intelligence, wide-area patrol, emergency survey, and sky–ground collaborative sensing.</td>
 </tr>
 <tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>空空</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT in camera direct-connect from “discoverable” to “production-ready,” closed critical gaps in authentication, channel sync, config changes, and multi-vendor stream URLs so the platform is deliverable on real NVR / multi-vendor sites: made device login credentials reliable so username/password auth works and direct-connect devices can truly “log in and stay managed”; rebuilt the post-NVR-sync pull model—previously sync wrote each channel camera’s own IP as the RTSP host, which badly mismatched the real “pull via NVR” topology, so sync looked successful while live play failed; after the fix, channel RTSP URLs are generated from the NVR host IP so batch-synced streams play and scale; fixed device edit save failures so access parameters remain maintainable instead of “write once, never change again”; built an RTSP URL rule library for common domestic camera brands and opened custom brand rules so heterogeneous devices can assemble stream URLs in one click without manual address trials or platform code changes per brand—moving direct-connect from “devices can be scanned” to “login works, sync is accurate, configs can be changed, and multi-brand streams play,” laying a solid foundation for later PTZ and zoom controls.</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT in camera direct-connect from “discoverable” to “production-ready,” closed critical gaps in authentication, channel sync, config changes, and multi-vendor stream URLs so the platform is deliverable on real NVR / multi-vendor sites: made device login work reliably so direct-connect devices can truly “log in and stay managed”; improved the post-NVR-sync streaming model so batch-synced channels play and scale; ensured access parameters remain maintainable; built stream URL rule libraries for common domestic camera brands and opened custom brand rules so heterogeneous devices can go live in one click without manual address trials—moving direct-connect from “devices can be scanned” to “login works, sync is accurate, configs can be changed, and multi-brand streams play,” laying a solid foundation for later PTZ and zoom controls.</td>
 </tr>
 <tr style="background-color: #f8f9fa;">
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>狗娃</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT toward "IoT data displayed on screen," proactively proposed the product vision of a visualization Board (drag-and-drop dashboard) module based on open-source GoView: traditional dashboards often require hand-written SQL for every screen and component, slowing delivery, making every change ripple across the stack, and leaving business users unable to self-serve. The Board approach puts charts, metrics, and layout on a drag-and-drop canvas and binds component variables directly to platform IoT thing-model metrics—real-time and historical values pulled from devices in one step, without bespoke queries per dashboard; campus situational awareness, production-line KPIs, equipment operations, and similar screens upgrade from "developers write SQL to get a screen" to "pick metrics, drag components, screen done," significantly shortening visualization delivery and turning IoT "data in the back office" into an operational "screens in the front office" capability. Previously also contributed sensor float data prediction, running-status property threshold configuration, threshold alarms with rule linkage, and one-screen running-status views for central-device associated sub-devices—closing the device operations loop of "predict—bound—alert—rule—one-screen control" so the device side can "see the numbers, govern the bounds, raise the alerts, and grasp the whole picture."</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT toward "IoT data displayed on screen," proactively proposed the product vision of a visualization Board (drag-and-drop dashboard) module: traditional dashboards often require hand-written SQL for every screen and component, slowing delivery, making every change ripple across the stack, and leaving business users unable to self-serve. The Board approach puts charts, metrics, and layout on a drag-and-drop canvas and binds component variables directly to platform IoT thing-model metrics—real-time and historical values pulled from devices in one step, without bespoke queries per dashboard; campus situational awareness, production-line KPIs, equipment operations, and similar screens upgrade from "developers write SQL to get a screen" to "pick metrics, drag components, screen done," significantly shortening visualization delivery and turning IoT "data in the back office" into an operational "screens in the front office" capability. Previously also contributed sensor float data prediction, running-status property threshold configuration, threshold alarms with rule linkage, and one-screen running-status views for central-device associated sub-devices—closing the device operations loop of "predict—bound—alert—rule—one-screen control" so the device side can "see the numbers, govern the bounds, raise the alerts, and grasp the whole picture."</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>大老刘</nobr></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT in external communication and solution storytelling, contributed the illustrated introduction material <em>AI Video Surveillance Analytics Platform</em>, systematically presenting the platform's capability landscape and deployment value in AI video surveillance scenarios so that users, integrators, and partners can quickly grasp the positioning and key highlights—significantly improving outreach and business communication efficiency.</td>
+</tr>
+<tr style="background-color: #f8f9fa;">
+<td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>刘兆中ᯤ⁵ᴳ</nobr></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">To advance EasyAIoT toward one-click macOS deployment, pioneered part of the Mac one-click deployment scripts—largely opening the main path of image pull, container orchestration, and environment precondition checks so that follow-on work only needed to close the “last mile.” His exploration clarified key nodes and risk points on the Mac deployment chain, substantially shortening the path to engineering completion, and remains an indispensable foundational contribution in taking macOS deployment from zero to usable.</td>
 </tr>
 </tbody>
 </table>
 
 <p style="font-size: 14px; line-height: 1.8; color: #2c3e50; font-weight: 500; margin: 20px 0; padding: 15px; background-color: #e8f4f8; border-left: 4px solid #3498db; border-radius: 4px;">
-<strong>Special Thanks</strong>: The above contributors have advanced EasyAIoT in cross-platform deployment documentation and scripts, national-standard video capability delivery and AI integration verification, multi-GPU training usability and checkpoint resume, multi-vendor camera direct discovery and batch onboarding, production-ready Tianditu spatial visualization, heterogeneous streaming media cluster deployment and scheduling architecture, production-ready license plate recognition algorithm and complete implementation, EasyAIoT-Edge end-to-end edge-side integration, campus developer community organization and youth collaborative ecosystem building, IoT device uplink/downlink closed loop and DJI FlightHub aerial view integration, Modbus-TCP / Modbus-RTU / OPC UA industrial protocol access, the production-ready closed loop of camera direct-connect from discovery through login/sync/config/multi-brand streaming, the GoView-based drag-and-drop Board vision with IoT metric real-time/historical value integration, and sensor float data prediction with threshold alarm rules plus one-screen running-status views for central-device associated sub-devices. Their professionalism and selfless dedication are worthy of our learning and respect. Once again, we express our most sincere gratitude to these outstanding contributors! 🙏
+<strong>Special Thanks</strong>: The above contributors have advanced EasyAIoT in cross-platform deployment documentation and scripts, foundational macOS one-click deployment scripting and path exploration, national-standard video capability delivery and AI integration verification, multi-GPU training and checkpoint resume, multi-vendor camera direct discovery and batch onboarding, Tianditu spatial visualization, heterogeneous streaming media cluster deployment and scheduling, license plate recognition algorithm and complete implementation, EasyAIoT-Edge end-to-end edge-side integration, campus developer community organization and youth collaborative ecosystem building, IoT device uplink/downlink closed loop and DJI FlightHub aerial view integration, Modbus-TCP / Modbus-RTU / OPC UA industrial protocol access, the production-ready closed loop of camera direct-connect from discovery through login/sync/config/multi-brand streaming, the drag-and-drop Board vision with IoT metric real-time/historical value integration, sensor float data prediction with threshold alarm rules plus one-screen running-status views for central-device associated sub-devices, and illustrated introduction materials for the AI video surveillance analytics platform. Their professionalism and selfless dedication are worthy of our learning and respect. Once again, we express our most sincere gratitude to these outstanding contributors! 🙏
 </p>
 
 ## 💝 Open Source Guardians
@@ -834,37 +977,48 @@ Sustaining an open-source project takes more than code and documentation. During
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/默者.png" width="80px;" alt="默者"/><br /><sub><b>默者</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/小满藏舟.png" width="80px;" alt="小满藏舟"/><br /><sub><b>小满藏舟</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/空空.png" width="80px;" alt="空空"/><br /><sub><b>空空</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/阿涛.png" width="80px;" alt="阿涛"/><br /><sub><b>阿涛</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/火车叨位去、.png" width="80px;" alt="火车叨位去、"/><br /><sub><b>火车叨位去、</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/NULL.png" width="80px;" alt="NULL"/><br /><sub><b>NULL</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/一片天.png" width="80px;" alt="一片天"/><br /><sub><b>一片天</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/舍得.png" width="80px;" alt="舍得"/><br /><sub><b>舍得</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/M.png" width="80px;" alt="M"/><br /><sub><b>M</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/lysss.jpg" width="80px;" alt="lysss"/><br /><sub><b>lysss</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/Sean-宋阳.jpg" width="80px;" alt="Sean-宋阳"/><br /><sub><b>Sean-宋阳</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/XYZ.jpg" width="80px;" alt="XYZ"/><br /><sub><b>XYZ</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/大虚子民🎼.jpg" width="80px;" alt="大虚子民🎼"/><br /><sub><b>大虚子民🎼</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/哈兰葱.jpg" width="80px;" alt="哈兰葱"/><br /><sub><b>哈兰葱</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/曲超.jpg" width="80px;" alt="曲超"/><br /><sub><b>曲超</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/李雪汉.jpg" width="80px;" alt="李雪汉"/><br /><sub><b>李雪汉</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/梦影·清之韵.jpg" width="80px;" alt="梦影·清之韵"/><br /><sub><b>梦影·清之韵</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/dasic.png" width="80px;" alt="dasic"/><br /><sub><b>dasic</b></sub></a></td>
     </tr>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/南北.png" width="80px;" alt="南北"/><br /><sub><b>南北</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/西乡一粒沙.png" width="80px;" alt="西乡一粒沙"/><br /><sub><b>西乡一粒沙</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/payne.png" width="80px;" alt="payne"/><br /><sub><b>payne</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/滕虎.png" width="80px;" alt="滕虎"/><br /><sub><b>滕虎</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/天天.png" width="80px;" alt="天天"/><br /><sub><b>天天</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王超.png" width="80px;" alt="王超"/><br /><sub><b>王超</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/最后的轻语.png" width="80px;" alt="最后的轻语"/><br /><sub><b>最后的轻语</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/yang.png" width="80px;" alt="yang"/><br /><sub><b>yang</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/战刀.jpg" width="80px;" alt="战刀"/><br /><sub><b>战刀</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/禾一虫.jpg" width="80px;" alt="禾一虫"/><br /><sub><b>禾一虫</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/钟意月月🍹.jpg" width="80px;" alt="钟意月月🍹"/><br /><sub><b>钟意月月🍹</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/山人.jpg" width="80px;" alt="山人"/><br /><sub><b>山人</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/林大侠.jpg" width="80px;" alt="林大侠"/><br /><sub><b>林大侠</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/core.jpg" width="80px;" alt="core"/><br /><sub><b>core</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王亚鹏.jpg" width="80px;" alt="王亚鹏"/><br /><sub><b>王亚鹏</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/今早好大雾.jpg" width="80px;" alt="今早好大雾"/><br /><sub><b>今早好大雾</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/头像飞鱼.jpg" width="80px;" alt="头像飞鱼"/><br /><sub><b>头像飞鱼</b></sub></a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/simon.jpg" width="80px;" alt="simon"/><br /><sub><b>simon</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/万博览.jpg" width="80px;" alt="万博览"/><br /><sub><b>万博览</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/董永乐.jpg" width="80px;" alt="董永乐"/><br /><sub><b>董永乐</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/℡夏别.jpg" width="80px;" alt="℡夏别"/><br /><sub><b>℡夏别</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="https://github.com/wangqiqi" target="_blank"><img src="./.image/open-source-guardian/周金旺.jpg" width="80px;" alt="周金旺"/><br /><sub><b>周金旺</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/无忧.jpg" width="80px;" alt="无忧"/><br /><sub><b>无忧</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/许多.jpg" width="80px;" alt="许多"/><br /><sub><b>许多</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王军.jpg" width="80px;" alt="王军"/><br /><sub><b>王军</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/子非鱼.png" width="80px;" alt="子非鱼"/><br /><sub><b>子非鱼</b></sub></a></td>
     </tr>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/在路上.png" width="80px;" alt="在路上"/><br /><sub><b>在路上</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/忘记时间.png" width="80px;" alt="忘记时间"/><br /><sub><b>忘记时间</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/何行者.png" width="80px;" alt="何行者"/><br /><sub><b>何行者</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/ANDY.png" width="80px;" alt="ANDY"/><br /><sub><b>ANDY</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/A许庆.png" width="80px;" alt="A许庆"/><br /><sub><b>A许庆</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/刘兆中📶⁵ᴳ.png" width="80px;" alt="刘兆中📶⁵ᴳ"/><br /><sub><b>刘兆中📶⁵ᴳ</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/冯.png" width="80px;" alt="冯"/><br /><sub><b>冯</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/莫斯克.png" width="80px;" alt="莫斯克"/><br /><sub><b>莫斯克</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/赵欢.png" width="80px;" alt="赵欢"/><br /><sub><b>赵欢</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/苏州小朱.jpg" width="80px;" alt="苏州小朱"/><br /><sub><b>苏州小朱</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/空白.jpg" width="80px;" alt=""/><br /><sub><b></b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/HuaZy.jpg" width="80px;" alt="HuaZy"/><br /><sub><b>HuaZy</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/越南打印机网络监控电脑门禁何工.jpg" width="80px;" alt="越南打印机网络监控电脑门禁何工"/><br /><sub><b>越南打印机网络监控电脑门禁何工</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/熊勇辉.jpg" width="80px;" alt="熊勇辉"/><br /><sub><b>熊勇辉</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/旭.jpg" width="80px;" alt="旭"/><br /><sub><b>旭</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/心远.jpg" width="80px;" alt="心远"/><br /><sub><b>心远</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/Mr.Peng.jpg" width="80px;" alt="Mr.Peng"/><br /><sub><b>Mr.Peng</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/舒韩春💭成都云速广告💭.jpg" width="80px;" alt="舒韩春💭成都云速广告💭"/><br /><sub><b>舒韩春💭成都云速广告💭</b></sub></a></td>
     </tr>
     <tr>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/前进!.png" width="80px;" alt="前进!"/><br /><sub><b>前进!</b></sub></a></td>
@@ -907,7 +1061,7 @@ Sustaining an open-source project takes more than code and documentation. During
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/胖哥.png" width="80px;" alt="胖哥"/><br /><sub><b>胖哥</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王宪芳.png" width="80px;" alt="王宪芳"/><br /><sub><b>王宪芳</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/lk.png" width="80px;" alt="lk"/><br /><sub><b>lk</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src=".image/open-source-guardian/阿旺.png" width="80px;" alt="阿旺*"/><br /><sub><b>阿旺*</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/阿旺.png" width="80px;" alt="阿旺*"/><br /><sub><b>阿旺*</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/🍃一笑奈何🍃.png" width="80px;" alt="🍃一笑奈何🍃"/><br /><sub><b>🍃一笑奈何🍃</b></sub></a></td>
     </tr>
     <tr>
@@ -973,6 +1127,38 @@ Sustaining an open-source project takes more than code and documentation. During
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/Louis.png" width="80px;" alt="Louis"/><br /><sub><b>Louis</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/胡首凡 梯控门禁五方对讲.png" width="80px;" alt="胡首凡 梯控门禁五方对讲"/><br /><sub><b>胡首凡 梯控门禁五方对讲</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/袁建华.png" width="80px;" alt="袁建华"/><br /><sub><b>袁建华</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/空空.png" width="80px;" alt="空空"/><br /><sub><b>空空</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/阿涛.png" width="80px;" alt="阿涛"/><br /><sub><b>阿涛</b></sub></a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/NULL.png" width="80px;" alt="NULL"/><br /><sub><b>NULL</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/一片天.png" width="80px;" alt="一片天"/><br /><sub><b>一片天</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/小满藏舟.png" width="80px;" alt="小满藏舟"/><br /><sub><b>小满藏舟</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/M.png" width="80px;" alt="M"/><br /><sub><b>M</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/舍得.png" width="80px;" alt="舍得"/><br /><sub><b>舍得</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/默者.png" width="80px;" alt="默者"/><br /><sub><b>默者</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/火车叨位去、.png" width="80px;" alt="火车叨位去、"/><br /><sub><b>火车叨位去、</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/payne.png" width="80px;" alt="payne"/><br /><sub><b>payne</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/滕虎.png" width="80px;" alt="滕虎"/><br /><sub><b>滕虎</b></sub></a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/天天.png" width="80px;" alt="天天"/><br /><sub><b>天天</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王超.png" width="80px;" alt="王超"/><br /><sub><b>王超</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/南北.png" width="80px;" alt="南北"/><br /><sub><b>南北</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/最后的轻语.png" width="80px;" alt="最后的轻语"/><br /><sub><b>最后的轻语</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/西乡一粒沙.png" width="80px;" alt="西乡一粒沙"/><br /><sub><b>西乡一粒沙</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/yang.png" width="80px;" alt="yang"/><br /><sub><b>yang</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/何行者.png" width="80px;" alt="何行者"/><br /><sub><b>何行者</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/在路上.png" width="80px;" alt="在路上"/><br /><sub><b>在路上</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/ANDY.png" width="80px;" alt="ANDY"/><br /><sub><b>ANDY</b></sub></a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/冯.png" width="80px;" alt="冯"/><br /><sub><b>冯</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/忘记时间.png" width="80px;" alt="忘记时间"/><br /><sub><b>忘记时间</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/A许庆.png" width="80px;" alt="A许庆"/><br /><sub><b>A许庆</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/刘兆中📶⁵ᴳ.png" width="80px;" alt="刘兆中📶⁵ᴳ"/><br /><sub><b>刘兆中📶⁵ᴳ</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/莫斯克.png" width="80px;" alt="莫斯克"/><br /><sub><b>莫斯克</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/赵欢.png" width="80px;" alt="赵欢"/><br /><sub><b>赵欢</b></sub></a></td>
     </tr>
   </tbody>
 </table>

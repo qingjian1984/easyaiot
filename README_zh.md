@@ -25,6 +25,12 @@
   <a href="./README_ko.md">한국어</a>
 </h4>
 
+## 🌐 官方网站
+
+EasyAIoT 官方网站：[http://36.111.47.113:8090/](http://36.111.47.113:8090/)
+
+提供产品介绍、特性说明、三档硬件选型、安装包下载与文档入口，便于快速了解平台价值并开始落地。
+
 ## 📖 项目介绍
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
@@ -36,7 +42,7 @@
 </p>
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
-平台由 <strong>WEB、APP、DEVICE、NODE、VIDEO、AI、TASK、EDGE、VISUALIZE</strong> 九个核心模块组成，以 Java 构建稳定管控底座、Python 承载 AI 与网络能力、C++ 驱动高性能计算任务，三语言混编各取所长。在能力侧，平台覆盖 GB28181 / ONVIF 多协议摄像头接入、<strong>大疆机场与无人机空中视角接入</strong>、实时与抓拍算法任务、YOLO 目标检测与 SAM 零样本自动标注、人脸/车牌识别、可编排业务后处理、联邦算力集群调度，以及 <strong>无限联邦边缘集群模式</strong>（普通开发板可即开即用、现场智能就地决策、告警与证据自动汇聚上云，算力随业务任意铺开），还有 MQTT / TCP / HTTP / Modbus-TCP / Modbus-RTU / OPC UA 物联网设备全生命周期管理，以及<strong>可视化大屏与 Web 工艺组态</strong>，让设备数据既能展成指挥态势、也能落回工艺画面；在体验侧，Web 管控台与移动 App / 小程序能力对齐，让指挥中心与现场巡检同一套业务逻辑、随时随地处置。
+平台由 <strong>WEB、APP、DEVICE、NODE、VIDEO、RTC、AI、RUNTIME、VISUALIZE、TRANSFORM、PANEL、SITE</strong> 等核心模块组成，并以 <strong>COMPILE</strong> 承接多平台打包交付（含 Ubuntu / CentOS·RHEL <strong>7～9</strong>（x86 + <strong>CentOS ARM</strong>，按 el7/el8/el9 分包） / <strong>麒麟(Kylin) / 欧拉(openEuler)</strong> / Windows / macOS / ARM）。在能力侧，平台覆盖 GB28181 / ONVIF 多协议摄像头接入、<strong>RTC 消费级摄像头 P2P 桥接</strong>（基于 go2rtc，覆盖 <strong>Tapo、Tuya、Ring、Nest、小米、Wyze、DoorBird、GoPro、Roborock</strong> 九大品牌——门店 Tapo 补盲、涂鸦白牌纳管、海外 Ring/Nest 门铃、米家存量利旧、Wyze 低成本扩点、DoorBird 门口对讲、GoPro 机动机位、石头扫地机移动视角等场景，Web 一键接入并纳入统一视频与 AI 研判闭环）、<strong>大疆机场与无人机空中视角接入</strong>、实时 / 抓拍 / 巡检算法任务、<strong>RUNTIME 原生高速执行层</strong>（编译型二进制承接拉流解码、YOLO 推理、带框推流与多路原画转发——相对解释型链路更低 CPU/内存、更稳时延；同一二进制覆盖实时 / 抓拍 / 巡检 / 转发）、YOLO 目标检测与 SAM 零样本自动标注、人脸/车牌识别、可编排业务后处理、联邦算力集群调度，以及 <strong>无限联邦边缘集群模式</strong>（普通开发板可即开即用、现场智能就地决策、告警与证据自动汇聚上云，算力随业务任意铺开），还有 MQTT / TCP / HTTP / Modbus-TCP / Modbus-RTU / OPC UA 物联网设备全生命周期管理，以及<strong>可视化大屏与 Web 工艺组态</strong>，让设备数据既能展成指挥态势、也能落回工艺画面；并新增 <strong>TRANSFORM 多向数据流转引擎</strong>，把平台侧业务事件按约定投递到 MES / ERP / CRM / WMS 等外部系统，多方对接可配、可追、可复用；配套 <strong>PANEL 交付与值守入口</strong>，让一体机到场当天可装可验，值守与排障不必事事等开发远程敲命令；另以 <strong>SITE 官方网站</strong>对外呈现产品价值、三档硬件选型与安装包入口，让访客先看懂再下载、先选型再落地。在体验侧，Web 管控台与移动 App / 小程序能力对齐，让指挥中心与现场巡检同一套业务逻辑、随时随地处置。
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #444; margin: 16px 0 8px 0;">
@@ -44,7 +50,7 @@
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-📄 如需更完整的图文介绍，请参阅 <a href=".doc/项目介绍/EasyAIoT项目介绍 V2.0.pptx" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT项目介绍 V2.0（PPT）</a>。
+📄 如需更完整的图文介绍，请参阅 <a href=".doc/项目介绍/EasyAIoT项目介绍 V2.0.pptx" style="color: #3498db; text-decoration: none; font-weight: 600;">EasyAIoT项目介绍 V2.0（PPT）</a>，以及 <a href=".doc/项目介绍/AI视频监控分析平台.pdf" style="color: #3498db; text-decoration: none; font-weight: 600;">AI视频监控分析平台（PDF）</a>。
 </p>
 
 ## 🌟 关于项目的一些思考
@@ -55,6 +61,113 @@
 EasyAIoT是一个云边端一体化的智能物联网平台，专注于AI与IoT的深度融合。平台通过算法任务管理、实时流分析、模型服务集群推理等核心能力，实现从设备接入到数据采集、AI分析、智能决策的全链路闭环，真正实现万物互联、万物智控。
 </p>
 
+### 🎛️ PANEL：一体机到场当天可装可验，值守不必等开发远程
+
+<p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
+智能物联网项目最容易卡在「最后一公里」：机器到了现场，却<strong>装不起来、验不出去、出了故障只能等开发远程敲命令</strong>，驻场成本与验收周期都被人拖住。PANEL 是面向集成商与现场运维的<strong>独立交付与值守入口</strong>——按档位一键装机、看清整机健康与依赖、启停服务与查日志当场办完；<strong>业务管控台尚未就绪时，也能先把整机拉起来、守住、交出去</strong>，把「机器到场 → 平台可用 → 可验收」从等人变成当天可闭环。
+</p>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">
+  <li><strong>缩短验收周期</strong>：到场按 mini / standard / full 选一档即可装机，进度与结果当场可见，少因命令记不全、步骤漏一步导致「装一半不知卡在哪」，PoC 与正式交付都能更快过验收</li>
+  <li><strong>降低驻场与远程成本</strong>：容器是否在跑、资源是否吃紧、日志卡在哪一目了然，重启、清缓存、拉镜像不必先翻文档再等开发支援，值守人员可自助处置常见故障</li>
+  <li><strong>多项目一套口径</strong>：同一套装机与运维入口可复用到多台一体机、多处机房，交付、值守、交接口径一致，避免「每台现场各一套口口相传」</li>
+</ul>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0 8px 0;">
+📦 <strong>安装包下载</strong>：Ubuntu / Debian、CentOS / RHEL <strong>7～9</strong>（x86 + <strong>CentOS ARM</strong>，对应 el7/el8/el9 RPM）、Windows、macOS 及 ARM / <strong>麒麟(Kylin) / 欧拉(openEuler)</strong>等目标安装包见 <a href="https://gitee.com/volara/easyaiot/releases" style="color: #3498db; text-decoration: none; font-weight: 600;">Gitee Releases</a>。
+</p>
+
+| | | |
+|:---:|:---:|:---:|
+| ![系统概览](.image/banner/panel/panel_1000.png) | ![容器管理](.image/banner/panel/panel_1001.png) | ![容器日志](.image/banner/panel/panel_1002.png) |
+| ![一键部署](.image/banner/panel/panel_1003.png) | ![镜像就绪](.image/banner/panel/panel_1004.png) | ![镜像拉取](.image/banner/panel/panel_1005.png) |
+| ![系统诊断](.image/banner/panel/panel_1006.png) | ![系统维护](.image/banner/panel/panel_1007.png) | ![服务拓扑](.image/banner/panel/panel_1008.png) |
+
+### 📡 RTC：消费级摄像头 P2P 桥接，让「没有 RTSP」的设备也能进平台
+
+<p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
+家庭、门店与轻量安防场景里，大量已在用的设备来自 <strong>Tapo、涂鸦、Ring、Nest、小米、Wyze、DoorBird、GoPro、Roborock</strong> 等品牌——它们普遍走厂商私有 P2P 协议，<strong>原生不提供标准 RTSP</strong>，传统视频监控平台往往只能劝用户另搭 Micam、Home Assistant 等中间件，接入链路长、运维割裂、AI 研判接不进来。EasyAIoT 新增独立 <strong>RTC 模块</strong>，基于开源项目 <a href="https://github.com/AlexxIT/go2rtc" style="color: #3498db; text-decoration: none; font-weight: 600;">go2rtc</a>，<strong>一次打通上述九大品牌的取流与对讲能力</strong>，把 P2P 桥接与平台编排收成一体——消费级设备也能像国标/ONVIF 摄像头一样，<strong>注册、预览、推流转发、挂 AI 任务、告警联动</strong>全链路打通。
+</p>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0 8px 0;">
+<strong>已覆盖品牌与典型价值场景：</strong>
+</p>
+
+<table style="width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px;">
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600; color: #2c3e50; width: 14%;">品牌</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600; color: #2c3e50; width: 18%;">厂商 / 生态</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600; color: #2c3e50; width: 28%;">典型设备</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600; color: #2c3e50;">落地价值</td>
+</tr>
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>Tapo</strong></td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;">TP-Link</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444;">家用 IPC、室内/室外枪机、球机</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444; line-height: 1.7;">门店、出租屋、小微店铺<strong>低成本补盲</strong>；云密码直连，支持<strong>双向对讲</strong>，无需折腾 RTSP 密码</td>
+</tr>
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>Tuya</strong></td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;">涂鸦智能</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444;">涂鸦生态 IPC、门铃、室内机</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444; line-height: 1.7;"><strong>海量白牌/OEM 摄像头</strong>一次纳管；出海与国内涂鸦系设备统一接入，减少「一品牌一套对接」</td>
+</tr>
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>Ring</strong></td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;">Amazon</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444;">门铃、室外机、Spotlight Cam</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444; line-height: 1.7;">海外社区、跨境电商仓<strong>门铃监控入平台</strong>；账号绑定后本地 P2P 取流，支持<strong>远程对讲</strong></td>
+</tr>
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>Nest</strong></td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;">Google</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444;">Nest Cam、Doorbell</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444; line-height: 1.7;">高端住宅、涉外项目<strong>Google 生态门铃/摄像头</strong>纳入统一值守，与专业摄像机同屏研判</td>
+</tr>
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>小米</strong></td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;">米家 / Mi Home</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444;">米家摄像机、智能门铃、室外机</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444; line-height: 1.7;">国内家庭与连锁门店<strong>存量米家设备利旧</strong>；免 Micam 中间件，直连平台挂 AI 分析</td>
+</tr>
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>Wyze</strong></td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;">Wyze</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444;">Wyze Cam v3/v4、门铃、室外机</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444; line-height: 1.7;"><strong>极致性价比摄像头</strong>批量入平台；本地 P2P、支持<strong>双向对讲</strong>，适合试点与广域补点</td>
+</tr>
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>DoorBird</strong></td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;">DoorBird</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444;">智能门铃、门口机</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444; line-height: 1.7;">别墅、高端社区<strong>门口可视对讲</strong>与平台告警联动；MJPEG/音频/对讲一体桥接</td>
+</tr>
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>GoPro</strong></td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;">GoPro</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444;">HERO9–12（USB / Wi-Fi）</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444; line-height: 1.7;">巡检、应急、运动视角<strong>机动机位</strong>；临时机位快速入流，适合勘察与现场记录</td>
+</tr>
+<tr>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>Roborock</strong></td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top;">石头科技</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444;">S6/S7/Qrevo MaxV 等带摄像头扫地机</td>
+<td style="padding: 10px 12px; border: 1px solid #e0e0e0; vertical-align: top; color: #444; line-height: 1.7;"><strong>移动视角补盲</strong>——家具底部、床底等固定摄像头看不到的区域；部分型号支持<strong>双向对讲</strong></td>
+</tr>
+</table>
+
+<ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">
+  <li><strong>Web 一键接入</strong>：管控台「接入 RTC 摄像头」入口，按品牌动态表单填参；Ring / Nest / 小米 / Wyze / Roborock 等 OAuth 类平台经 go2rtc WebUI 完成账号绑定后，复制源流 URL 即可登记</li>
+  <li><strong>全链路已打通</strong>：WEB 注册 → VIDEO <code>/register/device/rtc-live</code> → RTC 管理 API → go2rtc P2P 取流 → 标准 RTSP 输出 → SRS 推流转发 → Jessibuca 播放与 AI 分析，<strong>九大品牌同一套流程</strong>，无需额外中间件</li>
+  <li><strong>双向对讲</strong>：Tapo、Tuya、Ring、Wyze、DoorBird、Roborock 支持 go2rtc 双向音频，门铃对讲、远程喊话与告警联动可扩展</li>
+  <li><strong>生命周期联动</strong>：设备删除时自动清理 go2rtc 流配置；与设备目录、地图布点、算法任务体系无缝衔接</li>
+  <li><strong>Docker 一体化部署</strong>：<code>bash RTC/install_linux.sh start</code> 即可启动 go2rtc + Python 管理服务，默认 host 网络适配 P2P 局域网直连</li>
+</ul>
+
+<p style="font-size: 14px; line-height: 1.8; color: #444; margin: 12px 0 8px 0;">
+📖 详细接入文档见 <a href="RTC/README.md" style="color: #3498db; text-decoration: none; font-weight: 600;">RTC 模块 README</a>。
+</p>
+
 ### 🎯 三档硬件，一套平台
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
@@ -63,7 +176,7 @@ EasyAIoT是一个云边端一体化的智能物联网平台，专注于AI与IoT�
 
 | 选型 | 典型硬件（举例） | 推荐内存 | 你能做到什么 | 实测验证 |
 | :-- | :-- | :--: | :-- | :--: |
-| **mini** 边缘精简版 | <strong>边缘盒子</strong>（4 GB 工控机、门店安防一体机、工地现场网关） | ≥ 4 GB | <strong>一个点位装上就有智能</strong>：摄像头接入、实时分析、智能告警、模型推理，最低成本落地视觉能力 | 仅需约 2 GB，余量充足 |
+| **mini** 边缘精简版 | <strong>边缘盒子</strong>（8 GB 工控机、门店安防一体机、工地现场网关） | ≥ 8 GB | <strong>一个点位装上就有智能</strong>：摄像头接入、实时分析、智能告警、模型推理；事件面与 standard/full 一致（Gateway + iot-sink + EMQX） | 约 4–6 GB，余量充足 |
 | **standard** 标准版 | <strong>AI 一体摄像头</strong>（智能摄像终端、带算力 AI 监控摄像头、多目 AI 分析一体机） | ≥ 16 GB | <strong>每路摄像头即智能节点</strong>：多路摄像头上墙即可楼面/园区级覆盖，设备、规则、算力统一编排，多场景并行运营 | 约 10 GB，运行平稳有余量 |
 | **full** 完整版（默认） | <strong>AIoT 智能全栈一体机</strong>（企业级全栈智控一体机、行业物联网全栈主机、云边端一体智能平台一体机） | ≥ 20 GB | <strong>一箱配齐 IoT + 视频 + AI</strong>：设备纳管、海量接入、智能分析、指挥研判一体化，全量能力长期稳跑 | 约 14 GB，全能力开启仍留足余量 |
 
@@ -71,24 +184,9 @@ EasyAIoT是一个云边端一体化的智能物联网平台，专注于AI与IoT�
 <strong>安装选型与资源符合性（实测）：</strong>
 </p>
 
-<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 12px 0;">
-  <div style="flex: 1 1 22%; min-width: 160px; text-align: center;">
-    <img src=".image/deploy-profile-menu.png" alt="部署选型" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <p style="font-size: 12px; color: #888; margin: 8px 4px 0;">按现场硬件形态选一档</p>
-  </div>
-  <div style="flex: 1 1 22%; min-width: 160px; text-align: center;">
-    <img src=".image/deploy-profile-mini.png" alt="mini 实测符合性" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <p style="font-size: 12px; color: #888; margin: 8px 4px 0;"><strong>边缘盒子（mini）</strong>：实测约 2 GB，单点可安心跑智能</p>
-  </div>
-  <div style="flex: 1 1 22%; min-width: 160px; text-align: center;">
-    <img src=".image/deploy-profile-standard.png" alt="standard 实测符合性" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <p style="font-size: 12px; color: #888; margin: 8px 4px 0;"><strong>AI 一体摄像头（standard）</strong>：实测约 10 GB，组网覆盖仍有余量</p>
-  </div>
-  <div style="flex: 1 1 22%; min-width: 160px; text-align: center;">
-    <img src=".image/deploy-profile-full.png" alt="full 实测符合性" style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <p style="font-size: 12px; color: #888; margin: 8px 4px 0;"><strong>AIoT 智能全栈一体机（full）</strong>：实测约 14 GB，全栈配齐可放心投产</p>
-  </div>
-</div>
+| | | |
+|:---:|:---:|:---:|
+| ![边缘盒子 mini](.image/deploy-profile-mini.png) | ![AI 一体摄像头 standard](.image/deploy-profile-standard.png) | ![全栈一体机 full](.image/deploy-profile-full.png) |
 
 #### 🧠 AI能力
 
@@ -101,41 +199,44 @@ EasyAIoT是一个云边端一体化的智能物联网平台，专注于AI与IoT�
     </ul>
   </li>
   <li><strong>YOLO26 新一代目标检测能力</strong>：平台内置最新一代目标检测能力，开箱即可用于实时画面分析与抓拍识别，在相同硬件条件下可接入更多路摄像头、响应更快、误报更少。支持从数据采集、标注、训练到上线推理的完整闭环，帮助用户以更低成本持续迭代专属检测模型，快速覆盖安全帽佩戴、人员闯入、烟火隐患等各类常见安防与工业场景，让「看得准、算得快、扩得动」成为默认可用能力</li>
-  <li><strong>YOLO26 人体姿态分析</strong>：在目标检测能力之上新增人体关键点与骨架姿态分析，基于 YOLO26 Pose 模型开箱即用，支持图片、视频与摄像头实时流三种输入方式。图片模式可同步输出骨架标注与人数统计；视频模式采用异步任务处理，进度可轮询、结果可下载；摄像头模式可对接 RTSP/RTMP 实时取流，将姿态识别结果叠加推流回显，便于远程盯防与行为研判。模型推理页提供「姿态分析」与「目标检测」一键切换，置信度可调，与现有模型管理、历史记录、对照预览等能力无缝衔接，适用于工地作业规范、健身动作评估、人群聚集态势感知等需要「看清人体结构与动作形态」的场景，让平台从「框出目标」进一步走向「理解姿态」</li>
-  <li><strong>多协议摄像头接入支持</strong>：全面支持 GB28181 和 ONVIF 两大主流视频监控协议，实现标准化设备接入与管理。GB28181 作为中国国家标准，完美适配国内主流监控设备；ONVIF 作为国际通用标准，广泛兼容全球主流品牌摄像头。通过双协议支持，平台能够无缝对接现有监控系统，实现设备的即插即用、自动发现与统一管理，大幅降低设备接入门槛，提升系统兼容性与扩展性，为大规模摄像头部署提供坚实的技术基础。此外，新增 NVR 同网段/跨网段批量扫描、注册与统一管控能力，覆盖海康、大华、华为、萤石、小米等主流品牌，支持基于设备原生协议的网段发现、一键登记及通道批量导入，进一步降低大规模监控设备的接入与运维成本</li>
-  <li><strong>大疆机场 / 无人机空中视角接入</strong>：突破固定摄像头「只能看地面、难覆盖广域」的布控局限，将大疆司空体系下的机场与无人机高空画面纳入平台统一视频与 AI 研判闭环。流媒体模块提供「接入大疆直播」能力：支持<strong>司空 API 开启直播</strong>与<strong>手动直播源</strong>两种接入方式——API 模式可配置司空 Host、项目编号、开启直播接口、X-User-Token、工作空间与平台名称，按机场或无人机类型填写设备 SN、camera_index、机场/无人机 SN、清晰度与 Token 有效期，一键拉起厂家直播流并自动登记设备；手动模式则支持直接填入 RTSP / RTMP / HTTP-FLV / HLS 等直播源。接入后系统以厂家回流地址为上游，经本地 SRS 转推分发，前端以火山 RTC 等链路稳定播放；支持自动创建转发任务，使空中画面与国标/ONVIF 固定点位同屏共管。管理者可像管理固定摄像头一样调阅机场与飞行器实况，并进一步挂接实时 AI 分析、告警联动与证据留存，快速覆盖广域巡查、应急勘察、周界补盲等传统固定点位难以触及的场景，显著缩短「发现异常—锁定现场—联动处置」的响应链条，让智慧安防从平面布控升级到天地一体协同感知</li>
+  <li><strong>RUNTIME 高速执行层</strong>：把「看图、算图、推图」从解释型语言链路里抽出来，用 <strong>原生二进制</strong>贯通<strong>拉流 → 解码 → 推理 → 告警回传 → 带框推流</strong>。相对 Python 执行路径，避开 GIL 与多进程编排开销，同等硬件上<strong>同机路数更高、端到端时延更低、CPU/内存更省</strong>；实时 / 抓拍 / 巡检与多路原画转发共用同一套执行能力，默认 <code>executor=cpp</code>。业务上可做到：园区 NVR 数十路先保证「看得清、不卡顿」，再按需只对重点通道开 AI；原画预览与带框研判同屏切换、互不拖垮；平台（VIDEO/WEB）继续管设备编排、告警归档与权限，执行层专注吞吐与时延——扩路、加场景不必先换整机</li>
+  <li><strong>高性能推流转发</strong>：面向「要先把画面铺满大屏 / 分屏，不必每路都开算法」的真实交付——NVR 批量通道、楼宇多点位可一键建转发任务，默认走 <strong>RUNTIME</strong> 高性能路径（亦可切兼容模式），让多路原画以更低资源开销稳定上墙。原画观看与 AI 研判可同设备并行：值守既能看未标注实况，也能切到带框结果；算法启停后转发策略自动跟进，少一次手工改配置、少一轮联调返工。配套并排预览能力，验收时直接对比延时与标注效果，缩短「装完还要对半天画面」的周期</li>
+  <li><strong>YOLO26 人体姿态分析</strong>：在目标检测能力之上新增人体关键点与骨架姿态分析，开箱即用，支持图片、视频与摄像头实时流三种输入方式。图片模式可同步输出骨架标注与人数统计；视频模式支持进度跟踪与结果下载；摄像头模式可对接 RTSP/RTMP 实时取流，将姿态识别结果叠加推流回显，便于远程盯防与行为研判。模型推理页提供「姿态分析」与「目标检测」一键切换，适用于工地作业规范、健身动作评估、人群聚集态势感知等需要「看清人体结构与动作形态」的场景，让平台从「框出目标」进一步走向「理解姿态」</li>
+  <li><strong>多协议摄像头接入支持</strong>：全面支持 GB28181 和 ONVIF 两大主流视频监控协议，实现标准化设备接入与管理。GB28181 作为中国国家标准，完美适配国内主流监控设备；ONVIF 作为国际通用标准，广泛兼容全球主流品牌摄像头。通过双协议支持，平台能够无缝对接现有监控系统，实现设备的即插即用、自动发现与统一管理，大幅降低设备接入门槛，提升系统兼容性与扩展性，为大规模摄像头部署提供坚实的技术基础。此外，新增 NVR 同网段/跨网段批量扫描、注册与统一管控能力，覆盖海康、大华、华为、萤石、小米等主流品牌，支持基于设备原生协议的网段发现、一键登记及通道批量导入；对于米家等原生不支持 RTSP 的消费级摄像头，可通过 <strong>RTC 模块（go2rtc 桥接）</strong>纳入同一平台，进一步降低大规模监控设备的接入与运维成本</li>
+  <li><strong>大疆机场 / 无人机空中视角接入</strong>：突破固定摄像头「只能看地面、难覆盖广域」的布控局限，将大疆司空体系下的机场与无人机高空画面纳入平台统一视频与 AI 研判闭环。流媒体模块提供「接入大疆直播」能力：支持<strong>司空 API 开启直播</strong>与<strong>手动直播源</strong>两种接入方式——API 模式一键拉起厂家直播流并自动登记设备；手动模式则支持直接填入 RTSP / RTMP / HTTP-FLV / HLS 等直播源。接入后空中画面可与国标/ONVIF 固定点位同屏共管，管理者可像管理固定摄像头一样调阅机场与飞行器实况，并进一步挂接实时 AI 分析、告警联动与证据留存，快速覆盖广域巡查、应急勘察、周界补盲等传统固定点位难以触及的场景，显著缩短「发现异常—锁定现场—联动处置」的响应链条，让智慧安防从平面布控升级到天地一体协同感知</li>
+  <li><strong>RTC 消费级摄像头 P2P 桥接</strong>：一次打通 <strong>Tapo（TP-Link 家用/门店 IPC）、Tuya（涂鸦系白牌海量设备）、Ring / Nest（海外门铃生态）、小米米家（国内家庭存量利旧）、Wyze（高性价比补点）、DoorBird（高端门口对讲）、GoPro（机动巡检机位）、Roborock（扫地机移动视角）</strong> 九大品牌——它们原生均不支持标准 RTSP，RTC 模块基于 go2rtc 提供 P2P 桥接与统一管理 API。Web 管控台「接入 RTC 摄像头」按品牌动态引导填参或 OAuth 绑定，一键完成 go2rtc 流注册、VIDEO 设备登记与 SRS 推流转发；桥接后与国标/ONVIF 专业摄像机<strong>同屏共管、同挂 AI 任务、同走告警联动</strong>，把「家里/门店已在用的摄像头」和「项目里的专业摄像机」纳入同一套视频研判体系，显著降低消费级设备入平台的集成与利旧成本</li>
   <li><strong>实时对讲与云台远控</strong>：打破「只能看、不能管」的传统监控局限，值守人员在实时预览同屏即可完成语音喊话与云台操控——无需切换系统、不必亲临现场，即可远程沟通、引导疏散或制止违规行为，把响应从「派人到场」压缩到「开口即达」。云台操控让摄像头随心转向、变焦聚焦，突发情况可迅速对准事发区域、放大细节，形成「看得清、指得准、喊得到」的一体化现场处置闭环。全面兼容 GB28181 与 ONVIF 设备，利旧现有监控资产，无需额外购置对讲主机或第三方软件，让存量摄像头即刻具备远程沟通与灵活调度能力，显著降低系统孤岛与值守成本</li>
   <li><strong>可编排算法后处理</strong>：突破「只能检出、难以研判」的能力瓶颈，在目标检测之上增设独立的业务研判层，将画面感知结果转化为可运营、可追责、可统计的业务事件。支持按任务灵活定义人数统计、越线通行、停留超时、区域滞留、多条件复合告警等场景规则，无需反复调整模型即可快速适配工地安监、园区安防、交通管控等差异化需求，把通用视觉能力锻造成贴近现场的管理抓手。后处理与实时分析彼此独立、并行运转——监控画面持续流畅研判，业务逻辑按需弹性扩展，研判结果自动沉淀存档并驱动精准告警，显著降低误报漏报与人工复核成本。业务人员专注规则表达，平台负责分发执行与规模承载，让「看得见」真正走向「判得清、管得住、用得起来」</li>
-  <li><strong>多中心节点 × 多工作节点联邦集群</strong>：面向跨区域、多机房与云边协同部署，平台采用「N 个中心节点 + N 个工作节点」联邦架构——以中心节点为统一控制面、工作节点为算力与媒体执行面，构建可横向扩展的分布式调度体系。每个中心节点纳管本域工作节点集群，支持监测代理、分布式存储、流媒体引擎、音视频转码、视频分析运行时、模型推理与训练等运行时分发与一键远程部署；多中心节点可互联同步，集群泳道视图直观呈现「中心—工作」拓扑与资源水位，支持泳道级批量维护与组件分发。算法任务、自动标注流水线、推流转发等工作负载按节点角色与 GPU 能力智能调度、队列弹性分发，让海量路数接入、高并发推理与分布式训练在同一集群中协同运转，真正做到「纳得进、分得清、扩得开、管得全」</li>
-  <li><strong>SAM 零启动自动标注编排流水线</strong>：面向「尚无标注样本、尚无可用检测模型」的冷启动场景，平台集成 SAM 开放词汇分割能力与智能编排引擎，提供一键无人值守标注流水线。系统按策略自动串联摄像头抽帧采集、SAM 文本提示首批标注、达标后自动触发 YOLO 微调训练、量产阶段以 YOLO 高速推理为主并对漏检样本智能切换 SAM 回补、按进度周期性迭代训练及数据集自动打包导出，完整贯通「采—标—训—导」闭环。编排中枢实时感知流水线阶段与标注进度，自主决策 SAM / YOLO / 混合补充等标注模式及训练触发时机，支持任务暂停恢复与本地/集群算力队列弹性调度；配合可视化策略配置与运行日志，帮助用户从零样本、零模型起步快速沉淀专属检测能力，让「开口定义类别、坐等模型成型」成为数据集建设的默认可用路径</li>
+  <li><strong>多中心节点 × 多工作节点联邦集群</strong>：面向跨区域、多机房与云边协同部署，平台采用「N 个中心节点 + N 个工作节点」联邦架构——中心节点统一编排，工作节点承载算力与媒体执行，可横向扩展。每个中心节点纳管本域工作节点，支持流媒体、音视频转码、视频分析、模型推理与训练等能力的远程分发与一键部署；多中心可互联同步，集群泳道视图直观呈现「中心—工作」拓扑与资源水位。算法任务、自动标注流水线、推流转发等工作负载按节点角色与 GPU 能力智能调度，让海量路数接入、高并发推理与分布式训练在同一集群中协同运转，真正做到「纳得进、分得清、扩得开、管得全」</li>
+  <li><strong>SAM 零启动自动标注编排流水线</strong>：面向「尚无标注样本、尚无可用检测模型」的冷启动场景，平台集成 SAM 开放词汇分割能力，提供一键无人值守标注流水线。系统按策略自动串联摄像头抽帧采集、文本提示首批标注、达标后自动触发 YOLO 微调训练、量产阶段以 YOLO 高速推理为主并对漏检样本智能切换 SAM 回补、按进度周期性迭代训练及数据集自动打包导出，完整贯通「采—标—训—导」闭环。支持任务暂停恢复与本地/集群算力弹性调度，配合可视化策略配置与运行日志，帮助用户从零样本、零模型起步快速沉淀专属检测能力，让「开口定义类别、坐等模型成型」成为数据集建设的默认可用路径</li>
   <li><strong>万级弹性算力集群与横向扩容池</strong>：面向超大规模 AI 与视频业务，构建云边端一体的分布式算力底座，将算法任务、推流转发、算法服务、模型训练与推理统一纳入横向负载均衡与弹性伸缩体系。新增服务器一键纳管入网即可成为可调度算力单元，调度中枢按资源水位与业务压力自动分发任务、平衡负载，实现从百路到万路摄像头、从单机到万级节点的线性扩容——无需重复部署与手工调参，让海量路数接入、高并发推理与分布式训练在同一算力池中协同运行，真正做到「扩得动、跑得稳、管得住」</li>
-  <li><strong>无限联邦边缘集群模式</strong>：面向广域布点、弱网现场与分阶段扩容场景，让智能分析能力贴着业务就地部署——普通开发板与边缘算力节点也可成为随时上线的值守单元。中心统一下发任务与策略，现场就近完成感知研判，告警与证据自动回传汇聚，无需再为每个网点堆叠重型服务器与复杂运维体系。业务扩张时按需增配节点即可线性延展覆盖半径，做到「加一点，多一片；加一路，多一分保障」，真正实现算力随场景生长、智能随业务铺开</li>
   <li><strong>天地图空间可视化与以图研判</strong>：接入国家天地图，将摄像头、告警与人车识别能力汇聚到一张地图，让监控从「看画面」升级为「看全局」。流媒体与告警模块均提供「地图分布」视图，配合设备目录树按区域聚焦，一眼掌握卡口布局与在线状态；支持地图点选、地点搜索与批量导入坐标，国标通道、NVR 通道与直连摄像头均可快速完成布点，让每路画面都有清晰的空间归属。告警事件自动关联摄像头坐标上图展示，可按时间、事件类型、任务与业务标签筛选，选中即可查看抓拍与录像，帮助值守人员从「哪里出事」快速切入处置。结合人脸库与车牌库识别能力，可将同一目标在多个点位上的命中记录串联成空间脉络——<strong>以人寻迹</strong>，还原重点人员在布控范围内的出现路线与活动范围；<strong>以车寻迹</strong>，串联过车记录，快速定位车辆行经路径与停留区域，为寻人找车、巡防布控与事后复盘提供直观线索。移动类设备还支持轨迹回放，按时间轴重现巡逻与行进路线；矢量地图与卫星影像随心切换，自动适应视野，让管理者以地图为纲、以图为媒，更快发现异常、锁定目标、指挥调度</li>
-  <li><strong>Qwen / DeepSeek 多卡部署</strong>：支持将 Qwen、DeepSeek 等大语言模型以多卡并行方式部署上线，可按集群与 Worker 维度灵活调度 GPU 算力，实现模型实例的弹性扩缩与负载均衡，满足高并发推理与长上下文场景下的稳定服务能力</li>
+  <li><strong>Qwen / DeepSeek 多卡部署</strong>：支持将 Qwen、DeepSeek 等大语言模型以多卡并行方式部署上线，可按集群灵活调度 GPU 算力，实现模型实例的弹性扩缩与负载均衡，满足高并发推理与长上下文场景下的稳定服务能力</li>
   <li><strong>视觉大模型智能理解</strong>：集成QwenVL3视觉大模型，支持对实时视频画面进行深度视觉推理与语义理解，能够对画面内容进行智能分析与场景理解，提供更丰富的视觉认知能力，实现从像素级感知到语义级理解的跨越</li>
-  <li><strong>摄像头实时画面 AI 分析</strong>：面向 RTSP/RTMP 实时视频流构建「拉流解码 → 智能抽帧 → 模型推理 → 结构化出数 → 告警联动」全链路分析管线，以毫秒级响应将画面变化即时转化为可检索、可研判的结构化检测事件。观看链路与算法链路架构解耦、分级码率与多卡 GPU 协同调度并重，兼顾预览清晰度与高路数并发吞吐；分析结果可无缝衔接检测区域、布防时段、人脸/车牌识别及可编排后处理规则，将传统「人盯屏、事后翻」的值守模式升级为「机器全时盯、异常秒推送、证据自动留」，让实时视频从被动观看真正变为主动感知与智能研判的基础设施</li>
-  <li><strong>摄像头智能巡检</strong>：面向路数多、值守人力有限的监控场景，提供分屏巡检与设备目录批量巡检能力，在有限并发连接下对大规模摄像头进行轮巡式 AI 分析。支持轮询、连接池、混合三种调度模式——可按设定间隔自动抓拍、运行检测模型并联动告警与人脸/车牌识别；混合模式下焦点路常驻盯防、背景路池化轮巡，兼顾重点布控与全域覆盖。巡检进度实时推送，抓拍帧自动入库留存，支持从分屏画面或设备目录一键拉起数百路巡检会话，以「少连接、广覆盖、快发现」的方式，将传统人工逐屏翻看的值守模式升级为智能化自动巡检</li>
+  <li><strong>摄像头实时画面 AI 分析</strong>：面向 RTSP/RTMP 实时视频流提供从拉流、解码、模型推理到结构化出数与告警联动的全链路分析能力；默认可由 <strong>RUNTIME</strong> 承接（与抓拍、巡检共用同一执行器体系），以毫秒级响应将画面变化即时转化为可检索、可研判的结构化检测事件，并<strong>默认推送带框检测流</strong>供值守切换研判。观看（原画）与算法（检测画）链路相互独立，兼顾预览清晰度与高路数并发吞吐；分析结果可无缝衔接检测区域、布防时段、人脸/车牌识别及可编排后处理规则，将传统「人盯屏、事后翻」的值守模式升级为「机器全时盯、异常秒推送、证据自动留」，让实时视频从被动观看真正变为主动感知与智能研判的基础设施</li>
+  <li><strong>摄像头智能巡检</strong>：面向路数多、值守人力有限的监控场景，提供分屏巡检与设备目录批量巡检能力，对大规模摄像头进行轮巡式 AI 分析；默认可由 <strong>RUNTIME</strong> 以 <code>task_type=patrol</code> 在计算节点执行。支持轮询、连接池、混合三种调度模式——可按设定间隔自动抓拍、运行检测模型并联动告警与人脸/车牌识别；混合模式下焦点路常驻盯防、背景路轮巡，兼顾重点布控与全域覆盖。巡检进度实时可见，抓拍自动留存，支持从分屏画面或设备目录一键拉起数百路巡检，以「少连接、广覆盖、快发现」的方式，将传统人工逐屏翻看的值守模式升级为智能化自动巡检</li>
   <li><strong>云边端一体算法预警监控大屏</strong>：提供统一的云边端一体化算法预警监控大屏，实时展示设备状态、算法任务运行情况、告警事件统计、视频流分析结果等关键信息，支持多维度数据可视化展示，实现云端、边缘端、设备端的统一监控与管理，为决策者提供全局视角的智能监控指挥中心</li>
-  <li><strong>人脸识别与人脸库管理能力</strong>：支持在摄像头任务中灵活开启人脸识别能力，基于Milvus构建人脸库与人脸特征向量管理体系，提供人脸样本/特征的新增、查询、更新、删除与向量检索能力。支持对抓拍画面进行高效人脸比对与身份检索，完整记录匹配结果、抓拍图片、摄像头位置信息与设备上下文，便于后续人员轨迹追溯、安防取证与多维度统计分析</li>
+  <li><strong>人脸识别与人脸库管理能力</strong>：支持在摄像头任务中灵活开启人脸识别能力，提供人脸库与人脸特征管理体系，支持样本/特征的新增、查询、更新、删除与高效检索。支持对抓拍画面进行人脸比对与身份检索，完整记录匹配结果、抓拍图片、摄像头位置信息与设备上下文，便于后续人员轨迹追溯、安防取证与多维度统计分析</li>
   <li><strong>车牌识别与车牌库管理能力</strong>：支持在监控任务中一键启用车牌识别，自动从过车画面中识别车牌信息，并与自建车牌库实时比对。可灵活维护白名单、黑名单及业务标签，车辆命中规则时即时告警联动，帮助实现出入口通行管控、重点车辆布控、访客与固定车辆分类管理等需求。支持自动收录新出现车牌、完整留存抓拍与匹配记录，便于事后查车、轨迹核对与证据留存；识别过程与原有视频分析并行运行，不影响监控与告警主流程的稳定性和实时性</li>
   <li><strong>设备检测区域绘制</strong>：提供可视化的设备检测区域绘制工具，支持在设备抓拍图片上绘制四边形和多边形检测区域，支持区域与算法模型灵活关联配置，支持区域的可视化管理、编辑、删除等操作，支持快捷键操作提升绘制效率，实现精准的区域检测配置，为算法任务提供精确的检测范围定义</li>
   <li><strong>智能联动告警机制</strong>：支持检测区域、布防时段和事件告警的三重联动机制，系统会智能判断检测到的事件是否同时满足指定的检测区域范围、处于布防时段内且匹配告警事件类型，只有同时满足这三个条件时才会触发告警，实现精准的时空条件过滤，大幅降低误报率，提升告警系统的准确性和实用性</li>
   <li><strong>大规模摄像头管理</strong>：支持百级摄像头接入，提供采集、标注、训练、推理、导出、分析、告警、录像、存储、部署等全流程服务</li>
-  <li><strong>算法任务管理</strong>：支持创建和管理两种类型的算法任务，每个算法任务可灵活绑定抽帧器和排序器，实现精准的视频帧提取与结果排序
+  <li><strong>算法任务管理</strong>：支持创建和管理实时、抓拍、巡检等类型的算法任务，每个算法任务可灵活绑定抽帧器和排序器，实现精准的视频帧提取与结果排序
     <ul style="margin: 5px 0; padding-left: 20px;">
-      <li><strong>实时算法任务</strong>：用于实时画面分析，支持RTSP/RTMP流实时处理，提供毫秒级响应能力，适用于监控、安防等实时场景</li>
-      <li><strong>抓拍算法任务</strong>：用于抓拍图像分析，对抓拍图片进行智能识别与分析，适用于事件回溯、图像检索等场景</li>
+      <li><strong>实时算法任务</strong>：用于实时画面分析，支持 RTSP/RTMP 流处理；执行后端默认 <code>executor=cpp</code>（拉起 <strong>RUNTIME</strong>，默认推带框 AI 流并回传告警/心跳），亦可选 <code>python</code> 兼容路径</li>
+      <li><strong>抓拍算法任务</strong>：用于抓拍图像分析；默认亦可走 <code>executor=cpp</code>（RUNTIME SnapScheduler / Cron），对抓拍画面智能识别</li>
+      <li><strong>巡检算法任务</strong>：面向多路轮巡与连接池调度；默认亦可走 <code>executor=cpp</code>（RUNTIME PatrolScheduler），以「少连接、广覆盖」完成批量 AI 巡检</li>
     </ul>
   </li>
   <li><strong>数据集标注与多格式数据集管理</strong>：内置可视化图像标注工作台，支持矩形框、多边形等标注形态，以及标注类别管理与进度跟踪；全面兼容 YOLO、COCO、ImageFolder 等主流数据集格式的灵活导入与导出，并打通云平台数据集通道，支持云端数据集的一键导入与同步导出，贯通「数据采集—人工标注—模型训练—部署推理」全流程闭环</li>
-  <li><strong>多卡训练、断点续训与节点侧部署</strong>：突破「有卡用不上、任务控不住、中断成果丢」的训练落地瓶颈，系统性打通多卡算力利用、任务可控调度与节点侧部署链路，让现场 GPU 真正用得上、训练任务真正控得住。平台可自动识别并调度服务器全部 GPU，用户可在训练页按需选择单卡或多卡，不再受限于「只能看到一张卡」；兼容多种常见数据集格式与目录结构，支持大容量本地数据集上传，训练失败后仍可保留原始数据快速重试，显著降低数据准备与反复折腾的成本。训练进度全程可见，任务可停可续——避免中断后成果丢失、点击停止却仍在后台空转等痛点，本地与远程训练调度在失败时也能及时回退并给出清晰反馈。同步完善前端 GPU 选择、继续训练与停止状态展示，并修复模型发布误判失败、自定义预览图被覆盖、按名称/版本查不到模型以及数据集同步易超时、易冲突等问题，让「训练—发布—使用」闭环更顺畅可靠</li>
-  <li><strong>推流转发</strong>：支持在无需启用AI分析功能的情况下，直接观看摄像头实时画面。通过创建推流转发任务，可将多路摄像头进行批量推送，实现多路视频流的同步观看，满足纯视频监控场景需求</li>
+  <li><strong>多卡训练、断点续训与节点侧部署</strong>：突破「有卡用不上、任务控不住、中断成果丢」的训练瓶颈，打通多卡算力利用、任务可控调度与节点侧部署，让现场 GPU 真正用得上、训练任务真正控得住。平台可自动识别并调度服务器全部 GPU，用户可在训练页按需选择单卡或多卡；兼容多种常见数据集格式，支持大容量本地数据集上传，训练失败后仍可保留原始数据快速重试。训练进度全程可见，任务可停可续，本地与远程训练失败时也能及时回退并给出清晰反馈，让「训练—发布—使用」闭环更顺畅可靠</li>
+  <li><strong>推流转发</strong>：支持在不启算法的情况下直接观看摄像头实时画面；多路批量推送、NVR 通道自动建任务开箱可用。默认走 <strong>RUNTIME</strong> 高性能路径，多路原画更省资源、更易上墙，适合「大屏先铺满、重点通道再开 AI」；特殊环境可切 Python/FFmpeg 兼容模式</li>
   <li><strong>GPU 探测、负载分配与多卡协同</strong>：平台具备 GPU 资源探测与智能分配能力，可自动识别可用 GPU 数量，并依据各卡实时负载将视频编解码与算法推理任务动态调度到多卡并行执行，在保障稳定性的前提下提升多路流处理吞吐与算力利用率，实现多卡场景下的画面编解码与模型推理协同</li>
-  <li><strong>智能传输协议与拉流高可靠</strong>：在 RTSP 等拉流链路上，系统可根据 URL/路径等条件对传输层协议进行动态判断与切换；默认对摄像头拉流采用 UDP 传输以降低时延。当连续多帧出现灰屏、解码异常或流塌缩（解码失败导致画面停滞）时，自动触发 RTSP 重连与链路恢复，降低长时间花屏、卡死对业务的影响</li>
-  <li><strong>观看链路与算法链路分离及分级码率</strong>：将「实时预览/大屏观看」与「算法分析抽帧」在数据链路与控制策略上解耦，由两套独立控制面分别管理。观看侧采用约 6500 Kbps 码率，优先保障画清晰、少卡顿的监控观感；算法侧采用约 3500 Kbps 码率，在检测精度与算力/带宽占用之间取得平衡，避免分析任务与观看任务争抢同一条高码率通道，从架构上保障「看得清、不卡断」与「算得动、可扩展」兼顾</li>
+  <li><strong>智能传输协议与拉流高可靠</strong>：在 RTSP 等拉流链路上，系统可按场景自动选择合适的传输方式以兼顾时延与稳定性。当出现灰屏、解码异常或画面停滞时，自动触发重连与链路恢复，降低长时间花屏、卡死对业务的影响</li>
+  <li><strong>观看与研判双通路</strong>：把「大屏/分屏看原画」与「算法看结果」拆开调度——值守侧优先保证画面清晰、流畅；研判侧独立输出带框结果，两边互不抢路、互不拖垮。同一摄像头可同时保留实况与分析画面，值班切换更自然，扩路时也不必在「看得清」和「算得动」之间二选一</li>
   <li><strong>模型服务集群推理</strong>：支持分布式模型推理服务集群，实现智能负载均衡、故障自动切换与高可用保障，大幅提升推理吞吐量与系统稳定性</li>
   <li><strong>布防时段管理</strong>：支持全防模式和半防模式两种布防策略，可灵活配置不同时段的布防规则，实现精准的时段化智能监控与告警</li>
-  <li><strong>OCR与语音识别</strong>：基于PaddleOCR实现高精度文字识别，支持语音转文本功能，提供多语言识别能力</li>
+  <li><strong>OCR与语音识别</strong>：提供高精度文字识别与语音转文本能力，支持多语言识别</li>
   <li><strong>多模态视觉大模型</strong>：支持物体识别、文字识别等多种视觉任务，提供强大的图像理解与场景分析能力</li>
   <li><strong>LLM大语言模型</strong>：支持RTSP流、视频、图像、语音、文本等多种输入格式的智能分析与理解，实现多模态内容理解</li>
   <li><strong>模型部署与版本管理</strong>：支持AI模型的快速部署与版本管理，实现模型一键上线、版本回滚与灰度发布</li>
@@ -167,9 +268,9 @@ EasyAIoT是一个云边端一体化的智能物联网平台，专注于AI与IoT�
   <li><strong>产品模型管理</strong>：物联网落地最贵的往往不是买设备，而是每接一类设备就重配一遍档案。平台以产品为同类设备模板，支持创建、启停、检索与表格/卡片双视图，应用场景、厂商、型号一次配好——后续扩容直接套用产品模板，不用再逐台从零填写，同类设备一次建档、多台复用，把「设备接入成本」从线性增长压成可复制资产</li>
   <li><strong>多类型产品建模</strong>：现场同时存在直连终端、边缘网关、网关子设备与视频设备时，若用同一套接入路径硬套，拓扑必乱、协议必错。平台按直连、网关、网关子设备、视频四类形态分开建产品，边缘汇聚、直连终端与视频设备各走各的接入路径——拓扑不会混、协议不会配错，为后续规模化纳管打好正确的产品骨架</li>
   <li><strong>产品接入协议与认证配置</strong>：每台设备单独约定协议与鉴权，是联调返工的重灾区。平台在产品级一次定稿接入协议（MQTT / TCP / HTTP / Modbus-TCP / Modbus-RTU / OPC UA）、数据格式、认证方式与加解密策略，下属设备自动继承同一套规范——联调时不再逐台约定鉴权与报文格式，接入规范从「人口口相传」变成「产品级可继承契约」</li>
-  <li><strong>Modbus-TCP 工业以太网接入</strong>：面向电表、PLC、变频器等以太网侧工控设备，平台内置 Modbus-TCP 主站采集能力，按产品/设备配置主机地址、端口、从站号、寄存器测点与采集周期即可上线——轮询读数自动汇入设备影子与在线状态，寄存器写值与属性下发贯通，让工业测点与物联网物模型、规则引擎、告警联动同一套闭环，不必再外挂独立数采软件</li>
-  <li><strong>Modbus-RTU 串口现场接入</strong>：大量现场仪表仍挂在 RS-485 总线，若只能走 TCP 网关转换，接入成本与故障点都会翻倍。平台支持 Modbus-RTU 串口主站采集，可配置串口参数、从站地址、寄存器映射与读写周期，适配虚拟串口与真实串口场景——总线侧设备同样纳入统一纳管与上下行控制，补齐「以太网进不了、串口又管不住」的现场空白</li>
-  <li><strong>OPC UA 工业互联接入</strong>：面向现代化工控与上位系统互联场景，平台支持 OPC UA 客户端接入，按节点地址、命名空间与测点映射完成订阅/读写配置——复杂设备模型可映射为平台物模型属性，上行采集与下行写点与现有设备影子、规则链、消息推送无缝衔接，让 OPC UA 现场资产真正进入「看得见、控得住、可联动」的 AIoT 运营体系</li>
+  <li><strong>Modbus-TCP 工业以太网接入</strong>：面向电表、PLC、变频器等以太网侧工控设备，平台内置 Modbus-TCP 主站采集能力，按产品/设备配置接入参数与测点即可上线——读数自动汇入设备影子与在线状态，写值与属性下发贯通，让工业测点与物联网物模型、规则引擎、告警联动同一套闭环，不必再外挂独立数采软件</li>
+  <li><strong>Modbus-RTU 串口现场接入</strong>：大量现场仪表仍挂在 RS-485 总线，若只能走 TCP 网关转换，接入成本与故障点都会翻倍。平台支持 Modbus-RTU 串口主站采集，适配虚拟串口与真实串口场景——总线侧设备同样纳入统一纳管与上下行控制，补齐「以太网进不了、串口又管不住」的现场空白</li>
+  <li><strong>OPC UA 工业互联接入</strong>：面向现代化工控与上位系统互联场景，平台支持 OPC UA 客户端接入，完成订阅/读写配置——复杂设备模型可映射为平台物模型属性，上行采集与下行写点与现有设备影子、规则链、消息推送无缝衔接，让 OPC UA 现场资产真正进入「看得见、控得住、可联动」的 AIoT 运营体系</li>
   <li><strong>物模型属性定义</strong>：大屏、规则、告警若各写一套测点名，后期必然互相听不懂。平台先把设备能上报、能读写的测点定清楚，支持标准模板与自定义，草稿改完再发布——大屏、规则、告警从此认同一套字段，「能看哪些量」有统一语义，测点名各说各话的返工从根上被掐掉</li>
   <li><strong>物模型服务定义</strong>：远程启停、复位若每做一个动作就写一次性接口，控制面必然碎片化。平台把设备可被远程调用的服务及入参出参写成契约，草稿编辑、发布后生效——「能远程做什么」按契约填参即可，不必再为每个动作堆一次性接口，控制能力可复用、可审计</li>
   <li><strong>物模型事件定义</strong>：设备会上报哪些业务事件若不事先约定，告警口径必然前后打架。平台先约定事件类型，草稿发布后统一生效——事件日志与规则触发共用同一语义，「会发生哪些事」有统一口径，告警不会各说各话</li>
@@ -210,6 +311,7 @@ EasyAIoT是一个云边端一体化的智能物联网平台，专注于AI与IoT�
   <li><strong>消息推送</strong>：再准的检测、再完整的设备事件，若堵在系统里等人翻，价值等于零。按渠道创建推送任务，可先测试再正式启动——告警与业务事件直接落到责任人日常办公入口，不堵在系统里</li>
   <li><strong>推送历史</strong>：通知是否发出、是否触达若无记录，审计与优化只能靠猜。各渠道推送记录可回看——发出没有、触达没有有据可查，审计与触达策略优化都有底</li>
   <li><strong>通知用户与分组</strong>：关键告警全员刷屏会造成告警疲劳，该到的人收不到又会漏报。维护通知用户与分组，按角色、班次精准触达——该到的人收得到，全员刷屏的告警疲劳也少了，让「感知—研判—通知—处置」真正闭环到人</li>
+  <li><strong>TRANSFORM 多向业务流转</strong>：平台侧告警、设备事件与业务结果若只能停在 EasyAIoT 内部，对接 MES / ERP / CRM / WMS 等系统仍要按项目定制接口，交付周期与返工成本都会被放大。TRANSFORM 把「转给谁、按什么规则转、字段怎么对上、投没投到」收成可配置能力：数据目的、转发规则与映射模板一次配好即可复用，投递过程可监控、可回看——多方系统对接从「每家写一次定制接口」变成「按约定配通、按轨迹验收」，让平台数据真正进入客户既有业务闭环</li>
 </ul>
 
 #### 📱 移动端APP
@@ -218,8 +320,8 @@ EasyAIoT是一个云边端一体化的智能物联网平台，专注于AI与IoT�
   <li><strong>跨端覆盖</strong>：手机、小程序与 App 多端可用，运维与管理不必绑在工位前，现场也能即时查看与处置</li>
   <li><strong>能力对齐</strong>：移动端与 PC 管控台业务能力一致，换端不换功，管控体验无缝衔接</li>
   <li><strong>设备管理</strong>：多种接入方式统一纳管，列表与通道一目了然，点开即可实时看图，外出巡检同样心中有数</li>
-  <li><strong>推流转发</strong>：随时创建与启停转发任务，掌握集群节点与各路流状态，远程也能调度视频资源</li>
-  <li><strong>算法任务</strong>：实时与抓拍算法任务随手启停，检测成效随时掌握，异常发现不必等回办公室</li>
+  <li><strong>推流转发</strong>：随时创建与启停转发任务，掌握节点与各路画面状态；多路原画可高效上屏，外出也能调度视频资源</li>
+  <li><strong>算法任务</strong>：实时、抓拍与巡检任务随手启停，检测成效随时掌握，异常发现不必等回办公室</li>
   <li><strong>告警中心</strong>：告警随手检索，抓拍与录像即点即看，移动值守也能快速核实与跟进</li>
   <li><strong>模型管理</strong>：模型上线状态一眼可查，部署进展心中有数</li>
   <li><strong>模型推理</strong>：现场传图即得识别结果，临时核验与抽检不必回 PC</li>
@@ -253,11 +355,11 @@ EasyAIoT是一个云边端一体化的智能物联网平台，专注于AI与IoT�
 ### 💡 技术理念
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-我们认为没有任何一个编程语言能够擅长所有事情，但通过三种编程语言的深度融合，EasyAIoT将发挥各自优势，构建强大的技术生态。
+我们认为没有任何一个编程语言能够擅长所有事情，但通过五种编程语言的深度融合，EasyAIoT将发挥各自优势，构建强大的技术生态。
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-Java擅长构建稳定可靠的平台架构，但不适合网络编程和AI编程；Python擅长网络编程和AI算法开发，但在高性能任务执行方面存在瓶颈；C++擅长高性能任务执行，但在平台开发和AI编程方面不如前两者。EasyAIoT采用三合一语言混编架构，充分发挥各语言优势，构建一个实现颇具挑战，但使用极其便捷的AIoT平台。
+Java擅长构建稳定可靠的平台架构，却不适合网络编程与AI开发；Python擅长网络编程与AI算法，却在高路数、低时延的帧级执行上容易碰到 GIL 与进程开销瓶颈；C++擅长高性能任务执行，却不宜承担平台架构与算法编排——因此平台把<strong>拉流解码、推理、带框推流与多路原画转发</strong>下沉到 <strong>RUNTIME</strong>，WEB/VIDEO 继续做编排与业务面。Go擅长高并发网络编程与协议实现，却不宜承担平台管控与AI算法；TypeScript擅长复杂前端交互与类型安全的工程化界面，却不宜承担后端高性能计算与AI推理。EasyAIoT采用五合一语言混编架构，让各语言各司其职，构建一个实现颇具挑战、使用却极其便捷的AIoT平台。
 </p>
 
 ![EasyAIoT平台架构.jpg](.image/iframe2.jpg)
@@ -277,7 +379,7 @@ Java擅长构建稳定可靠的平台架构，但不适合网络编程和AI编�
 ### 🏗️ 项目架构特点
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-EasyAIoT其实不是一个项目，而是九个项目。
+EasyAIoT其实不是一个项目，而是多个可独立部署的子项目（含 WEB、DEVICE、VIDEO、RTC、AI 等）。
 </p>
 
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
@@ -296,7 +398,7 @@ EasyAIoT其实不是一个项目，而是九个项目。
 ### 🌍 本土化支持
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
-EasyAIoT积极响应本土化战略，全面支持本土化硬件和操作系统，为用户提供安全可控的AIoT解决方案：
+EasyAIoT积极响应本土化战略，全面支持本土化硬件和操作系统，为用户提供安全可控的AIoT解决方案。已覆盖 <strong>麒麟(Kylin) / 欧拉(openEuler)</strong> 等国产操作系统的部署与 PANEL 安装包交付。
 </p>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
@@ -324,7 +426,7 @@ EasyAIoT积极响应本土化战略，全面支持本土化硬件和操作系统
 <div style="padding: 20px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); border-radius: 10px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
 <h4 style="margin-top: 0; color: white; font-size: 18px;">🖱️ 操作系统支持</h4>
 <ul style="font-size: 14px; line-height: 1.8; margin: 10px 0; padding-left: 20px;">
-  <li>兼容麒麟（Kylin）操作系统</li>
+  <li>兼容<strong>麒麟(Kylin) / 欧拉(openEuler)</strong></li>
   <li>支持方德（Founder）等本土化Linux发行版</li>
   <li>适配统信UOS等主流本土化操作系统</li>
   <li>提供完整的本土化部署方案</li>
@@ -340,7 +442,7 @@ EasyAIoT积极响应本土化战略，全面支持本土化硬件和操作系统
 ## 🧩 项目结构
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
-EasyAIoT由九个核心项目组成：
+EasyAIoT 由 WEB、APP、DEVICE、NODE、VIDEO、RTC、AI、RUNTIME、VISUALIZE、TRANSFORM、PANEL、SITE 等核心模块组成，并配套 COMPILE 多平台打包交付能力：
 </p>
 
 <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
@@ -349,8 +451,25 @@ EasyAIoT由九个核心项目组成：
 <td style="padding: 15px; border: 1px solid #e0e0e0; background-color: #f8f9fa; font-weight: 600; color: #2c3e50;">描述</td>
 </tr>
 <tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>SITE模块</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>官方价值入口</strong>：面向访客、集成商与终端客户的独立官方网站，把「云边端一体化」讲清楚——先理解价值，再进入下载与部署</li>
+    <li><strong>缩短认知路径</strong>：产品特性、三档硬件选型、安装包入口与文档导览同站完成，减少「翻仓库、问人、找包」的沟通成本</li>
+    <li><strong>支撑选型决策</strong>：按 mini / standard / full 呈现边缘盒子、AI 一体摄像头与全栈一体机适用场景，帮助现场按硬件能力一次选对档位</li>
+    <li><strong>引流到落地</strong>：官网与演示环境、开源仓库、Releases 安装包形成闭环，让「看懂 → 试用 → 下载 → 装机」可连续完成</li>
+  </ul>
+</td>
+</tr>
+<tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>WEB模块</strong></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">基于Vue的前端管理界面，提供统一的用户交互体验</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>统一管控界面</strong>：前端管理界面，提供统一的用户交互体验</li>
+    <li><strong>多协议设备接入向导</strong>：IPC / NVR / 国标 / RTC 平台分 Tab 引导，支持 ONVIF 扫描、跨网段扫描、手动 RTSP、大疆直播与消费级摄像头 P2P 接入</li>
+    <li><strong>RTC 平台接入</strong>：「接入 RTC 摄像头」快捷入口，按 <strong>Tapo / Tuya / Ring / Nest / 小米 / Wyze / DoorBird / GoPro / Roborock</strong> 九大品牌动态表单填参，OAuth 平台引导至 go2rtc WebUI 完成绑定</li>
+  </ul>
+</td>
 </tr>
 <tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>APP模块</strong></td>
@@ -358,9 +477,9 @@ EasyAIoT由九个核心项目组成：
   <ul style="margin: 5px 0; padding-left: 20px;">
     <li><strong>跨端覆盖</strong>：一套建设、多端触达，手机、小程序与 App 均可使用</li>
     <li><strong>能力对齐</strong>：与 PC 管控台业务能力一致，支持多租户切换</li>
-    <li><strong>设备管理</strong>：直连摄像头、GB28181、NVR 等多协议统一纳管，在线状态与通道浏览，设备详情内一键实时预览</li>
-    <li><strong>推流转发</strong>：推流任务创建、启停、集群节点状态与多路流地址查看</li>
-    <li><strong>算法任务</strong>：实时/抓拍算法任务列表、启停控制与检测/帧数统计</li>
+    <li><strong>设备管理</strong>：直连摄像头、GB28181、NVR、RTC 消费级摄像头等多协议统一纳管，在线状态与通道浏览，设备详情内一键实时预览</li>
+    <li><strong>推流转发</strong>：推流任务创建、启停、节点状态与多路画面查看；支持高性能 / 兼容模式按现场切换</li>
+    <li><strong>算法任务</strong>：实时 / 抓拍 / 巡检任务列表、启停控制与检测/帧数统计（默认可走 RUNTIME）</li>
     <li><strong>告警中心</strong>：告警事件检索、抓拍图预览、告警录像点播回放</li>
     <li><strong>模型与 AI</strong>：模型列表与部署状态、移动端图片推理工作台、训练任务进度监控与停止</li>
     <li><strong>个人中心</strong>：个人资料、账号安全、常见问题、意见反馈与应用设置</li>
@@ -371,15 +490,14 @@ EasyAIoT由九个核心项目组成：
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>DEVICE模块</strong></td>
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
-    <li><strong>技术优势</strong>：基于JDK21，提供更好的性能和现代化特性</li>
     <li><strong>设备管理</strong>：设备注册、认证、状态监控、生命周期管理</li>
     <li><strong>产品管理</strong>：产品定义、物模型管理、产品配置</li>
     <li><strong>协议支持</strong>：MQTT、TCP、HTTP、Modbus-TCP、Modbus-RTU、OPC UA 等多种物联网与工业协议</li>
     <li><strong>设备认证</strong>：设备动态注册、身份认证、安全接入</li>
     <li><strong>规则引擎</strong>：数据流转规则、消息路由、数据转换</li>
     <li><strong>数据采集</strong>：设备数据采集、存储、查询与分析</li>
-    <li><strong>节点控制面</strong>：内置 <code>iot-node</code> 微服务，提供计算/媒体节点 CRUD、SSH 连通测试、Agent 注册与心跳、工作负载调度与媒体节点池分配等统一控制面能力</li>
-    <li><strong>可视化后台</strong>：内置 <code>iot-visualize</code> 微服务（库 <code>iot-visualize20</code>），统一管理大屏/组态项目、模板、素材、数据源与服务部署，为 VISUALIZE 编辑器与 FUXA 组态提供工程元数据与发布能力</li>
+    <li><strong>节点编排</strong>：计算/媒体节点纳管、连通检测、工作负载调度与媒体节点池分配</li>
+    <li><strong>可视化后台</strong>：统一管理大屏/组态项目、模板、素材、数据源与服务部署，为可视化编辑器与工艺组态提供工程管理与发布能力</li>
   </ul>
 </td>
 </tr>
@@ -387,12 +505,12 @@ EasyAIoT由九个核心项目组成：
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>NODE模块</strong></td>
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
-    <li><strong>节点代理</strong>：基于 Python 的边缘/远程节点 Agent，通过 <code>install.sh</code> 一键安装为 systemd 服务，部署于目标服务器后自动接入平台</li>
-    <li><strong>控制面通信</strong>：向 <code>iot-node</code> 控制面注册并周期性心跳，实时上报 CPU、内存、磁盘、GPU 利用率及在运工作负载状态</li>
-    <li><strong>远程工作负载</strong>：通过 HTTP 接口（默认 9100 端口）接收控制面下发的部署/停止指令，在节点本地拉起 AI 模型服务、算法任务、FFmpeg 转码等工作负载</li>
-    <li><strong>媒体节点池</strong>：支持在节点上远程 <code>docker compose</code> 部署 SRS/ZLM 流媒体栈，配合控制面实现设备与媒体节点的 Sticky 绑定与流地址生成</li>
-    <li><strong>节点角色</strong>：支持 compute（算力）、media（媒体）、hybrid（混合）三种角色，支撑 AI 推理、算法任务与流媒体业务的跨节点调度与弹性扩容</li>
-    <li><strong>离线友好</strong>：提供 pip wheels 离线依赖打包与 Agent 热更新能力，适配无外网或受限网络环境下的批量节点纳管</li>
+    <li><strong>节点代理</strong>：边缘/远程节点 Agent，一键安装部署后自动接入平台</li>
+    <li><strong>状态上报</strong>：周期性心跳，实时上报 CPU、内存、磁盘、GPU 利用率及在运工作负载状态</li>
+    <li><strong>远程工作负载</strong>：接收平台下发的部署/停止指令，在节点本地拉起 AI 模型服务、算法任务、音视频转码及 <strong>RUNTIME 执行器</strong>等工作负载</li>
+    <li><strong>媒体节点池</strong>：支持在节点上远程部署流媒体能力，实现设备与媒体节点绑定及流地址生成</li>
+    <li><strong>节点角色</strong>：支持算力、媒体、混合三种角色，支撑 AI 推理、算法任务与流媒体业务的跨节点调度与弹性扩容；算力节点可承接中心下发的实时 / 抓拍 / 巡检与高性能转发</li>
+    <li><strong>离线友好</strong>：支持离线依赖打包与 Agent 热更新，适配无外网或受限网络环境下的批量节点纳管</li>
   </ul>
 </td>
 </tr>
@@ -400,10 +518,39 @@ EasyAIoT由九个核心项目组成：
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>VIDEO模块</strong></td>
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
-    <li><strong>流媒体处理</strong>：支持RTSP/RTMP流实时处理与传输</li>
-    <li><strong>算法任务管理</strong>：支持实时算法任务和抓拍算法任务两种类型，分别用于实时画面分析和抓拍图像分析</li>
+    <li><strong>流媒体处理</strong>：支持 RTSP/RTMP 流实时处理与传输</li>
+    <li><strong>多协议摄像头接入</strong>：GB28181、ONVIF、NVR 批量扫描、大疆司空直播与 RTC 消费级摄像头统一纳管</li>
+    <li><strong>RTC 联动 API</strong>：<code>/register/device/rtc-live</code> 一键完成 go2rtc 流注册与设备入库，删除设备时自动清理 RTC 流</li>
+    <li><strong>算法任务管理</strong>：支持实时 / 抓拍 / 巡检；默认可走高性能执行路径并输出带框研判画面，亦可按现场切兼容模式</li>
+    <li><strong>推流转发编排</strong>：多路原画批量上屏默认高性能；特殊环境可切兼容模式；任务启停与策略变更可自动跟进，减少手工返工</li>
     <li><strong>抽帧器与排序器</strong>：支持灵活的抽帧策略与结果排序机制，每个算法任务可绑定独立的抽帧器和排序器</li>
     <li><strong>布防时段</strong>：支持全防模式和半防模式的时段化配置</li>
+    <li><strong>编排与执行分工</strong>：VIDEO 管设备编排、原画预览、告警归档与启停；重活交给 <strong>RUNTIME</strong>（推理与高性能转发）——「管得住」与「跑得动」分开，路数与时延不再被 Python 编排拖住</li>
+    <li><strong>验收预览</strong>：支持原画与研判画面并排对照，便于现场快速验收延时与标注效果</li>
+  </ul>
+</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>RTC模块</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>go2rtc</strong>：基于 <a href="https://github.com/AlexxIT/go2rtc">go2rtc</a> 源码，vendor 随 install 脚本拉取</li>
+    <li><strong>九大品牌 P2P 桥接</strong>：
+      <ul style="margin: 4px 0; padding-left: 18px; line-height: 1.7;">
+        <li><strong>Tapo</strong>（TP-Link）— 家用/门店 IPC，云密码直连 + 双向对讲</li>
+        <li><strong>Tuya</strong>（涂鸦）— 白牌/OEM 摄像头海量纳管</li>
+        <li><strong>Ring</strong>（Amazon）— 门铃/室外机，海外社区与仓储</li>
+        <li><strong>Nest</strong>（Google）— Nest Cam / Doorbell 涉外高端场景</li>
+        <li><strong>小米</strong>（米家）— 国内家庭存量设备利旧，免 Micam</li>
+        <li><strong>Wyze</strong> — 高性价比 IPC，试点与广域补点</li>
+        <li><strong>DoorBird</strong> — 智能门铃门口对讲 + 视频</li>
+        <li><strong>GoPro</strong> — HERO9–12 机动机位 / 应急巡检</li>
+        <li><strong>Roborock</strong>（石头）— 带摄像头扫地机移动视角补盲</li>
+      </ul>
+    </li>
+    <li><strong>统一管理 API</strong>：平台注册表、流 URL 构建、go2rtc REST 代理，默认端口 6100（管理）/ 1984（WebUI）/ 8554（RTSP）</li>
+    <li><strong>与 VIDEO 全链路打通</strong>：P2P 取流 → 标准 RTSP → SRS 推流 → Web 播放与 AI 分析，消费级设备与专业摄像机同一套运维体系</li>
+    <li><strong>Docker 一体化</strong>：单容器运行 go2rtc 核心 + Python 管理服务，host 网络适配 P2P 局域网直连</li>
   </ul>
 </td>
 </tr>
@@ -419,18 +566,20 @@ EasyAIoT由九个核心项目组成：
 </td>
 </tr>
 <tr>
-<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>TASK模块</strong></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">基于C++的高性能任务处理模块，负责计算密集型任务执行</td>
-</tr>
-<tr>
-<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>EDGE模块</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>RUNTIME模块</strong></td>
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
-    <li><strong>无限联邦边缘集群模式</strong>：第八核心模块，把智能能力从中心延伸到现场——普通开发板与边缘节点可随时加入值守网络，算力随业务铺开，告警与证据自动汇聚上云</li>
-    <li><strong>现场轻量值守</strong>：专注就近感知与研判回传，不背负重型管控界面与本地业务系统，降低边缘部署门槛与长期运维负担</li>
-    <li><strong>开箱接入、统一纳管</strong>：现场节点快速加入后由中心统一编排任务与策略，减少人工配置与分点分建成本</li>
-    <li><strong>业务无缝延展</strong>：中心负责看全局、定规则，边缘负责盯现场、快响应；节点数量可随覆盖范围持续扩展，支撑实时分析、巡检与抓拍等场景横向铺开</li>
-    <li><strong>轻装落地</strong>：边缘侧重「干活」而非「堆设备」，让广域布点更容易落地、更容易复制</li>
+    <li><strong>高性能原生执行</strong>：单二进制贯通拉流、解码、ONNX 推理、告警/心跳回传与带框推流；默认 <code>executor=cpp</code>，相对 Python 路径同机路数更高、时延更低、资源更省</li>
+    <li><strong>四类现场形态</strong>：实时盯防、定时抓拍、轮巡巡检、纯原画转发——按业务选形态，不必为「只想看图」也付满额算力成本</li>
+    <li><strong>原画与研判双画面</strong>：实时任务默认同步输出带框检测流，与 VIDEO 原画预览分离呈现，互不抢路</li>
+    <li><strong>多路原画省资源上墙</strong>：推流转发默认走高性能路径，NVR 多通道场景下「多路看原画、少路跑 AI」同时成立</li>
+    <li><strong>告警与状态回传中心</strong>：分析与转发过程的告警、运行状态汇聚回 VIDEO 统一落库与通知，节点本地不堆业务数据</li>
+    <li><strong>过载时保实时</strong>：算力吃紧时优先保障当前画面与告警时效，避免「越忙越卡、越卡越漏」</li>
+    <li><strong>GPU 优先、失败可续跑</strong>：有加速卡则优先用，不可用时自动降级继续跑，任务不中断</li>
+    <li><strong>一键分发</strong>：WEB「业务运行时分发」或安装脚本批量下发；中心机随 VIDEO 安装自动挂载本机执行器</li>
+    <li><strong>事件面 MQTT</strong>：告警/抓拍/后处理发往 EMQX 算法总线，由 <strong>iot-sink</strong> 落库、归档与通知 enrichment</li>
+    <li><strong>管理面 HTTP 心跳</strong>：任务存活回 VIDEO，启停与任务表由 VIDEO 管理</li>
+    <li><strong>NFS 媒体根</strong>：告警图、SRS 录像统一写入 <strong>NFS 共享媒体根</strong>（`EASYAIOT_MEDIA_ROOT`，默认 `/mnt/easyaiot-media`；无 sudo 时 fallback 至 `$HOME/easyaiot/media`）；MQTT 只带路径，由 <strong>iot-sink</strong> 读盘归档 MinIO</li>
   </ul>
 </td>
 </tr>
@@ -438,24 +587,52 @@ EasyAIoT由九个核心项目组成：
 <td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>VISUALIZE模块</strong></td>
 <td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
   <ul style="margin: 5px 0; padding-left: 20px;">
-    <li><strong>拖拽式大屏编辑器</strong>：第九核心模块，基于 GoView 的高性能低代码可视化编辑器，专注画布编辑与预览，不含独立登录与项目管理</li>
-    <li><strong>与 WEB 一体联动</strong>：项目创建、模板、素材、数据源、发布与投放在管理后台「可视化」菜单完成；点击「打开编辑器」跳转本模块（默认 <code>:8002</code>）携带 Token 进入画布</li>
+    <li><strong>拖拽式大屏编辑器</strong>：高性能低代码可视化编辑器，专注画布编辑与预览</li>
+    <li><strong>与 WEB 一体联动</strong>：项目创建、模板、素材、数据源、发布与投放在管理后台「可视化」菜单完成；点击「打开编辑器」即可进入画布</li>
     <li><strong>大屏交付能力</strong>：图表、指标与布局拖拽配置，组件可挂接平台数据源与 IoT 测点，支撑园区态势、产线 KPI、设备运维、能源能耗等指挥大屏快速成屏</li>
-    <li><strong>与组态分工清晰</strong>：大屏（dashboard）走本模块编辑；工艺组态（scada）走 FUXA Web 组态；工程元数据统一由 DEVICE <code>iot-visualize</code> 管理</li>
+    <li><strong>与组态分工清晰</strong>：指挥大屏走本模块编辑；工艺组态走 Web 组态能力；工程元数据统一由 DEVICE 侧可视化后台管理</li>
     <li><strong>部署形态</strong>：与 APP 同属 full 完整版能力，mini / standard 可按现场硬件跳过，降低边缘精简部署体积</li>
+  </ul>
+</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>TRANSFORM模块</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>多向业务流转</strong>：把平台侧告警、设备事件与业务结果按约定投递到 MES / ERP / CRM / WMS 等外部系统，打通「平台有数 → 业务系统用得上」的最后一公里</li>
+    <li><strong>可配置对接</strong>：数据目的、转发规则与字段映射一次配好即可复用，减少「每接一家客户系统就定制一套接口」的交付成本</li>
+    <li><strong>投递可验收</strong>：运行集群与投递轨迹可监控、可回看，联调与验收能回答「转没转到、卡在哪一步」，少靠口头对账</li>
+    <li><strong>横向扩展</strong>：流量上来后可按业务约定扩容消费与投递能力，支撑多产线、多工厂、多系统并行对接</li>
+  </ul>
+</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>PANEL模块</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>交付与值守入口</strong>：独立于业务管控台——到场可装、可验、可守，缩短验收周期，降低驻场与远程支援成本</li>
+    <li><strong>当天可闭环</strong>：按档位界面化装机，进度与结果当场可见，业务管控台未就绪也能先把整机拉起来并交出去</li>
+    <li><strong>自助排障</strong>：容器健康、资源水位、任务日志与镜像就绪度一目了然，常见启停、拉镜像、清缓存不必等开发敲命令</li>
+    <li><strong>多现场复用</strong>：同一套入口贯穿多台一体机与多处机房，PoC 与量产交付口径一致</li>
+  </ul>
+</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; vertical-align: top;"><strong>COMPILE打包</strong></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; line-height: 1.8; color: #444;">
+  <ul style="margin: 5px 0; padding-left: 20px;">
+    <li><strong>多平台交付物</strong>：把 PANEL 等能力打成 Ubuntu / Debian、CentOS / RHEL <strong>7～9</strong>（x86 + <strong>CentOS ARM</strong>，按 el7/el8/el9 分包）、Windows、macOS 及 ARM / <strong>麒麟(Kylin) / 欧拉(openEuler)</strong>等目标安装包或可执行文件，方便给客户装机，不必现场从源码编译</li>
+    <li><strong>缩短交付链路</strong>：集成商可按目标环境取对应安装包完成部署与升级，安装、启停与卸载路径统一，降低跨系统交付差异</li>
+    <li><strong>与 PANEL 配套</strong>：打包产物可直接用于现场运维入口落地，让「能打包出去」和「到场能装能守」同一条交付链打通</li>
   </ul>
 </td>
 </tr>
 </table>
 
-<p style="font-size: 14px; line-height: 1.8; color: #555; margin: 15px 0;">
-如需深入了解各模块技术栈、微服务拆分、中间件拓扑与数据流转细节，请参阅 <a href=".doc/架构设计/项目架构设计分析.md" style="color: #3498db; text-decoration: none; font-weight: 600;">项目架构设计分析</a>。
-</p>
-
 ## 🖥️ 跨平台部署优势
 
 <p style="font-size: 15px; line-height: 1.8; color: #333; margin: 15px 0;">
-EasyAIoT支持在Linux、Mac、Windows三大主流操作系统上部署，为不同环境下的用户提供灵活便捷的部署方案：
+EasyAIoT支持在Linux、Mac、Windows三大主流操作系统上部署，为不同环境下的用户提供灵活便捷的部署方案；配套 <strong>COMPILE</strong> 可按目标系统产出安装包与可执行文件，配合 <strong>PANEL</strong> 完成到场装机与日常值守：
 </p>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
@@ -467,6 +644,7 @@ EasyAIoT支持在Linux、Mac、Windows三大主流操作系统上部署，为不
   <li>支持Docker容器化部署，一键启动所有服务</li>
   <li>完美适配服务器、边缘计算设备（如RK3588等ARM架构设备）</li>
   <li>提供完整的自动化安装脚本，简化部署流程</li>
+  <li>覆盖 Ubuntu、CentOS/RHEL <strong>7～9</strong>（含 <strong>CentOS ARM</strong>）、<strong>麒麟(Kylin) / 欧拉(openEuler)</strong>等主流服务器发行版</li>
 </ul>
 </div>
 
@@ -508,7 +686,7 @@ EasyAIoT支持在Linux、Mac、Windows三大主流操作系统上部署，为不
 构筑了物联网设备（尤其是海量摄像头）的高效接入与管控网络。我们深度融合流媒体实时传输技术与前沿人工智能（AI），打造一体化服务核心。这套方案不仅打通了异构设备的互联互通，更将高清视频流与强大的AI解析引擎深度集成，赋予监控系统"智能之眼"——精准实现人脸识别、异常行为分析、风险人员布控及周界入侵检测。
 </p>
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 10px 0;">
-平台支持两种类型的算法任务：实时算法任务用于RTSP/RTMP流的实时画面分析，提供毫秒级响应能力；抓拍算法任务用于抓拍图像的智能分析，支持事件回溯与图像检索。通过算法任务管理实现灵活的抽帧与排序策略，每个任务可绑定独立的抽帧器和排序器，结合模型服务集群推理能力，确保毫秒级响应与高可用保障。同时，提供全防模式和半防模式两种布防策略，可根据不同时段灵活配置监控规则，实现精准的时段化智能监控与告警。
+平台支持实时、抓拍与巡检等类型的算法任务：三类任务均可默认走 <strong>RUNTIME 高速执行层</strong>（<code>executor=cpp</code>）——以原生二进制完成长连接拉流、解码、YOLO 推理与结果回传，实时任务<strong>默认推带框 AI 检测流</strong>；抓拍按 Cron 采帧识别；巡检多路轮巡覆盖；推流转发亦可走同一高性能路径把多路原画省资源上墙。相对 Python 兼容后端，高性能路径更吃得住高路数与低时延。告警与心跳统一回 VIDEO。通过算法任务管理实现灵活的抽帧与排序策略，结合模型服务集群推理，确保毫秒级响应与高可用。同时提供全防 / 半防两种布防策略，按时段精准监控与告警。
 </p>
 <p style="font-size: 14px; line-height: 1.8; color: #555; margin: 10px 0;">
 在物联网设备管理方面，EasyAIoT提供完整的设备生命周期管理能力，支持多种物联网与工业协议（MQTT、TCP、HTTP、Modbus-TCP、Modbus-RTU、OPC UA），实现设备的快速接入、安全认证、实时监控和智能控制。通过规则引擎实现设备数据的智能流转与处理，结合AI能力对设备数据进行深度分析，实现从设备接入、数据采集、智能分析到决策执行的全流程自动化，真正实现万物互联、万物智控。
@@ -523,8 +701,10 @@ EasyAIoT是一个开源学习项目，与商业行为无关。用户在使用该
 
 ## 📚 部署文档
 
-- [平台部署文档](.doc/部署文档/平台部署文档_zh.md) — Linux / Mac / Windows 分步部署指南
-- [部署最佳实践](.doc/部署文档/部署最佳实践.md) — 环境要求、一键部署流程、运维排错与生产环境建议
+- [平台部署文档](.doc/部署文档/平台部署文档_zh.md) — Linux（含 Ubuntu / CentOS·RHEL **7～9** / **CentOS ARM** / ARM / **麒麟(Kylin) / 欧拉(openEuler)**）/ Mac / Windows 分步部署指南
+- [macOS 镜像部署](.doc/部署文档/平台macOS部署文档_zh.md) — Docker Desktop 一键拉取预构建镜像
+- [Windows 镜像部署](.doc/部署文档/平台Windows部署文档_zh.md) — `install_windows.ps1` 推荐入口（第 0 章）
+- [部署最佳实践](.doc/部署文档/部署最佳实践.md) — 规格选型、环境要求、一键部署（含 CentOS **7～9** / **CentOS ARM** / **麒麟(Kylin) / 欧拉(openEuler)**）、预构建镜像、运维排障与生产环境建议
 
 ## 🎮 演示环境
 
@@ -795,11 +975,11 @@ EasyAIoT是一个开源学习项目，与商业行为无关。用户在使用该
 </tr>
 <tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>雨落流殇</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在超大规模流媒体承载方向的发展，贡献 SRS 与 ZLMediaKit 异构流媒体服务器集群的部署架构与调度思路，提出多节点池协同、流媒体控制面与业务层解耦、存储与上传流水线及节点注册调度等可扩展方案，为平台支撑万级路摄像头并发接入、稳定分发与弹性扩容奠定了重要的架构基础。</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在超大规模流媒体承载方向的发展，贡献异构流媒体服务器集群的部署与调度思路，提出多节点池协同、流媒体与业务层解耦及节点注册调度等可扩展方案，为平台支撑万级路摄像头并发接入、稳定分发与弹性扩容奠定了重要的架构基础。</td>
 </tr>
 <tr style="background-color: #f8f9fa;">
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>常康</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在智能交通与车辆管控方向的发展，独立贡献车牌识别算法与完整代码实现，涵盖基于 ONNX 的车牌定位检测、号码与颜色识别、双层牌拼接与倾斜透视校正、车牌库管理与多库顺序匹配、算法任务一键联动及 Kafka 异步比对等核心链路，全面支持蓝/黄/绿/白牌及新能源车牌等主流类型，使平台「车牌识别与车牌库管理能力」从能力规划真正走向可落地、可闭环的生产应用。</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在智能交通与车辆管控方向的发展，独立贡献车牌识别算法与完整代码实现，涵盖车牌定位检测、号码与颜色识别、双层牌拼接与倾斜透视校正、车牌库管理与多库顺序匹配、算法任务一键联动及异步比对等核心链路，全面支持蓝/黄/绿/白牌及新能源车牌等主流类型，使平台「车牌识别与车牌库管理能力」从能力规划真正走向可落地、可闭环的生产应用。</td>
 </tr>
 <tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>Li</nobr></td>
@@ -807,21 +987,29 @@ EasyAIoT是一个开源学习项目，与商业行为无关。用户在使用该
 </tr>
 <tr style="background-color: #f8f9fa;">
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>陈家林</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在物联网设备互通、工业协议接入与空天视频融合方向的发展，打通设备指令与状态数据的上下行闭环，使平台真正实现「下得去、看得见、控得住」；系统性贡献 Modbus-TCP、Modbus-RTU、OPC UA 工业协议接入能力，完成以太网侧与串口侧工控设备及 OPC UA 节点的统一采集、寄存器/测点读写与物模型映射，使电表、传感器、PLC、控制器等海量工业设备数据可被平台统一汇聚、监测与联动，补齐「看得见现场、也听得到设备」的关键拼图；同时贡献大疆司空机场与无人机画面接入能力，把空中巡检视角纳入统一视频与告警体系，显著拓展平台在工控数采、产线智控、广域巡查、应急勘察与天地一体协同感知中的落地价值。</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在物联网设备互通、工业协议接入与空天视频融合方向的发展，打通设备指令与状态数据的上下行闭环，使平台真正实现「下得去、看得见、控得住」；系统性贡献 Modbus-TCP、Modbus-RTU、OPC UA 工业协议接入能力，完成以太网侧与串口侧工控设备及 OPC UA 节点的统一采集、测点读写与物模型映射，使电表、传感器、PLC、控制器等海量工业设备数据可被平台统一汇聚、监测与联动，补齐「看得见现场、也听得到设备」的关键拼图；同时贡献大疆司空机场与无人机画面接入能力，把空中巡检视角纳入统一视频与告警体系，显著拓展平台在工控数采、产线智控、广域巡查、应急勘察与天地一体协同感知中的落地价值。</td>
 </tr>
 <tr>
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>空空</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在摄像头直连「从能发现走向能落地」方向的发展，补齐直连接入在认证、通道同步、配置变更与多品牌出流等关键短板，使平台在真实 NVR / 多厂商现场具备可交付的可用性：打通设备登录凭证链路，让账号密码认证稳定可用，直连设备真正「登得进、管得住」；重塑 NVR 同步通道后的取流模型——此前同步结果把 RTSP 主机写成各通道摄像头自身 IP，与「经 NVR 集中取流」的现场拓扑严重不符，导致同步看似成功、实况却拉不起；修复后统一以 NVR 主机 IP 生成通道 RTSP 地址，让批量同步出来的流可播、可用，显著提升 NVR 规模化接入效率；修复设备编辑保存失败并报错的问题，保障接入参数可持续维护而非「一次写入后无法再改」；同步建设国内常用监控品牌 RTSP URL 规则库，并开放自定义品牌规则，使异厂商、异型号设备可按规则一键拼流出流，不必依赖人工试地址、也不必为每个新品牌改平台代码，把直连能力从「扫得到设备」推进到「登得进、同步准、改得了、多品牌都能出流」的生产可用形态，为后续云台与变焦等操控能力完善奠定坚实基础。</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在摄像头直连「从能发现走向能落地」方向的发展，补齐直连接入在认证、通道同步、配置变更与多品牌出流等关键短板，使平台在真实 NVR / 多厂商现场具备可交付的可用性：打通设备登录认证，让直连设备真正「登得进、管得住」；完善 NVR 同步通道后的取流模型，让批量同步出来的流可播、可用，显著提升 NVR 规模化接入效率；保障接入参数可持续维护；同步建设国内常用监控品牌出流规则库，并开放自定义品牌规则，使异厂商、异型号设备可一键出流，不必依赖人工试地址，把直连能力从「扫得到设备」推进到「登得进、同步准、改得了、多品牌都能出流」的生产可用形态，为后续云台与变焦等操控能力完善奠定坚实基础。</td>
 </tr>
 <tr style="background-color: #f8f9fa;">
 <td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>狗娃</nobr></td>
-<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在「物联网数据可展成屏」方向的发展，前瞻提出基于开源 GoView 落地可视化 Board（拖拽看板）模块的产品构想：传统大屏往往每张屏、每个组件都要独立手写 SQL，交付慢、改一次动全身、业务人员几乎无法自助做屏。Board 方案把图表、指标与布局交给拖拽画布配置，并把组件变量直接挂接平台 IoT 物模型测点——实时值与历史值从设备侧一键取用，不必再为每张看板单独拼查询；让园区态势、产线 KPI、设备运维等大屏从「开发写 SQL 才能出屏」升级为「选测点、拖组件即可成屏」，显著缩短可视化交付周期，把 IoT「后台有数」真正变成「前台有屏」的可运营能力。此前亦贡献传感器浮点数据预测、运行状态属性上下阈值配置、阈值告警与规则联动，以及中心设备关联子设备运行状态一屏展示，打通「预测—定界—告警—规则—一屏掌控」设备运行闭环，使平台设备侧具备「看得见数、管得住界、告得出警、看得清全局」的能力。</td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在「物联网数据可展成屏」方向的发展，前瞻提出可视化 Board（拖拽看板）模块的产品构想：传统大屏往往每张屏、每个组件都要独立手写查询，交付慢、改一次动全身、业务人员几乎无法自助做屏。Board 方案把图表、指标与布局交给拖拽画布配置，并把组件直接挂接平台 IoT 物模型测点——实时值与历史值从设备侧一键取用；让园区态势、产线 KPI、设备运维等大屏从「开发写查询才能出屏」升级为「选测点、拖组件即可成屏」，显著缩短可视化交付周期，把 IoT「后台有数」真正变成「前台有屏」的可运营能力。此前亦贡献传感器浮点数据预测、运行状态属性上下阈值配置、阈值告警与规则联动，以及中心设备关联子设备运行状态一屏展示，打通「预测—定界—告警—规则—一屏掌控」设备运行闭环，使平台设备侧具备「看得见数、管得住界、告得出警、看得清全局」的能力。</td>
+</tr>
+<tr>
+<td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>大老刘</nobr></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在对外宣介与方案表达方向的发展，贡献《AI视频监控分析平台》图文介绍材料，系统梳理平台在 AI 视频监控分析场景下的能力全貌与落地价值，让更多用户、集成商与合作伙伴能快速理解平台定位与核心亮点，显著提升项目对外传播与商务沟通效率。</td>
+</tr>
+<tr style="background-color: #f8f9fa;">
+<td style="padding: 15px; border: 1px solid #e0e0e0; font-weight: 600; color: #2c3e50; width: 32%; min-width: 9rem;"><nobr>刘兆中ᯤ⁵ᴳ</nobr></td>
+<td style="padding: 15px; border: 1px solid #e0e0e0; color: #444; line-height: 1.8;">为推动 EasyAIoT 项目在 macOS 一键部署方向的发展，率先贡献部分 Mac 一键部署脚本，把镜像拉取、容器编排与环境前置检查等主干路径基本打通，使后续完善只需补齐「最后一公里」；其探索与实践为团队厘清了 Mac 侧部署链路的关键节点与风险点，显著缩短了后续工程化收尾的路径，是 macOS 部署能力从零到可用过程中不可或缺的奠基性贡献。</td>
 </tr>
 </tbody>
 </table>
 
 <p style="font-size: 14px; line-height: 1.8; color: #2c3e50; font-weight: 500; margin: 20px 0; padding: 15px; background-color: #e8f4f8; border-left: 4px solid #3498db; border-radius: 4px;">
-<strong>特别致谢</strong>：以上贡献者在跨平台部署文档与脚本、国标视频能力落地与 AI 联调验证、多卡训练可用性与断点续训能力落地、多品牌摄像头直连发现与批量接入、天地图空间可视化完整落地、异构流媒体集群部署与调度架构、车牌识别算法与完整代码落地、EasyAIoT-Edge 边缘侧端到端串联、校园开发者社群组织与青年协作生态构建、物联网设备上下行闭环与大疆司空空中视角接入、Modbus-TCP / Modbus-RTU / OPC UA 工业协议接入、摄像头直连从发现到登录/同步/配置/多品牌出流的落地闭环、基于 GoView 的拖拽看板（Board）构想与 IoT 测点实时/历史值直取集成、传感器浮点数据预测与阈值告警规则及中心设备关联子设备运行状态一屏展示等不同方面推动了 EasyAIoT 的发展，他们的专业精神与无私奉献值得我们学习与尊敬。再次向这些杰出的贡献者表示最诚挚的感谢！🙏
+<strong>特别致谢</strong>：以上贡献者在跨平台部署文档与脚本、macOS 一键部署脚本奠基与链路探索、国标视频能力与 AI 联调验证、多卡训练与断点续训、多品牌摄像头直连发现与批量接入、天地图空间可视化、异构流媒体集群部署与调度、车牌识别算法与完整代码、EasyAIoT-Edge 边缘侧端到端串联、校园开发者社群组织与青年协作生态构建、物联网设备上下行闭环与大疆司空空中视角接入、Modbus-TCP / Modbus-RTU / OPC UA 工业协议接入、摄像头直连从发现到登录/同步/配置/多品牌出流的闭环、拖拽看板（Board）构想与 IoT 测点实时/历史值直取集成、传感器浮点数据预测与阈值告警规则及中心设备关联子设备运行状态一屏展示、AI 视频监控分析平台图文介绍材料等不同方面推动了 EasyAIoT 的发展，他们的专业精神与无私奉献值得我们学习与尊敬。再次向这些杰出的贡献者表示最诚挚的感谢！🙏
 </p>
 
 ## 💝 开源守望者
@@ -831,37 +1019,48 @@ EasyAIoT是一个开源学习项目，与商业行为无关。用户在使用该
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/默者.png" width="80px;" alt="默者"/><br /><sub><b>默者</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/小满藏舟.png" width="80px;" alt="小满藏舟"/><br /><sub><b>小满藏舟</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/空空.png" width="80px;" alt="空空"/><br /><sub><b>空空</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/阿涛.png" width="80px;" alt="阿涛"/><br /><sub><b>阿涛</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/火车叨位去、.png" width="80px;" alt="火车叨位去、"/><br /><sub><b>火车叨位去、</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/NULL.png" width="80px;" alt="NULL"/><br /><sub><b>NULL</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/一片天.png" width="80px;" alt="一片天"/><br /><sub><b>一片天</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/舍得.png" width="80px;" alt="舍得"/><br /><sub><b>舍得</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/M.png" width="80px;" alt="M"/><br /><sub><b>M</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/lysss.jpg" width="80px;" alt="lysss"/><br /><sub><b>lysss</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/Sean-宋阳.jpg" width="80px;" alt="Sean-宋阳"/><br /><sub><b>Sean-宋阳</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/XYZ.jpg" width="80px;" alt="XYZ"/><br /><sub><b>XYZ</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/大虚子民🎼.jpg" width="80px;" alt="大虚子民🎼"/><br /><sub><b>大虚子民🎼</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/哈兰葱.jpg" width="80px;" alt="哈兰葱"/><br /><sub><b>哈兰葱</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/曲超.jpg" width="80px;" alt="曲超"/><br /><sub><b>曲超</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/李雪汉.jpg" width="80px;" alt="李雪汉"/><br /><sub><b>李雪汉</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/梦影·清之韵.jpg" width="80px;" alt="梦影·清之韵"/><br /><sub><b>梦影·清之韵</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/dasic.png" width="80px;" alt="dasic"/><br /><sub><b>dasic</b></sub></a></td>
     </tr>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/南北.png" width="80px;" alt="南北"/><br /><sub><b>南北</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/西乡一粒沙.png" width="80px;" alt="西乡一粒沙"/><br /><sub><b>西乡一粒沙</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/payne.png" width="80px;" alt="payne"/><br /><sub><b>payne</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/滕虎.png" width="80px;" alt="滕虎"/><br /><sub><b>滕虎</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/天天.png" width="80px;" alt="天天"/><br /><sub><b>天天</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王超.png" width="80px;" alt="王超"/><br /><sub><b>王超</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/最后的轻语.png" width="80px;" alt="最后的轻语"/><br /><sub><b>最后的轻语</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/yang.png" width="80px;" alt="yang"/><br /><sub><b>yang</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/战刀.jpg" width="80px;" alt="战刀"/><br /><sub><b>战刀</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/禾一虫.jpg" width="80px;" alt="禾一虫"/><br /><sub><b>禾一虫</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/钟意月月🍹.jpg" width="80px;" alt="钟意月月🍹"/><br /><sub><b>钟意月月🍹</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/山人.jpg" width="80px;" alt="山人"/><br /><sub><b>山人</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/林大侠.jpg" width="80px;" alt="林大侠"/><br /><sub><b>林大侠</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/core.jpg" width="80px;" alt="core"/><br /><sub><b>core</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王亚鹏.jpg" width="80px;" alt="王亚鹏"/><br /><sub><b>王亚鹏</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/今早好大雾.jpg" width="80px;" alt="今早好大雾"/><br /><sub><b>今早好大雾</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/头像飞鱼.jpg" width="80px;" alt="头像飞鱼"/><br /><sub><b>头像飞鱼</b></sub></a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/simon.jpg" width="80px;" alt="simon"/><br /><sub><b>simon</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/万博览.jpg" width="80px;" alt="万博览"/><br /><sub><b>万博览</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/董永乐.jpg" width="80px;" alt="董永乐"/><br /><sub><b>董永乐</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/℡夏别.jpg" width="80px;" alt="℡夏别"/><br /><sub><b>℡夏别</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="https://github.com/wangqiqi" target="_blank"><img src="./.image/open-source-guardian/周金旺.jpg" width="80px;" alt="周金旺"/><br /><sub><b>周金旺</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/无忧.jpg" width="80px;" alt="无忧"/><br /><sub><b>无忧</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/许多.jpg" width="80px;" alt="许多"/><br /><sub><b>许多</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王军.jpg" width="80px;" alt="王军"/><br /><sub><b>王军</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/子非鱼.png" width="80px;" alt="子非鱼"/><br /><sub><b>子非鱼</b></sub></a></td>
     </tr>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/在路上.png" width="80px;" alt="在路上"/><br /><sub><b>在路上</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/忘记时间.png" width="80px;" alt="忘记时间"/><br /><sub><b>忘记时间</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/何行者.png" width="80px;" alt="何行者"/><br /><sub><b>何行者</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/ANDY.png" width="80px;" alt="ANDY"/><br /><sub><b>ANDY</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/A许庆.png" width="80px;" alt="A许庆"/><br /><sub><b>A许庆</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/刘兆中📶⁵ᴳ.png" width="80px;" alt="刘兆中📶⁵ᴳ"/><br /><sub><b>刘兆中📶⁵ᴳ</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/冯.png" width="80px;" alt="冯"/><br /><sub><b>冯</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/莫斯克.png" width="80px;" alt="莫斯克"/><br /><sub><b>莫斯克</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/赵欢.png" width="80px;" alt="赵欢"/><br /><sub><b>赵欢</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/苏州小朱.jpg" width="80px;" alt="苏州小朱"/><br /><sub><b>苏州小朱</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/空白.jpg" width="80px;" alt=""/><br /><sub><b></b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/HuaZy.jpg" width="80px;" alt="HuaZy"/><br /><sub><b>HuaZy</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/越南打印机网络监控电脑门禁何工.jpg" width="80px;" alt="越南打印机网络监控电脑门禁何工"/><br /><sub><b>越南打印机网络监控电脑门禁何工</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/熊勇辉.jpg" width="80px;" alt="熊勇辉"/><br /><sub><b>熊勇辉</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/旭.jpg" width="80px;" alt="旭"/><br /><sub><b>旭</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/心远.jpg" width="80px;" alt="心远"/><br /><sub><b>心远</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/Mr.Peng.jpg" width="80px;" alt="Mr.Peng"/><br /><sub><b>Mr.Peng</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/舒韩春💭成都云速广告💭.jpg" width="80px;" alt="舒韩春💭成都云速广告💭"/><br /><sub><b>舒韩春💭成都云速广告💭</b></sub></a></td>
     </tr>
     <tr>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/前进!.png" width="80px;" alt="前进!"/><br /><sub><b>前进!</b></sub></a></td>
@@ -904,7 +1103,7 @@ EasyAIoT是一个开源学习项目，与商业行为无关。用户在使用该
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/胖哥.png" width="80px;" alt="胖哥"/><br /><sub><b>胖哥</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王宪芳.png" width="80px;" alt="王宪芳"/><br /><sub><b>王宪芳</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/lk.png" width="80px;" alt="lk"/><br /><sub><b>lk</b></sub></a></td>
-      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src=".image/open-source-guardian/阿旺.png" width="80px;" alt="阿旺*"/><br /><sub><b>阿旺*</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/阿旺.png" width="80px;" alt="阿旺*"/><br /><sub><b>阿旺*</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/🍃一笑奈何🍃.png" width="80px;" alt="🍃一笑奈何🍃"/><br /><sub><b>🍃一笑奈何🍃</b></sub></a></td>
     </tr>
     <tr>
@@ -970,6 +1169,38 @@ EasyAIoT是一个开源学习项目，与商业行为无关。用户在使用该
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/Louis.png" width="80px;" alt="Louis"/><br /><sub><b>Louis</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/胡首凡 梯控门禁五方对讲.png" width="80px;" alt="胡首凡 梯控门禁五方对讲"/><br /><sub><b>胡首凡 梯控门禁五方对讲</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/袁建华.png" width="80px;" alt="袁建华"/><br /><sub><b>袁建华</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/空空.png" width="80px;" alt="空空"/><br /><sub><b>空空</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/阿涛.png" width="80px;" alt="阿涛"/><br /><sub><b>阿涛</b></sub></a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/NULL.png" width="80px;" alt="NULL"/><br /><sub><b>NULL</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/一片天.png" width="80px;" alt="一片天"/><br /><sub><b>一片天</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/小满藏舟.png" width="80px;" alt="小满藏舟"/><br /><sub><b>小满藏舟</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/M.png" width="80px;" alt="M"/><br /><sub><b>M</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/舍得.png" width="80px;" alt="舍得"/><br /><sub><b>舍得</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/默者.png" width="80px;" alt="默者"/><br /><sub><b>默者</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/火车叨位去、.png" width="80px;" alt="火车叨位去、"/><br /><sub><b>火车叨位去、</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/payne.png" width="80px;" alt="payne"/><br /><sub><b>payne</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/滕虎.png" width="80px;" alt="滕虎"/><br /><sub><b>滕虎</b></sub></a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/天天.png" width="80px;" alt="天天"/><br /><sub><b>天天</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/王超.png" width="80px;" alt="王超"/><br /><sub><b>王超</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/南北.png" width="80px;" alt="南北"/><br /><sub><b>南北</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/最后的轻语.png" width="80px;" alt="最后的轻语"/><br /><sub><b>最后的轻语</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/西乡一粒沙.png" width="80px;" alt="西乡一粒沙"/><br /><sub><b>西乡一粒沙</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/yang.png" width="80px;" alt="yang"/><br /><sub><b>yang</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/何行者.png" width="80px;" alt="何行者"/><br /><sub><b>何行者</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/在路上.png" width="80px;" alt="在路上"/><br /><sub><b>在路上</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/ANDY.png" width="80px;" alt="ANDY"/><br /><sub><b>ANDY</b></sub></a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/冯.png" width="80px;" alt="冯"/><br /><sub><b>冯</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/忘记时间.png" width="80px;" alt="忘记时间"/><br /><sub><b>忘记时间</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/A许庆.png" width="80px;" alt="A许庆"/><br /><sub><b>A许庆</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/刘兆中📶⁵ᴳ.png" width="80px;" alt="刘兆中📶⁵ᴳ"/><br /><sub><b>刘兆中📶⁵ᴳ</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/莫斯克.png" width="80px;" alt="莫斯克"/><br /><sub><b>莫斯克</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/open-source-guardian/赵欢.png" width="80px;" alt="赵欢"/><br /><sub><b>赵欢</b></sub></a></td>
     </tr>
   </tbody>
 </table>

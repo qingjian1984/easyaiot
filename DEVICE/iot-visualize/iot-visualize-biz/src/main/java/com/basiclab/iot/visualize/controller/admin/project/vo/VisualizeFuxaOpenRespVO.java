@@ -16,4 +16,7 @@ public class VisualizeFuxaOpenRespVO {
     @Schema(description = "打开模式：edit / preview")
     private String mode;
 
+    @Schema(description = "是否只读打开（演示保护或 forcePreview 导致 edit 被降级为 preview）")
+    private Boolean readOnly;
+
 }

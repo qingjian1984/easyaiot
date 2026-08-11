@@ -12,7 +12,11 @@
           <ModelList />
         </TabPane>
         <TabPane v-if="showAdvancedTabs" key="6" tab="模型训练">
-          <TrainTaskList :tab-active="state.activeKey === '6'" />
+          <TrainTaskList
+            :tab-active="state.activeKey === '6'"
+            :auto-open="route.query.launch === '1'"
+            :initial-dataset-id="initialDatasetId"
+          />
         </TabPane>
         <TabPane key="2" tab="模型推理">
           <AiModelTool :initialLLMId="initialLLMId" :tab-active="state.activeKey === '2'" />
@@ -96,6 +100,11 @@ const initialLLMId = computed(() => {
   return llmId ? parseInt(llmId, 10) : null;
 });
 
+const initialDatasetId = computed(() => {
+  const value = route.query.datasetId;
+  return typeof value === 'string' ? value : undefined;
+});
+
 // 处理路由参数，自动切换到指定tab
 onMounted(() => {
   const tab = route.query.tab as string;
@@ -111,6 +120,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #ffffff;
 
   :deep(.ant-tabs-nav) {
     padding: 5px 0 0 25px;
@@ -120,7 +130,7 @@ onMounted(() => {
   .train-tab {
     flex: 1;
     min-height: 0;
-    padding: 16px 19px 12px 15px;
+    padding: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;

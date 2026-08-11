@@ -12,6 +12,7 @@
 - [Sélection du profil de déploiement](#sélection-du-profil-de-déploiement)
 - [Exigences d'environnement et vérifications pré-déploiement](#exigences-denvironnement-et-vérifications-pré-déploiement)
 - [Déploiement en un clic et étape par étape](#déploiement-en-un-clic-et-étape-par-étape)
+- [Mode atomique RUNTIME (nœuds de calcul légers)](#mode-atomique-runtime-nœuds-de-calcul-légers)
 - [Opérations courantes](#opérations-courantes)
 - [Images préconstruites](#images-préconstruites)
 - [Configuration GPU](#configuration-gpu)
@@ -27,7 +28,7 @@
 
 ## Deux modes d'utilisation (détaillé)
 
-Les scripts d'entrée unifiés (`install_linux.sh` / `install_linux_arm.sh` / `install_linux_kylin.sh`) prennent en charge **deux modes d'utilisation équivalents** :
+Les scripts d'entrée unifiés (`install_linux.sh` / `install_linux_centos.sh` / `install_linux_centos_arm.sh` / `install_linux_openeuler.sh` / `install_linux_arm.sh` / `install_linux_kylin.sh`) prennent en charge **deux modes d'utilisation équivalents** :
 
 | Mode | Entrée | Public cible | Caractéristiques |
 |------|--------|--------------|------------------|
@@ -186,7 +187,7 @@ Enregistré dans `.scripts/docker/.deploy_profile`, réutilisé par `start` / `s
 
 | Profil | Alias | RAM recommandée | Cas d'usage |
 |--------|-------|-----------------|-------------|
-| **mini** | `1` / `4g` | ≥ 4 Go | Nœuds edge, PoC |
+| **mini** | `1` / `4g` | ≥ 8 Go | Nœuds edge, PoC |
 | **standard** | `2` / `16g` | ≥ 16 Go | Production standard |
 | **full** | `3` (par défaut) | ≥ 20 Go | Fonctionnalités complètes + APP H5 |
 
@@ -198,14 +199,16 @@ Enregistré dans `.scripts/docker/.deploy_profile`, réutilisé par `start` / `s
 
 **mini**
 
-- Métier : `iot-system`, VIDEO, AI, WEB
-- Middleware : PostgreSQL, Redis, SRS
-- Non démarrés : Nacos, Gateway, Kafka, iot-sink, MinIO, Milvus, ZLMediaKit, Node-RED, TDengine, EMQX, et la plupart des sous-modules DEVICE
-- Routage API : nginx proxy `/admin-api` et `/dev-api` vers `iot-system:48099`
+- Métier : `iot-system`, `iot-gateway`, `iot-sink`, `iot-infra`, VIDEO, AI, WEB
+- Middleware : Nacos, PostgreSQL, Redis, Kafka, MinIO, SRS, EMQX
+- Non démarrés : `iot-device`, `iot-dataset`, `iot-node`, `iot-visualize`, `iot-file`, `iot-message`, `iot-gb28181`, `iot-tdengine`, Milvus, ZLMediaKit, Node-RED, FUXA, TDengine, APP / VISUALIZE / TRANSFORM, etc.
+- Plan événements : identique à standard/full — MQTT → Gateway → iot-sink
+- Média : pile NFS préparée à l'installation (`EASYAIOT_MEDIA_ROOT`)
+- Routage API : entrée unifiée via Gateway (48080)
 
 **standard**
 
-- Non démarrés : TDengine, Node-RED, `iot-device`, `iot-tdengine` (inclut EMQX)
+- Non démarrés : TDengine, Node-RED, `iot-device`, `iot-tdengine`
 - Tous les autres démarrés
 
 **full**
@@ -236,7 +239,7 @@ Analyse mémoire :
 
 | Logiciel | Exigence |
 |----------|----------|
-| OS | Ubuntu 24.04+ (26.04 recommandé) ; Kylin, ARM64 également pris en charge |
+| OS | Ubuntu 24.04+ (26.04 recommandé) ; CentOS/RHEL, **Kylin (麒麟) / openEuler (欧拉)**, ARM64 également pris en charge |
 | Docker | Installé et démon accessible |
 | Docker Compose | **v2.35.0+** (plugin `docker compose`) |
 | NVIDIA Driver / Container Toolkit | Scénarios GPU uniquement |
@@ -357,6 +360,28 @@ cd .scripts/docker
 
 ---
 
+## Mode atomique RUNTIME (nœuds de calcul légers)
+
+Séparez la pile centrale et les nœuds de calcul légers :
+
+| Rôle | Contenu | Entrée |
+|------|---------|--------|
+| **Centre / tout-en-un** | Middleware + DEVICE/AI/VIDEO/WEB… ; VIDEO monte RUNTIME | `install_linux.sh install` |
+| **Nœud de calcul** | **RUNTIME seul** | `VIDEO_BASE_URL=… install_linux.sh runtime` |
+| **Lots de nœuds** | Idem via SSH | WEB « distribution runtime » → RUNTIME(C++) |
+
+```bash
+VIDEO_BASE_URL=http://<VIDEO-central>:6000 \
+  sudo -E bash .scripts/docker/install_linux.sh runtime
+
+./RUNTIME/install_linux.sh status
+source /opt/easyaiot/RUNTIME/env.sh
+```
+
+`VIDEO_BASE_URL` obligatoire. Atomique ≠ jamais de push. Indépendant des profils mini/standard/full — ne relancez pas `install` complet sur les boîtiers de calcul. Détails : [`RUNTIME/README.md`](../../RUNTIME/README.md).
+
+---
+
 ## Opérations courantes
 
 ### Script unifié
@@ -426,11 +451,27 @@ Multi-GPU : `export CUDA_VISIBLE_DEVICES=0,1`
 ## Environnements spéciaux
 
 ```bash
+# CentOS / RHEL / Rocky / Alma x86 (mise à niveau Docker CE, ports firewalld)
+sudo .scripts/docker/install_linux_centos.sh install
+# Docker seulement : sudo .scripts/docker/install_linux_centos.sh --upgrade-docker-only
+
+# CentOS / RHEL ARM (puis délégation à install_linux_arm.sh)
+sudo .scripts/docker/install_linux_centos_arm.sh install
+# Docker seulement : sudo .scripts/docker/install_linux_centos_arm.sh --upgrade-docker-only
+
+# openEuler
+sudo .scripts/docker/install_linux_openeuler.sh install
+# Docker seulement : sudo .scripts/docker/install_linux_openeuler.sh --upgrade-docker-only
+
 # Kylin OS
 sudo .scripts/docker/install_linux_kylin.sh install
 
-# ARM64
+# ARM64 (générique)
 sudo .scripts/docker/install_linux_arm.sh install
+
+# macOS / Windows
+bash .scripts/docker/install_mac.sh install
+bash .scripts/docker/install_windows.sh install
 ```
 
 ---
@@ -549,7 +590,7 @@ cd WEB && ./install_linux.sh build
 | `.scripts/docker/logs/` | Journaux du script d'installation ; rapports `merged_logs_*`, `disk_usage_*` |
 | `.scripts/docker/standalone-logs/` | Journaux sur disque de Nacos et autres middleware |
 | `.build-cache/device/logs/` | Journaux Spring des microservices DEVICE |
-| `~/easyaiot/data/srs.log` | Streaming SRS |
+| `${EASYAIOT_MEDIA_ROOT:-/mnt/easyaiot-media}/srs.log` | Streaming SRS (racine média résolue par `deploy_profile`) |
 | `WEB/logs/runtime.log` | Journal d'exécution WEB |
 | `docker logs <container>` | stdout du conteneur (courant pour AI/VIDEO) |
 

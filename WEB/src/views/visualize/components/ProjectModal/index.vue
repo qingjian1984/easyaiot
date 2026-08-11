@@ -14,11 +14,18 @@
       <div class="footer-buttons">
         <Button @click="handleCancel">{{ state.isView ? '关闭' : '取消' }}</Button>
         <Button
-          v-if="state.isView && state.recordId"
+          v-if="state.isView && state.recordId && !isDemoScada"
           type="default"
           @click="handleOpenEditor"
         >
           {{ isScadaProject(state.projectType) ? '打开组态编辑器' : '打开编辑器' }}
+        </Button>
+        <Button
+          v-if="state.isView && state.recordId && isDemoScada"
+          type="default"
+          @click="handleOpenPreview"
+        >
+          预览组态（只读）
         </Button>
         <Button v-if="!state.isView" type="primary" :loading="state.editLoading" @click="handleOk">
           保存
@@ -58,6 +65,7 @@ import {
 } from '@/api/device/visualize'
 import {
   VISUALIZE_PROJECT_TYPE_OPTIONS,
+  isFuxaDemoProject,
   isScadaProject,
   openVisualizeEditor,
 } from '@/utils/visualizeEditor'
@@ -77,6 +85,8 @@ const state = reactive({
   editLoading: false,
   recordId: null as number | null,
   projectType: 'dashboard' as string,
+  projectName: '' as string,
+  editorRef: '' as string,
 })
 
 const getTitle = computed(() => {
@@ -85,6 +95,15 @@ const getTitle = computed(() => {
   if (state.isView) return `查看${typeLabel}项目`
   return '新增项目'
 })
+
+const isDemoScada = computed(() =>
+  isFuxaDemoProject({
+    id: state.recordId,
+    projectType: state.projectType,
+    projectName: state.projectName,
+    editorRef: state.editorRef,
+  }),
+)
 
 const [registerForm, { setFieldsValue, validate, resetFields, setProps, updateSchema, getFieldsValue }] = useForm({
   labelWidth: 120,
@@ -231,6 +250,8 @@ function resetFormState() {
   resetFields()
   state.recordId = null
   state.projectType = 'dashboard'
+  state.projectName = ''
+  state.editorRef = ''
   previewUrl.value = ''
   previewBroken.value = false
   setFieldsValue({ projectType: 'dashboard', editorRef: '' })
@@ -249,6 +270,8 @@ async function loadDetail(record: any) {
     }
     state.recordId = detail?.id ?? null
     state.projectType = detail?.projectType || 'dashboard'
+    state.projectName = detail?.projectName ?? ''
+    state.editorRef = detail?.editorRef ?? ''
     previewUrl.value = detail?.indexImage ?? ''
     previewBroken.value = false
     await setFieldsValue({
@@ -283,6 +306,20 @@ function handleOpenEditor() {
     })
   } catch (e: any) {
     createMessage.error(e?.message || '打开编辑器失败')
+  }
+}
+
+function handleOpenPreview() {
+  if (!state.recordId) return
+  try {
+    const values = (getFieldsValue?.() || {}) as Recordable
+    openVisualizeEditor(state.recordId, 'preview', {
+      projectType: state.projectType,
+      editorRef: values.editorRef,
+      projectName: values.projectName,
+    })
+  } catch (e: any) {
+    createMessage.error(e?.message || '打开预览失败')
   }
 }
 

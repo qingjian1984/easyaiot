@@ -10,8 +10,10 @@ import com.basiclab.iot.visualize.controller.admin.project.vo.VisualizeProjectSa
 import com.basiclab.iot.visualize.dal.dataobject.project.VisualizeProjectDO;
 import com.basiclab.iot.visualize.dal.pgsql.project.VisualizeProjectMapper;
 import com.basiclab.iot.visualize.enums.VisualizeProjectTypeEnum;
+import com.basiclab.iot.visualize.framework.fuxa.FuxaDemoGuard;
 import com.basiclab.iot.visualize.framework.fuxa.FuxaProperties;
 import com.basiclab.iot.visualize.framework.fuxa.FuxaSsoClient;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
@@ -26,6 +28,7 @@ import static com.basiclab.iot.visualize.enums.ErrorCodeConstants.PROJECT_NOT_FO
 import static com.basiclab.iot.visualize.enums.ErrorCodeConstants.PROJECT_NOT_SCADA;
 import static com.basiclab.iot.visualize.enums.ErrorCodeConstants.PROJECT_TYPE_INVALID;
 
+@Slf4j
 @Service
 @Validated
 public class VisualizeProjectServiceImpl implements VisualizeProjectService {
@@ -106,6 +109,7 @@ public class VisualizeProjectServiceImpl implements VisualizeProjectService {
         String resolvedMode = "preview".equalsIgnoreCase(mode) ? "preview" : "edit";
         String ref = editorRef;
         String projectName = null;
+        boolean readOnly = false;
 
         if (id != null) {
             VisualizeProjectDO project = validateExists(id);
@@ -118,6 +122,18 @@ public class VisualizeProjectServiceImpl implements VisualizeProjectService {
             }
         }
 
+        // 生产演示保护：强制 preview，避免 SSO 以 admin 进入 /editor 改删工艺图
+        if ("edit".equals(resolvedMode)) {
+            boolean protectDemo = fuxaProperties.isDemoReadOnly()
+                    && FuxaDemoGuard.isProtectedDemo(id, projectName, ref);
+            if (fuxaProperties.isForcePreview() || protectDemo) {
+                log.info("FUXA open forced to preview (forcePreview={}, demoReadOnly hit={}), id={}, ref={}",
+                        fuxaProperties.isForcePreview(), protectDemo, id, ref);
+                resolvedMode = "preview";
+                readOnly = true;
+            }
+        }
+
         // 编辑模式：空引用或仅 /editor 时回退为项目名（与 FUXA Views 画面名对齐）
         if ("edit".equals(resolvedMode)) {
             String trimmed = ref == null ? "" : ref.trim();
@@ -125,9 +141,17 @@ public class VisualizeProjectServiceImpl implements VisualizeProjectService {
                 ref = StringUtils.hasText(projectName) ? projectName : trimmed;
             }
         }
+        // 预览且引用仍是 /editor：降为运行态首页，避免只读策略下仍跳进编辑器
+        if ("preview".equals(resolvedMode)) {
+            String trimmed = ref == null ? "" : ref.trim();
+            if ("/editor".equals(trimmed) || trimmed.startsWith("/editor?")) {
+                ref = StringUtils.hasText(projectName) ? projectName : "";
+            }
+        }
 
         VisualizeFuxaOpenRespVO resp = new VisualizeFuxaOpenRespVO();
         resp.setMode(resolvedMode);
+        resp.setReadOnly(readOnly);
 
         if (fuxaSsoClient.isEnabled()) {
             try {

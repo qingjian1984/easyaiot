@@ -39,6 +39,7 @@ from app.utils.ffmpeg_compat import (
     ffmpeg_rtsp_timeout_args as _ffmpeg_rtsp_timeout_args,
     ffmpeg_supports_rw_timeout as _ffmpeg_supports_rw_timeout,
 )
+from app.utils.ffmpeg_process_registry import stop_registered_process
 from app.utils.flighthub_source import (
     build_register_info as build_flighthub_register_info,
     flighthub_env,
@@ -47,6 +48,14 @@ from app.utils.flighthub_source import (
     resolve_camera_index,
     resolve_device_type_from_record,
     start_flighthub_live,
+)
+from app.utils.rtc_source import (
+    build_rtc_stream_url,
+    get_rtc_public_config,
+    list_rtc_platforms,
+    register_rtc_live,
+    cleanup_rtc_stream_for_device,
+    is_rtc_device,
 )
 from app.utils.gb28181_source import resolve_gb28181_source
 from app.utils.node_client import resolve_java_backend_url
@@ -489,11 +498,8 @@ def start_ffmpeg_stream(device_id):
 @camera_bp.route('/device/<string:device_id>/stream/stop', methods=['POST'])
 def stop_ffmpeg_stream(device_id):
     try:
+        stop_registered_process(ffmpeg_processes, ffmpeg_lock, device_id)
         with ffmpeg_lock:
-            if device_id in ffmpeg_processes:
-                ffmpeg_processes[device_id].stop()
-                del ffmpeg_processes[device_id]
-
             device = Device.query.get(device_id)
             if device:
                 device.enable_forward = False
@@ -831,6 +837,73 @@ def get_flighthub_config():
     return jsonify({'code': 0, 'msg': 'success', 'data': get_flighthub_public_config()})
 
 
+@camera_bp.route('/rtc/config', methods=['GET'])
+def get_rtc_config():
+    """返回 RTC / go2rtc 公共配置。"""
+    return jsonify({'code': 0, 'msg': 'success', 'data': get_rtc_public_config()})
+
+
+@camera_bp.route('/rtc/platforms', methods=['GET'])
+def get_rtc_platforms():
+    """返回 RTC 支持的摄像头平台列表。"""
+    try:
+        platforms = list_rtc_platforms()
+        return jsonify({'code': 0, 'msg': 'success', 'data': {'platforms': platforms}})
+    except Exception as e:
+        logger.error(f'RTC platforms fetch failed: {e}', exc_info=True)
+        return jsonify({'code': 502, 'msg': f'RTC 服务不可用: {e}'}), 502
+
+
+@camera_bp.route('/rtc/build-url', methods=['POST'])
+def build_rtc_url():
+    """预览 RTC 平台源流 URL（不注册）。"""
+    data = request.get_json(silent=True) or {}
+    platform = (data.get('platform') or '').strip()
+    params = data.get('params') or {}
+    if not platform:
+        return jsonify({'code': 400, 'msg': 'platform is required'}), 400
+    try:
+        source = build_rtc_stream_url(platform, params)
+        return jsonify({'code': 0, 'msg': 'success', 'data': {'platform': platform, 'source': source}})
+    except Exception as e:
+        logger.error(f'RTC build-url failed: {e}', exc_info=True)
+        return jsonify({'code': 400, 'msg': str(e)}), 400
+
+
+@camera_bp.route('/register/device/rtc-live', methods=['POST'])
+def register_rtc_live_device():
+    """登记 RTC 平台摄像头（Tapo/Tuya/Ring 等），自动注册 go2rtc 流并写入 VIDEO。"""
+    data = request.get_json(silent=True) or {}
+    try:
+        result = register_rtc_live(data)
+        if not result.get('ok'):
+            return jsonify({
+                'code': int(result.get('code') or 500),
+                'msg': result.get('msg') or 'RTC live register failed',
+            }), int(result.get('code') or 500)
+
+        register_info = result['register_info']
+        if data.get('enable_forward') is not None:
+            register_info['enable_forward'] = bool(data.get('enable_forward'))
+        device_id = register_camera(register_info)
+        return jsonify({
+            'code': 0,
+            'msg': 'success',
+            'data': {
+                'id': device_id,
+                'platform': result.get('platform'),
+                'stream_name': result.get('stream_name'),
+                'source': register_info.get('source'),
+                'rtsp_url': result.get('rtsp_url'),
+                'play_urls': result.get('play_urls'),
+            },
+        })
+    except Exception as e:
+        logger.error(f'RTC live device register failed: {e}', exc_info=True)
+        db.session.rollback()
+        return jsonify({'code': 500, 'msg': str(e)}), 500
+
+
 @camera_bp.route('/register/device/dji-live', methods=['POST'])
 def register_dji_live_device():
     """登记大疆直播设备（机场 dock / 无人机 drone，协议相同，仅元数据区分）。"""
@@ -1024,10 +1097,7 @@ def update_device(device_id):
         # 关闭观看转发时同步停止守护进程（与算法任务无关）
         ef = data.get('enable_forward')
         if ef is False or (isinstance(ef, str) and ef.lower() in ('false', '0', 'no', 'off')):
-            with ffmpeg_lock:
-                if device_id in ffmpeg_processes:
-                    ffmpeg_processes[device_id].stop()
-                    del ffmpeg_processes[device_id]
+            stop_registered_process(ffmpeg_processes, ffmpeg_lock, device_id)
 
         return jsonify({
             'code': 0,
@@ -1048,11 +1118,11 @@ def update_device(device_id):
 def delete_device(device_id):
     """删除设备"""
     try:
-        # 先停止可能的流媒体转发
-        if device_id in ffmpeg_processes and ffmpeg_processes[device_id]['process'] is not None:
-            process = ffmpeg_processes[device_id]['process']
-            if process.poll() is None:  # 进程仍在运行
-                stop_ffmpeg_stream(device_id)
+        # 停止转发属于删除前的尽力清理；子进程已退出等清理异常不能阻断设备删库。
+        try:
+            stop_registered_process(ffmpeg_processes, ffmpeg_lock, device_id)
+        except Exception as e:
+            logger.warning(f'删除设备前停止流媒体转发失败 {device_id}: {e}', exc_info=True)
 
         delete_camera(device_id)
         return jsonify({
@@ -1065,6 +1135,9 @@ def delete_device(device_id):
     except RuntimeError as e:
         logger.error(f'删除设备失败: {str(e)}')
         return jsonify({'code': 500, 'msg': str(e)}), 500
+    except Exception as e:
+        logger.error(f'删除设备失败（未知错误）: {str(e)}', exc_info=True)
+        return jsonify({'code': 500, 'msg': f'删除设备失败: {str(e)}'}), 500
 
 
 @camera_bp.route('/devices/batch-delete', methods=['POST'])

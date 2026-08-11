@@ -293,6 +293,56 @@ export interface StorageMountCheckResult {
   steps?: MediaDeployStepVO[];
 }
 
+/** NFS / 共享媒体拓扑节点 */
+export interface CephTopologyNodeVO {
+  nodeId: number;
+  name?: string;
+  host?: string;
+  nodeRole?: string;
+  status?: string;
+  agentPort?: number;
+  /** platform | storage_nfs | nfs_client（兼容 storage_osd / ceph_client） */
+  kind?: string;
+  isPlatform?: boolean;
+  cephMountReady?: boolean;
+  cephMountPath?: string;
+  cephMonHost?: string;
+  cephPool?: string;
+  cephfsName?: string;
+  nfsMountReady?: boolean;
+  nfsMountPath?: string;
+  nfsServerHost?: string;
+  nfsExportPath?: string;
+  storageBackend?: string;
+  alertImagesDir?: string;
+  playbacksDir?: string;
+  snapsDir?: string;
+  lastHeartbeatAt?: string;
+  sshCredentialConfigured?: boolean;
+}
+
+export interface CephTopologyLinkVO {
+  sourceNodeId?: number;
+  targetNodeId?: number;
+  relation?: string;
+}
+
+export interface CephTopologySummaryVO {
+  totalNodes?: number;
+  storageNodes?: number;
+  clientNodes?: number;
+  mountReadyCount?: number;
+  mountNotReadyCount?: number;
+  offlineCount?: number;
+}
+
+export interface CephTopologyResult {
+  center?: CephTopologyNodeVO;
+  nodes?: CephTopologyNodeVO[];
+  links?: CephTopologyLinkVO[];
+  summary?: CephTopologySummaryVO;
+}
+
 export interface AgentCheckResult {
   success?: boolean;
   deployed?: boolean;
@@ -480,7 +530,32 @@ export const checkStorageStackBySsh = async (nodeId: number): Promise<StorageSta
   return unwrapNodeApiData<StorageStackCheckResult>(res);
 };
 
-/** 通过 SSH 检测 CephFS 客户端挂载 */
+/** NFS 共享媒体节点拓扑（原 getCephTopology，字段兼容） */
+export const getCephTopology = async (): Promise<CephTopologyResult> => {
+  const res = await commonApi('get', `${Api.Node}/storage/topology`, {}, { isTransformResponse: false });
+  return unwrapNodeApiData<CephTopologyResult>(res);
+};
+
+export interface NfsClusterAssignPayload {
+  serverNodeId?: number;
+  clientNodeIds?: number[];
+  mountRoot?: string;
+  nfsExport?: string;
+  nfsMountOpts?: string;
+}
+
+/** 分配/切换 NFS 集群（服务端 + 客户端 tags） */
+export const assignNfsCluster = async (payload: NfsClusterAssignPayload): Promise<CephTopologyResult> => {
+  const res = await commonApi(
+    'post',
+    `${Api.Node}/storage/assign-nfs-cluster`,
+    payload,
+    { isTransformResponse: false, timeout: 2 * 60 * 1000 },
+  );
+  return unwrapNodeApiData<CephTopologyResult>(res);
+};
+
+/** 通过 SSH 检测 NFS 客户端挂载 */
 export const checkStorageMountBySsh = async (nodeId: number): Promise<StorageMountCheckResult> => {
   const res = await commonApi(
     'post',
@@ -665,12 +740,44 @@ export type WorkloadBundleTypeKey =
   | 'ai_service'
   | 'llm_service'
   | 'auto_label'
-  | 'model_train';
+  | 'model_train'
+  | 'transform_runtime';
 
 export interface WorkloadBundleBatchReq {
   nodeIds: number[];
   bundleType: WorkloadBundleTypeKey;
+  /** TRANSFORM 全量分发后拉起的容器副本数 */
+  replicas?: number;
 }
+
+export const stopNodeWorkload = (
+  nodeId: number,
+  workloadType: string,
+  workloadId: string,
+) => {
+  return commonApi('post', `${Api.Node}/workload/stop`, {
+    params: { nodeId, workloadType, workloadId },
+  });
+};
+
+/** 心跳未带 TRANSFORM_NODE_ID 时，按绑定表反查节点硬停 */
+export const stopNodeWorkloadById = (workloadType: string, workloadId: string) => {
+  return commonApi('post', `${Api.Node}/workload/stop-by-id`, {
+    params: { workloadType, workloadId },
+  });
+};
+
+export const deployNodeWorkload = (data: {
+  nodeId: number;
+  workloadType: string;
+  workloadId: string;
+  runtime?: string;
+  image?: string;
+  env?: Record<string, string>;
+  command?: string[];
+}) => {
+  return commonApi('post', `${Api.Node}/workload/deploy`, { data });
+};
 
 export interface WorkloadBundleNodeResult {
   nodeId?: number;
@@ -678,6 +785,9 @@ export interface WorkloadBundleNodeResult {
   host?: string;
   success?: boolean;
   message?: string;
+  version?: string;
+  controlPlaneVersion?: string;
+  versionMatch?: boolean;
   steps?: MediaDeployStepVO[];
 }
 
@@ -834,6 +944,71 @@ export const batchRemoveFfmpegBySsh = async (data: NodeFfmpegBatchReq): Promise<
   const res = await commonApi(
     'post',
     `${BUNDLE_API}/ffmpeg/batch-remove-ssh`,
+    { data },
+    { isTransformResponse: false, timeout: BUNDLE_TIMEOUT },
+  );
+  return unwrapNodeApiData<WorkloadBundleBatchResult>(res);
+};
+
+// ---------- RUNTIME(C++) 离线分发 ----------
+
+export interface NodeRuntimeCppBatchReq {
+  nodeIds: number[];
+}
+
+export interface NodeRuntimeCppCheckResult {
+  runtimeReady?: boolean;
+  runtimePath?: string;
+  version?: string;
+  git?: string;
+  builtAt?: string;
+  controlPlaneVersion?: string;
+  versionMatch?: boolean;
+  success?: boolean;
+  message?: string;
+  steps?: MediaDeployStepVO[];
+}
+
+export const checkRuntimeCppBySsh = async (nodeId: number): Promise<NodeRuntimeCppCheckResult> => {
+  const res = await commonApi(
+    'post',
+    `${BUNDLE_API}/runtime-cpp/check-ssh?nodeId=${nodeId}`,
+    {},
+    { isTransformResponse: false, timeout: 3 * 60 * 1000 },
+  );
+  return unwrapNodeApiData<NodeRuntimeCppCheckResult>(res);
+};
+
+export const batchCheckRuntimeCppBySsh = async (
+  data: NodeRuntimeCppBatchReq,
+): Promise<WorkloadBundleBatchResult> => {
+  const res = await commonApi(
+    'post',
+    `${BUNDLE_API}/runtime-cpp/batch-check-ssh`,
+    { data },
+    { isTransformResponse: false, timeout: BUNDLE_TIMEOUT },
+  );
+  return unwrapNodeApiData<WorkloadBundleBatchResult>(res);
+};
+
+export const batchDeployRuntimeCppBySsh = async (
+  data: NodeRuntimeCppBatchReq,
+): Promise<WorkloadBundleBatchResult> => {
+  const res = await commonApi(
+    'post',
+    `${BUNDLE_API}/runtime-cpp/batch-deploy-ssh`,
+    { data },
+    { isTransformResponse: false, timeout: BUNDLE_TIMEOUT },
+  );
+  return unwrapNodeApiData<WorkloadBundleBatchResult>(res);
+};
+
+export const batchRemoveRuntimeCppBySsh = async (
+  data: NodeRuntimeCppBatchReq,
+): Promise<WorkloadBundleBatchResult> => {
+  const res = await commonApi(
+    'post',
+    `${BUNDLE_API}/runtime-cpp/batch-remove-ssh`,
     { data },
     { isTransformResponse: false, timeout: BUNDLE_TIMEOUT },
   );

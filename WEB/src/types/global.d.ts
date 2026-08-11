@@ -97,6 +97,8 @@ declare global {
     VITE_GLOB_FUXA_URL?: string
     /** TD-005 Canary 认证-only harness 开关（仅 'true' 时注册 harness 路由） */
     VITE_TD005_AUTH_HARNESS?: string
+    /** EasyAIoT PANEL 运维控制台（留空则使用当前访问域名 + 9200 端口） */
+    VITE_PANEL_URL?: string
   }
 
   declare function parseInt(s: string | number, radix?: number): number

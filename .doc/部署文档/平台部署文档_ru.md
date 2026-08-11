@@ -35,10 +35,13 @@ EasyAIoT развёртывается с помощью **Docker-контейн�
 | ОС | Скрипт |
 |----|--------|
 | Linux x86 | `.scripts/docker/install_linux.sh` |
-| Linux ARM | `.scripts/docker/install_linux_arm.sh` |
-| Kylin | `.scripts/docker/install_linux_kylin.sh` |
+| CentOS / RHEL (x86) | `.scripts/docker/install_linux_centos.sh` |
+| **CentOS / RHEL · ARM** | `.scripts/docker/install_linux_centos_arm.sh` |
+| **Kylin (麒麟)** | `.scripts/docker/install_linux_kylin.sh` |
+| **openEuler (欧拉)** | `.scripts/docker/install_linux_openeuler.sh` |
+| Linux ARM (общий) | `.scripts/docker/install_linux_arm.sh` |
 | macOS | `.scripts/docker/install_mac.sh` |
-| Windows | `.scripts/docker/install_win.ps1` |
+| Windows | `.scripts/docker/install_windows.ps1` / `install_windows.sh` |
 
 ---
 
@@ -116,8 +119,8 @@ sudo .scripts/docker/install_linux.sh install
 
 ### Предварительные требования
 
-- ОС: **Ubuntu 24.04+** (рекомендуется 26.04)
-- Docker + Docker Compose **v2.35+**
+- ОС: **Ubuntu 24.04+** (рекомендуется 26.04); также **CentOS/RHEL**, ARM, **Kylin (麒麟) / openEuler (欧拉)**
+- Docker + Docker Compose **v2.35+** (на CentOS / **openEuler (欧拉)**: OS-скрипт может установить/обновить Docker CE)
 - **≥ 300 ГБ** свободного места на диске
 
 ```bash
@@ -131,6 +134,9 @@ git clone https://gitee.com/volara/easyaiot.git
 cd easyaiot
 
 sudo .scripts/docker/install_linux.sh
+# CentOS / RHEL x86: sudo .scripts/docker/install_linux_centos.sh
+# CentOS / RHEL ARM: sudo .scripts/docker/install_linux_centos_arm.sh
+# openEuler: sudo .scripts/docker/install_linux_openeuler.sh
 # 1 Deploy → 1 First install → 7 Health verify
 ```
 
@@ -144,10 +150,29 @@ cd easyaiot
 
 # Необязательно: загрузить предсобранные образы для сокращения времени установки
 sudo .scripts/docker/install_linux.sh pull
+# CentOS x86: sudo .scripts/docker/install_linux_centos.sh pull
+# CentOS ARM: sudo .scripts/docker/install_linux_centos_arm.sh pull
+# openEuler: sudo .scripts/docker/install_linux_openeuler.sh pull
 
 sudo .scripts/docker/install_linux.sh install
+# CentOS x86: sudo .scripts/docker/install_linux_centos.sh install
+# CentOS ARM: sudo .scripts/docker/install_linux_centos_arm.sh install
+# openEuler: sudo .scripts/docker/install_linux_openeuler.sh install
+
 .scripts/docker/install_linux.sh verify
 ```
+
+### Примечания CentOS / RHEL
+
+Используйте `.scripts/docker/install_linux_centos.sh` (CentOS 7/8/Stream, Rocky, Alma, RHEL · x86). Подробности (ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#centos--rhel-系说明).
+
+### Примечания CentOS / RHEL · ARM
+
+Используйте `.scripts/docker/install_linux_centos_arm.sh` (CentOS/RHEL aarch64/arm64). Та же подготовка Docker CE / зеркало / firewalld, затем делегирование `install_linux_arm.sh`. Подробности (ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#centos--rhel-系--arm-说明).
+
+### Примечания **openEuler (欧拉)**
+
+Используйте `.scripts/docker/install_linux_openeuler.sh` (openEuler 24.03 LTS / 24.x). Удаляет системный `docker-engine`, исправляет `$releasever` репозитория Docker CE, настраивает зеркало и firewalld, затем делегирует `install_linux.sh`. Подробности (ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#openeuler-24x-说明).
 
 ### Длительность установки
 
@@ -160,13 +185,24 @@ sudo .scripts/docker/install_linux.sh install
 
 ---
 
+## Развёртывание macOS / Windows (только образы)
+
+Настольные ОС поддерживают только **готовые образы** (`install_mac.sh` / `install_windows.ps1` / `install_windows.sh`). Локальный `build` / `build-runtime` недоступен. Подробности: [macOS](./平台macOS部署文档_ru.md), [Windows](./平台Windows部署文档_ru.md). Обзор (ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#macos--windows-镜像部署).
+
+```bash
+bash .scripts/docker/install_mac.sh install
+bash .scripts/docker/install_windows.sh install
+```
+
+---
+
 ## Профили развёртывания
 
 Выбирается интерактивно при первом `install`, сохраняется в `.scripts/docker/.deploy_profile`. Используется последующими операциями `start` / `stop` / `update`.
 
 | Вариант | Имя | Рекомендуемая RAM | Сценарий |
 |:------:|------|-----------------|----------|
-| 1 | **mini** | ≥ 4 ГБ | Edge-узлы, PoC |
+| 1 | **mini** | ≥ 8 ГБ | Edge-узлы, PoC |
 | 2 | **standard** | ≥ 16 ГБ | Обычная production |
 | 3 | **full** (по умолчанию) | ≥ 20 ГБ | Полный функционал + APP H5 |
 
@@ -193,6 +229,8 @@ export EASYAIOT_DEPLOY_PROFILE=full && sudo .../install_linux.sh install  # Не
 | `check` | Проверка окружения Docker |
 | `update` | Обновление образов и перезапуск |
 | `pull` | Загрузка предсобранных образов |
+| `build` |
+| `runtime` / `runtime-atomic` | **Атомарный режим RUNTIME** (только исполнитель; `VIDEO_BASE_URL`) |
 | `build` | Локальная пересборка образов |
 | `profile` | Просмотр профиля развёртывания |
 | `analyze-logs` | Объединение логов нескольких модулей |
@@ -231,6 +269,33 @@ cd .scripts/docker && ./install_middleware_linux.sh install   # Только mid
 cd .scripts/docker && ./install_business_linux.sh install     # Только бизнес-модули
 cd AI && ./install_linux.sh install                           # Один модуль
 ```
+
+---
+
+---
+
+## Атомарный режим RUNTIME (вычислительные узлы)
+
+Для **edge-боксов / воркеров**: установить **только** C++ исполнитель — без локальных VIDEO / WEB / DEVICE. Оповещения и heartbeat агрегируются в центральный VIDEO; формальные `realtime` задачи по умолчанию пушат поток с рамками на SRS `ai/`.
+
+> **Атомарный ≠ никогда не пушить.** Атомарный = нет локального бизнес-стека. Подробности: [`RUNTIME/README.md`](../../RUNTIME/README.md).
+
+```bash
+VIDEO_BASE_URL=http://<центр-VIDEO>:6000 \
+  bash .scripts/docker/install_linux.sh runtime
+
+VIDEO_BASE_URL=http://192.168.1.10:6000 ./RUNTIME/install_linux.sh atomic
+```
+
+| Пункт | Примечание |
+|-------|------------|
+| Обязательно | `VIDEO_BASE_URL` |
+| Каталог | По умолчанию `/opt/easyaiot/RUNTIME` |
+| Результат | `bin/RUNTIME`, `node.env`, `env.sh`, `config/atomic.example.ini` |
+| Формальные задачи | Создать задачи `executor=cpp` в центральном WEB |
+| Smoke | `source /opt/easyaiot/RUNTIME/env.sh && $RUNTIME_BIN …/atomic.example.ini` |
+
+Полный стек центра по-прежнему через `install`; монтирование RUNTIME через локальный VIDEO — отдельный путь.
 
 ---
 
@@ -293,7 +358,7 @@ cd .scripts/docker && ./analyze_merge_logs.sh --non-interactive --modules all --
 
 | Параметр | Требование |
 |------|-------------|
-| ОС | Ubuntu 24.04+ (рекомендуется 26.04); также macOS, Windows, ARM, Kylin |
+| ОС | Ubuntu 24.04+ (рекомендуется 26.04); также macOS, Windows, CentOS/RHEL, ARM, **Kylin (麒麟) / openEuler (欧拉)** |
 | CPU | Мин. 4 ядра, рекомендуется 8+ |
 | RAM | Зависит от профиля (full ≥ 20 ГБ, рекомендуется 32 ГБ) |
 | Диск | Мин. 300 ГБ свободно, рекомендуется 500 ГБ+ SSD |

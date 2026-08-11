@@ -38,6 +38,19 @@ source "${EASYAIOT_ROOT}/.scripts/docker/gpu_compose_helpers.sh"
 # shellcheck source=../.scripts/docker/deploy_profile.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/deploy_profile.sh"
 
+# 带 GPU/CPU / RUNTIME / source-free override 的 compose 调用
+video_compose() {
+    local -a files=(-f docker-compose.yaml)
+    if [ -f .docker-compose.gpu.override.yaml ]; then
+        files+=(-f .docker-compose.gpu.override.yaml)
+    fi
+    if [ -f .docker-compose.runtime.override.yaml ]; then
+        files+=(-f .docker-compose.runtime.override.yaml)
+    fi
+    append_source_free_compose_file files
+    $COMPOSE_CMD "${files[@]}" "$@"
+}
+
 # 打印带颜色的消息
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -53,6 +66,15 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# 编译并挂载 RUNTIME（高性能算法任务默认依赖；实现见 scripts/ensure_runtime_cpp.sh）
+ensure_cpp_runtime() {
+    bash "${EASYAIOT_ROOT}/VIDEO/scripts/ensure_runtime_cpp.sh" install
+}
+
+wire_cpp_runtime_override() {
+    bash "${EASYAIOT_ROOT}/VIDEO/scripts/ensure_runtime_cpp.sh" wire || true
 }
 
 # 清理 compose recreate 被中断后遗留的「改名孤儿容器」（形如 <12位hex>_video-service）。
@@ -324,7 +346,10 @@ clean_compose_cache() {
     
     # 4. 清理 docker-compose 的临时文件（如果存在）
     print_info "清理 docker-compose 临时文件..."
-    find . -maxdepth 1 -name ".docker-compose.*" -type f -delete 2>/dev/null || true
+    find . -maxdepth 1 -name ".docker-compose.*" -type f \
+        ! -name ".docker-compose.gpu.override.yaml" \
+        ! -name ".docker-compose.runtime.override.yaml" \
+        -delete 2>/dev/null || true
     find . -maxdepth 1 -name "docker-compose.override.yml" -type f -delete 2>/dev/null || true
     find . -maxdepth 1 -name "docker-compose.override.yaml" -type f -delete 2>/dev/null || true
     
@@ -342,27 +367,15 @@ create_env_file() {
             # 自动配置中间件连接信息（使用localhost，因为使用host网络模式）
             print_info "自动配置中间件连接信息（使用host网络模式，通过localhost访问中间件）..."
             
-            # 更新数据库连接（使用localhost，因为使用host网络模式）
-            sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:iot45722414822@localhost:5432/iot-video20|' .env.docker
-            
-            # 更新Nacos配置（使用localhost，因为使用host网络模式）
-            sed -i 's|^NACOS_SERVER=.*|NACOS_SERVER=localhost:8848|' .env.docker
-            
-            # 更新MinIO配置（使用localhost，因为使用host网络模式）
-            sed -i 's|^MINIO_ENDPOINT=.*|MINIO_ENDPOINT=localhost:9000|' .env.docker
-            sed -i 's|^MINIO_SECRET_KEY=.*|MINIO_SECRET_KEY=basiclab@iot975248395|' .env.docker
-            
-            # 更新Redis配置（使用localhost，因为使用host网络模式）
-            sed -i 's|^REDIS_HOST=.*|REDIS_HOST=localhost|' .env.docker
-            
-            # 更新Kafka配置（使用localhost，因为使用host网络模式）
-            sed -i 's|^KAFKA_BOOTSTRAP_SERVERS=.*|KAFKA_BOOTSTRAP_SERVERS=localhost:9092|' .env.docker
-            
-            # 更新TDengine配置（使用localhost，因为使用host网络模式）
-            sed -i 's|^TDENGINE_HOST=.*|TDENGINE_HOST=localhost|' .env.docker
-            
-            # 更新Nacos密码
-            sed -i 's|^NACOS_PASSWORD=.*|NACOS_PASSWORD=basiclab@iot78475418754|' .env.docker
+            # 临时文件写回，兼容 macOS BSD sed
+            _set_env_docker_kv .env.docker DATABASE_URL "postgresql://postgres:iot45722414822@localhost:5432/iot-video20"
+            _set_env_docker_kv .env.docker NACOS_SERVER "localhost:8848"
+            _set_env_docker_kv .env.docker MINIO_ENDPOINT "localhost:9000"
+            _set_env_docker_kv .env.docker MINIO_SECRET_KEY "basiclab@iot975248395"
+            _set_env_docker_kv .env.docker REDIS_HOST "localhost"
+            _set_env_docker_kv .env.docker KAFKA_BOOTSTRAP_SERVERS "localhost:9092"
+            _set_env_docker_kv .env.docker TDENGINE_HOST "localhost"
+            _set_env_docker_kv .env.docker NACOS_PASSWORD "basiclab@iot78475418754"
             
             print_success "中间件连接信息已自动配置（使用host网络模式）"
             print_info "注意：使用host网络模式后，容器可以直接访问宿主机局域网，支持ONVIF摄像头发现"
@@ -373,49 +386,56 @@ create_env_file() {
         fi
     else
         print_info ".env.docker 文件已存在"
-        print_info "检查并更新中间件连接信息（使用host网络模式）..."
-        
-        # 检查并更新数据库连接（如果还是旧的服务名，改为localhost）
-        if grep -q "DATABASE_URL=.*PostgresSQL" .env.docker || grep -q "DATABASE_URL=.*postgres-server" .env.docker; then
-            sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres:iot45722414822@localhost:5432/iot-video20|' .env.docker
-            print_info "已更新数据库连接为 localhost:5432（host网络模式）"
-        fi
-        
-        # 检查并更新Nacos配置（如果还是IP地址或旧的服务名，改为localhost）
-        if grep -q "NACOS_SERVER=.*14\.18\.122\.2" .env.docker || grep -q "NACOS_SERVER=.*Nacos" .env.docker || grep -q "NACOS_SERVER=.*nacos-server" .env.docker; then
-            sed -i 's|^NACOS_SERVER=.*|NACOS_SERVER=localhost:8848|' .env.docker
-            print_info "已更新Nacos连接为 localhost:8848（host网络模式）"
-        fi
-        
-        # 检查并更新MinIO配置（如果还是旧的服务名，改为localhost）
-        if grep -q "MINIO_ENDPOINT=.*MinIO" .env.docker || grep -q "MINIO_ENDPOINT=.*minio-server" .env.docker; then
-            sed -i 's|^MINIO_ENDPOINT=.*|MINIO_ENDPOINT=localhost:9000|' .env.docker
-            print_info "已更新MinIO连接为 localhost:9000（host网络模式）"
-        fi
-        
-        # 检查并更新Redis配置（如果还是旧的服务名，改为localhost）
-        if grep -q "REDIS_HOST=.*Redis" .env.docker || grep -q "REDIS_HOST=.*redis-server" .env.docker; then
-            sed -i 's|^REDIS_HOST=.*|REDIS_HOST=localhost|' .env.docker
-            print_info "已更新Redis连接为 localhost（host网络模式）"
-        fi
-        
-        # 检查并更新Kafka配置（如果还是旧的服务名，改为localhost）
-        if grep -q "KAFKA_BOOTSTRAP_SERVERS=.*Kafka" .env.docker || grep -q "KAFKA_BOOTSTRAP_SERVERS=.*kafka-server" .env.docker; then
-            sed -i 's|^KAFKA_BOOTSTRAP_SERVERS=.*|KAFKA_BOOTSTRAP_SERVERS=localhost:9092|' .env.docker
-            print_info "已更新Kafka连接为 localhost:9092（host网络模式）"
-        fi
-        
-        # 检查并更新TDengine配置（如果还是旧的服务名，改为localhost）
-        if grep -q "TDENGINE_HOST=.*TDengine" .env.docker || grep -q "TDENGINE_HOST=.*tdengine-server" .env.docker; then
-            sed -i 's|^TDENGINE_HOST=.*|TDENGINE_HOST=localhost|' .env.docker
-            print_info "已更新TDengine连接为 localhost（host网络模式）"
+        # Docker Desktop 使用 bridge + 服务名，不能改回 localhost（host 网络在 Desktop 无效）
+        if [ -n "${EASYAIOT_DESKTOP_OS:-}" ] || [ "${EASYAIOT_COMPOSE_DESKTOP:-0}" = "1" ]; then
+            print_info "桌面端部署：保留/使用容器网络中间件地址（postgres-server 等）"
+            _set_env_docker_kv .env.docker DATABASE_URL "postgresql://postgres:iot45722414822@postgres-server:5432/iot-video20"
+            _set_env_docker_kv .env.docker REDIS_HOST "redis-server"
+        else
+            print_info "检查并更新中间件连接信息（使用host网络模式）..."
+            
+            # 检查并更新数据库连接（如果还是旧的服务名，改为localhost）
+            if grep -q "DATABASE_URL=.*PostgresSQL" .env.docker || grep -q "DATABASE_URL=.*postgres-server" .env.docker; then
+                _set_env_docker_kv .env.docker DATABASE_URL "postgresql://postgres:iot45722414822@localhost:5432/iot-video20"
+                print_info "已更新数据库连接为 localhost:5432（host网络模式）"
+            fi
+            
+            # 检查并更新Nacos配置（如果还是IP地址或旧的服务名，改为localhost）
+            if grep -q "NACOS_SERVER=.*14\.18\.122\.2" .env.docker || grep -q "NACOS_SERVER=.*Nacos" .env.docker || grep -q "NACOS_SERVER=.*nacos-server" .env.docker; then
+                _set_env_docker_kv .env.docker NACOS_SERVER "localhost:8848"
+                print_info "已更新Nacos连接为 localhost:8848（host网络模式）"
+            fi
+            
+            # 检查并更新MinIO配置（如果还是旧的服务名，改为localhost）
+            if grep -q "MINIO_ENDPOINT=.*MinIO" .env.docker || grep -q "MINIO_ENDPOINT=.*minio-server" .env.docker; then
+                _set_env_docker_kv .env.docker MINIO_ENDPOINT "localhost:9000"
+                print_info "已更新MinIO连接为 localhost:9000（host网络模式）"
+            fi
+            
+            # 检查并更新Redis配置（如果还是旧的服务名，改为localhost）
+            if grep -q "REDIS_HOST=.*Redis" .env.docker || grep -q "REDIS_HOST=.*redis-server" .env.docker; then
+                _set_env_docker_kv .env.docker REDIS_HOST "localhost"
+                print_info "已更新Redis连接为 localhost（host网络模式）"
+            fi
+            
+            # 检查并更新Kafka配置（如果还是旧的服务名，改为localhost）
+            if grep -q "KAFKA_BOOTSTRAP_SERVERS=.*Kafka" .env.docker || grep -q "KAFKA_BOOTSTRAP_SERVERS=.*kafka-server" .env.docker; then
+                _set_env_docker_kv .env.docker KAFKA_BOOTSTRAP_SERVERS "localhost:9092"
+                print_info "已更新Kafka连接为 localhost:9092（host网络模式）"
+            fi
+            
+            # 检查并更新TDengine配置（如果还是旧的服务名，改为localhost）
+            if grep -q "TDENGINE_HOST=.*TDengine" .env.docker || grep -q "TDENGINE_HOST=.*tdengine-server" .env.docker; then
+                _set_env_docker_kv .env.docker TDENGINE_HOST "localhost"
+                print_info "已更新TDengine连接为 localhost（host网络模式）"
+            fi
         fi
     fi
 
     ensure_deploy_profile
     apply_python_service_deploy_env "${EASYAIOT_ROOT}"
     if is_mini_deploy_profile; then
-        print_info "mini 形态：已配置本机部署（JAVA_BACKEND_URL=48099, NODE_REMOTE_DEPLOY=false）"
+        print_info "mini 形态：已配置 Gateway 部署（48080）+ MQTT→iot-sink 统一事件面"
     else
         print_info "${EASYAIOT_DEPLOY_PROFILE:-full} 形态：已配置网关部署（JAVA_BACKEND_URL=48080, MinIO 启用）"
     fi
@@ -463,6 +483,7 @@ install_service() {
     create_directories
     download_face_rec_model
     create_env_file
+    ensure_cpp_runtime || true
     check_gpu
     configure_compose_gpu "docker-compose.yaml" ".env.docker"
 
@@ -477,7 +498,7 @@ install_service() {
     
     print_info "启动服务..."
     cleanup_renamed_containers
-    $COMPOSE_CMD up -d --remove-orphans
+    video_compose up -d --remove-orphans
 
     print_success "服务安装完成！"
     print_info "等待服务启动..."
@@ -508,9 +529,10 @@ start_service() {
 
     check_gpu
     configure_compose_gpu "docker-compose.yaml" ".env.docker"
-    
+    wire_cpp_runtime_override
+
     cleanup_renamed_containers
-    $COMPOSE_CMD up -d --force-recreate --remove-orphans
+    video_compose up -d --force-recreate --remove-orphans
     print_success "服务已启动"
     check_status
 }
@@ -521,7 +543,7 @@ stop_service() {
     check_docker
     check_docker_compose
     
-    $COMPOSE_CMD down
+    video_compose down
     print_success "服务已停止"
 }
 
@@ -539,9 +561,10 @@ restart_service() {
     fi
     check_gpu
     configure_compose_gpu "docker-compose.yaml" ".env.docker"
+    wire_cpp_runtime_override
 
     cleanup_renamed_containers
-    $COMPOSE_CMD up -d --force-recreate --remove-orphans
+    video_compose up -d --force-recreate --remove-orphans
     print_success "服务已重启"
     check_status
 }
@@ -552,7 +575,7 @@ check_status() {
     check_docker
     check_docker_compose
     
-    $COMPOSE_CMD ps
+    video_compose ps
     
     echo ""
     print_info "容器健康状态:"
@@ -576,10 +599,10 @@ view_logs() {
     
     if [ "$1" == "-f" ] || [ "$1" == "--follow" ]; then
         print_info "实时查看日志（按 Ctrl+C 退出）..."
-        $COMPOSE_CMD logs -f --tail=50
+        video_compose logs -f --tail=50
     else
         print_info "查看最近日志（最近50行）..."
-        $COMPOSE_CMD logs --tail=50
+        video_compose logs --tail=50
     fi
 }
 
@@ -623,7 +646,7 @@ clean_service() {
     check_docker
     check_docker_compose
     print_info "停止并删除容器..."
-        $COMPOSE_CMD down -v
+        video_compose down -v
         
         print_info "删除镜像..."
         docker rmi video-service:latest 2>/dev/null || true
@@ -646,6 +669,7 @@ update_service() {
     check_docker
     check_docker_compose
     check_network
+    ensure_cpp_runtime || true
 
     # 记录更新前代码版本，用于判断依赖/构建文件是否变化
     local rev_before=""
@@ -696,12 +720,12 @@ update_service() {
         # 构建完成后才重建容器：compose 检测到镜像变化「先停旧、再起新」，停机仅数秒
         print_info "应用新镜像（仅重建变更服务，最小化停机）..."
         cleanup_renamed_containers
-        $COMPOSE_CMD up -d --remove-orphans --no-deps video-service
+        video_compose up -d --remove-orphans --no-deps video-service
     else
         print_success "依赖未变，跳过镜像构建（业务代码经卷挂载，重启进程即可生效）"
         # 确保容器存在并应用任何 compose 配置变更（首次启用源码挂载时会在此处重建一次）
         cleanup_renamed_containers
-        $COMPOSE_CMD up -d --remove-orphans --no-deps video-service
+        video_compose up -d --remove-orphans --no-deps video-service
 
         # 是否需要重启进程以加载新源码：有新提交，或本地有未提交改动（git diff 脏）。
         # git diff --quiet HEAD 仅在出错或有已跟踪改动时返回非 0，用于捕获“改了代码没 commit”的场景；
@@ -715,7 +739,7 @@ update_service() {
 
         if [ "$code_changed" = "1" ]; then
             print_info "重启容器进程以加载最新源码（秒级）..."
-            $COMPOSE_CMD restart video-service
+            video_compose restart video-service
         else
             print_info "代码无变更，无需重启"
         fi
@@ -733,7 +757,7 @@ show_help() {
     echo "  ./install_linux.sh [命令]"
     echo ""
     echo "可用命令:"
-    echo "  install    - 安装并启动服务（首次运行）"
+    echo "  install    - 安装并启动服务（首次运行；含 RUNTIME 高性能执行器编译）"
     echo "  start      - 启动服务"
     echo "  stop       - 停止服务"
     echo "  restart    - 重启服务"
@@ -742,8 +766,12 @@ show_help() {
     echo "  logs -f    - 实时查看服务日志（最近50行）"
     echo "  build      - 重新构建镜像"
     echo "  clean      - 清理容器和镜像"
-    echo "  update     - 更新并重启服务"
+    echo "  update     - 更新并重启服务（含 RUNTIME 重编译）"
     echo "  help       - 显示此帮助信息"
+    echo ""
+    echo "环境变量:"
+    echo "  EASYAIOT_RUNTIME_SKIP=1      跳过 RUNTIME 编译"
+    echo "  EASYAIOT_RUNTIME_REQUIRED=1  RUNTIME 失败则中止 VIDEO 安装"
     echo ""
 }
 

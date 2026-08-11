@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { Button } from '@/components/Button';
 import { ApiSelect, RadioButtonGroup } from '@/components/Form';
+import { getPanelConsoleUrl, openPanelConsole } from '@/utils/panel';
 import TrendChart from './TrendChart.vue';
 import GaugePanel from './GaugePanel.vue';
 import GpuVramOverview from './GpuVramOverview.vue';
@@ -12,6 +13,8 @@ import { formatPercent, formatStorageRange } from '../../utils/clusterMetrics';
 import { NODE_DASHBOARD, NODE_METRIC, OVERVIEW_ALL_NODES_ID, TREND_SAMPLE_INTERVAL_OPTIONS } from '../../utils/constants';
 
 defineOptions({ name: 'ClusterDashboard' });
+
+const panelConsoleUrl = computed(() => getPanelConsoleUrl());
 
 const {
   loading,
@@ -153,6 +156,14 @@ const effectiveSelectedNodeIds = computed(() => {
         <h2 class="load-section__title">{{ NODE_DASHBOARD.clusterLoad }}</h2>
         <div class="load-section__head-right">
           <div class="load-section__scope-controls">
+            <Button
+              type="primary"
+              class="load-section__console-btn"
+              :title="panelConsoleUrl"
+              @click="openPanelConsole"
+            >
+              {{ NODE_DASHBOARD.openPanelAction }}
+            </Button>
             <label class="control-item load-section__central-node">
               <span>{{ NODE_DASHBOARD.overviewCentralNode }}</span>
               <ApiSelect
@@ -309,7 +320,7 @@ const effectiveSelectedNodeIds = computed(() => {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 20px;
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
 
 .stat-card {
@@ -394,6 +405,10 @@ const effectiveSelectedNodeIds = computed(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px 20px;
+  flex-shrink: 0;
+}
+
+.load-section__console-btn {
   flex-shrink: 0;
 }
 

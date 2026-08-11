@@ -786,12 +786,28 @@ def create_algorithm_task(task_name: str,
                          pose_intent_threshold: Optional[float] = None,
                          pose_intent_config=None,
                          post_process_enabled: bool = False,
-                         post_process_replicas: int = 1) -> AlgorithmTask:
+                         post_process_replicas: int = 1,
+                         executor: str = 'cpp',
+                         runtime_bin_path: Optional[str] = None,
+                         runtime_control_port: Optional[int] = None) -> AlgorithmTask:
     """创建算法任务"""
     try:
         # 验证任务类型
         if task_type not in ['realtime', 'snap', 'patrol']:
             raise ValueError(f"无效的任务类型: {task_type}，必须是 'realtime'、'snap' 或 'patrol'")
+
+        from app.services.runtime_config_service import normalize_executor, ensure_runtime_bin_ready
+        executor = normalize_executor(executor)
+        if executor == 'cpp':
+            if task_type not in ('realtime', 'snap', 'patrol'):
+                raise ValueError(f'executor=cpp 不支持任务类型: {task_type}')
+            # 本机需已编译 RUNTIME；远程依赖 iot-node 分发到节点
+            if (schedule_policy or 'local') == 'local':
+                ensure_runtime_bin_ready(None)
+        if runtime_control_port is not None:
+            runtime_control_port = int(runtime_control_port)
+            if runtime_control_port < 8000 or runtime_control_port > 9000:
+                raise ValueError('runtime_control_port 必须在 8000-9000 之间')
 
         from app.utils.alert_class_filter import parse_alert_class_names
         if alert_event_enabled and not parse_alert_class_names(alert_class_names):
@@ -1053,6 +1069,9 @@ def create_algorithm_task(task_name: str,
             pose_intent_config=_serialize_pose_intent_config(pose_intent_config),
             post_process_enabled=bool(post_process_enabled),
             post_process_replicas=max(1, int(post_process_replicas or 1)),
+            executor=executor or 'cpp',
+            runtime_bin_path=(runtime_bin_path or None),
+            runtime_control_port=runtime_control_port,
         )
         
         db.session.add(task)
@@ -1084,6 +1103,28 @@ def update_algorithm_task(task_id: int, **kwargs) -> AlgorithmTask:
             raise ValueError('任务运行中，无法编辑，请先停止任务')
         
         task_type = kwargs.get('task_type', task.task_type)
+
+        if 'executor' in kwargs or 'task_type' in kwargs or 'schedule_policy' in kwargs:
+            from app.services.runtime_config_service import normalize_executor, ensure_runtime_bin_ready
+            if 'executor' in kwargs:
+                kwargs['executor'] = normalize_executor(kwargs.get('executor'))
+            effective_executor = normalize_executor(
+                kwargs.get('executor', getattr(task, 'executor', None) or 'cpp')
+            )
+            effective_type = kwargs.get('task_type', task.task_type)
+            effective_policy = kwargs.get(
+                'schedule_policy', getattr(task, 'schedule_policy', None) or 'local'
+            )
+            if effective_executor == 'cpp':
+                if effective_type not in ('realtime', 'snap', 'patrol'):
+                    raise ValueError(f'executor=cpp 不支持任务类型: {effective_type}')
+                if (effective_policy or 'local') == 'local':
+                    ensure_runtime_bin_ready(task)
+        if 'runtime_control_port' in kwargs and kwargs['runtime_control_port'] is not None:
+            port = int(kwargs['runtime_control_port'])
+            if port < 8000 or port > 9000:
+                raise ValueError('runtime_control_port 必须在 8000-9000 之间')
+            kwargs['runtime_control_port'] = port
         
         # 处理设备ID列表
         device_id_list = kwargs.pop('device_ids', None)
@@ -1230,6 +1271,7 @@ def update_algorithm_task(task_id: int, **kwargs) -> AlgorithmTask:
             'pose_analysis_enabled', 'pose_analysis_config',
             'pose_intent_enabled', 'pose_library_ids', 'pose_intent_threshold', 'pose_intent_config',
             'post_process_enabled', 'post_process_script', 'post_process_replicas',
+            'executor', 'runtime_bin_path', 'runtime_control_port',
         ]
         
         if 'sam_supplement_config' in kwargs:
@@ -1582,6 +1624,13 @@ def start_algorithm_task(task_id: int):
             service_message = f"服务启动异常: {str(e)}"
         
         logger.info(f"启动算法任务成功: task_id={task_id}, message={service_message}, already_running={already_running}")
+        try:
+            from app.services.runtime_config_service import normalize_executor
+            if normalize_executor(task.executor) == 'cpp' and task.task_type == 'realtime':
+                from app.services.stream_forward_service import refresh_stream_forward_rtsp_for_devices
+                refresh_stream_forward_rtsp_for_devices([d.id for d in (task.devices or [])])
+        except Exception as e:
+            logger.warning('启动算法后刷新推流转发 RTSP 失败 task_id=%s: %s', task_id, e)
         return task, service_message, already_running
     except Exception as e:
         db.session.rollback()
@@ -1593,6 +1642,7 @@ def stop_algorithm_task(task_id: int):
     """停止算法任务"""
     try:
         task = AlgorithmTask.query.get_or_404(task_id)
+        device_ids = [d.id for d in (task.devices or [])]
         task.is_enabled = False
         task.run_status = 'stopped'
         task.updated_at = datetime.utcnow()
@@ -1636,6 +1686,14 @@ def stop_algorithm_task(task_id: int):
             daemon=True,
             name=f"stop-task-{task_id}",
         ).start()
+
+        try:
+            from app.services.runtime_config_service import normalize_executor
+            if normalize_executor(task.executor) == 'cpp' and task.task_type == 'realtime':
+                from app.services.stream_forward_service import refresh_stream_forward_rtsp_for_devices
+                refresh_stream_forward_rtsp_for_devices(device_ids)
+        except Exception as e:
+            logger.warning('停止算法后刷新推流转发 RTSP 失败 task_id=%s: %s', task_id, e)
 
         logger.info(f"停止算法任务成功(服务清理已转后台执行): task_id={task_id}")
         return task

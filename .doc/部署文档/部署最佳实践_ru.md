@@ -12,6 +12,7 @@
 - [Выбор профиля развертывания](#выбор-профиля-развертывания)
 - [Требования к окружению и проверки перед развертыванием](#требования-к-окружению-и-проверки-перед-развертыванием)
 - [Развертывание в один клик и поэтапное развертывание](#развертывание-в-один-клик-и-поэтапное-развертывание)
+- [Атомарный режим RUNTIME (лёгкие вычислительные узлы)](#атомарный-режим-runtime-лёгкие-вычислительные-узлы)
 - [Типовые операции](#типовые-операции)
 - [Предварительно собранные образы](#предварительно-собранные-образы)
 - [Настройка GPU](#настройка-gpu)
@@ -27,7 +28,7 @@
 
 ## Два режима использования (подробно)
 
-Единые входные скрипты (`install_linux.sh` / `install_linux_arm.sh` / `install_linux_kylin.sh`) поддерживают **два эквивалентных способа использования**:
+Единые входные скрипты (`install_linux.sh` / `install_linux_centos.sh` / `install_linux_centos_arm.sh` / `install_linux_openeuler.sh` / `install_linux_arm.sh` / `install_linux_kylin.sh`) поддерживают **два эквивалентных способа использования**:
 
 | Режим | Вход | Аудитория | Характеристики |
 |-------|------|-----------|----------------|
@@ -186,7 +187,7 @@ sudo .scripts/docker/install_linux.sh         # 1 Deploy → 1 Install → 7 Ver
 
 | Профиль | Псевдонимы | Рекомендуемая RAM | Сценарий |
 |---------|------------|-------------------|----------|
-| **mini** | `1` / `4g` | ≥ 4 ГБ | Edge-узлы, PoC |
+| **mini** | `1` / `4g` | ≥ 8 ГБ | Edge-узлы, PoC |
 | **standard** | `2` / `16g` | ≥ 16 ГБ | Обычный production |
 | **full** | `3` (по умолчанию) | ≥ 20 ГБ | Полный функционал + APP H5 |
 
@@ -198,14 +199,16 @@ sudo .scripts/docker/install_linux.sh         # 1 Deploy → 1 Install → 7 Ver
 
 **mini**
 
-- Бизнес: `iot-system`, VIDEO, AI, WEB
-- Middleware: PostgreSQL, Redis, SRS
-- Не запускаются: Nacos, Gateway, Kafka, iot-sink, MinIO, Milvus, ZLMediaKit, Node-RED, TDengine, EMQX и большинство подмодулей DEVICE
-- Маршрутизация API: nginx проксирует `/admin-api` и `/dev-api` на `iot-system:48099`
+- Бизнес: `iot-system`, `iot-gateway`, `iot-sink`, `iot-infra`, VIDEO, AI, WEB
+- Middleware: Nacos, PostgreSQL, Redis, Kafka, MinIO, SRS, EMQX
+- Не запускаются: `iot-device`, `iot-dataset`, `iot-node`, `iot-visualize`, `iot-file`, `iot-message`, `iot-gb28181`, `iot-tdengine`, Milvus, ZLMediaKit, Node-RED, FUXA, TDengine, APP / VISUALIZE / TRANSFORM и др.
+- Событийный контур: как standard/full — MQTT → Gateway → iot-sink
+- Медиа: NFS-стек готовится при установке (`EASYAIOT_MEDIA_ROOT`)
+- Маршрутизация API: единая точка входа Gateway (48080)
 
 **standard**
 
-- Не запускаются: TDengine, Node-RED, `iot-device`, `iot-tdengine` (включая EMQX)
+- Не запускаются: TDengine, Node-RED, `iot-device`, `iot-tdengine`
 - Все остальные запускаются
 
 **full**
@@ -236,7 +239,7 @@ sudo .scripts/docker/install_linux.sh         # 1 Deploy → 1 Install → 7 Ver
 
 | ПО | Требование |
 |----|------------|
-| ОС | Ubuntu 24.04+ (рекомендуется 26.04); также поддерживаются Kylin, ARM64 |
+| ОС | Ubuntu 24.04+ (рекомендуется 26.04); также поддерживаются CentOS/RHEL, **Kylin (麒麟) / openEuler (欧拉)**, ARM64 |
 | Docker | Установлен, демон доступен |
 | Docker Compose | **v2.35.0+** (плагин `docker compose`) |
 | NVIDIA Driver / Container Toolkit | Только для сценариев с GPU |
@@ -357,6 +360,28 @@ cd .scripts/docker
 
 ---
 
+## Атомарный режим RUNTIME (лёгкие вычислительные узлы)
+
+Планируйте полный стек центра и лёгкие compute-узлы раздельно:
+
+| Роль | Что ставить | Вход |
+|------|-------------|------|
+| **Центр / all-in-one** | Middleware + DEVICE/AI/VIDEO/WEB…; VIDEO монтирует RUNTIME | `install_linux.sh install` |
+| **Вычислительный узел** | **Только RUNTIME** | `VIDEO_BASE_URL=… install_linux.sh runtime` |
+| **Пакет узлов** | То же через SSH | WEB «дистрибуция runtime» → RUNTIME(C++) |
+
+```bash
+VIDEO_BASE_URL=http://<центр-VIDEO>:6000 \
+  sudo -E bash .scripts/docker/install_linux.sh runtime
+
+./RUNTIME/install_linux.sh status
+source /opt/easyaiot/RUNTIME/env.sh
+```
+
+Обязателен `VIDEO_BASE_URL`. Атомарный ≠ никогда не пушить. Не связан с профилями mini/standard/full — не запускайте полный `install` на compute-боксах. Подробности: [`RUNTIME/README.md`](../../RUNTIME/README.md).
+
+---
+
 ## Типовые операции
 
 ### Единый скрипт
@@ -426,11 +451,27 @@ docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu24.04 nvidia-smi
 ## Особые среды
 
 ```bash
+# CentOS / RHEL / Rocky / Alma x86 (автообновление Docker CE, порты firewalld)
+sudo .scripts/docker/install_linux_centos.sh install
+# Только Docker: sudo .scripts/docker/install_linux_centos.sh --upgrade-docker-only
+
+# CentOS / RHEL ARM (затем делегирование install_linux_arm.sh)
+sudo .scripts/docker/install_linux_centos_arm.sh install
+# Только Docker: sudo .scripts/docker/install_linux_centos_arm.sh --upgrade-docker-only
+
+# openEuler
+sudo .scripts/docker/install_linux_openeuler.sh install
+# Только Docker: sudo .scripts/docker/install_linux_openeuler.sh --upgrade-docker-only
+
 # Kylin OS
 sudo .scripts/docker/install_linux_kylin.sh install
 
-# ARM64
+# ARM64 (общий)
 sudo .scripts/docker/install_linux_arm.sh install
+
+# macOS / Windows
+bash .scripts/docker/install_mac.sh install
+bash .scripts/docker/install_windows.sh install
 ```
 
 ---
@@ -549,7 +590,7 @@ cd WEB && ./install_linux.sh build
 | `.scripts/docker/logs/` | Журналы скрипта установки; отчеты `merged_logs_*`, `disk_usage_*` |
 | `.scripts/docker/standalone-logs/` | Журналы на диске Nacos и другого middleware |
 | `.build-cache/device/logs/` | Spring-журналы микросервисов DEVICE |
-| `~/easyaiot/data/srs.log` | Стриминг SRS |
+| `${EASYAIOT_MEDIA_ROOT:-/mnt/easyaiot-media}/srs.log` | Стриминг SRS (корень медиа через `deploy_profile`) |
 | `WEB/logs/runtime.log` | Журнал выполнения WEB |
 | `docker logs <container>` | stdout контейнера (типично для AI/VIDEO) |
 

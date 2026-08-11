@@ -28,7 +28,7 @@
   const titleQuery = route.query?.title ?? '';
   const { setTitle } = useTabs();
   setTitle(
-    decodeURIComponent(String(titleQuery || index)) || 'NodeRed',
+    decodeURIComponent(String(titleQuery || index)) || 'EasyAIoT',
   );
   
   // 构建完整的 iframe 路径

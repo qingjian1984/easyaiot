@@ -28,6 +28,10 @@
       <FfmpegBatchPanel :node-ids="selectedNodeIds" />
     </CollapseContainer>
 
+    <CollapseContainer title="高性能算法 · RUNTIME(C++)" :canExpan="true" :defaultExpan="true" class="mb-4">
+      <RuntimeCppBatchPanel :node-ids="selectedNodeIds" />
+    </CollapseContainer>
+
     <Tabs v-model:activeKey="activeBundleKey" type="card" destroy-inactive-tab-pane>
       <TabPane v-for="bundle in WORKLOAD_BUNDLE_TYPES" :key="bundle.key" :tab="bundle.label">
         <WorkloadBundlePanel :bundle="bundle" :node-ids="selectedNodeIds" />
@@ -47,6 +51,7 @@ import { isPlatformNode } from '../../utils/platformNode';
 import { WORKLOAD_BUNDLE_COPY, WORKLOAD_BUNDLE_TYPES } from '../../utils/constants';
 import WorkloadBundlePanel from './WorkloadBundlePanel.vue';
 import FfmpegBatchPanel from './FfmpegBatchPanel.vue';
+import RuntimeCppBatchPanel from './RuntimeCppBatchPanel.vue';
 
 defineOptions({ name: 'WorkloadBundleBatch' });
 
@@ -75,7 +80,8 @@ async function loadNodes() {
   nodesLoading.value = true;
   try {
     const res = await getNodePage({ pageNo: 1, pageSize: 500 });
-    nodeList.value = res?.data?.list || [];
+    // 分发目标不含本机控制面：列表直接隐藏 platform 节点
+    nodeList.value = (res?.data?.list || []).filter((node) => !isPlatformNode(node));
     nodeOptions.value = nodeList.value.map((node) => ({
       label: `${node.name} (${node.host}) — ${node.status || 'unknown'}`,
       value: node.id!,

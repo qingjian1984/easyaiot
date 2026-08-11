@@ -50,7 +50,7 @@
                     @click="emit('view', item)"
                   >
                     <div class="overlay-actions" @click.stop>
-                      <Tooltip title="打开编辑器">
+                      <Tooltip v-if="!isFuxaDemoProject(item)" title="打开编辑器">
                         <button class="overlay-btn" @click="emit('open-editor', item)">
                           <FundProjectionScreenOutlined />
                         </button>
@@ -124,7 +124,7 @@ import {
 import { BasicForm, useForm } from '@/components/Form'
 import { propTypes } from '@/utils/propTypes'
 import { isFunction } from '@/utils/is'
-import { getProjectTypeLabel, isScadaProject } from '@/utils/visualizeEditor'
+import { getProjectTypeLabel, isFuxaDemoProject, isScadaProject } from '@/utils/visualizeEditor'
 
 defineOptions({ name: 'VisualizeProjectCardList' })
 

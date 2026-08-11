@@ -9,8 +9,10 @@
 - [概述](#概述)
 - [兩種使用模式](#兩種使用模式)
 - [快速開始](#快速開始)
+- [macOS / Windows 鏡像部署](#macos--windows-鏡像部署)
 - [部署規格](#部署規格)
 - [腳本命令參考](#腳本命令參考)
+- [RUNTIME 原子模式（計算節點）](#runtime-原子模式計算節點)
 - [服務存取與連接埠](#服務存取與連接埠)
 - [常見問題](#常見問題)
 - [環境要求](#環境要求)
@@ -26,8 +28,9 @@ EasyAIoT 採用 **Docker 容器化 + 統一安裝腳本** 部署，平台由基�
 | 基礎服務 | `.scripts/docker` | Nacos、PostgreSQL、Redis、Kafka、MinIO 等 |
 | DEVICE | `DEVICE/` | 裝置管理與 API 閘道（Java / Spring Cloud） |
 | AI | `AI/` | 模型訓練、推理（Python） |
-| VIDEO | `VIDEO/` | 視訊串流處理、告警、錄影（Python） |
-| WEB | `WEB/` | 管理主控台（Vue 3） |
+| VIDEO | `VIDEO/` | 視訊串流處理、告警、錄影（Python）；算法任務默認可拉起 RUNTIME |
+| RUNTIME | `RUNTIME/` | C++ 高速幀執行器；中心機隨 VIDEO 掛載，計算節點可 **原子模式只裝執行器** |
+| WEB || WEB | `WEB/` | 管理主控台（Vue 3） |
 | APP | `APP/` | 行動端 H5（僅 **full** 規格） |
 
 **統一入口腳本**（下文以 Linux x86 為例）：
@@ -35,10 +38,13 @@ EasyAIoT 採用 **Docker 容器化 + 統一安裝腳本** 部署，平台由基�
 | 系統 | 腳本 |
 |------|------|
 | Linux x86 | `.scripts/docker/install_linux.sh` |
-| Linux ARM | `.scripts/docker/install_linux_arm.sh` |
-| 銀河麒麟 | `.scripts/docker/install_linux_kylin.sh` |
+| CentOS / RHEL 系（x86） | `.scripts/docker/install_linux_centos.sh` |
+| **CentOS / RHEL 系 · ARM** | `.scripts/docker/install_linux_centos_arm.sh` |
+| **麒麟(Kylin)** | `.scripts/docker/install_linux_kylin.sh` |
+| **歐拉(openEuler)** | `.scripts/docker/install_linux_openeuler.sh` |
+| Linux ARM（通用） | `.scripts/docker/install_linux_arm.sh` |
 | macOS | `.scripts/docker/install_mac.sh` |
-| Windows | `.scripts/docker/install_win.ps1` |
+| Windows | `.scripts/docker/install_windows.ps1` / `install_windows.sh` |
 
 ---
 
@@ -116,8 +122,8 @@ sudo .scripts/docker/install_linux.sh install
 
 ### 環境前提
 
-- 作業系統：**Ubuntu 24.04+**（建議 26.04）
-- Docker + Docker Compose **v2.35+**
+- 作業系統：**Ubuntu 24.04+**（建議 26.04）；亦支援 **CentOS/RHEL 系**、ARM、**麒麟(Kylin) / 歐拉(openEuler)**
+- Docker + Docker Compose **v2.35+**（CentOS / **歐拉(openEuler)** 可用對應入口腳本自動安裝/升級 Docker CE）
 - 磁碟可用空間 **≥ 300 GB**
 
 ```bash
@@ -130,7 +136,18 @@ docker --version && docker compose version && docker ps
 git clone https://gitee.com/volara/easyaiot.git
 cd easyaiot
 
+# Ubuntu / 通用 Linux x86
 sudo .scripts/docker/install_linux.sh
+
+# CentOS / RHEL / Rocky / Alma x86
+# sudo .scripts/docker/install_linux_centos.sh
+
+# CentOS / RHEL 系 ARM
+# sudo .scripts/docker/install_linux_centos_arm.sh
+
+# openEuler（卸載自帶 docker-engine、修復倉庫 releasever、裝 Docker CE）
+# sudo .scripts/docker/install_linux_openeuler.sh
+
 # 1 部署 → 1 首次安裝 → 7 健康驗證
 ```
 
@@ -144,10 +161,32 @@ cd easyaiot
 
 # 可選：拉取預建構映像，縮短 install 耗時
 sudo .scripts/docker/install_linux.sh pull
+# CentOS x86：sudo .scripts/docker/install_linux_centos.sh pull
+# CentOS ARM：sudo .scripts/docker/install_linux_centos_arm.sh pull
+# openEuler：sudo .scripts/docker/install_linux_openeuler.sh pull
 
 sudo .scripts/docker/install_linux.sh install
+# CentOS x86：sudo .scripts/docker/install_linux_centos.sh install
+# CentOS ARM：sudo .scripts/docker/install_linux_centos_arm.sh install
+# openEuler：sudo .scripts/docker/install_linux_openeuler.sh install
+
 .scripts/docker/install_linux.sh verify
+# CentOS x86：.scripts/docker/install_linux_centos.sh verify
+# CentOS ARM：.scripts/docker/install_linux_centos_arm.sh verify
+# openEuler：.scripts/docker/install_linux_openeuler.sh verify
 ```
+
+### CentOS / RHEL 系說明
+
+適用 CentOS 7/8/Stream、Rocky、Alma、RHEL（x86）。入口 `install_linux_centos.sh` 會自動升級 Docker CE、配置鏡像源與 firewalld，再轉交 `install_linux.sh`。詳見簡體中文：[平台部署文档_zh.md](./平台部署文档_zh.md#centos--rhel-系说明)。
+
+### CentOS / RHEL 系 · ARM 說明
+
+適用 aarch64/arm64 上的 CentOS/RHEL 系。入口 `install_linux_centos_arm.sh` 完成與 x86 相同的環境準備後，轉交 `install_linux_arm.sh`（預設 `DOCKER_PLATFORM=linux/arm64`）。詳見簡體中文：[平台部署文档_zh.md](./平台部署文档_zh.md#centos--rhel-系--arm-说明)。
+
+### **歐拉(openEuler)** 說明
+
+適用 **歐拉(openEuler)** 24.03 LTS 等 24.x。入口 `install_linux_openeuler.sh` 會卸載自帶 docker-engine、修復倉庫 `$releasever`、配置鏡像源與 firewalld，再轉交 `install_linux.sh`。詳見簡體中文：[平台部署文档_zh.md](./平台部署文档_zh.md#openeuler-24x-说明)。
 
 ### 安裝耗時
 
@@ -160,13 +199,38 @@ sudo .scripts/docker/install_linux.sh install
 
 ---
 
+## macOS / Windows 鏡像部署
+
+桌面端（macOS、Windows）**僅支援預建構映像部署**，不在本機編譯。詳見簡體中文專文：
+
+- [平台部署文档_zh.md · macOS / Windows](./平台部署文档_zh.md#macos--windows-镜像部署)
+- [平台macOS部署文档_zh_tw.md](./平台macOS部署文档_zh_tw.md)（簡體：[平台macOS部署文档_zh.md](./平台macOS部署文档_zh.md)）
+- [平台Windows部署文档_zh_tw.md](./平台Windows部署文档_zh_tw.md)（簡體：[平台Windows部署文档_zh.md](./平台Windows部署文档_zh.md)）
+
+```bash
+# macOS
+bash .scripts/docker/install_mac.sh install
+
+# Windows（Git Bash / WSL）
+bash .scripts/docker/install_windows.sh install
+```
+
+```powershell
+# Windows PowerShell
+.\.scripts\docker\install_windows.ps1 install
+```
+
+不支援：`build` / `build-runtime`。訪問位址：`http://localhost:8888`。
+
+---
+
 ## 部署規格
 
 首次 `install` 時互動選擇，結果保存在 `.scripts/docker/.deploy_profile`，後續 `start` / `stop` / `update` 自動沿用。
 
 | 選項 | 名稱 | 建議記憶體 | 適用場景 |
 |:----:|------|----------|----------|
-| 1 | **mini** | ≥ 4 GB | 邊緣節點、PoC 驗證 |
+| 1 | **mini** | ≥ 8 GB | 邊緣節點、PoC 驗證 |
 | 2 | **standard** | ≥ 16 GB | 常規生產 |
 | 3 | **full**（預設） | ≥ 20 GB | 完整功能，含 APP H5 |
 
@@ -194,6 +258,7 @@ export EASYAIOT_DEPLOY_PROFILE=full && sudo .../install_linux.sh install  # 非�
 | `update` | 更新映像並重啟 |
 | `pull` | 拉取預建構映像 |
 | `build` | 本地重新建構映像 |
+| `runtime` / `runtime-atomic` | **RUNTIME 原子模式**（只裝計算節點執行器，需 `VIDEO_BASE_URL`） |
 | `profile` | 查看部署規格 |
 | `analyze-logs` | 多模組日誌合併 |
 | `analyze-disk` | 磁碟占用分析 |
@@ -231,6 +296,32 @@ cd .scripts/docker && ./install_middleware_linux.sh install   # 僅中介軟體
 cd .scripts/docker && ./install_business_linux.sh install     # 僅業務模組
 cd AI && ./install_linux.sh install                           # 單模組
 ```
+
+---
+
+## RUNTIME 原子模式（計算節點）
+
+適用於**邊緣算力盒 / 集羣計算節點**：本機**只安裝** C++ 執行器，不部署 VIDEO / WEB / DEVICE。告警與心跳匯聚到中心 VIDEO；正式 `realtime` 任務仍默認把帶框檢測流推到中心/集羣 SRS 的 `ai/` 應用。
+
+> **原子 ≠ 永不推流**：原子只表示本機無業務面。詳細步驟見 [`RUNTIME/README.md`](../../RUNTIME/README.md)。
+
+```bash
+VIDEO_BASE_URL=http://<中心VIDEO>:6000 \
+  bash .scripts/docker/install_linux.sh runtime
+
+VIDEO_BASE_URL=http://192.168.1.10:6000 ./RUNTIME/install_linux.sh atomic
+```
+
+| 項 | 說明 |
+|----|------|
+| 必填 | `VIDEO_BASE_URL`（或參數傳入） |
+| 安裝目錄 | 默認 `/opt/easyaiot/RUNTIME` |
+| 產出 | `bin/RUNTIME`、`node.env`、`env.sh`、`config/atomic.example.ini` |
+| 正式任務 | 中心 WEB 創建算法任務（`executor=cpp`），由 VIDEO + Agent 下發 |
+| 手工冒煙 | `source /opt/easyaiot/RUNTIME/env.sh && $RUNTIME_BIN …/atomic.example.ini` |
+| 批量分發 | WEB「業務運行時分發」→ RUNTIME(C++) |
+
+中心機完整棧仍用 `install`；本機 VIDEO 安裝會自動編譯掛載 RUNTIME，與原子模式互不替代。
 
 ---
 
@@ -293,7 +384,7 @@ cd .scripts/docker && ./analyze_merge_logs.sh --non-interactive --modules all --
 
 | 項目 | 要求 |
 |------|------|
-| 作業系統 | Ubuntu 24.04+（建議 26.04）；亦支援 macOS、Windows、ARM、銀河麒麟 |
+| 作業系統 | Ubuntu 24.04+（建議 26.04）；亦支援 macOS、Windows、CentOS/RHEL、ARM、**麒麟(Kylin) / 歐拉(openEuler)** |
 | CPU | 最低 4 核，建議 8 核+ |
 | 記憶體 | 取決於部署規格（full ≥ 20 GB，建議 32 GB） |
 | 磁碟 | 最低 300 GB 可用，建議 500 GB+ SSD |
@@ -316,6 +407,6 @@ sudo usermod -aG docker $USER && newgrp docker
 
 ---
 
-**文件版本**：3.1  
-**最後更新**：2026-07-08  
-**腳本入口**：`.scripts/docker/install_linux.sh`（無參數 = 互動引導；`<命令>` = 直接執行）
+**文件版本**：3.2  
+**最後更新**：2026-07-30  
+**腳本入口**：Linux `install_linux.sh`；macOS `install_mac.sh`；Windows `install_windows.ps1` / `install_windows.sh`

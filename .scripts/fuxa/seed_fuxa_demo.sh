@@ -49,6 +49,6 @@ fi
 
 echo "[OK] 组态演示工程已导入 FUXA"
 echo "     画面：水厂工艺总貌 / 产线运行看板 / 厂区管网组态 / 配电室电力监视"
-echo "     编辑器：${FUXA_URL}/editor"
 echo "     运行态：${FUXA_URL}/home"
+echo "     编辑器：${FUXA_URL}/editor（生产公网 nginx 已禁 /editor，请直连容器内网改图）"
 echo "     建议同步导入平台种子：bash .scripts/go-view/seed_visualize_demo.sh"

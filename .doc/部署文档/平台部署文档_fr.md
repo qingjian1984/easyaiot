@@ -35,10 +35,13 @@ EasyAIoT est déployé via **des conteneurs Docker et un script d'installation u
 | OS | Script |
 |----|--------|
 | Linux x86 | `.scripts/docker/install_linux.sh` |
-| Linux ARM | `.scripts/docker/install_linux_arm.sh` |
-| Kylin | `.scripts/docker/install_linux_kylin.sh` |
+| CentOS / RHEL (x86) | `.scripts/docker/install_linux_centos.sh` |
+| **CentOS / RHEL · ARM** | `.scripts/docker/install_linux_centos_arm.sh` |
+| **Kylin (麒麟)** | `.scripts/docker/install_linux_kylin.sh` |
+| **openEuler (欧拉)** | `.scripts/docker/install_linux_openeuler.sh` |
+| Linux ARM (générique) | `.scripts/docker/install_linux_arm.sh` |
 | macOS | `.scripts/docker/install_mac.sh` |
-| Windows | `.scripts/docker/install_win.ps1` |
+| Windows | `.scripts/docker/install_windows.ps1` / `install_windows.sh` |
 
 ---
 
@@ -117,8 +120,8 @@ sudo .scripts/docker/install_linux.sh install
 
 ### Prérequis
 
-- OS : **Ubuntu 24.04+** (26.04 recommandé)
-- Docker + Docker Compose **v2.35+**
+- OS : **Ubuntu 24.04+** (26.04 recommandé) ; également **CentOS/RHEL**, ARM, **Kylin (麒麟) / openEuler (欧拉)**
+- Docker + Docker Compose **v2.35+** (sous CentOS / **openEuler (欧拉)** : le script d'entrée OS peut installer/mettre à niveau Docker CE)
 - **≥ 300 Go** d'espace disque libre
 
 ```bash
@@ -132,6 +135,9 @@ git clone https://gitee.com/volara/easyaiot.git
 cd easyaiot
 
 sudo .scripts/docker/install_linux.sh
+# CentOS / RHEL x86 : sudo .scripts/docker/install_linux_centos.sh
+# CentOS / RHEL ARM : sudo .scripts/docker/install_linux_centos_arm.sh
+# openEuler : sudo .scripts/docker/install_linux_openeuler.sh
 # 1 Deploy → 1 First install → 7 Health verify
 ```
 
@@ -145,10 +151,29 @@ cd easyaiot
 
 # Optionnel : télécharger les images préconstruites pour raccourcir l'installation
 sudo .scripts/docker/install_linux.sh pull
+# CentOS x86 : sudo .scripts/docker/install_linux_centos.sh pull
+# CentOS ARM : sudo .scripts/docker/install_linux_centos_arm.sh pull
+# openEuler : sudo .scripts/docker/install_linux_openeuler.sh pull
 
 sudo .scripts/docker/install_linux.sh install
+# CentOS x86 : sudo .scripts/docker/install_linux_centos.sh install
+# CentOS ARM : sudo .scripts/docker/install_linux_centos_arm.sh install
+# openEuler : sudo .scripts/docker/install_linux_openeuler.sh install
+
 .scripts/docker/install_linux.sh verify
 ```
+
+### Notes CentOS / RHEL
+
+Utilisez `.scripts/docker/install_linux_centos.sh` (CentOS 7/8/Stream, Rocky, Alma, RHEL · x86). Détails (ZH) : [平台部署文档_zh.md](./平台部署文档_zh.md#centos--rhel-系说明).
+
+### Notes CentOS / RHEL · ARM
+
+Utilisez `.scripts/docker/install_linux_centos_arm.sh` (CentOS/RHEL aarch64/arm64). Même préparation Docker CE / miroir / firewalld, puis délégation à `install_linux_arm.sh`. Détails (ZH) : [平台部署文档_zh.md](./平台部署文档_zh.md#centos--rhel-系--arm-说明).
+
+### Notes **openEuler (欧拉)**
+
+Utilisez `.scripts/docker/install_linux_openeuler.sh` (openEuler 24.03 LTS / 24.x). Remplace le `docker-engine` système, corrige `$releasever` du dépôt Docker CE, configure le miroir et firewalld, puis délègue à `install_linux.sh`. Détails (ZH) : [平台部署文档_zh.md](./平台部署文档_zh.md#openeuler-24x-说明).
 
 ### Durée d'installation
 
@@ -161,13 +186,24 @@ Flux `install` : sélection du profil → vérification de l'environnement → c
 
 ---
 
+## Déploiement macOS / Windows (images uniquement)
+
+Les plateformes bureau ne prennent en charge que le déploiement par **images préconstruites** (`install_mac.sh` / `install_windows.ps1` / `install_windows.sh`). Pas de `build` / `build-runtime` local. Détails : [macOS](./平台macOS部署文档_fr.md), [Windows](./平台Windows部署文档_fr.md). Vue d’ensemble (ZH) : [平台部署文档_zh.md](./平台部署文档_zh.md#macos--windows-镜像部署).
+
+```bash
+bash .scripts/docker/install_mac.sh install
+bash .scripts/docker/install_windows.sh install
+```
+
+---
+
 ## Profils de déploiement
 
 Sélectionné de manière interactive lors du premier `install`, enregistré dans `.scripts/docker/.deploy_profile`. Réutilisé par les opérations `start` / `stop` / `update` ultérieures.
 
 | Option | Nom | RAM recommandée | Cas d'usage |
 |:------:|------|-----------------|-------------|
-| 1 | **mini** | ≥ 4 Go | Nœuds edge, PoC |
+| 1 | **mini** | ≥ 8 Go | Nœuds edge, PoC |
 | 2 | **standard** | ≥ 16 Go | Production courante |
 | 3 | **full** (par défaut) | ≥ 20 Go | Fonctionnalités complètes + APP H5 |
 
@@ -194,6 +230,8 @@ Différences de services par profil : [Sélection du profil de déploiement](./�
 | `check` | Vérification de l'environnement Docker |
 | `update` | Mettre à jour les images et redémarrer |
 | `pull` | Télécharger les images préconstruites |
+| `build` |
+| `runtime` / `runtime-atomic` | **Mode atomique RUNTIME** (exécuteur seul ; `VIDEO_BASE_URL`) |
 | `build` | Reconstruire les images localement |
 | `profile` | Afficher le profil de déploiement |
 | `analyze-logs` | Fusion multi-modules des journaux |
@@ -232,6 +270,33 @@ cd .scripts/docker && ./install_middleware_linux.sh install   # Middleware uniqu
 cd .scripts/docker && ./install_business_linux.sh install     # Modules métier uniquement
 cd AI && ./install_linux.sh install                           # Module unique
 ```
+
+---
+
+---
+
+## Mode atomique RUNTIME (nœuds de calcul)
+
+Pour **boîtiers edge / workers** : installer **uniquement** l'exécuteur C++ — pas de VIDEO / WEB / DEVICE locaux. Alertes et heartbeats agrégés vers le VIDEO central ; les tâches `realtime` formelles poussent toujours par défaut le flux à cadres vers SRS `ai/`.
+
+> **Atomique ≠ jamais de push.** Atomique = pas de pile métier locale. Détails : [`RUNTIME/README.md`](../../RUNTIME/README.md).
+
+```bash
+VIDEO_BASE_URL=http://<VIDEO-central>:6000 \
+  bash .scripts/docker/install_linux.sh runtime
+
+VIDEO_BASE_URL=http://192.168.1.10:6000 ./RUNTIME/install_linux.sh atomic
+```
+
+| Élément | Notes |
+|---------|-------|
+| Requis | `VIDEO_BASE_URL` |
+| Répertoire | Défaut `/opt/easyaiot/RUNTIME` |
+| Sorties | `bin/RUNTIME`, `node.env`, `env.sh`, `config/atomic.example.ini` |
+| Tâches formelles | Créer des tâches `executor=cpp` sur le WEB central |
+| Smoke | `source /opt/easyaiot/RUNTIME/env.sh && $RUNTIME_BIN …/atomic.example.ini` |
+
+La pile complète du centre utilise toujours `install` ; le montage RUNTIME via VIDEO local est distinct du mode atomique.
 
 ---
 
@@ -294,7 +359,7 @@ Plus d'informations : [Dépannage](./部署最佳实践_fr.md#dépannage).
 
 | Élément | Exigence |
 |------|-------------|
-| OS | Ubuntu 24.04+ (26.04 recommandé) ; également macOS, Windows, ARM, Kylin |
+| OS | Ubuntu 24.04+ (26.04 recommandé) ; également macOS, Windows, CentOS/RHEL, ARM, **Kylin (麒麟) / openEuler (欧拉)** |
 | CPU | Min. 4 cœurs, 8+ recommandés |
 | RAM | Dépend du profil (full ≥ 20 Go, 32 Go recommandés) |
 | Disque | Min. 300 Go libres, 500 Go+ SSD recommandé |

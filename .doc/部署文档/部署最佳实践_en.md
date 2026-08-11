@@ -12,6 +12,7 @@
 - [Deployment Profile Selection](#deployment-profile-selection)
 - [Environment Requirements & Pre-Deployment Checks](#environment-requirements--pre-deployment-checks)
 - [One-Click & Step-by-Step Deployment](#one-click--step-by-step-deployment)
+- [RUNTIME Atomic Mode (Lightweight Compute Nodes)](#runtime-atomic-mode-lightweight-compute-nodes)
 - [Common Operations](#common-operations)
 - [Pre-Built Images](#pre-built-images)
 - [GPU Configuration](#gpu-configuration)
@@ -27,7 +28,7 @@
 
 ## Two Usage Modes (Detailed)
 
-Unified entry scripts (`install_linux.sh` / `install_linux_arm.sh` / `install_linux_kylin.sh`) support **two equivalent usage patterns**:
+Unified entry scripts (`install_linux.sh` / `install_linux_centos.sh` / `install_linux_centos_arm.sh` / `install_linux_openeuler.sh` / `install_linux_arm.sh` / `install_linux_kylin.sh` / `install_mac.sh` / `install_windows.sh`) support **two equivalent usage patterns**:
 
 | Mode | Entry | Audience | Characteristics |
 |------|-------|----------|-----------------|
@@ -186,7 +187,7 @@ Saved to `.scripts/docker/.deploy_profile`, reused by `start` / `stop` / `update
 
 | Profile | Aliases | Recommended RAM | Use case |
 |---------|---------|-----------------|----------|
-| **mini** | `1` / `4g` | ≥ 4 GB | Edge nodes, PoC |
+| **mini** | `1` / `4g` | ≥ 8 GB | Edge nodes, PoC |
 | **standard** | `2` / `16g` | ≥ 16 GB | Regular production |
 | **full** | `3` (default) | ≥ 20 GB | Full features + APP H5 |
 
@@ -198,14 +199,16 @@ Saved to `.scripts/docker/.deploy_profile`, reused by `start` / `stop` / `update
 
 **mini**
 
-- Business: `iot-system`, VIDEO, AI, WEB
-- Middleware: PostgreSQL, Redis, SRS
-- Not started: Nacos, Gateway, Kafka, iot-sink, MinIO, Milvus, ZLMediaKit, Node-RED, TDengine, EMQX, and most DEVICE sub-modules
-- API routing: nginx proxies `/admin-api` and `/dev-api` to `iot-system:48099`
+- Business: `iot-system`, `iot-gateway`, `iot-sink`, `iot-infra`, VIDEO, AI, WEB
+- Middleware: Nacos, PostgreSQL, Redis, Kafka, MinIO, SRS, EMQX
+- Not started: `iot-device`, `iot-dataset`, `iot-node`, `iot-visualize`, `iot-file`, `iot-message`, `iot-gb28181`, `iot-tdengine`, Milvus, ZLMediaKit, Node-RED, FUXA, TDengine, APP / VISUALIZE / TRANSFORM, etc.
+- Event plane: same as standard/full — MQTT → Gateway → iot-sink for ingest and archive
+- Media: NFS media stack auto-prepared on install (`EASYAIOT_MEDIA_ROOT`)
+- API routing: unified entry via Gateway (48080)
 
 **standard**
 
-- Not started: TDengine, Node-RED, `iot-device`, `iot-tdengine` (includes EMQX)
+- Not started: TDengine, Node-RED, `iot-device`, `iot-tdengine`
 - All others started
 
 **full**
@@ -217,6 +220,25 @@ Memory analysis:
 ```bash
 .scripts/docker/analyze_deploy_memory.sh
 .scripts/docker/analyze_deploy_memory.sh --all-profiles
+```
+
+### NFS shared media storage
+
+Alert images and SRS DVR files are written to a **shared NFS media root** (`EASYAIOT_MEDIA_ROOT`). Single-node installs export locally; clusters use iot-node NFS assignment; desktop installs bind a local directory.
+
+| Item | Description |
+|------|-------------|
+| Default path | `/mnt/easyaiot-media` (`alert_images/`, `playbacks/`, etc.) |
+| No sudo | Falls back to `$HOME/easyaiot/media` |
+| In containers | Always mounted at `/mnt/easyaiot-media` |
+| DVR archive | SRS `on_dvr` → iot-sink → MinIO → playback URL |
+| Alerts | RUNTIME/VIDEO → MQTT → iot-sink reads NFS path → MinIO → DB |
+
+Install scripts call `.scripts/media-cluster/nfs/ensure_nfs_media_stack.sh`. Verification:
+
+```bash
+.scripts/docker/verify_dvr_nfs_chain.sh
+.scripts/docker/verify_alert_mqtt_chain.sh
 ```
 
 ---
@@ -236,7 +258,7 @@ Memory analysis:
 
 | Software | Requirement |
 |----------|-------------|
-| OS | Ubuntu 24.04+ (26.04 recommended); Kylin, ARM64 also supported |
+| OS | Ubuntu 24.04+ (26.04 recommended); CentOS/RHEL, **Kylin (麒麟) / openEuler (欧拉)**, ARM64 also supported |
 | Docker | Installed and daemon accessible |
 | Docker Compose | **v2.35.0+** (`docker compose` plugin) |
 | NVIDIA Driver / Container Toolkit | GPU scenarios only |
@@ -357,6 +379,41 @@ cd .scripts/docker
 
 ---
 
+## RUNTIME Atomic Mode (Lightweight Compute Nodes)
+
+Plan center full-stack and lightweight compute nodes separately:
+
+| Role | What to install | Entry |
+|------|-----------------|-------|
+| **Center / all-in-one** | Middleware + DEVICE/AI/VIDEO/WEB…; VIDEO auto-mounts RUNTIME | `install_linux.sh install` |
+| **Compute node** | **RUNTIME only** | `VIDEO_BASE_URL=… install_linux.sh runtime` |
+| **Batch nodes** | Same, via SSH | WEB “workload distribute” → RUNTIME(C++) |
+
+```bash
+VIDEO_BASE_URL=http://<center-VIDEO>:6000 \
+  sudo -E bash .scripts/docker/install_linux.sh runtime
+
+./RUNTIME/install_linux.sh status
+source /opt/easyaiot/RUNTIME/env.sh
+```
+
+Notes:
+
+- **Required** `VIDEO_BASE_URL`; optional `SRS_RTMP_BASE` / `AI_RTMP_URL` (example ini only)
+- Default install dir `/opt/easyaiot/RUNTIME`
+- Atomic ≠ never push: formal `executor=cpp` + `realtime` still default-pushes center `ai/{device}`
+- Independent of mini/standard/full profiles—do **not** run full `install` on compute boxes
+- Details: [`RUNTIME/README.md`](../../RUNTIME/README.md)
+
+| Variable | Meaning |
+|----------|---------|
+| `VIDEO_BASE_URL` | Center VIDEO base URL (required for atomic) |
+| `EASYAIOT_RUNTIME_INSTALL_DIR` | Install dir, default `/opt/easyaiot/RUNTIME` |
+| `SRS_RTMP_BASE` / `AI_RTMP_URL` | Optional example-ini detection stream |
+| `EASYAIOT_RUNTIME_BUILD_MODE` | `docker` (default) / `host` |
+
+---
+
 ## Common Operations
 
 ### Unified Script
@@ -365,6 +422,7 @@ cd .scripts/docker
 ./install_linux.sh install | start | stop | restart | status
 ./install_linux.sh logs | logs WEB | verify | check | profile
 ./install_linux.sh build | pull | update | clean
+./install_linux.sh runtime          # atomic mode (needs VIDEO_BASE_URL)
 ./install_linux.sh diagnose | analyze-logs | analyze-disk | help
 ```
 
@@ -426,12 +484,37 @@ Multi-GPU: `export CUDA_VISIBLE_DEVICES=0,1`
 ## Special Environments
 
 ```bash
+# CentOS / RHEL / Rocky / Alma x86 (auto-upgrade Docker CE, open firewalld ports)
+sudo .scripts/docker/install_linux_centos.sh install
+# Docker only: sudo .scripts/docker/install_linux_centos.sh --upgrade-docker-only
+
+# CentOS / RHEL family ARM (then delegates to install_linux_arm.sh)
+sudo .scripts/docker/install_linux_centos_arm.sh install
+# Docker only: sudo .scripts/docker/install_linux_centos_arm.sh --upgrade-docker-only
+
+# openEuler (replace stock docker-engine, fix repo releasever, install Docker CE)
+sudo .scripts/docker/install_linux_openeuler.sh install
+# Docker only: sudo .scripts/docker/install_linux_openeuler.sh --upgrade-docker-only
+# el9 unavailable: --el-release 7
+
 # Kylin OS
 sudo .scripts/docker/install_linux_kylin.sh install
 
-# ARM64
+# ARM64 (generic, non-EL)
 sudo .scripts/docker/install_linux_arm.sh install
+
+# macOS (Docker Desktop + bash 4+)
+bash .scripts/docker/install_mac.sh install
+
+# Windows (PowerShell: install_windows.ps1; or Git Bash / WSL)
+bash .scripts/docker/install_windows.sh install
 ```
+
+CentOS notes: x86 entry `install_linux_centos.sh` prepares Docker CE (replaces CentOS 7 stock docker 1.13), DaoCloud mirror, and firewalld; then delegates to `install_linux.sh`. ARM entry `install_linux_centos_arm.sh` uses the same prep then delegates to `install_linux_arm.sh`. On CentOS 7 the platform agent uses `ensure_platform_agent_centos7.sh`. Details (ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#centos--rhel-系--arm-说明).
+
+**openEuler (欧拉)** notes: `install_linux_openeuler.sh` removes conflicting stock `docker-engine`, rewrites Docker CE repo `$releasever` (default el9), configures DaoCloud mirror + DNS and firewalld, then delegates to `install_linux.sh`. Details (ZH): [平台部署文档_zh.md](./平台部署文档_zh.md#openeuler-24x-说明).
+
+Desktop notes: shared logic in `install_desktop_common.sh`; middleware via `install_middleware_desktop.sh`; no local build. See Chinese guides [macOS](./平台macOS部署文档_zh.md) / [Windows](./平台Windows部署文档_zh.md).
 
 ---
 
@@ -549,7 +632,7 @@ cd WEB && ./install_linux.sh build
 | `.scripts/docker/logs/` | Install script logs; `merged_logs_*`, `disk_usage_*` reports |
 | `.scripts/docker/standalone-logs/` | Nacos and other middleware on-disk logs |
 | `.build-cache/device/logs/` | DEVICE microservice Spring logs |
-| `~/easyaiot/data/srs.log` | SRS streaming |
+| `${EASYAIOT_MEDIA_ROOT:-/mnt/easyaiot-media}/srs.log` | SRS streaming (media root resolved by `deploy_profile`) |
 | `WEB/logs/runtime.log` | WEB runtime log |
 | `docker logs <container>` | Container stdout (common for AI/VIDEO) |
 

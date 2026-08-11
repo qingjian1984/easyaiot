@@ -19,9 +19,12 @@
             </div>
           </template>
           <template #renderItem="{ item }">
-            <ListItem :class="!item.disabled? 'product-item normal' : 'product-item error'">
+            <ListItem :class="[
+              !item.disabled ? 'product-item normal' : 'product-item error',
+              isNodeRedDemoFlow(item) ? 'is-demo-readonly' : '',
+            ]">
               <div class="product-info">
-                <div class="status">{{ !item.disabled ? '启用' : '禁用' }}</div>
+                <div class="status">{{ isNodeRedDemoFlow(item) ? '演示只读' : (!item.disabled ? '启用' : '禁用') }}</div>
                 <div class="title o2">{{ item.label }}</div>
                 <div class="props">
                   <div class="flex" style="justify-content: space-between;">
@@ -45,12 +48,18 @@
                       <Icon icon="ant-design:eye-filled" :size="15" />
                     </span>
                   </Tooltip>
-                  <Tooltip title="编辑">
+                  <Tooltip v-if="!isNodeRedDemoFlow(item)" title="编辑">
                     <span class="action-btn" @click="handleEdit(item)">
                       <Icon icon="ant-design:edit-filled" :size="15" />
                     </span>
                   </Tooltip>
+                  <Tooltip v-else title="演示规则链只读，禁止编辑">
+                    <span class="action-btn action-btn--disabled">
+                      <Icon icon="ant-design:lock-filled" :size="15" />
+                    </span>
+                  </Tooltip>
                   <PopConfirmButton
+                    v-if="!isNodeRedDemoFlow(item)"
                     type="default"
                     placement="topRight"
                     title="是否确认删除？"
@@ -83,6 +92,7 @@ import {isFunction} from '@/utils/is';
 import RULE_C1 from '@/assets/images/rule/rule_c1.png';
 import RULE_C2 from '@/assets/images/rule/rule_c2.png';
 import RULE_C3 from '@/assets/images/rule/rule_c3.png';
+import {isNodeRedDemoFlow} from '@/utils/noderedDemo';
 
 defineOptions({ name: 'RulechainCardList' });
 
@@ -142,16 +152,26 @@ onMounted(() => {
 async function fetch(p = {}) {
   const {api, params} = props;
   if (api && isFunction(api)) {
-    const res = await api({...params, pageNo: page.value, pageSize: pageSize.value, ...p});
-    let list = [];
-    res['data'].forEach((element) => {
-      if (element.type == 'tab') {
-        list.push(element);
-      }
-    });
-    data.value = list;
-    total.value = res.total;
-    hideLoading();
+    state.loading = true;
+    try {
+      const res = await api({...params, pageNo: page.value, pageSize: pageSize.value, ...p});
+      let list = [];
+      const body = res?.data ?? res;
+      const rows = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
+      rows.forEach((element) => {
+        if (element.type == 'tab') {
+          list.push(element);
+        }
+      });
+      data.value = list;
+      total.value = Array.isArray(body) ? list.length : (body?.total ?? list.length);
+    } catch (e) {
+      console.error('加载规则链列表失败', e);
+      data.value = [];
+      total.value = 0;
+    } finally {
+      hideLoading();
+    }
   }
 }
 
@@ -304,7 +324,7 @@ async function handleDelete(record: object) {
     &.normal {
       background-image: url('@/assets/images/product/blue-bg.719b437a.png');
 
-      .status {
+      .product-info .status {
         background: #d9dffd;
         color: #266CFBFF;
       }
@@ -313,9 +333,26 @@ async function handleDelete(record: object) {
     &.error {
       background-image: url('@/assets/images/product/red-bg.101af5ac.png');
 
-      .status {
+      .product-info .status {
         background: #fad7d9;
         color: #d43030;
+      }
+    }
+
+    &.is-demo-readonly {
+      .product-info .status {
+        width: auto;
+        min-width: 72px;
+        height: 26px;
+        padding: 0 12px;
+        white-space: nowrap;
+        background: #fff7e6;
+        color: #d46b08;
+        border: 1px solid #ffd591;
+        border-right: 0;
+        box-sizing: border-box;
+        font-weight: 600;
+        line-height: 24px;
       }
     }
 
@@ -335,6 +372,8 @@ async function handleDelete(record: object) {
         position: absolute;
         right: 0;
         top: 16px;
+        white-space: nowrap;
+        overflow: hidden;
       }
 
       .title {
@@ -420,6 +459,12 @@ async function handleDelete(record: object) {
 
           &:first-child:before {
             display: none;
+          }
+
+          &--disabled {
+            cursor: not-allowed;
+            color: #94a3b8;
+            opacity: 0.85;
           }
         }
       }

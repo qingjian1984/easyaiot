@@ -20,8 +20,31 @@ _print_root_header() {
     echo ""
     echo "  1) 部署 — 安装、启动、停止、更新等服务操作"
     echo "  2) 分析 — 日志、磁盘、状态等问题定位"
+    echo "  3) 官网 — SITE 官方网站独立部署"
     echo ""
     echo "  0) 退出"
+    echo ""
+}
+
+_print_site_header() {
+    echo ""
+    echo -e "${YELLOW}========================================${NC}"
+    echo -e "${YELLOW}  【官网】SITE 独立部署${NC}"
+    echo -e "${YELLOW}========================================${NC}"
+    echo ""
+    echo "默认端口：http://localhost:8090"
+    echo ""
+    echo "  1) 安装并启动官网"
+    echo "  2) 启动官网"
+    echo "  3) 停止官网"
+    echo "  4) 重启官网"
+    echo "  5) 查看官网状态"
+    echo "  6) 查看官网日志"
+    echo "  7) 重新构建官网镜像"
+    echo "  8) 更新官网（重建并启动）"
+    echo "  9) 清理官网容器与镜像"
+    echo ""
+    echo "  0) 返回上级菜单"
     echo ""
 }
 
@@ -73,6 +96,10 @@ _print_analyze_header() {
     echo "     说明：先看运行状态，再自动做健康检查"
     echo "  4) Docker 与环境检查"
     echo "     说明：确认 Docker / Compose 是否安装可用"
+    echo "  5) 告警事件面验收（控制面共享盘 + MQTT 入库）"
+    echo "     说明：探针校验 ALERT_IMAGES 共享挂载，再跑 MQTT→iot-sink→alert 表"
+    echo "  6) 节点 Ceph/共享媒体（列表·探针·业务打通）"
+    echo "     说明：按 compute_node 列出 ceph_mount_ready，验 alert_images + playbacks"
     echo ""
     echo "  0) 返回上级菜单"
     echo ""
@@ -149,7 +176,7 @@ run_analyze_interactive_menu() {
     local choice=""
     while true; do
         _print_analyze_header
-        read -r -p "请输入分析选项 [0-4]: " choice || choice=""
+        read -r -p "请输入分析选项 [0-6]: " choice || choice=""
         if [ -z "$choice" ]; then
             continue
         fi
@@ -173,6 +200,14 @@ run_analyze_interactive_menu() {
                 print_info "即将执行：Docker 与环境检查 (check)"
                 easyaiot_run_command check
                 ;;
+            5)
+                print_info "即将执行：告警事件面验收 (verify-alert)"
+                easyaiot_run_command verify-alert
+                ;;
+            6)
+                print_info "即将执行：节点 Ceph 列表 + 业务验收 (ceph verify)"
+                easyaiot_run_command ceph verify
+                ;;
             0|q|Q|exit|b|B)
                 return 0
                 ;;
@@ -188,7 +223,7 @@ run_install_root_menu() {
     local choice=""
     while true; do
         _print_root_header
-        read -r -p "请输入选项 [0-2，默认 0 退出]: " choice || choice=""
+        read -r -p "请输入选项 [0-3，默认 0 退出]: " choice || choice=""
         choice="${choice:-0}"
         case "$choice" in
             1)
@@ -197,8 +232,67 @@ run_install_root_menu() {
             2)
                 run_analyze_interactive_menu
                 ;;
+            3)
+                run_site_interactive_menu
+                ;;
             0|q|Q|exit)
                 print_info "已退出交互式引导"
+                return 0
+                ;;
+            *)
+                print_error "无效选项: $choice"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+run_site_interactive_menu() {
+    local choice=""
+    while true; do
+        _print_site_header
+        read -r -p "请输入官网选项 [0-9]: " choice || choice=""
+        if [ -z "$choice" ]; then
+            continue
+        fi
+        case "$choice" in
+            1)
+                print_info "即将执行：安装并启动官网 (site install)"
+                easyaiot_run_command site install
+                ;;
+            2)
+                print_info "即将执行：启动官网 (site start)"
+                easyaiot_run_command site start
+                ;;
+            3)
+                print_info "即将执行：停止官网 (site stop)"
+                easyaiot_run_command site stop
+                ;;
+            4)
+                print_info "即将执行：重启官网 (site restart)"
+                easyaiot_run_command site restart
+                ;;
+            5)
+                print_info "即将执行：查看官网状态 (site status)"
+                easyaiot_run_command site status
+                ;;
+            6)
+                print_info "即将执行：查看官网日志 (site logs)"
+                easyaiot_run_command site logs
+                ;;
+            7)
+                print_info "即将执行：构建官网镜像 (site build)"
+                easyaiot_run_command site build
+                ;;
+            8)
+                print_info "即将执行：更新官网 (site update)"
+                easyaiot_run_command site update
+                ;;
+            9)
+                print_info "即将执行：清理官网 (site clean)"
+                easyaiot_run_command site clean
+                ;;
+            0|q|Q|exit|b|B)
                 return 0
                 ;;
             *)

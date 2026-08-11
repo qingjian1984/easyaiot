@@ -32,7 +32,7 @@
 #                    - pull:  不指定则交互选择（默认 full）；指定则直接拉取该形态
 #   --arch <arch>    指定构建架构：all | amd64 | arm64（默认 all=全部架构）
 #                    单架构模式仅构建/推送该架构镜像，跳过多架构 manifest 更新
-#   --module <mod>   指定构建模块：all | DEVICE | AI | VIDEO | WEB | APP | VISUALIZE（默认 all=全部）
+#   --module <mod>   指定构建模块：all | DEVICE | AI | RTC | VIDEO | WEB | APP | VISUALIZE | TRANSFORM | PANEL（默认 all=全部）
 #                    单模块模式仅构建/推送该模块镜像，跳过全量 install_linux.sh build
 #   --native-source  使用原始源（非国内镜像源），默认使用腾讯云镜像源加速
 #
@@ -58,14 +58,17 @@
 #   共享镜像（全形态通用，pull 时按形态跳过不会启动的 DEVICE 服务）:
 #     docker.cnb.cool/holmesian/easyaiot/aiot-ai:amd64       → ai-service:latest
 #     docker.cnb.cool/holmesian/easyaiot/aiot-video:amd64    → video-service:latest
+#     docker.cnb.cool/holmesian/easyaiot/aiot-rtc:amd64      → rtc-service:latest
+#     docker.cnb.cool/holmesian/easyaiot/aiot-panel:amd64    → easyaiot/panel:latest
 #     mini 仅拉 aiot-system；standard 跳过 aiot-device/aiot-tdengine/aiot-visualize；full 拉全部 DEVICE
 #   形态相关镜像（WEB，全量形态均构建/推送）:
 #     docker.cnb.cool/holmesian/easyaiot/aiot-web:amd64          → web-service:latest          (full)
 #     docker.cnb.cool/holmesian/easyaiot/aiot-web-mini:amd64     → web-service:latest-mini     (mini)
 #     docker.cnb.cool/holmesian/easyaiot/aiot-web-standard:amd64 → web-service:latest-standard (standard)
-#   仅 full 形态（APP 移动端 H5 / VISUALIZE 可视化编辑器）:
+#   仅 full 形态（APP 移动端 H5 / VISUALIZE 可视化编辑器 / TRANSFORM 系统对接）:
 #     docker.cnb.cool/holmesian/easyaiot/aiot-app:amd64              → app-service:latest
 #     docker.cnb.cool/holmesian/easyaiot/aiot-visualize-web:amd64    → visualize-service:latest
+#     docker.cnb.cool/holmesian/easyaiot/aiot-transform:amd64        → transform-service:latest
 #
 # 示例:
 #   bash .scripts/docker/runtime_image.sh build --push
@@ -106,7 +109,9 @@ _log() {
     local label="$1" msg="$2"
     echo -e "${label}${msg}${NC}"
     # msg 来自 print_* 调用，均为纯文本（颜色仅在 label 中），无需 sed 剥离 ANSI
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${msg}" >> "$LOG_FILE"
+    # 运行中若 logs 目录被删（如误删 .scripts），自动重建，避免整段 pull 中止
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${msg}" >> "$LOG_FILE" 2>/dev/null || true
 }
 print_info()    { _log "$BLUE" "[INFO] $1"; }
 print_success() { _log "$GREEN" "[OK] $1"; }
@@ -118,7 +123,8 @@ print_header()  {
     echo "============================================================"
     echo -e "${GREEN} $1${NC}"
     echo "============================================================"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 # ============================================================================
@@ -216,7 +222,7 @@ fi
 if [ -n "${EASYAIOT_RUNTIME_BUILD_MODULE:-}" ]; then
     _bm_norm=$(runtime_normalize_build_module "$EASYAIOT_RUNTIME_BUILD_MODULE")
     if [ "$_bm_norm" = "INVALID" ]; then
-        print_error "无效的目标模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}，可选: all | DEVICE | AI | VIDEO | WEB | APP | VISUALIZE"
+        print_error "无效的目标模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}，可选: all | DEVICE | AI | RTC | VIDEO | WEB | APP | VISUALIZE | TRANSFORM | PANEL"
         exit 1
     fi
     if [ -n "$_bm_norm" ]; then
@@ -696,7 +702,9 @@ build_module_with_install_script() {
     local arch_note=""; ! is_native_arch "$target_arch" && arch_note=" [跨架构: ${target_arch}]"
     print_info "执行 ${module_dir}/${install_script} build${arch_note} ..."
 
-    local build_log="${LOG_DIR}/build_${local_name}_${target_arch}_$(date +%Y%m%d_%H%M%S).log"
+    # 本地镜像名可能含仓库前缀（如 easyaiot/panel），日志文件名需去掉路径分隔符
+    local log_name="${local_name//\//-}"
+    local build_log="${LOG_DIR}/build_${log_name}_${target_arch}_$(date +%Y%m%d_%H%M%S).log"
     local rc=0
 
     # subshell 内导出子进程环境，避免 FORCE_REBUILD=0|1 污染本脚本的布尔变量
@@ -719,7 +727,9 @@ build_module_with_install_script() {
 
     if [ $rc -ne 0 ]; then
         print_error "构建失败 (exit=${rc})，日志: ${build_log}"
-        tail -40 "$build_log" | while IFS= read -r line; do echo "  $line"; done
+        if [ -f "$build_log" ]; then
+            tail -40 "$build_log" | while IFS= read -r line; do echo "  $line"; done
+        fi
         return 1
     fi
 
@@ -779,19 +789,20 @@ local_image_ready() {
 all_build_plan_images_ready_for_arch() {
     local target_arch="$1" profile mapping tmp rname lname
 
-    if runtime_build_includes_module AI || runtime_build_includes_module VIDEO; then
+    if runtime_build_includes_module AI || runtime_build_includes_module RTC || runtime_build_includes_module VIDEO || runtime_build_includes_module PANEL; then
         for mapping in "${INDEPENDENT_MODULES[@]}"; do
             rname="${mapping%%|*}"; tmp="${mapping#*|}"; lname="${tmp%%|*}"
             is_profile_dependent "$rname" && continue
-            case "$rname" in
-                aiot-ai)    runtime_build_includes_module AI || continue ;;
-                aiot-video) runtime_build_includes_module VIDEO || continue ;;
+            local _imod="${mapping##*|}"
+            case "$_imod" in
+                AI|RTC|VIDEO|PANEL) runtime_build_includes_module "$_imod" || continue ;;
+                *) continue ;;
             esac
             local_image_ready "$lname" "" "$target_arch" || return 1
         done
     fi
 
-    # 仅 full 形态模块（APP / VISUALIZE）
+    # 仅 full 形态模块（APP / VISUALIZE / TRANSFORM）
     for mapping in "${FULL_ONLY_MODULES[@]}"; do
         local rname="${mapping%%|*}"
         local tmp="${mapping#*|}"
@@ -943,10 +954,13 @@ build_single_module() {
 
     case "$remote_name" in
         aiot-ai)    build_module_with_install_script "AI" "ai-service" "$local_ref" "$target_arch" ;;
+        aiot-rtc)   build_module_with_install_script "RTC" "rtc-service" "$local_ref" "$target_arch" ;;
         aiot-video) build_module_with_install_script "VIDEO" "video-service" "$local_ref" "$target_arch" ;;
         aiot-web)   build_module_with_install_script "WEB" "web-service" "$local_ref" "$target_arch" ;;
         aiot-app)   build_module_with_install_script "APP" "app-service" "$local_ref" "$target_arch" ;;
         aiot-visualize-web) build_module_with_install_script "VISUALIZE" "visualize-service" "$local_ref" "$target_arch" ;;
+        aiot-transform) build_module_with_install_script "TRANSFORM" "transform-service" "$local_ref" "$target_arch" ;;
+        aiot-panel) build_module_with_install_script "PANEL" "easyaiot/panel" "$local_ref" "$target_arch" ;;
         *)
             # DEVICE 模块：统一由 build_device_all 处理
             build_device_all "$target_arch" || return 1
@@ -1006,19 +1020,20 @@ count_planned_images_for_arch() {
     local -a profiles=("$@")
     local count=0 mapping rname _bp
 
-    if runtime_build_includes_module AI || runtime_build_includes_module VIDEO; then
+    if runtime_build_includes_module AI || runtime_build_includes_module RTC || runtime_build_includes_module VIDEO || runtime_build_includes_module PANEL; then
         for mapping in "${INDEPENDENT_MODULES[@]}"; do
             rname="${mapping%%|*}"
             is_profile_dependent "$rname" && continue
-            case "$rname" in
-                aiot-ai)    runtime_build_includes_module AI || continue ;;
-                aiot-video) runtime_build_includes_module VIDEO || continue ;;
+            local _imod="${mapping##*|}"
+            case "$_imod" in
+                AI|RTC|VIDEO|PANEL) runtime_build_includes_module "$_imod" || continue ;;
+                *) continue ;;
             esac
             count=$((count + 1))
         done
     fi
 
-    # full 专属：APP / VISUALIZE
+    # full 专属：APP / VISUALIZE / TRANSFORM
     for mapping in "${FULL_ONLY_MODULES[@]}"; do
         local _fmod="${mapping##*|}"
         runtime_build_includes_module "$_fmod" || continue
@@ -1111,7 +1126,7 @@ build_all_modules() {
     if runtime_is_single_module_build; then
         echo "  构建模块: ${EASYAIOT_RUNTIME_BUILD_MODULE}（单模块）"
     else
-        echo "  构建模块: 全部 (DEVICE + AI + VIDEO + WEB + APP + VISUALIZE)"
+        echo "  构建模块: 全部 (DEVICE + AI + RTC + VIDEO + WEB + APP + VISUALIZE + TRANSFORM + PANEL)"
     fi
     if runtime_is_single_arch_build; then
         echo "  架构模式: 单架构（跳过多架构 manifest 更新）"
@@ -1233,20 +1248,21 @@ build_all_modules() {
                 ;;
         esac
 
-        # ── 共享模块（AI + VIDEO）──
-        if runtime_build_includes_module AI || runtime_build_includes_module VIDEO; then
+        # ── 共享模块（AI + RTC + VIDEO + PANEL，全形态）──
+        if runtime_build_includes_module AI || runtime_build_includes_module RTC || runtime_build_includes_module VIDEO || runtime_build_includes_module PANEL; then
             for mapping in "${INDEPENDENT_MODULES[@]}"; do
                 local rname="${mapping%%|*}"; local tmp="${mapping#*|}"; local lname="${tmp%%|*}"
+                local _imod="${mapping##*|}"
                 is_profile_dependent "$rname" && continue
-                case "$rname" in
-                    aiot-ai)    runtime_build_includes_module AI || continue ;;
-                    aiot-video) runtime_build_includes_module VIDEO || continue ;;
+                case "$_imod" in
+                    AI|RTC|VIDEO|PANEL) runtime_build_includes_module "$_imod" || continue ;;
+                    *) continue ;;
                 esac
                 _build_push_track "$rname" "$lname" "" "$target_arch"
             done
         fi
 
-        # ── full 专属模块（APP / VISUALIZE）──
+        # ── full 专属模块（APP / VISUALIZE / TRANSFORM）──
         for mapping in "${FULL_ONLY_MODULES[@]}"; do
             local _frname="${mapping%%|*}"
             local _ftmp="${mapping#*|}"
@@ -1539,14 +1555,21 @@ pull_all_images() {
 
     # ★ 拉取前必须先修好宿主机 DNS（daemon.json dns 无法修复 dockerd 自身解析）
     # 典型故障: lookup docker.cnb.cool on [::1]:53: connection refused
+    # Windows/Git Bash：不改 /etc/resolv.conf，走 Windows 本机 DNS / Docker Desktop 探测
     print_info "检查并修复宿主机 DNS（供 dockerd 解析镜像仓库）..."
     if ! ensure_host_dns_for_docker "docker.cnb.cool"; then
-        print_error "宿主机 DNS 不可用，已中止拉取。请按上方指引修复 /etc/resolv.conf 后重试。"
+        if [ "${EASYAIOT_DESKTOP_OS:-}" = "windows" ] || [ "${EASYAIOT_FORCE_WINDOWS:-0}" = "1" ]; then
+            print_error "DNS 不可用，已中止拉取。请按上方 Windows/Docker Desktop 指引排查后重试。"
+        else
+            print_error "宿主机 DNS 不可用，已中止拉取。请按上方指引修复 /etc/resolv.conf 后重试。"
+        fi
         return 1
     fi
 
     select_pull_profile
     local pull_profile="${EASYAIOT_DEPLOY_PROFILE}"
+
+    runtime_images_refresh_local
 
     # ★ 拉取前校验本地镜像架构，删除与当前系统不一致的残留镜像（避免仅按「存在」跳过拉取）
     runtime_images_ensure_arch_consistency "$CURRENT_ARCH" "$pull_profile" "$TAG"
@@ -1642,7 +1665,11 @@ pull_all_images() {
     fi
 
     if [ "${_EASYAIOT_DNS_ABORT}" -eq 1 ]; then
-        print_error "因宿主机 DNS 故障已中止后续拉取（避免无意义重试）。请先修复 /etc/resolv.conf。"
+        if [ "${EASYAIOT_DESKTOP_OS:-}" = "windows" ] || [ "${EASYAIOT_FORCE_WINDOWS:-0}" = "1" ]; then
+            print_error "因 DNS 故障已中止后续拉取。请检查 Windows 本机 DNS / Docker Desktop DNS 设置后重试。"
+        else
+            print_error "因宿主机 DNS 故障已中止后续拉取（避免无意义重试）。请先修复 /etc/resolv.conf。"
+        fi
         return 1
     fi
 
@@ -1711,18 +1738,7 @@ pull_all_images() {
         echo ""
 
         # ★ 写入标记文件，让各平台 install 脚本自动跳过构建
-        local _pulled_marker="${SCRIPT_DIR}/.runtime_images_pulled"
-        cat > "$_pulled_marker" <<EOF
-# EasyAIoT 运行时镜像拉取标记
-# 此文件由 runtime_image.sh pull 自动生成
-# 各平台 install 脚本检测到此文件后会跳过 docker build，直接启动服务：
-#   install_linux.sh / install_linux_arm.sh / install_linux_kylin.sh / install_mac.sh
-# 删除此文件可强制下次 install 重新本地构建
-PULL_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-PULL_ARCH=${CURRENT_ARCH}
-PULL_PROFILE=${pull_profile}
-PULL_TAG=${TAG}
-EOF
+        runtime_images_write_pulled_marker "$CURRENT_ARCH" "$pull_profile" "$TAG"
         print_info "已记录镜像拉取状态（install 将自动跳过构建）"
 
         print_info "现在可以直接使用对应平台的 install 脚本启动服务："
@@ -1736,11 +1752,42 @@ EOF
         fi
         if [ "$(uname -s)" = "Darwin" ]; then
             echo "  bash .scripts/docker/install_mac.sh start"
-            echo "  bash .scripts/docker/install_mac.sh install            (自动跳过构建)"
+            echo "  bash .scripts/docker/install_mac.sh install            (仅镜像部署)"
         fi
+        case "$(uname -s)" in
+            MINGW*|MSYS*|CYGWIN*)
+                echo "  bash .scripts/docker/install_windows.sh start"
+                echo "  bash .scripts/docker/install_windows.sh install        (仅镜像部署)"
+                echo "  或 PowerShell: .scripts/docker/install_windows.ps1 install"
+                ;;
+        esac
     else
         echo ""
         print_warning "有 ${failed_all} 个镜像拉取失败"
+        # 核心业务镜像已齐时视为软成功：避免因个别尚未发布镜像（如 aiot-transform）
+        # 在 PANEL 无源码 runtime 上错误回退到本地 build
+        local saved_profile="${EASYAIOT_DEPLOY_PROFILE:-}"
+        export EASYAIOT_DEPLOY_PROFILE="$pull_profile"
+        if runtime_images_pulled_ready 2>/dev/null || {
+            # 标记可能仍是旧的 embedded：临时按 latest 校验核心镜像
+            local -a _soft_refs=()
+            runtime_images_collect_check_refs _soft_refs "$pull_profile" "latest"
+            local _ok=1 _ref
+            for _ref in "${_soft_refs[@]}"; do
+                if ! runtime_local_image_arch_ready "$_ref" "$CURRENT_ARCH"; then
+                    _ok=0
+                    break
+                fi
+            done
+            [ "$_ok" -eq 1 ]
+        }; then
+            runtime_images_write_pulled_marker "$CURRENT_ARCH" "$pull_profile" "latest"
+            print_warning "核心预构建镜像已就绪，将跳过本地构建继续（缺失镜像需后续补拉）"
+            [ -n "$saved_profile" ] && export EASYAIOT_DEPLOY_PROFILE="$saved_profile" || true
+            print_local_runtime_image_list pull "$pull_profile"
+            return 0
+        fi
+        [ -n "$saved_profile" ] && export EASYAIOT_DEPLOY_PROFILE="$saved_profile" || true
         runtime_print_install_local_build_help pull
         return 1
     fi

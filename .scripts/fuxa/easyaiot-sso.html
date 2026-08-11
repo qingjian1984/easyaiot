@@ -35,6 +35,14 @@
   </div>
   <script>
     (function () {
+      // 与 seed / 平台种子一致：演示工艺图禁止经桥接页进入 /editor
+      var DEMO_VIEWS = {
+        '水厂工艺总貌': 1,
+        '产线运行看板': 1,
+        '厂区管网组态': 1,
+        '配电室电力监视': 1
+      };
+
       var params = new URLSearchParams(window.location.search);
       var token = params.get('token') || '';
       var username = params.get('username') || 'admin';
@@ -61,6 +69,24 @@
         } catch (e) {}
       }
 
+      function isDemoView(name) {
+        return !!(name && DEMO_VIEWS[name]);
+      }
+
+      function isEditorPath(p) {
+        return p === '/editor' || (p && p.indexOf('/editor?') === 0);
+      }
+
+      // 演示画面：强制运行态，拒绝 edit / target=/editor
+      if (isDemoView(view) && (mode === 'edit' || isEditorPath(target))) {
+        mode = 'preview';
+        target = '';
+        document.getElementById('msg').textContent = '演示组态只读，改为运行态预览…';
+      }
+      if (!view && isEditorPath(target) && mode === 'edit') {
+        // 无画面名却指向编辑器时，演示保护环境下仍允许（由 nginx 公网层拦截）
+      }
+
       if (token) {
         try {
           var user = {
@@ -79,6 +105,10 @@
       } else if (!allowNoToken) {
         fail('缺少 FUXA token，请从 EasyAIoT 重新打开组态');
         return;
+      } else if (isDemoView(view) && mode !== 'preview' && mode !== 'home') {
+        // 无 token 直开演示编辑器：一律拒绝，改预览
+        mode = 'preview';
+        target = '';
       }
 
       // 编辑器打开指定画面：写入 FUXA 的 currentview，再进 /editor
@@ -90,8 +120,12 @@
       if (target && target.charAt(0) === '/') {
         path = target;
         // 若 target 是 /editor 且带了 view，仍需选中对应画面
-        if (view && (path === '/editor' || path.indexOf('/editor?') === 0)) {
-          selectEditorView(view);
+        if (view && isEditorPath(path)) {
+          if (isDemoView(view)) {
+            path = '/home?view=' + encodeURIComponent(view);
+          } else {
+            selectEditorView(view);
+          }
         }
       } else if (mode === 'preview' || mode === 'home') {
         path = view ? ('/home?view=' + encodeURIComponent(view)) : '/home';

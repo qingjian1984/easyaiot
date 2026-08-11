@@ -22,13 +22,18 @@
 #   --skip-pull         跳过拉取镜像
 #   --no-upgrade-docker 检测到过旧 Docker 时不自动升级
 #   --upgrade-docker    强制升级 Docker CE（需 root）
-#   --seed              启动成功后导入演示组态工程
+#   --seed              启动成功后导入/恢复演示组态工程（覆盖当前工程）
+#   --seed-only         仅导入/恢复演示工程（容器需已运行，不重启）
 #
 # 默认访问信息（与 docker-compose.yml 一致）：
-#   编辑器:  http://127.0.0.1:1881/editor
 #   运行态:  http://127.0.0.1:1881/home
-#   SSO:     http://127.0.0.1:1881/easyaiot-sso.html
+#   编辑器:  http://127.0.0.1:1881/editor   # 宿主机直连可改图；公网应由 WEB nginx 禁 /editor
+#   SSO:     http://127.0.0.1:1881/easyaiot-sso.html  # 已含演示画面只读（拒绝进 editor）
 #   账号:    admin / 123456（请在生产环境修改）
+#
+# 演示只读说明：
+#   - 平台/SSO 对 4 套演示画面强制预览；公网 nginx.prod-server.conf 禁 /editor 与工程写入
+#   - 本脚本直连容器 :1881，运维可用 /editor 改图，或 --seed / --seed-only 整包恢复
 # ============================================
 
 set -e
@@ -52,11 +57,12 @@ FUXA_PORT=1881
 [ -n "${FUXA_IMAGE+x}" ] && _FUXA_IMAGE_FROM_ENV=1 || _FUXA_IMAGE_FROM_ENV=
 [ -n "${FUXA_TAG+x}" ] && _FUXA_TAG_FROM_ENV=1 || _FUXA_TAG_FROM_ENV=
 FUXA_TAG="${FUXA_TAG:-1.3.3}"
-FUXA_IMAGE="${FUXA_IMAGE:-proxy.vvvv.ee/frangoteam/fuxa:${FUXA_TAG}}"
+FUXA_IMAGE="${FUXA_IMAGE:-docker.1panel.live/frangoteam/fuxa:${FUXA_TAG}}"
 FUXA_IMAGE_ALIAS="${FUXA_IMAGE_ALIAS:-frangoteam/fuxa:${FUXA_TAG}}"
 SSO_HTML="${SCRIPT_DIR}/../fuxa/easyaiot-sso.html"
 SEED_SCRIPT="${SCRIPT_DIR}/../fuxa/seed_fuxa_demo.sh"
-DOCKER_MIRROR="${DOCKER_MIRROR:-https://proxy.vvvv.ee/}"
+# FUXA 专用：与通用中间件不同，优先 1ms（DaoCloud 对 frangoteam/fuxa 常 403）
+DOCKER_MIRROR="${DOCKER_MIRROR:-https://docker.1ms.run/}"
 
 FORCE_OS_CHECK=false
 WAIT_READY=true
@@ -100,18 +106,25 @@ CentOS 7.9 单独部署 FUXA（Web SCADA / HMI 组态）
   --skip-pull         跳过拉取镜像
   --no-upgrade-docker 不自动升级过旧 Docker
   --upgrade-docker    强制升级 Docker CE（需 root）
-  --seed              启动成功后导入演示组态工程
+  --seed              启动成功后导入/恢复演示组态工程（覆盖当前工程）
+  --seed-only         仅恢复演示工程（容器已运行时用；数据被改删后推荐）
 
 环境变量:
-  FUXA_IMAGE / FUXA_TAG   覆盖镜像（默认 proxy.vvvv.ee/frangoteam/fuxa:1.3.3）
+  FUXA_IMAGE / FUXA_TAG   覆盖镜像（默认 docker.1panel.live/frangoteam/fuxa:1.3.3；拉取优先 1ms）
   DOCKER_MIRROR           镜像加速器地址
+  FUXA_URL                --seed/--seed-only 时覆盖导入地址（默认 http://127.0.0.1:1881）
 
 示例:
   sudo ./start_fuxa_centos7.sh              # 首次部署推荐 root
   ./start_fuxa_centos7.sh --status
   ./start_fuxa_centos7.sh --restart
   sudo ./start_fuxa_centos7.sh --seed       # 启动并导入演示画面
+  sudo ./start_fuxa_centos7.sh --seed-only  # 仅恢复被改坏的演示工艺图
   ./start_fuxa_centos7.sh --logs
+
+演示只读:
+  SSO 桥接页已拒绝演示画面进编辑器；公网请用 WEB nginx 禁 /editor。
+  宿主机直连本容器仍可改图（运维用途）；恢复演示请用 --seed / --seed-only。
 EOF
 }
 
@@ -130,6 +143,7 @@ parse_args() {
             --no-upgrade-docker) SKIP_DOCKER_UPGRADE=true; shift ;;
             --upgrade-docker) FORCE_DOCKER_UPGRADE=true; shift ;;
             --seed) SEED_DEMO=true; shift ;;
+            --seed-only) ACTION="seed-only"; SEED_DEMO=true; shift ;;
             *)
                 print_error "未知选项: $1"
                 show_help
@@ -354,7 +368,7 @@ configure_docker_mirror_local() {
 
     mkdir -p /etc/docker
 
-    if [ -f "$docker_config_file" ] && grep -qE 'proxy\.vvvv\.ee|docker\.m\.daocloud\.io|1panel\.live' "$docker_config_file" 2>/dev/null; then
+    if [ -f "$docker_config_file" ] && grep -qE 'docker\.m\.daocloud\.io|1panel\.live|1ms\.run' "$docker_config_file" 2>/dev/null; then
         print_success "Docker 镜像源已配置"
         return 0
     fi
@@ -494,13 +508,13 @@ ensure_fuxa_image() {
         fi
     fi
 
-    # 回退：直连常见代理
+    # 回退：直连常见代理（与 pull_fuxa.sh 顺序一致：1ms 优先）
     local candidates=(
-        "${FUXA_IMAGE}"
-        "proxy.vvvv.ee/frangoteam/fuxa:${FUXA_TAG}"
-        "docker.1panel.live/frangoteam/fuxa:${FUXA_TAG}"
         "docker.1ms.run/frangoteam/fuxa:${FUXA_TAG}"
+        "docker.1panel.live/frangoteam/fuxa:${FUXA_TAG}"
         "docker.m.daocloud.io/frangoteam/fuxa:${FUXA_TAG}"
+        "frangoteam/fuxa:${FUXA_TAG}"
+        "${FUXA_IMAGE}"
     )
 
     local pulled=false src
@@ -525,7 +539,7 @@ ensure_fuxa_image() {
 
     print_error "无法拉取 FUXA 镜像"
     print_info "可手动: bash ${SCRIPT_DIR}/pull_fuxa.sh"
-    print_info "或: docker pull proxy.vvvv.ee/frangoteam/fuxa:${FUXA_TAG}"
+    print_info "或: docker pull docker.1ms.run/frangoteam/fuxa:${FUXA_TAG} && docker tag docker.1ms.run/frangoteam/fuxa:${FUXA_TAG} ${FUXA_IMAGE}"
     exit 1
 }
 
@@ -658,34 +672,41 @@ seed_fuxa_demo() {
         return 0
     fi
 
-    print_section "导入 FUXA 演示组态工程"
+    # 直连本机容器端口（绕过公网 nginx 只读），可恢复被改删的演示工艺图
+    local seed_url="${FUXA_URL:-http://127.0.0.1:${FUXA_PORT}}"
+    print_section "导入/恢复 FUXA 演示组态工程"
+    print_info "目标: ${seed_url}（将覆盖当前 FUXA 工程）"
     chmod +x "$SEED_SCRIPT" 2>/dev/null || true
     set +e
-    FUXA_URL="http://127.0.0.1:${FUXA_PORT}" bash "$SEED_SCRIPT"
+    FUXA_URL="${seed_url}" bash "$SEED_SCRIPT"
     local rc=$?
     set -e
     if [ "$rc" -eq 0 ]; then
-        print_success "演示组态工程导入完成"
+        print_success "演示组态工程导入/恢复完成（4 套中文画面）"
+        print_info "平台侧元数据可同步: bash ${SCRIPT_DIR}/../go-view/seed_visualize_demo.sh"
     else
-        print_warning "演示工程导入失败 (exit ${rc})，可稍后手动: bash ${SEED_SCRIPT}"
+        print_warning "演示工程导入失败 (exit ${rc})，可稍后: FUXA_URL=${seed_url} bash ${SEED_SCRIPT}"
     fi
 }
 
 show_connection_info() {
     print_section "FUXA 访问信息"
     echo "  容器名:   ${CONTAINER_NAME}"
-    echo "  编辑器:   http://127.0.0.1:${FUXA_PORT}/editor"
     echo "  运行态:   http://127.0.0.1:${FUXA_PORT}/home"
-    echo "  SSO 桥接: http://127.0.0.1:${FUXA_PORT}/easyaiot-sso.html"
+    echo "  编辑器:   http://127.0.0.1:${FUXA_PORT}/editor  (宿主机直连/运维改图)"
+    echo "  SSO 桥接: http://127.0.0.1:${FUXA_PORT}/easyaiot-sso.html  (演示画面只读)"
     echo "  账号:     admin / 123456"
     echo "  数据目录: ${SCRIPT_DIR}/fuxa_data/{appdata,db,logs,images}"
+    echo ""
+    print_info "演示只读: 平台/SSO 禁演示进编辑器；公网请配合 WEB nginx 禁 /editor"
+    print_info "恢复演示: ./start_fuxa_centos7.sh --seed-only"
     echo ""
     print_info "常用命令:"
     echo "  docker ps | grep ${CONTAINER_NAME}"
     echo "  docker logs -f ${CONTAINER_NAME}"
     echo "  ./start_fuxa_centos7.sh --status"
     echo "  ./start_fuxa_centos7.sh --stop"
-    echo "  bash ../fuxa/seed_fuxa_demo.sh"
+    echo "  ./start_fuxa_centos7.sh --seed-only"
 }
 
 stop_fuxa() {
@@ -737,6 +758,19 @@ main() {
         logs)
             check_docker
             show_logs
+            exit 0
+            ;;
+        seed-only)
+            check_docker
+            print_section "仅恢复 FUXA 演示工程"
+            if ! docker ps --filter "name=${CONTAINER_NAME}" --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+                print_error "容器 ${CONTAINER_NAME} 未运行，请先: sudo $0  或  sudo $0 --seed"
+                exit 1
+            fi
+            wait_for_fuxa || true
+            seed_fuxa_demo
+            show_connection_info
+            print_success "演示工程恢复流程完成"
             exit 0
             ;;
         restart)

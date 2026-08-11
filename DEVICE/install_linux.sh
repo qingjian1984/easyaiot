@@ -18,6 +18,7 @@ EASYAIOT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=../.scripts/docker/init-build-cache-dirs.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/init-build-cache-dirs.sh"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
+COMPOSE_DESKTOP_FILE="${SCRIPT_DIR}/docker-compose.desktop.yaml"
 # shellcheck source=../.scripts/docker/deploy_profile.sh
 source "${EASYAIOT_ROOT}/.scripts/docker/deploy_profile.sh"
 DEVICE_COMPOSE_PROFILE_ARGS=()
@@ -33,8 +34,13 @@ refresh_device_compose_profile_args() {
     fi
 }
 
+# 桌面端（Windows/macOS Docker Desktop）使用 bridge override，避免 host 网络端口不可达
 device_compose() {
-    $DOCKER_COMPOSE -f "$COMPOSE_FILE" ${DEVICE_COMPOSE_PROFILE_ARGS[@]+"${DEVICE_COMPOSE_PROFILE_ARGS[@]}"} "$@"
+    if [ -f "$COMPOSE_DESKTOP_FILE" ] && { [ -n "${EASYAIOT_DESKTOP_OS:-}" ] || [ "${EASYAIOT_COMPOSE_DESKTOP:-0}" = "1" ]; }; then
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" -f "$COMPOSE_DESKTOP_FILE" ${DEVICE_COMPOSE_PROFILE_ARGS[@]+"${DEVICE_COMPOSE_PROFILE_ARGS[@]}"} "$@"
+    else
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" ${DEVICE_COMPOSE_PROFILE_ARGS[@]+"${DEVICE_COMPOSE_PROFILE_ARGS[@]}"} "$@"
+    fi
 }
 
 # 按部署形态收集应启动的 DEVICE 服务名
@@ -235,6 +241,48 @@ restart_unhealthy_containers() {
     done
 }
 
+# Docker iot-sink 启动前释放 48092（避免与本地 java -jar iot-sink-biz.jar 冲突）
+stop_local_iot_sink_jar_if_needed() {
+    local want_sink=0 svc
+    for svc in "$@"; do
+        [ "$svc" = "iot-sink" ] && want_sink=1 && break
+    done
+    [ "$want_sink" -eq 1 ] || return 0
+    local pid
+    pid=$(pgrep -f '[i]ot-sink-biz.*\.jar' 2>/dev/null | head -1 || true)
+    [ -z "$pid" ] && return 0
+    print_warning "检测到本地 iot-sink jar (pid=${pid})，停止以便 Docker 容器接管 :48092 ..."
+    kill "$pid" 2>/dev/null || true
+    local i=0
+    while [ "$i" -lt 10 ]; do
+        ss -ltn 2>/dev/null | grep -q ':48092 ' || return 0
+        sleep 1
+        i=$((i + 1))
+    done
+    print_warning "48092 仍被占用，请手动检查: ss -ltnp | grep 48092"
+}
+
+# Docker iot-gateway 启动前释放 48080（避免与本地 java -jar iot-gateway.jar 冲突）
+stop_local_iot_gateway_jar_if_needed() {
+    local want_gw=0 svc
+    for svc in "$@"; do
+        [ "$svc" = "iot-gateway" ] && want_gw=1 && break
+    done
+    [ "$want_gw" -eq 1 ] || return 0
+    local pid
+    pid=$(pgrep -f '[i]ot-gateway.*\.jar' 2>/dev/null | head -1 || true)
+    [ -z "$pid" ] && return 0
+    print_warning "检测到本地 iot-gateway jar (pid=${pid})，停止以便 Docker 容器接管 :48080 ..."
+    kill "$pid" 2>/dev/null || true
+    local i=0
+    while [ "$i" -lt 10 ]; do
+        ss -ltn 2>/dev/null | grep -q ':48080 ' || return 0
+        sleep 1
+        i=$((i + 1))
+    done
+    print_warning "48080 仍被占用，请手动检查: ss -ltnp | grep 48080"
+}
+
 # 后台启动 compose 服务。
 apply_device_profile_env() {
     ensure_deploy_profile
@@ -283,6 +331,9 @@ compose_up_detached() {
         print_info "DEVICE 跳过: ${skip_services[*]}"
     fi
     print_info "DEVICE 启动: ${up_targets[*]}"
+
+    stop_local_iot_sink_jar_if_needed "${up_targets[@]}"
+    stop_local_iot_gateway_jar_if_needed "${up_targets[@]}"
 
     # --remove-orphans：顺带清理「已从 compose 文件移除的服务」的残留容器
     local _up_log _up_rc _retry _delay

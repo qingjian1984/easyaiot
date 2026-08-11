@@ -51,7 +51,9 @@ export const NODE_TERM = {
   agentPort: '监测代理端口',
   mediaService: '流媒体引擎',
   mqttService: 'MQTT 网关',
-  storageService: 'Ceph 存储',
+  storageCephTopology: 'NFS 集群拓扑',
+  storageBatchOps: '批量运维',
+  storageService: 'NFS 共享存储',
   mediaPort: '流媒体端口',
   mqttPort: 'MQTT 端口',
   platformUrl: '平台接入地址',
@@ -78,6 +80,7 @@ export const NODE_TERM = {
   clusterEnvVideo: '视频分析运行时',
   clusterEnvAi: '模型推理与训练',
   clusterEnvLlm: '大模型推理',
+  clusterEnvTransform: '数据转发',
   pendingTitle: '节点待纳管',
   offlineTitle: '节点离线',
   maintenanceTitle: '维护模式',
@@ -149,7 +152,7 @@ export const NODE_ROLE_DESC: Record<string, string> = {
   gpu: '配备 GPU，用于模型推理、深度学习算法等算力密集型任务',
   media: '用于 SRS/ZLM 流媒体集群，设备拉流/推流',
   mqtt: '用于 EMQX MQTT 集群，设备物联网协议接入',
-  storage: 'Ceph OSD 节点，承载录像/抓拍分布式存储',
+  storage: 'NFS 存储节点，export 共享媒体目录（录像/抓拍/告警图）',
   hybrid: '同时承担计算与媒体调度',
 };
 
@@ -211,6 +214,7 @@ export const NODE_DASHBOARD = {
   overviewCentralNodeAll: '全部中心节点',
   overviewBackToAll: '返回全部节点',
   overviewNodeFocusHint: '选择单个节点后，下方资源图表仅展示该节点数据',
+  openPanelAction: '打开控制台',
   clusterLoad: '集群资源负载',
   sectionVram: '节点显存分布',
   sectionVramHint: '各 GPU 卡的显存使用率',
@@ -307,6 +311,7 @@ export const NODE_PAGE = {
   clusterEnvVideo: NODE_TERM.clusterEnvVideo,
   clusterEnvAi: NODE_TERM.clusterEnvAi,
   clusterEnvLlm: NODE_TERM.clusterEnvLlm,
+  clusterEnvTransform: NODE_TERM.clusterEnvTransform,
 } as const;
 
 /** 服务部署 Tab 键（与 index.vue TabPane key 一致） */
@@ -355,9 +360,9 @@ export const CLUSTER_NODE_ROLE_FILTERS = {
   media: ['media', 'hybrid'] as const,
   /** MQTT 网关节点 */
   mqtt: ['mqtt'] as const,
-  /** Ceph 存储/MON 节点 */
+  /** NFS 存储/MON 节点 */
   storage: ['storage'] as const,
-  /** 需挂载 CephFS 的节点 */
+  /** 需挂载 NFS 的节点（兼容键名 cephClient） */
   cephClient: ['compute', 'gpu', 'hybrid', 'media'] as const,
 } as const;
 
@@ -411,6 +416,15 @@ export const WORKLOAD_BUNDLE_TYPES = [
     desc: '批量分发 AI 后处理 Kafka Worker/Sink 运行时与脚本（集群订阅处理与落库）',
   },
   {
+    key: 'transform_runtime',
+    label: '数据转发 Runtime',
+    module: 'TRANSFORM',
+    remoteRoot: '/opt/easyaiot/TRANSFORM',
+    pythonLauncher: '/opt/easyaiot/TRANSFORM/scripts/run-runtime.sh',
+    scriptMarker: 'transform-runtime/target/transform-runtime-1.0.0.jar',
+    desc: '无镜像则打包 gzip → SSH 分发 load → Agent 多容器 → iot_transform_heartbeat 验收；节点维部署',
+  },
+  {
     key: 'ai_service',
     label: '模型服务',
     module: 'AI',
@@ -450,12 +464,16 @@ export const WORKLOAD_BUNDLE_TYPES = [
 
 export const VIDEO_WORKLOAD_BUNDLE_TYPES = WORKLOAD_BUNDLE_TYPES.filter((b) => b.module === 'VIDEO');
 export const AI_WORKLOAD_BUNDLE_TYPES = WORKLOAD_BUNDLE_TYPES.filter((b) => b.module === 'AI');
+export const TRANSFORM_WORKLOAD_BUNDLE_TYPES = WORKLOAD_BUNDLE_TYPES.filter(
+  (b) => b.module === 'TRANSFORM',
+);
 
 export type WorkloadBundleType = (typeof WORKLOAD_BUNDLE_TYPES)[number]['key'];
 
 /** 旧版「运行时分发」Tab 跳转：按 bundle 类型映射到新 Tab key */
-export function resolveLegacyWorkloadTab(bundleKey?: string): '7' | '8' | '9' {
+export function resolveLegacyWorkloadTab(bundleKey?: string): '7' | '8' | '9' | '11' {
   if (bundleKey === 'llm_service') return '9';
+  if (bundleKey === 'transform_runtime') return '11';
   if (bundleKey && AI_WORKLOAD_BUNDLE_TYPES.some((b) => b.key === bundleKey)) return '8';
   return '7';
 }
@@ -479,6 +497,12 @@ export const WORKLOAD_BUNDLE_COPY = {
   ffmpegDeploy: '分发 FFmpeg',
   ffmpegCheck: '检测 FFmpeg',
   ffmpegRemove: '删除 FFmpeg',
+  runtimeCppHint:
+    '一键分发：点击「分发 RUNTIME」即可。控制面若尚未编译会自动 install → 导出离线包 → SSH 安装到 /opt/easyaiot/RUNTIME（首次较久）。算法类「全量分发」也会自动带上。模型走 Ceph；推理默认 prefer GPU、失败回退 CPU。装好后可在算法任务里选「高性能」+「自动/指定节点」把任务调度到该节点。检测会对照控制面与节点 VERSION，不一致时建议重新分发升级。',
+  runtimeCppPath: '/opt/easyaiot/RUNTIME/bin/RUNTIME',
+  runtimeCppDeploy: '分发 RUNTIME',
+  runtimeCppCheck: '检测 RUNTIME',
+  runtimeCppRemove: '删除 RUNTIME',
 } as const;
 
 /** 集群洞察文案 */
