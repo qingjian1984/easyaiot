@@ -55,12 +55,13 @@ class PowerModelCanaryAssetContractTest {
     }
 
     @Test
-    void manifestHashesMatchExactBytesAndRemainsUncommittedCandidate() throws Exception {
+    void manifestHashesMatchExactBytesAndReferencesFrozenAssetCommit() throws Exception {
         Path root = root();
         Path assets = root.resolve(".doc/技术设计/电力运维云平台/assets/td005-canary");
         JsonNode manifest = MAPPER.readTree(Files.newInputStream(assets.resolve("manifest.json")));
         assertEquals("REVIEW_CANDIDATE", manifest.path("status").asText());
-        assertEquals("UNCOMMITTED", manifest.path("gitCommit").asText());
+        assertTrue(manifest.path("gitCommit").asText().matches("[0-9a-f]{40}"));
+        assertFalse("UNCOMMITTED".equals(manifest.path("gitCommit").asText()));
         assertEquals("122", manifest.path("tenantCandidate").asText());
         assertEquals("canary-meter-122", manifest.path("templateCode").asText());
         for (JsonNode file : manifest.path("files")) {

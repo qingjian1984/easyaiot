@@ -27,7 +27,7 @@
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
 | [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.3 | In Review |
-| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.30 | In Review |
+| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.31 | In Review |
 | [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.9 | In Review |
 | [TD-005 版本、绑定、审计与 Outbox 迁移回滚设计](./TD-005-版本绑定审计Outbox迁移与回滚设计.md) | 0.1.7 | In Review / Migration Candidate |
 | [TD-005 孤儿属性处置方案](./TD-005-孤儿属性处置方案.md) | 0.2.0 | Executed / Verified |
@@ -383,3 +383,7 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   三请求及生产 Schema SHA-256 已冻结到 manifest，`gitCommit=UNCOMMITTED` 明确阻断执行。请求语义与
   manifest hash 契约 **2/2 PASS、0 skipped**，当前目标集合更新为 **57/57 PASS、0 skipped**；未调用 API、
   未写 tenant 122，也未改变角色、Secret 或容器运行态。
+- **模板 API 与运行准备资产已提交（2026-08-11，TD-005 1.0.31）**：资产基准提交为
+  `af41b51517bee12e36a50c75b6009e96d76f4dea`；Canary manifest 已回填该提交，三个请求与生产 Schema
+  相对提交无漂移。用户配置 `.claude/settings.json`、`CLAUDE.md`、`DEVICE/.claude/` 未纳入提交。该动作
+  只关闭资产可追溯门禁，四项运行批准仍为 OPEN。

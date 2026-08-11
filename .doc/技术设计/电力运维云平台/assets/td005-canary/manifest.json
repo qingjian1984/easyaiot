@@ -2,7 +2,7 @@
   "assetVersion": "1.0.0",
   "tdVersion": "1.0.30",
   "status": "REVIEW_CANDIDATE",
-  "gitCommit": "UNCOMMITTED",
+  "gitCommit": "af41b51517bee12e36a50c75b6009e96d76f4dea",
   "tenantCandidate": "122",
   "templateCode": "canary-meter-122",
   "schema": {

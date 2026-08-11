@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.30
+> 版本：1.0.31
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -43,6 +43,7 @@
 | 1.0.28 | 冻结 HMAC 注入窗口前阶段 2 运行基线：full、Topic 6/1/30 天、消费组 lag=0、数据库积压 0、业务 4/4/17；全量只读预检 16/16 PASS |
 | 1.0.29 | 形成默认只读的 Secret 注入窗口执行器：双因子执行门禁、仅重建 iot-device、健康/挂载/阶段 2 复验及基础 Compose 自动回退 |
 | 1.0.30 | 形成 tenant 122 隔离模板 Canary 三请求资产与独立窗口：单只读测点、无产品/设备/绑定，运行标识服务端或窗口生成，未执行 API 写入 |
+| 1.0.31 | 提交模板 API 与运行准备资产并将 Canary manifest 回填资产基准 commit af41b515；请求/Schema hash 不变，运行门禁仍 OPEN |
 
 ## 1. 结论
 
@@ -583,10 +584,14 @@ draftId、ETag、幂等键、requestId 或 secret。未来执行顺序固定为 
 [TD-005 隔离模板 Canary 窗口申请单](./TD-005隔离模板Canary窗口申请单-20260811.md)。当前仅离线候选，
 角色授权、Secret 注入、template API 开启和 Canary 写入仍为独立 OPEN 门禁。
 
-请求语义与 manifest 逐字节 hash 契约 2/2 PASS、0 skipped；生产 Schema hash 同时精确匹配。manifest
-保持 `status=REVIEW_CANDIDATE`、`gitCommit=UNCOMMITTED`，因此资产尚不可执行。
+请求语义与 manifest 逐字节 hash 契约 2/2 PASS、0 skipped；生产 Schema hash 同时精确匹配。
 
-当前 manifest 的 `gitCommit=UNCOMMITTED` 是明确门禁：只有评审冻结、文件哈希复算并写入真实 Git commit 后，才能作为正式 release package。
+1.0.31 将模板 API、权限/Secret/Canary 运行准备资产提交为
+`af41b51517bee12e36a50c75b6009e96d76f4dea`，Canary manifest 已回填该资产基准提交；三个请求及生产
+Schema 均相对该提交无漂移。manifest 仍为 `REVIEW_CANDIDATE`，提交号只关闭可追溯门禁，不授权角色、
+Secret 注入、容器重建、template API 开启或 Canary 写入。
+
+manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 
 所有 JSON、Schema、golden manifest 和验证文本资产固定为 UTF-8 无 BOM；服务端、脚本、CI 和编辑器必须显式使用 UTF-8，禁止依赖 Windows 活动代码页。`.xlsx` 为 OOXML ZIP 二进制，不适用文本编码规则。验证脚本必须拒绝带 BOM 或不能按严格 UTF-8 解码的文本资产，终端回显乱码不能作为修改文件编码的依据。
 
