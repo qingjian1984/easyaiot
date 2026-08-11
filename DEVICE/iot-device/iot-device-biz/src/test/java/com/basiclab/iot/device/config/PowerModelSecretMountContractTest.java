@@ -22,13 +22,16 @@ class PowerModelSecretMountContractTest {
                 ".scripts/docker/power_model_activation_preflight.ps1"));
         assertTrue(application.contains("optional:configtree:/run/secrets/"));
         assertTrue(application.contains(
-                "${easyaiot.power-model.idempotency-hmac-secret-file-content:${EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET:}}"));
+                "idempotency-hmac-secret: ${EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET:}"));
         assertTrue(overlay.contains("EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET: !reset null"));
         assertTrue(overlay.contains("EASYAIOT_POWER_MODEL_HMAC_SECRET_FILE:?"));
-        assertTrue(overlay.contains("target: easyaiot.power-model.idempotency-hmac-secret-file-content"));
-        assertFalse(overlay.matches("(?s).*idempotency-hmac-secret-file-content:\\s*[A-Za-z0-9+/=]{32,}.*"));
+        assertTrue(overlay.contains("target: easyaiot.power-model.idempotency-hmac-secret"));
+        assertFalse(overlay.matches("(?s).*idempotency-hmac-secret:\\s*[A-Za-z0-9+/=]{32,}.*"));
         assertTrue(preflight.contains("source=$source"));
         assertTrue(preflight.contains("configtree-file"));
+        assertTrue(preflight.contains(
+                "/run/secrets/easyaiot.power-model.idempotency-hmac-secret"));
+        assertFalse(preflight.contains("idempotency-hmac-secret-file-content"));
         assertTrue(preflight.contains("@('events', 'template-api', 'api')"));
     }
 

@@ -27,7 +27,7 @@
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
 | [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.3 | In Review |
-| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.34 | In Review |
+| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.52 | In Review |
 | [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.9 | In Review |
 | [TD-005 版本、绑定、审计与 Outbox 迁移回滚设计](./TD-005-版本绑定审计Outbox迁移与回滚设计.md) | 0.1.7 | In Review / Migration Candidate |
 | [TD-005 孤儿属性处置方案](./TD-005-孤儿属性处置方案.md) | 0.2.0 | Executed / Verified |
@@ -527,3 +527,42 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   `fd7c5887…c1e3a`、新容器 `f96616cd0756…` healthy/restartCount=0。运行资产 `index-c6336efc.js` 命中
   fail-closed 与 blocked 常量，其他 20 个容器 ID 20/20 未变化。未打开浏览器、未登录、未调用 API、未改
   数据库或配置、未写 Canary。下一步是新的单次认证批准；认证成功也仍不等同于 Canary 写入批准。
+- **REAUTH-V2 认证与运行前新鲜度门禁已通过（2026-08-11，TD-005 1.0.47）**：owner 以
+  `USER-APPROVAL-20260811-TD005-AUTH-HARNESS-REAUTH-V2` 精确批准；无读取地清除两类 Web Storage 后，
+  页面内置门禁在输入前为 true。用户本人完成 tenant 123 / user 132 登录，四步均 ok、login 精确一次，页面
+  保持 harness 且未出现白名单外 API。只读元数据确认 access 6118 / refresh 6117 active=1/1，未查询 Token
+  字段；21:34 双库 READ ONLY 前检再次 PASS 并 ROLLBACK，权限 3/0、十四类业务事实残留 0。当前唯一下一
+  门禁是 owner 独立批准冻结资产的 identity→draft→validate→publish 单次 Canary 写入；认证批准不得外推。
+- **模板 Canary 首次单次写入在 identity 404 后安全停止（2026-08-11，TD-005 1.0.48）**：owner 以
+  `USER-APPROVAL-20260811-TD005-CANARY-TEMPLATE-SINGLE-WRITE` 精确批准；冻结 hash、access 元数据、双库
+  READ ONLY 前检和 iot-device20 仓库外 custom-format 备份（447,615 字节、SHA-256 `724464e6…ac99ac6`、
+  TOC 1,346）均 PASS。首个 identity 返回 HTTP 404 后立即停止，draft/validate/publish 均未调用；失败后权限
+  3/0、十四类业务事实仍为 0。根因是运行 iot-device JAR 缺少模板 Controller/Service 类，虽 template=true
+  仍无真实路由。下一步必须另批仅重建 iot-device 的当前源码镜像修复窗口，验收运行类与路由后重新认证，
+  再申请新的单次 Canary；本次批准不得复用。
+- **identity 404 浏览器与令牌收敛已完成（2026-08-11，TD-005 1.0.49）**：owner 以
+  `USER-APPROVAL-20260811-TD005-CANARY-404-TOKEN-CONTAINMENT` 精确批准；无读取地清除 Chrome 两类
+  Web Storage，未清 Cookie/缓存。系统库仓库外 custom-format 备份 1,118,403 字节、SHA-256
+  `8804eea3…bc1619`、TOC 1,039 行 PASS；单事务仅软撤销 access 6118 / refresh 6117，两行 deleted=1，
+  user 132 active=0/0，未查询 Token 字段。最终权限 3/0、十四类业务事实残留 0，容器均 healthy 且未重建。
+  下一步是独立 iot-device 当前源码镜像修复部署；之后必须重新认证并另批新的单次 Canary。
+- **iot-device 模板 API 镜像修复前检已完成（2026-08-11，TD-005 1.0.50，未部署）**：旧暂存 JAR
+  `49469f2c…d5c04` 缺少四个模板类；本机 Maven 用户 settings 默认 Java 8 覆盖仓库 Java 17，首次构建因此被
+  文本块编译门禁拒绝。未改 settings/POM，改由命令显式锁定 Java 17 后反应堆 33/33 BUILD SUCCESS；新候选
+  与暂存 JAR hash 均为 `953cc5d9…0346d6`，四个模板类存在，模板 Controller + Canary 资产合同 11/11 PASS。
+  尚未构建镜像、重建容器或调用 API。下一步须 owner 独立批准仅构建镜像并重建 iot-device，保留 Secret、
+  template=true、binding=false，验收运行类和一次未认证非 404 路由探针；失败仅回退 iot-device。
+- **iot-device 模板 API 镜像修复部署失败并安全回退（2026-08-11，TD-005 1.0.51）**：owner 以
+  `USER-APPROVAL-20260811-TD005-IOT-DEVICE-TEMPLATE-API-IMAGE-REPAIR-DEPLOY` 精确批准；新镜像及四类检查
+  通过，仅重建 iot-device，但新容器因 `PowerModelActivationGuard` 解析到的 Secret 少于 32 字节而未 healthy。
+  挂载文件实际存在、可读且为 64 字节，定位为 Config Tree 静态合同未覆盖真实 Spring 属性绑定。路由探针和
+  API 均未执行；脚本仅回退 iot-device 至旧镜像 `4fa86930…705b`，当前 healthy。其他相关容器未变化，最终
+  权限 3/0、十四类残留 0。下一步先修复 Secret 真实运行时解析并补隔离启动合同，再申请新部署窗口。
+- **Config Tree Secret 运行时解析缺口已在源码关闭（2026-08-11，TD-005 1.0.52，未部署）**：Compose
+  Secret 文件名已直接映射最终属性 `easyaiot.power-model.idempotency-hmac-secret`，移除失效的中间属性
+  占位解析；明文环境变量仍只作为空值兼容回退。新增真实 Spring Config Data 临时目录启动合同，覆盖挂载存在
+  和挂载缺失两条路径；静态挂载合同、启动门禁与动态绑定聚焦测试 16/16 PASS。Java 17 反应堆 33/33
+  BUILD SUCCESS；新暂存 JAR 为 279,652,971 字节，SHA-256 `54bedaec…3b009`，模板四类齐全且内置配置不含
+  旧中间键。本轮未读取/修改仓库外 Secret，未构建镜像、重建容器、调用 API 或修改数据库。当前 iot-device
+  仍为回退旧镜像且 healthy；下一步申请新的仅 iot-device 部署审批，旧批准不得复用。证据见
+  [`iot-device-configtree-runtime-repair-preflight-20260811.md`](./assets/td005-canary/iot-device-configtree-runtime-repair-preflight-20260811.md)。

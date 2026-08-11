@@ -55,7 +55,7 @@ Outbox/Inbox/release/projection=`0/0/0/0`，invalid index=0，业务基线=`4/4/
 批准后使用基础 Compose 与 secret 覆盖层重建且仅重建 `iot-device`。验收必须确认：
 
 - 容器恢复 healthy；
-- `/run/secrets/easyaiot.power-model.idempotency-hmac-secret-file-content` 存在且字节数不少于 32；
+- `/run/secrets/easyaiot.power-model.idempotency-hmac-secret` 存在且字节数不少于 32；
 - 容器环境中的兼容 secret 为空，不含明文；
 - 激活预检仍判定 template API=false、binding API=false；
 - PostgreSQL 业务基线和 Canary 租户 14 类事实未变化；

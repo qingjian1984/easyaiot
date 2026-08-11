@@ -122,7 +122,7 @@ function Test-RuntimeInvariants {
     $plainSecret = $null
     $mount = Invoke-Native -File 'docker' -Arguments @(
         'exec', 'iot-device', 'sh', '-c',
-        'p=/run/secrets/easyaiot.power-model.idempotency-hmac-secret-file-content; if [ -f "$p" ]; then wc -c < "$p"; else echo 0; fi'
+        'p=/run/secrets/easyaiot.power-model.idempotency-hmac-secret; if [ -f "$p" ]; then wc -c < "$p"; else echo 0; fi'
     )
     $mountBytes = if ($mount.Code -eq 0 -and $mount.Text.Trim() -match '^\d+$') {
         [int]$mount.Text.Trim()

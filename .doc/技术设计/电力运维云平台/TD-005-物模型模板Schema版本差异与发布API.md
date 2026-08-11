@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.46
+> 版本：1.0.52
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -59,6 +59,12 @@
 | 1.0.44 | 新增 tenant 123 双库只读前检与静态合同；实跑确认身份/权限 3/0、十四类业务事实残留 0，运行前新鲜度门禁 PASS |
 | 1.0.45 | 重认证因白名单外 logout 判失败并完成四令牌收敛；网络门禁改为页面内置、先全拒绝后开放，合同与 full harness 构建 PASS，尚未部署 |
 | 1.0.46 | owner 独立批准后仅重建 WEB 部署页面内置网络门禁；新镜像/容器 healthy，运行资产命中门禁常量，其他 20 个容器未变化 |
+| 1.0.47 | REAUTH-V2 在页面内置门禁下认证-only PASS；新令牌仅核对元数据，双库只读新鲜度复核权限 3/0、十四类残留 0，Canary 写入仍 OPEN |
+| 1.0.48 | 单次 Canary 在 identity HTTP 404 后停止且零残留；定位运行 iot-device JAR 缺少模板 API 类，须独立修复部署后重新认证和审批 |
+| 1.0.49 | identity 404 后完成浏览器存储与 6118/6117 精确收敛；系统库备份校验通过，active=0/0、权限 3/0、十四类残留 0 |
+| 1.0.50 | 定位旧暂存 JAR 与本机 Maven Java 8 覆盖；显式 Java 17 构建新候选，四类存在且聚焦合同 11/11 PASS，待独立部署 |
+| 1.0.51 | 新镜像因真实 Config Tree Secret 未绑定而启动失败并仅回退 iot-device；旧镜像恢复 healthy、权限 3/0、十四类残留 0 |
+| 1.0.52 | 将 Config Tree 挂载文件直接映射最终 Secret 属性，新增真实 Spring Config Data 有挂载/无挂载启动合同；聚焦测试 16/16 PASS，待新部署审批 |
 
 ## 1. 结论
 
@@ -721,6 +727,57 @@ Canary 写入仍分别需要独立批准。执行证据见
 回退标签，新镜像 `fd7c5887…c1e3a`、新容器 `f96616cd0756…` healthy/restartCount=0。运行静态资产
 `index-c6336efc.js` 同时包含 fail-closed 与阻断常量，其他 20 个容器 ID 未变化。部署窗口未打开浏览器、未登录、
 未调用 API 或写 Canary；再次认证与 Canary 写入仍是两个独立 OPEN 门禁。
+
+1.0.47 按 `USER-APPROVAL-20260811-TD005-AUTH-HARNESS-REAUTH-V2` 完成新的单次认证：清除两类 Web Storage
+但不读取其值，输入凭据前页面内置门禁为 true；用户本人完成 tenant 123 / user 132 登录后，tenant、captcha、
+login、permission-info 四步均 ok，login 精确一次，页面未离开 harness，资源记录未出现白名单外 API。只读数据库
+元数据确认 access 6118 / refresh 6117 active=1/1，未查询 Token 字段。21:34 再次执行双库 READ ONLY 前检并
+ROLLBACK，权限仍为 3/0、十四类业务事实残留仍为 0。认证和运行前新鲜度门禁已关闭；
+`identity→draft→validate→publish` 单次 Canary 写入仍须 owner 独立精确批准。执行证据见
+[`auth-harness-reauth-v2-execution-20260811.md`](./assets/td005-canary/auth-harness-reauth-v2-execution-20260811.md)。
+
+1.0.48 按 `USER-APPROVAL-20260811-TD005-CANARY-TEMPLATE-SINGLE-WRITE` 完成 hash、access 元数据、双库只读
+前检和仓库外 custom-format 备份后，首个 identity 请求返回 HTTP 404；窗口立即停止，未调用 draft、validate、
+publish，失败后十四类业务事实仍为 0。只读诊断确认网关运行 JAR 含 `/api/v1/power/**` 路由且容器 healthy，
+但 iot-device 运行 JAR 缺少 `PowerModelTemplateController` 和模板服务类，template=true 无法产生真实路由。
+下一步须另批当前源码镜像的仅 iot-device 修复部署，验收运行类和路由后重新认证；本次 Canary 批准不可复用。
+执行证据见
+[`template-single-write-attempt-20260811.md`](./assets/td005-canary/template-single-write-attempt-20260811.md)。
+
+1.0.49 按 `USER-APPROVAL-20260811-TD005-CANARY-404-TOKEN-CONTAINMENT` 无读取地清除独立 Chrome 中
+`localhost:8888` 的 localStorage/sessionStorage；系统库仓库外 custom-format 备份 1,118,403 字节、SHA-256
+`8804eea3…bc1619`、TOC 1,039 行 PASS。单事务仅软撤销 access 6118 / refresh 6117，两行均 deleted=1，
+tenant 123 / user 132 active=0/0，未查询 Token 字段。最终双库 READ ONLY 前检权限 3/0、十四类业务事实
+残留 0，相关容器均 healthy 且未重建。执行证据见
+[`canary-404-token-containment-20260811.md`](./assets/td005-canary/canary-404-token-containment-20260811.md)。
+
+1.0.50 的镜像修复前检确认：旧 `DEVICE/target/jars/iot-device-biz.jar` hash `49469f2c…d5c04` 缺少
+PowerModelTemplate Controller/Service 四类，正是运行镜像 404 的构建产物根因。本机 Maven 用户 settings 又以
+默认 profile 将 source/target 覆盖为 1.8；未修改用户配置或 POM，而是在构建命令显式锁定仓库要求的 Java 17。
+反应堆 33/33 BUILD SUCCESS，新候选及暂存 JAR hash 均为 `953cc5d9…0346d6`，四类存在；模板 Controller 与
+冻结 Canary 资产合同 11/11 PASS。未构建镜像、未重建容器或调用 API；下一步仍须 owner 独立批准仅重建
+iot-device。前检证据见
+[`iot-device-template-api-image-repair-preflight-20260811.md`](./assets/td005-canary/iot-device-template-api-image-repair-preflight-20260811.md)。
+
+1.0.51 按 `USER-APPROVAL-20260811-TD005-IOT-DEVICE-TEMPLATE-API-IMAGE-REPAIR-DEPLOY` 构建包含模板四类的
+新镜像并仅重建 iot-device；新容器在启动门禁解析到的 HMAC Secret 少于 32 字节，150 秒内未 healthy，因此
+未执行路由探针或任何 API。挂载文件只读元数据为存在、可读、64 字节，暴露现有测试仅验证 Config Tree 静态
+文本/挂载而未验证真实 Spring 属性解析。自动回退恢复旧镜像 `4fa86930…705b` 与 healthy iot-device；其他相关
+容器启动时间未变，最终双库前检权限 3/0、十四类业务事实残留 0。下一步须先补真实 Config Tree 绑定合同并
+修复 Secret provider，再另批部署。证据见
+[`iot-device-template-api-image-repair-deploy-attempt-20260811.md`](./assets/td005-canary/iot-device-template-api-image-repair-deploy-attempt-20260811.md)。
+
+1.0.52 已在源码层关闭上述解析缺口：Compose Secret 的 Config Tree 文件名从中间属性
+`easyaiot.power-model.idempotency-hmac-secret-file-content` 改为最终属性
+`easyaiot.power-model.idempotency-hmac-secret`，应用配置继续保留明文环境变量空值兼容回退。新增真实
+Spring Config Data 启动合同，以临时 Config Tree 目录验证“挂载存在时最终属性取得测试 Secret、挂载缺失时
+最终属性保持空值并由既有启动门禁 fail-closed”；连同静态挂载合同和 ActivationGuard 共 16/16 PASS。
+本轮未读取或修改仓库外 Secret，未构建镜像、重建容器、调用 API 或修改数据库。Java 17 反应堆 33/33
+BUILD SUCCESS；新暂存 JAR 为 279,652,971 字节，SHA-256
+`54bedaec85bed61f7afe012dcbc5eda933c4e6958c8ade6ca3a6c86e4143b009`，模板四类齐全，内置配置命中最终属性
+且不含旧中间键。运行态仍是已回退的旧镜像；下一步须申请新的仅 iot-device 部署窗口，1.0.51 的批准不得
+复用。前检证据见
+[`iot-device-configtree-runtime-repair-preflight-20260811.md`](./assets/td005-canary/iot-device-configtree-runtime-repair-preflight-20260811.md)。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

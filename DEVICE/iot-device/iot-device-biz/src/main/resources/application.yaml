@@ -224,7 +224,7 @@ easyaiot:
     binding-apply-api-enabled: ${EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED:false}
     collector-release-port-enabled: ${EASYAIOT_POWER_MODEL_COLLECTOR_RELEASE_PORT_ENABLED:false}
     # Config Tree 挂载优先；直接环境变量仅作为非 Compose 场景的兼容回退。
-    idempotency-hmac-secret: ${easyaiot.power-model.idempotency-hmac-secret-file-content:${EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET:}}
+    idempotency-hmac-secret: ${EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET:}
 
 # Outbox relay、Kafka listener 与消费协调器的总开关；默认不装配后台任务。
 power:
