@@ -1,12 +1,12 @@
 {
   "content": {
     "schemaVersion": "1.0.0",
-    "templateCode": "canary-meter-122",
+    "templateCode": "canary-meter-123",
     "templateName": "M1隔离验证电表",
     "deviceType": "METER",
     "templateKind": "STANDARD",
     "version": "1.0.0",
-    "description": "仅用于 tenant 122 的 M1 模板 API 隔离验证，不绑定产品或设备。",
+    "description": "仅用于 tenant 123 的 M1 模板 API 隔离验证，不绑定产品或设备。",
     "tags": ["canary", "m1"],
     "properties": [
       {

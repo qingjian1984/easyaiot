@@ -1,0 +1,16 @@
+# TD-005 Canary 认证-only harness 构建覆盖层。
+#
+# 用法（须配合 owner 独立批准的 harness 部署窗口）：
+#   docker compose -f docker-compose.yaml -f docker-compose.td005-auth-harness.yml build web-service
+#   docker compose -f docker-compose.yaml -f docker-compose.td005-auth-harness.yml up -d --no-deps web-service
+#
+# 仅在构建期注入 VITE_TD005_AUTH_HARNESS=true，使 harness 路由注册；运行时配置不变。
+# 默认构建（不带本覆盖层）不注册 harness 路由，访问 /td005-auth-harness 返回 404。
+services:
+  web-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_GLOB_DEPLOY_PROFILE: "full"
+        VITE_TD005_AUTH_HARNESS: "true"

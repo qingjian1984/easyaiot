@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** TD-005 1.0.30：tenant 122 隔离模板 Canary 请求资产静态合同。 */
+/** TD-005 1.0.41：tenant 123 隔离模板 Canary 请求资产静态合同。 */
 class PowerModelCanaryAssetContractTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -32,7 +32,7 @@ class PowerModelCanaryAssetContractTest {
                 "DEVICE/iot-device/iot-device-biz/src/main/resources/schemas/power-model/"
                         + "easyaiot-power-model-template.schema.json")));
 
-        assertEquals("canary-meter-122", identity.path("templateCode").asText());
+        assertEquals("canary-meter-123", identity.path("templateCode").asText());
         assertEquals(identity.path("templateCode"), content.path("templateCode"));
         assertEquals(identity.path("templateName"), content.path("templateName"));
         assertEquals(identity.path("deviceType"), content.path("deviceType"));
@@ -62,8 +62,8 @@ class PowerModelCanaryAssetContractTest {
         assertEquals("REVIEW_CANDIDATE", manifest.path("status").asText());
         assertTrue(manifest.path("gitCommit").asText().matches("[0-9a-f]{40}"));
         assertFalse("UNCOMMITTED".equals(manifest.path("gitCommit").asText()));
-        assertEquals("122", manifest.path("tenantCandidate").asText());
-        assertEquals("canary-meter-122", manifest.path("templateCode").asText());
+        assertEquals("123", manifest.path("tenantCandidate").asText());
+        assertEquals("canary-meter-123", manifest.path("templateCode").asText());
         for (JsonNode file : manifest.path("files")) {
             assertEquals(file.path("sha256").asText(), sha256(assets.resolve(file.path("path").asText())));
         }

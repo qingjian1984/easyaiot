@@ -37,6 +37,7 @@ const { getFormRules } = useFormRules()
 const formRef = ref()
 const loading = ref(false)
 const rememberMe = ref(authUtil.getRememberMe())
+const tenantNameEdited = ref(false)
 
 onMounted(() => {
   rememberMe.value = authUtil.getRememberMe()
@@ -74,6 +75,12 @@ async function getCode() {
 // 根据域名，获得租户信息 && 获取租户ID
 async function getTenantId() {
   if (tenantEnable === 'true') {
+    if (tenantNameEdited.value) {
+      const res = await getTenantIdByName(formData.tenantName)
+      authUtil.setTenantId(res.id)
+      return
+    }
+
     const website = location.host
     const tenant = await getTenantByWebsite(website)
     if (tenant.id != null) {
@@ -102,7 +109,6 @@ async function handleLogin(params) {
       mode: 'none', // 不要默认的错误提示
     })
     if (userInfo) {
-      console.log(JSON.stringify(userInfo));
       await permissionStore.changePermissionCode(userInfo.permissions)
       notification.success({
         message: t('sys.login.loginSuccessTitle'),
@@ -129,7 +135,7 @@ async function handleLogin(params) {
   <LoginFormTitle v-show="getShow" class="enter-x" />
   <Form
     v-show="getShow" ref="formRef" class="enter-x p-4" :model="formData" :rules="getFormRules"
-    @keypress.enter="handleLogin"
+    @keypress.enter.prevent="getCode"
   >
     <FormItem name="tenantName" class="enter-x">
       <Input
@@ -138,6 +144,7 @@ async function handleLogin(params) {
         size="large"
         :placeholder="t('sys.login.tenantName')"
         class="fix-auto-fill"
+        @input="tenantNameEdited = true"
       />
     </FormItem>
     <FormItem name="username" class="enter-x">

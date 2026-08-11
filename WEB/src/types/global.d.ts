@@ -95,6 +95,8 @@ declare global {
     VITE_GLOB_VISUALIZE_URL?: string
     /** FUXA 组态编辑器基址 */
     VITE_GLOB_FUXA_URL?: string
+    /** TD-005 Canary 认证-only harness 开关（仅 'true' 时注册 harness 路由） */
+    VITE_TD005_AUTH_HARNESS?: string
   }
 
   declare function parseInt(s: string | number, radix?: number): number

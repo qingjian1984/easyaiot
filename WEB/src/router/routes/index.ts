@@ -133,6 +133,23 @@ export const JobLogRoute: AppRouteRecordRaw = {
   ],
 }
 
+/**
+ * TD-005 Canary 认证-only harness 路由
+ * 仅在 VITE_TD005_AUTH_HARNESS=true 构建时注册（见 basicRoutes 末尾条件展开）；
+ * 生产默认构建不含本路由，访问返回 404。ignoreAuth + whitePathList 双重保证不触发 dict/业务 API。
+ */
+export const Td005AuthHarnessRoute: AppRouteRecordRaw = {
+  path: '/td005-auth-harness',
+  name: 'Td005AuthHarness',
+  component: () => import('@/views/base/td005-auth-harness/index.vue'),
+  meta: {
+    title: 'TD-005 Auth Harness',
+    ignoreAuth: true,
+    hideMenu: true,
+    hidden: true,
+  },
+}
+
 // Basic routing without permission
 // 未经许可的基本路由
 export const basicRoutes = [
@@ -152,4 +169,6 @@ export const basicRoutes = [
   SAM_MODEL_SETUP_ROUTE,
   REDIRECT_ROUTE,
   PAGE_NOT_FOUND_ROUTE,
+  // TD-005 Canary 认证-only harness：仅 VITE_TD005_AUTH_HARNESS=true 构建注册
+  ...(import.meta.env.VITE_TD005_AUTH_HARNESS === 'true' ? [Td005AuthHarnessRoute] : []),
 ]

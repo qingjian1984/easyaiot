@@ -1,10 +1,10 @@
 {
-  "assetVersion": "1.0.0",
-  "tdVersion": "1.0.30",
+  "assetVersion": "1.1.0",
+  "tdVersion": "1.0.41",
   "status": "REVIEW_CANDIDATE",
-  "gitCommit": "af41b51517bee12e36a50c75b6009e96d76f4dea",
-  "tenantCandidate": "122",
-  "templateCode": "canary-meter-122",
+  "gitCommit": "UNCOMMITTED",
+  "tenantCandidate": "123",
+  "templateCode": "canary-meter-123",
   "schema": {
     "path": "DEVICE/iot-device/iot-device-biz/src/main/resources/schemas/power-model/easyaiot-power-model-template.schema.json",
     "sha256": "2431b8e7f25414aff89468d1b1daced2d10ce064d80b0816791912c7272bbae5"
@@ -12,15 +12,15 @@
   "files": [
     {
       "path": "draft-request.json",
-      "sha256": "1269d9caa5bcf38cedc9118f8e97f324c8fa1251fa7035f4a564e58821b8c795"
+      "sha256": "bb2090f6ffb3da324697f1e6c678a612b6f8fe1141d4b50582533f99c2062824"
     },
     {
       "path": "identity-request.json",
-      "sha256": "91e239e421af9e34db9960c2b206120b3d0d737c0407b792906774fd3a278750"
+      "sha256": "db379af50272c509a33cc8efa7029b07442e7bfdc03f07dff93fc6d31d9967c3"
     },
     {
       "path": "publish-request.json",
-      "sha256": "a00d6e5e1a28d7cfb0bd3c379c14af75d00c2b551450eb42f16680532f76c279"
+      "sha256": "beeb95448bfc6f56165370ead2a7d0a16c1e101be3e5cd6b5684e2774c532413"
     }
   ]
 }

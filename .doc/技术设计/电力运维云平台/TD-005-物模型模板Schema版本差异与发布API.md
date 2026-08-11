@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.41
+> 版本：1.0.42
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -54,6 +54,7 @@
 | 1.0.39 | Canary 认证前检确认账户、角色、30 分钟 token 策略就绪，但本机无 WEB 镜像/容器；形成 full 档位 WEB 首次部署独立窗口，未登录或取 token |
 | 1.0.40 | owner 批准后仅以 full 构建并首次创建 healthy 的 WEB；依赖容器和 token 基线未变，形成不导出 token 的独立浏览器认证窗口 |
 | 1.0.41 | 浏览器认证窗口获批，但应用内浏览器在导航前因主机权限无法建立控制连接；登录未执行、token 仍为 0，待修复连接或另批 Chrome CDP |
+| 1.0.42 | tenant 123 / user 132 认证-only harness 验收 PASS；Canary 三请求资产重定向为 `canary-meter-123` 并重算哈希，请求/Schema 合同 1/1 PASS，manifest 基准提交仍 OPEN |
 
 ## 1. 结论
 
@@ -677,6 +678,15 @@ PostgreSQL、Kafka 的容器 ID和启动时间均未变化。template-api 阶段
 调用登录 API。事后只读核验 token=0、允许权限=3、禁止权限=0，WEB/gateway/system/device 容器 ID与启动
 时间不变且均 healthy。本窗口状态为 `BLOCKED_BROWSER_CONTROL / NOT_EXECUTED`；须修复应用内浏览器连接，
 或由 owner 另行明确批准使用 Chrome CDP 后才能重试，现有批准不扩展到替代控制面。
+
+1.0.42 经后续独立批准，认证-only harness 已在 tenant 123 / user 132 上完成一次认证：tenant、captcha、
+login、permission-info 四步均成功，页面未进入 Dashboard，Nginx 仅记录批准认证端点，新增 access/refresh
+元数据各一条且未读取 Token 字段。由于原 Canary 资产仍绑定 tenant 122，本版将 identity、draft、publish
+请求统一重定向为 `canary-meter-123`，描述与发布原因同步改为 tenant 123，manifest 升为 1.1.0 并重算三个
+请求文件的逐字节 SHA-256；生产 Schema SHA-256 未漂移。Java 17 下请求/Schema 合同 1/1 PASS，证明单只读
+测点、空 events/services、无 tenant/actor/draftId/ETag/idempotency/requestId/secret 运行事实。为避免伪造
+冻结状态，manifest 暂保留 `gitCommit=UNCOMMITTED`；形成实际资产基准提交并回填前，不得申请或执行
+identity→draft→validate→publish。tenant 123 的 14 类空事实新鲜度复核也保持 OPEN。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

@@ -453,3 +453,56 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   浏览器控制面。事后 token 仍为 0、权限 3/0，WEB/gateway/system/device 容器均 healthy 且 ID/启动时间
   未变化。下一步只能二选一：修复应用内浏览器连接后沿用原批准重试，或由 owner 另批 Chrome CDP 可见窗口；
   两种路径均继续要求用户本人输入凭据、阻断非认证 API且不导出 token。
+- **Chrome CDP 认证续作检查点（2026-08-11，未关闭）**：登录对象已改为 tenant 123 `codex测试` /
+  user 132 `aotemane` / role 112，role 112 仅获 3900～3902。已处置首次错误租户登录产生的 tenant 1 /
+  user 115 六条令牌；已修复并仅部署 WEB 的重复登录表单、手工租户优先、回车验证码和 Axios 空值保护，
+  当前 `web-service` healthy。新流程已正确使用 `get-id-by-name`，login 与 permission-info 均 HTTP 200，
+  但因认证成功后固定进入 Dashboard，严格 allowlist 阻断 `/system/dict-data/list-all-simple` 及后续
+  `/video/alert/**`，UI 仍显示 `Network Error`。tenant 123 / user 132 当前存在 access IDs
+  6102/6104/6106 与 refresh IDs 6101/6103/6105，认证窗口不得继续重试。下一步先独立批准精确撤销这六行
+  并清除浏览器会话，再实现 permission-info 后停止、完全不进入 Router/Dashboard 的认证-only 测试入口；
+  不得用扩大 dict/video/业务 API allowlist 规避问题。详细证据见
+  [`browser-cdp-auth-progress-20260811.md`](./assets/td005-canary/browser-cdp-auth-progress-20260811.md)。当前仍未调用
+  电力 API、未写模板 Canary，identity→draft→validate→publish 独立写入门禁继续 OPEN。
+- **tenant 123 / user 132 令牌处置窗口已完成（2026-08-11）**：owner 以
+  `USER-APPROVAL-20260811-TD005-TOKEN-DISPOSAL-6101-6106` 精确批准后，先完成仓库外 custom-format
+  全库备份（1,117,845 字节，SHA-256
+  `c6b62581ff91d9517e460f423a32dcd769e0cddd061e0e8746f127635dc11d64`，TOC 1,039 行 PASS），再单事务
+  软撤销 access IDs 6102/6104/6106 与 refresh IDs 6101/6103/6105。前后断言 PASS、两次均 `UPDATE 3`；
+  六行 `deleted=1`、`expires_time` 未变，user 132 active access/refresh=0，全库活动计数从 2689/2689
+  精确降为 2686/2686。role 112 仍为允许 3/禁止 0，PostgreSQL 容器 healthy 且未重启。下一步不是重新
+  登录，而是先关闭认证-only harness 的“不得读取 token 值”和“失败一次即锁止”静态门禁并完成构建验证；
+  harness 部署、重新认证和 Canary 写入仍分别需要独立批准。
+- **认证-only harness 代码门禁已关闭（2026-08-11，未部署）**：独立入口仅在
+  `VITE_TD005_AUTH_HARNESS=true` 构建时注册；已移除 token 存在性读取、页面会话清理和状态重置入口，
+  首次租户查询前即永久锁定一次尝试，验证码成功/失败也由同一锁保证最多进入一次认证链。实际代码仅各有
+  一次 `loginApi` / `getUserInfo` 调用，不导入 Router、Dashboard、dict 或 video 依赖；认证成功停在
+  permission-info。`harness=true` 的 Vite 生产构建 PASS（192.2 秒），产物包含独立入口；仅出现仓库既有
+  Vue 宏与 Rollup 循环分块警告。ESLint 因既有 `micromark` 非导出子路径错误无法启动；全量
+  `vue-tsc` 仍被仓库既有跨模块类型错误阻断，过滤输出未发现 `td005-auth-harness` 局部错误，故这两项门禁
+  不标记 PASS。当前运行中的 `web-service` 未重建，未打开浏览器、未登录、未调用 API、
+  未清会话、未修改数据库或容器。下一步必须先形成并获得仅部署该 harness WEB 构建的独立批准；部署后仍需
+  新的单次认证批准，Canary 写入继续是第三个独立门禁。
+- **认证-only harness WEB 已完成受控部署（2026-08-11）**：owner 以
+  `USER-APPROVAL-20260811-TD005-AUTH-HARNESS-WEB-DEPLOY` 精确批准后，仅按
+  `VITE_GLOB_DEPLOY_PROFILE=full`、`VITE_TD005_AUTH_HARNESS=true` 构建并以 `--no-deps` 重建
+  `web-service`。新镜像
+  `sha256:6789fb7c54fb480c848679f1786ff86c2165de555c40aed583b253857377c89e`、新容器
+  `7f1b877fe479` 均 healthy/restartCount=0，运行静态文件包含 harness 路由与页面标识；原镜像
+  `sha256:cca2c5c4df72206769a1157e63c7f7ea1319f1c063fe6fd60ed09cc57998a047` 已保留专用回退标签。
+  其他容器 ID 全部未变；窗口前既有的 ZLMediaKit unhealthy 未越权处置。未打开浏览器、未登录、未调用 API、
+  未改数据库/配置且未写 Canary。下一步是新的认证-only 单次浏览器批准；该批准仍不得扩展为 Canary 写入。
+- **认证-only harness 单次认证已验收通过（2026-08-11）**：owner 以
+  `USER-APPROVAL-20260811-TD005-AUTH-HARNESS-SINGLE-AUTH` 精确批准，用户本人在独立可见 Chrome 输入 tenant
+  123 `codex测试` / user 132 `aotemane` 的现有凭据与验证码，`rememberMe=false`。tenant、captcha、login、
+  permission-info 四步均 `ok`，页面停在 harness 且永久锁定，未进入 Dashboard；Nginx 日志按 harness referrer
+  核对只出现五类批准认证端点，login 精确一次，无 dict/video/power/其他业务 API。只读数据库元数据确认
+  新增 access ID 6114（20:42:26 到期）与 refresh ID 6113 各一条，active=1/1；未查询 Token 字段，未刷新、
+  未改容器/数据库/配置且未写 Canary。identity→draft→validate→publish 写入继续等待独立精确批准。
+- **隔离模板 Canary 资产已重定向 tenant 123（2026-08-11，未提交/未执行）**：TD-005 升 1.0.42，
+  identity/draft/publish 从 `canary-meter-122` 统一改为 `canary-meter-123`，描述、发布原因、README、窗口申请
+  和生产合同测试同步 role 112 / user 132；manifest 升 1.1.0，三个请求 SHA-256 更新为
+  `db379af5…67c3` / `bb2090f6…2824` / `beeb9544…2413`，生产 Schema hash 仍为 `2431b8e7…bae5`。
+  Java 17 请求/Schema 合同 **1/1 PASS**，逐字节 manifest hash 复算一致；但 `gitCommit=UNCOMMITTED` 被
+  原有强门禁明确拒绝，tenant 123 十四类空事实的新鲜度复核也未执行。下一步必须先形成聚焦的资产基准提交并
+  回填 manifest，再做只读 tenant 123 运行前检；两项关闭前不得申请 Canary 写入。

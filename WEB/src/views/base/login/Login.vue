@@ -24,40 +24,9 @@ const title = computed(() => globSetting?.title ?? '')
 
 <template>
   <div :class="prefixCls" class="relative h-full min-h-full w-full overflow-hidden px-4">
-    <div :class="prefixCls" class="relative h-full min-h-full w-full overflow-hidden px-4">
-      <div class="absolute right-4 top-4 flex items-center">
-        <AppDarkModeToggle v-if="!sessionTimeout" class="enter-x mr-2" />
-        <AppLocalePicker v-if="!sessionTimeout && showLocale" class="enter-x xl:text-gray-600" :show-text="false" />
-      </div>
-
-      <span class="-enter-x xl:hidden">
-      <AppLogo :always-show-title="true" />
-    </span>
-
-      <div class="relative mx-auto h-full py-2 container sm:px-10">
-        <div class="h-full flex">
-          <div class="mr-4 hidden min-h-full pl-4 xl:w-6/12 xl:flex xl:flex-col">
-            <AppLogo class="-enter-x" />
-            <!--            <div class="my-auto">-->
-            <!--              <img :alt="title" src="@/assets/svg/login-box-bg.svg" class="-enter-x w-1/2 -mt-16">-->
-            <!--              <div class="-enter-x mt-10 font-medium text-white">-->
-            <!--                <span class="mt-4 inline-block text-3xl dark:text-gray-500"> {{ t('sys.login.signInTitle') }}</span>-->
-            <!--              </div>-->
-            <!--              <div class="-enter-x mt-5 font-normal text-white dark:text-gray-500">-->
-            <!--                {{ t('sys.login.signInDesc') }}-->
-            <!--              </div>-->
-            <!--            </div>-->
-          </div>
-          <div class="h-full w-full flex py-5 xl:my-0 xl:h-auto xl:w-6/12 xl:py-0">
-            <!-- eslint-disable max-len -->
-            <div :class="`${prefixCls}-form`" class="enter-x relative mx-auto my-auto w-full rounded-md px-5 py-8 shadow-md xl:ml-16 lg:w-2/4 sm:w-3/4 xl:w-auto xl:bg-transparent xl:p-4 sm:px-8 xl:shadow-none">
-              <!--   平台登录框           -->
-              <LoginForm />
-              <ForgetPasswordForm />
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="absolute right-4 top-4 flex items-center">
+      <AppDarkModeToggle v-if="!sessionTimeout" class="enter-x mr-2" />
+      <AppLocalePicker v-if="!sessionTimeout && showLocale" class="enter-x xl:text-gray-600" :show-text="false" />
     </div>
     <span class="-enter-x xl:hidden">
       <AppLogo :always-show-title="true" />

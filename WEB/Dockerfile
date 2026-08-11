@@ -93,6 +93,8 @@ RUN --mount=type=cache,target=/pnpm/store,id=web-pnpm-store \
 # 源码变更或 install_linux.sh clean 后通过 CACHE_BUST 使后续层失效（避免命中 CACHED 跳过 pnpm build）
 ARG CACHE_BUST=0
 ARG VITE_GLOB_DEPLOY_PROFILE=full
+# TD-005 Canary 认证-only harness：默认关闭，仅 Canary 构建显式传 true 才注册 harness 路由
+ARG VITE_TD005_AUTH_HARNESS=false
 RUN echo "cache-bust=${CACHE_BUST}" > /tmp/.web-cache-bust
 
 COPY . .
@@ -102,7 +104,8 @@ COPY . .
 ARG SKIP_VITE_BUILD=0
 
 # 部署形态与上传前缀写入生产环境（与 nginx /dev-api 路由一致；mini 无 Gateway 48080）
-RUN printf '\nVITE_GLOB_DEPLOY_PROFILE = %s\nVITE_GLOB_UPLOAD_URL = /dev-api\n' "${VITE_GLOB_DEPLOY_PROFILE}" >> .env.production
+# TD-005 harness 开关一并写入（默认 false，生产构建不含 harness 路由）
+RUN printf '\nVITE_GLOB_DEPLOY_PROFILE = %s\nVITE_GLOB_UPLOAD_URL = /dev-api\nVITE_TD005_AUTH_HARNESS = %s\n' "${VITE_GLOB_DEPLOY_PROFILE}" "${VITE_TD005_AUTH_HARNESS}" >> .env.production
 
 # vite 前端构建（约 2–10 分钟）；跨架构时通过 SKIP_VITE_BUILD=1 跳过，直接用预构建 dist-prebuilt
 RUN --mount=type=cache,target=/pnpm/store,id=web-pnpm-store \

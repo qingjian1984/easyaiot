@@ -14,7 +14,10 @@ const LOGIN_PATH = PageEnum.BASE_LOGIN
 
 // const ROOT_PATH = RootRoute.path
 
-const whitePathList: PageEnum[] = [LOGIN_PATH]
+const whitePathList: string[] = [LOGIN_PATH]
+// TD-005 Canary harness：构建启用时加入白名单，命中后直接 next()，不触发 dict/业务 API 加载
+if (import.meta.env.VITE_TD005_AUTH_HARNESS === 'true')
+  whitePathList.push('/td005-auth-harness')
 
 export function createPermissionGuard(router: Router) {
   const dictStore = useDictStoreWithOut()
