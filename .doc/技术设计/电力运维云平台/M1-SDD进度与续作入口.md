@@ -27,7 +27,7 @@
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
 | [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.3 | In Review |
-| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.32 | In Review |
+| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.34 | In Review |
 | [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.9 | In Review |
 | [TD-005 版本、绑定、审计与 Outbox 迁移回滚设计](./TD-005-版本绑定审计Outbox迁移与回滚设计.md) | 0.1.7 | In Review / Migration Candidate |
 | [TD-005 孤儿属性处置方案](./TD-005-孤儿属性处置方案.md) | 0.2.0 | Executed / Verified |
@@ -393,3 +393,13 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   全部 PASS。新增只读封装入口，只接受两份含 `BEGIN TRANSACTION READ ONLY` 且无 `COMMIT` 的 SQL，绝不
   引用 apply/rollback；封装实跑 PASS、两事务均 ROLLBACK，扩展合同 **2/2 PASS、0 skipped**，当前目标
   集合更新为 **58/58 PASS、0 skipped**。无数据库或容器写入。
+- **仓库外 HMAC Secret 已生成（2026-08-11，TD-005 1.0.33，尚未注入）**：owner 仅批准建议的仓库外
+  路径生成，系统 CSPRNG 48 随机字节编码为 64 字节 Base64；严格 UTF-8、无 BOM/换行/NUL、非 reparse、
+  仓库外和 ACL 门禁全部 PASS，宽泛读取主体为 0。未记录 Secret 内容或摘要，未重建 `iot-device`，
+  template/binding API=false，角色与数据库不变。下一步仍需独立批准 Secret 注入与单服务重建窗口。
+- **HMAC Secret 注入窗口已完成（2026-08-11，TD-005 1.0.34）**：owner 以精确令牌批准仅重建
+  `iot-device`。首次执行因 Kafka 消费组尚在重新入组而失败关闭并自动回退；回退后完整基线恢复。执行器
+  增加 6×5 秒有界等待并修复回退结果输出，`READY_ONLY` 与契约 **4/4 PASS** 后重试成功。最终容器
+  healthy、Config Tree=64 字节、明文环境=0、template/binding API=false、阶段 2 16/16 PASS、消费组
+  6 分区在线 lag=0、数据库积压 `0/0/0/0`、业务 `4/4/17`。role 111 关联=0、tenant 122 残留=0；当前
+  目标集合更新为 **59/59 PASS、0 skipped**。未授权角色、未启用 API、未写 Canary 数据。

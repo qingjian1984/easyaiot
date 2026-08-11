@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.32
+> 版本：1.0.34
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -45,6 +45,8 @@
 | 1.0.30 | 形成 tenant 122 隔离模板 Canary 三请求资产与独立窗口：单只读测点、无产品/设备/绑定，运行标识服务端或窗口生成，未执行 API 写入 |
 | 1.0.31 | 提交模板 API 与运行准备资产并将 Canary manifest 回填资产基准 commit af41b515；请求/Schema hash 不变，运行门禁仍 OPEN |
 | 1.0.32 | 修复 Windows PowerShell 管道未固定 UTF-8 导致 Canary 中文租户名假漂移；新增仅允许运行两份 READ ONLY SQL 的封装入口 |
+| 1.0.33 | owner 批准后在仓库外生成 HMAC Secret：CSPRNG 48 字节→64 字节 Base64，严格 UTF-8/无换行/收紧 ACL 预检 PASS；尚未注入或重建容器 |
+| 1.0.34 | owner 独立批准后完成 Config Tree Secret 注入与仅重建 iot-device；补 Kafka 重新入组有界等待，最终挂载 64/明文 0/API false/阶段 2 PASS |
 
 ## 1. 结论
 
@@ -599,6 +601,18 @@ PASS。新增 `run_readonly_preflight.ps1` 固定 UTF-8，并在执行前拒绝�
 或包含独立 `COMMIT` 的 SQL；封装入口不引用 apply/rollback。该修复不改变数据库或运行态。
 
 只读封装实跑 PASS，两事务均显式 ROLLBACK；扩展后的 Canary 角色与编码安全合同 2/2 PASS、0 skipped。
+
+1.0.33 按 `USER-APPROVAL-20260811-TD005-HMAC-SECRET-GENERATION` 仅执行仓库外 Secret 文件生成与只读
+预检。系统 CSPRNG 生成 48 个随机字节，Base64 文件为 64 UTF-8 字节；普通文件、非 reparse point、仓库
+外、无 BOM/换行/NUL、严格 UTF-8、长度和 ACL 全部门禁 PASS，宽泛读取主体为 0。未记录值或摘要，未将
+Secret 注入环境变量、Nacos、仓库或容器；`iot-device` 未重建，template/binding API 和角色均未变化。
+
+1.0.34 按 `USER-APPROVAL-20260811-TD005-HMAC-SECRET-INJECTION` 执行。首次挂载后因 Kafka 消费组尚在
+重新入组，阶段 2 后检失败关闭并自动回退；回退后挂载 0、API=false、消费组恢复且基线全 PASS。执行器
+因此增加 6×5 秒有界重新入组等待，并修复回退结果输出被抑制的问题；`READY_ONLY` 与契约测试 4/4 PASS
+后在同一批准范围重试成功。最终 `iot-device` healthy，Config Tree 挂载 64 字节，容器明文环境 Secret=0，
+template/binding API=false，阶段 2 16 项、数据库基线和消费组全部 PASS。角色关联与 tenant 122 事实仍为
+0；未启用 API、未授权角色、未写 Canary 数据。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

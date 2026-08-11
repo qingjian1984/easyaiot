@@ -69,6 +69,18 @@ class PowerModelSecretMountContractTest {
         assertFalse(script.contains("WriteAllBytes"));
     }
 
+    @Test
+    void injectionWaitsForKafkaRejoinAndKeepsRollbackResultVisible() throws Exception {
+        String script = Files.readString(root().resolve(
+                ".scripts/docker/power_model_secret_injection_window.ps1"));
+        assertTrue(script.contains("function Wait-Stage2Baseline"));
+        assertTrue(script.contains("param([int]$Attempts = 6, [int]$IntervalSeconds = 5)"));
+        assertTrue(script.contains("Start-Sleep -Seconds $IntervalSeconds"));
+        assertTrue(script.contains("if (-not (Wait-Stage2Baseline))"));
+        assertTrue(script.contains("ROLLBACK_RESULT=PASS target=iot-device healthy=true stage2=true"));
+        assertFalse(script.contains("[void](Invoke-BaseRollback)"));
+    }
+
     private static Path root() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
         while (current != null) {

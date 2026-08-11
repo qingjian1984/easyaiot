@@ -52,25 +52,34 @@ function Wait-DeviceHealthy {
     $false
 }
 
+function Wait-Stage2Baseline {
+    param([int]$Attempts = 6, [int]$IntervalSeconds = 5)
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        if (Test-Stage2Baseline) { return $true }
+        if ($attempt -lt $Attempts) { Start-Sleep -Seconds $IntervalSeconds }
+    }
+    return $false
+}
+
 function Invoke-BaseRollback {
-    'ROLLBACK_STARTED target=iot-device overlay=false' | Write-Output
+    'ROLLBACK_STARTED target=iot-device overlay=false' | Write-Host
     $rollback = Invoke-Native -File 'docker' -Arguments @(
         'compose', '-f', $baseCompose, 'up', '-d', '--no-deps', '--force-recreate', 'iot-device'
     )
     if ($rollback.Code -ne 0) {
-        'ROLLBACK_RESULT=ERROR reason=compose-recreate-failed' | Write-Output
+        'ROLLBACK_RESULT=ERROR reason=compose-recreate-failed' | Write-Host
         return $false
     }
     if (-not (Wait-DeviceHealthy)) {
-        'ROLLBACK_RESULT=ERROR reason=health-timeout' | Write-Output
+        'ROLLBACK_RESULT=ERROR reason=health-timeout' | Write-Host
         return $false
     }
-    if (-not (Test-Stage2Baseline)) {
-        'ROLLBACK_RESULT=ERROR reason=stage2-baseline-failed' | Write-Output
+    if (-not (Wait-Stage2Baseline)) {
+        'ROLLBACK_RESULT=ERROR reason=stage2-baseline-failed' | Write-Host
         return $false
     }
-    'ROLLBACK_RESULT=PASS target=iot-device healthy=true stage2=true' | Write-Output
-    $true
+    'ROLLBACK_RESULT=PASS target=iot-device healthy=true stage2=true' | Write-Host
+    return $true
 }
 
 $fileCheckLines = @(& $secretPreflight -SecretFile $SecretFile 2>&1)
@@ -114,19 +123,19 @@ try {
     )
     if ($apply.Code -ne 0) {
         'WINDOW_APPLY=ERROR reason=compose-recreate-failed' | Write-Output
-        [void](Invoke-BaseRollback)
+        $rollbackSucceeded = Invoke-BaseRollback
         exit 1
     }
     if (-not (Wait-DeviceHealthy)) {
         'WINDOW_APPLY=ERROR reason=health-timeout' | Write-Output
-        [void](Invoke-BaseRollback)
+        $rollbackSucceeded = Invoke-BaseRollback
         exit 1
     }
 
     $inspectResult = Invoke-Native -File 'docker' -Arguments @('inspect', 'iot-device')
     if ($inspectResult.Code -ne 0) {
         'WINDOW_APPLY=ERROR reason=inspect-failed' | Write-Output
-        [void](Invoke-BaseRollback)
+        $rollbackSucceeded = Invoke-BaseRollback
         exit 1
     }
     $container = @($inspectResult.Text | ConvertFrom-Json)[0]
@@ -149,12 +158,12 @@ try {
     } else { 0 }
     if ($plainSecretBytes -ne 0 -or $mountBytes -lt 32) {
         'WINDOW_APPLY=ERROR reason=secret-metadata-invariant' | Write-Output
-        [void](Invoke-BaseRollback)
+        $rollbackSucceeded = Invoke-BaseRollback
         exit 1
     }
-    if (-not (Test-Stage2Baseline)) {
+    if (-not (Wait-Stage2Baseline)) {
         'WINDOW_APPLY=ERROR reason=stage2-postcheck' | Write-Output
-        [void](Invoke-BaseRollback)
+        $rollbackSucceeded = Invoke-BaseRollback
         exit 1
     }
     'WINDOW_RESULT=PASS target=iot-device healthy=true source=configtree-file plainEnvironmentBytes=0 mountedBytesGe32=true apiEnabled=false' | Write-Output

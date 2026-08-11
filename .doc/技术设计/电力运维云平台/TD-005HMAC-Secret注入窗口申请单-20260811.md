@@ -1,9 +1,9 @@
 # TD-005 HMAC Secret 注入窗口申请单（2026-08-11）
 
-> 状态：OPEN / 待 owner 独立批准
+> 状态：EXECUTED / VERIFIED
 > 目标：`iot-device` 运行容器
 > 双基线：平台功能计划 1.4.0；EasyAIoT 项目开发宪法 1.5.0
-> 依据：TD-005 1.0.28
+> 依据：TD-005 1.0.34
 
 ## 1. 申请范围
 
@@ -63,6 +63,31 @@ Outbox/Inbox/release/projection=`0/0/0/0`，invalid index=0，业务基线=`4/4/
 - 上述 §2.1 的 16 项阶段 2 预检在重建后仍全部 PASS。
 
 验收记录只能写 `configured=true`、来源和字节门限结果，不得写值或摘要。
+
+### 3.1 Secret 生成记录（不含注入授权）
+
+2026-08-11，owner 明确批准在建议的仓库外目录生成 Secret，记录为
+`USER-APPROVAL-20260811-TD005-HMAC-SECRET-GENERATION`。已使用系统 CSPRNG 生成 48 个随机字节并编码为
+无 BOM/无换行的 Base64 文件，最终文件长度 64 UTF-8 字节；目录与文件 ACL 仅保留当前运维主体、SYSTEM
+和 Administrators，预检确认 `outsideRepository=true`、严格 UTF-8、长度门限 PASS、
+`broadReadPrincipals=0`。不记录 Secret 内容或摘要。
+
+该批准仅覆盖文件生成与只读预检；未授权 Compose 挂载、`iot-device` 重建或任何 API/角色/数据变更。
+
+### 3.2 Secret 注入执行记录
+
+owner 以 `USER-APPROVAL-20260811-TD005-HMAC-SECRET-INJECTION` 明确批准使用已生成文件，仅重建
+`iot-device`，两个 API 保持关闭且不授权角色、不写 Canary 数据。
+
+首次执行完成挂载后，容器已 healthy，但 Kafka 消费组仍在重新入组，阶段 2 即时后检失败关闭；执行器按
+设计使用基础 Compose 自动回退。8 秒后独立验收确认挂载=0、明文=0、两个 API=false、消费组恢复 6 分区
+在线且 lag=0，阶段 2 全 PASS。该过程没有数据库、角色或 Canary 写入。
+
+随后修正执行器：容器 healthy 后对阶段 2/Kafka 重新入组增加 6 次、每次间隔 5 秒的有界等待，并让自动
+回退结果不再被输出抑制。PowerShell 语法、`READY_ONLY` 容器 ID 不变和契约测试 4/4 PASS 后，在同一批准
+范围重试成功。最终独立验收：`iot-device` healthy；Config Tree 挂载 64 字节；明文环境 Secret=0；
+template API=false、binding API=false；阶段 2 16 项全 PASS；role 111 的 TD-005 关联=0；tenant 122 的
+14 类事实残留=0。未记录 Secret 内容或摘要。
 
 冻结执行入口为 `.scripts/docker/power_model_secret_injection_window.ps1`。默认不带 `-Execute` 时只运行
 文件、Compose 与阶段 2 基线检查并返回 `READY_ONLY`；实际执行必须同时提供 `-Execute` 和精确批准令牌
