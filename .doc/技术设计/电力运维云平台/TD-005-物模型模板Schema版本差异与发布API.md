@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.44
+> 版本：1.0.45
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -57,6 +57,7 @@
 | 1.0.42 | tenant 123 / user 132 认证-only harness 验收 PASS；Canary 三请求资产重定向为 `canary-meter-123` 并重算哈希，请求/Schema 合同 1/1 PASS，manifest 基准提交仍 OPEN |
 | 1.0.43 | tenant 123 Canary 资产基准提交 `1ec8e801` 已形成并回填 manifest；完整资产/Schema/网关合同复验通过后关闭可追溯门禁 |
 | 1.0.44 | 新增 tenant 123 双库只读前检与静态合同；实跑确认身份/权限 3/0、十四类业务事实残留 0，运行前新鲜度门禁 PASS |
+| 1.0.45 | 重认证因白名单外 logout 判失败并完成四令牌收敛；网络门禁改为页面内置、先全拒绝后开放，合同与 full harness 构建 PASS，尚未部署 |
 
 ## 1. 结论
 
@@ -704,6 +705,15 @@ tenant 123 `codex测试`、user 132 `aotemane`、role 112、允许菜单 3900～
 双库执行返回允许权限 3、禁止权限 0、残留 0，运行前新鲜度门禁转为 **PASS**。20:33:11 仅按 ID/状态/到期
 时间核对 access 6114 与 refresh 6113 均 active，未查询 Token 字段。上述证据不授权业务 API 调用或 Canary
 写入，identity→draft→validate→publish 仍须 owner 独立精确批准。
+
+1.0.45 的重新认证窗口发现旧 CDP 注入门禁未能跨页面重载保持：tenant 查询 401 后 Axios 调用了白名单外
+logout，尽管随后五类认证请求成功，窗口仍按失败关闭。独立收敛窗口在 custom-format 全库备份 hash/TOC
+通过后，仅软撤销 access 6114/6116 与 refresh 6113/6115；tenant 123 / user 132 未删除令牌恢复 0/0，权限
+3/0 与十四类空事实未漂移。修复把唯一网络门禁作为 harness 页面最先执行模块，先将 fetch/XHR/sendBeacon/
+WebSocket/EventSource 全部 fail-closed，全部网络面安装成功后才开放五类认证路径；logout、refresh、跨域、
+重复安装和部分安装失败合同 PASS。full+harness 生产构建 PASS 且产物包含门禁标记，但尚未部署；再次认证、
+Canary 写入仍分别需要独立批准。执行证据见
+[`auth-harness-reauth-failure-containment-20260811.md`](./assets/td005-canary/auth-harness-reauth-failure-containment-20260811.md)。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

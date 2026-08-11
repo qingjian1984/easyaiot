@@ -512,3 +512,12 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   `iot-device20` 十四类 Canary 业务事实残留=0。20:33:11 只读核对 access 6114 / refresh 6113 的 ID、状态和
   到期时间均 active，未查询 Token 字段。运行前身份/权限/空事实新鲜度门禁已关闭；下一步是 owner 独立批准
   identity→draft→validate→publish 单次 Canary 写入，现有认证和只读前检均不构成该授权。
+- **认证重试失败、令牌已收敛，网络门禁修复已构建但未部署（2026-08-11，TD-005 1.0.45）**：重认证
+  前已无读取地清空浏览器两类 Web Storage；20:45:50 tenant 401 后旧 Axios 流程调用白名单外 logout 401，
+  因此即使随后 tenant/captcha/login/permission-info 全 200 且 login 一次，窗口仍按失败关闭。独立批准后，
+  仓库外备份 1,118,259 字节、SHA-256 `7fc73563…bc16`、TOC 1,039 行 PASS；单事务仅软撤销 access
+  6114/6116 与 refresh 6113/6115，各 `UPDATE 2`，user 132 未删除令牌恢复 0/0，权限 3/0、十四类事实 0。
+  新门禁作为 harness 页面最先执行模块，先全拒绝五类网络面，再开放五个认证 API；logout/refresh/跨域/
+  部分安装失败合同 PASS，full+harness 生产构建 PASS。当前 WEB 尚未部署修复；下一步须先独立批准仅重建
+  web-service，之后另批单次认证，Canary 写入继续 OPEN。详见
+  [`auth-harness-reauth-failure-containment-20260811.md`](./assets/td005-canary/auth-harness-reauth-failure-containment-20260811.md)。

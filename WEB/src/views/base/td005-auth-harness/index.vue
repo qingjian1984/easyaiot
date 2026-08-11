@@ -22,6 +22,8 @@
  */
 import { computed, reactive, ref } from 'vue'
 
+import './td005AuthAllowlist.js'
+
 import { Button, Form, Input } from 'ant-design-vue'
 
 import { Verify } from '@/components/Verifition'

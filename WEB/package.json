@@ -43,7 +43,8 @@
     "reinstall": "rimraf pnpm-lock.yaml && rimraf node_modules && npm run bootstrap",
     "gen:icon": "esno ./build/generate/icon/index.ts",
     "verify:jcs-golden": "esno ./build/script/verifyJcsGolden.ts",
-    "verify:event-contracts": "esno ./build/script/verifyEventContracts.ts"
+    "verify:event-contracts": "esno ./build/script/verifyEventContracts.ts",
+    "verify:td005-auth-allowlist": "node ./build/script/verifyTd005AuthAllowlist.mjs"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
