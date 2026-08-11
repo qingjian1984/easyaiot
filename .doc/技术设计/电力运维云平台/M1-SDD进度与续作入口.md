@@ -447,3 +447,9 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   0、允许权限 3、禁止权限 0、tenant 122 残留 0。未打开页面、未登录、未调用 API、未写 Canary。已形成
   独立浏览器认证窗口，要求用户本人输入现有凭据、`rememberMe=false`、token 仅留浏览器且不导出；下一步
   先取得该认证窗口批准，仍不等同于 Canary 写入批准。
+- **浏览器认证窗口获批但未执行（2026-08-11，TD-005 1.0.41）**：owner 以
+  `USER-APPROVAL-20260811-TD005-CANARY-BROWSER-AUTH` 批准后，应用内浏览器控制在导航前被主机用户配置
+  访问权限阻断，未打开 8888、未发租户/验证码/login/permission-info 请求。按安全规则未切换未批准的
+  浏览器控制面。事后 token 仍为 0、权限 3/0，WEB/gateway/system/device 容器均 healthy 且 ID/启动时间
+  未变化。下一步只能二选一：修复应用内浏览器连接后沿用原批准重试，或由 owner 另批 Chrome CDP 可见窗口；
+  两种路径均继续要求用户本人输入凭据、阻断非认证 API且不导出 token。
