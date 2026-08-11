@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.42
+> 版本：1.0.43
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -55,6 +55,7 @@
 | 1.0.40 | owner 批准后仅以 full 构建并首次创建 healthy 的 WEB；依赖容器和 token 基线未变，形成不导出 token 的独立浏览器认证窗口 |
 | 1.0.41 | 浏览器认证窗口获批，但应用内浏览器在导航前因主机权限无法建立控制连接；登录未执行、token 仍为 0，待修复连接或另批 Chrome CDP |
 | 1.0.42 | tenant 123 / user 132 认证-only harness 验收 PASS；Canary 三请求资产重定向为 `canary-meter-123` 并重算哈希，请求/Schema 合同 1/1 PASS，manifest 基准提交仍 OPEN |
+| 1.0.43 | tenant 123 Canary 资产基准提交 `1ec8e801` 已形成并回填 manifest；完整资产/Schema/网关合同复验通过后关闭可追溯门禁 |
 
 ## 1. 结论
 
@@ -687,6 +688,12 @@ login、permission-info 四步均成功，页面未进入 Dashboard，Nginx 仅�
 测点、空 events/services、无 tenant/actor/draftId/ETag/idempotency/requestId/secret 运行事实。为避免伪造
 冻结状态，manifest 暂保留 `gitCommit=UNCOMMITTED`；形成实际资产基准提交并回填前，不得申请或执行
 identity→draft→validate→publish。tenant 123 的 14 类空事实新鲜度复核也保持 OPEN。
+
+1.0.43 已创建聚焦资产基准提交 `1ec8e801d33436b7d176709c45c115faefe3b41c`，该提交包含 tenant 123
+identity/draft/publish 的精确字节、合同测试、认证 harness 与执行证据；用户配置和临时浏览器白名单未纳入。
+manifest 已回填该 40 位提交号并保持三个请求及生产 Schema 哈希不变。Java 17 完整资产合同 3/3 PASS，
+覆盖请求/Schema、manifest 精确字节/真实提交格式和网关 `/api/v1/power/**` 原样路由。该提交与测试只关闭
+资产可追溯门禁，不授权任何运行调用；tenant 123 十四类空事实新鲜度复核仍是后续门禁。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

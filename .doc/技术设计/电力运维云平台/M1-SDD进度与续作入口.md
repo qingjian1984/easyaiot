@@ -499,10 +499,10 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   核对只出现五类批准认证端点，login 精确一次，无 dict/video/power/其他业务 API。只读数据库元数据确认
   新增 access ID 6114（20:42:26 到期）与 refresh ID 6113 各一条，active=1/1；未查询 Token 字段，未刷新、
   未改容器/数据库/配置且未写 Canary。identity→draft→validate→publish 写入继续等待独立精确批准。
-- **隔离模板 Canary 资产已重定向 tenant 123（2026-08-11，未提交/未执行）**：TD-005 升 1.0.42，
+- **隔离模板 Canary 资产已重定向并冻结 tenant 123（2026-08-11，未执行）**：TD-005 升 1.0.43，
   identity/draft/publish 从 `canary-meter-122` 统一改为 `canary-meter-123`，描述、发布原因、README、窗口申请
   和生产合同测试同步 role 112 / user 132；manifest 升 1.1.0，三个请求 SHA-256 更新为
   `db379af5…67c3` / `bb2090f6…2824` / `beeb9544…2413`，生产 Schema hash 仍为 `2431b8e7…bae5`。
-  Java 17 请求/Schema 合同 **1/1 PASS**，逐字节 manifest hash 复算一致；但 `gitCommit=UNCOMMITTED` 被
-  原有强门禁明确拒绝，tenant 123 十四类空事实的新鲜度复核也未执行。下一步必须先形成聚焦的资产基准提交并
-  回填 manifest，再做只读 tenant 123 运行前检；两项关闭前不得申请 Canary 写入。
+  聚焦资产基准提交 `1ec8e801d33436b7d176709c45c115faefe3b41c` 已形成并回填 manifest；Java 17 完整
+  请求/Schema/manifest/网关合同 **3/3 PASS**，逐字节 hash 与 40 位提交格式门禁关闭。tenant 123 十四类
+  空事实的新鲜度复核仍未执行；下一步只允许准备并运行 read-only tenant 123 前检，关闭前不得申请 Canary 写入。

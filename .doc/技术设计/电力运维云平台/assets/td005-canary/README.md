@@ -27,8 +27,7 @@ Canary 写请求。
 每个写请求使用窗口内新生成且互不相同的 `Idempotency-Key`；发布另带窗口内新生成的 `X-Request-Id`。
 这些运行标识不得预写入资产。tenant、actor、draftId、ETag、traceId 和服务端 ID 均不得由资产伪造。
 
-`manifest.json` 冻结三个请求文件及生产 Schema 的逐字节 SHA-256。tenant 123 资产重定向后暂标
-`gitCommit=UNCOMMITTED`；必须先形成实际资产基准提交并回填提交号，才能申请运行窗口。提交号只关闭资产
-可追溯门禁，不替代任何运行批准。
+`manifest.json` 冻结三个请求文件及生产 Schema 的逐字节 SHA-256，并指向包含 tenant 123 请求资产的基准
+提交 `1ec8e801d33436b7d176709c45c115faefe3b41c`。提交号只关闭资产可追溯门禁，不替代任何运行批准。
 
 形成或验证本目录不授权调用 API，也不授权角色、Secret 注入、容器重建、API 开启或数据库写入。
