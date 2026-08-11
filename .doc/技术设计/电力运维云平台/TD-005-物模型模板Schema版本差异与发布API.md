@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.43
+> 版本：1.0.44
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -56,6 +56,7 @@
 | 1.0.41 | 浏览器认证窗口获批，但应用内浏览器在导航前因主机权限无法建立控制连接；登录未执行、token 仍为 0，待修复连接或另批 Chrome CDP |
 | 1.0.42 | tenant 123 / user 132 认证-only harness 验收 PASS；Canary 三请求资产重定向为 `canary-meter-123` 并重算哈希，请求/Schema 合同 1/1 PASS，manifest 基准提交仍 OPEN |
 | 1.0.43 | tenant 123 Canary 资产基准提交 `1ec8e801` 已形成并回填 manifest；完整资产/Schema/网关合同复验通过后关闭可追溯门禁 |
+| 1.0.44 | 新增 tenant 123 双库只读前检与静态合同；实跑确认身份/权限 3/0、十四类业务事实残留 0，运行前新鲜度门禁 PASS |
 
 ## 1. 结论
 
@@ -694,6 +695,15 @@ identity/draft/publish 的精确字节、合同测试、认证 harness 与执行
 manifest 已回填该 40 位提交号并保持三个请求及生产 Schema 哈希不变。Java 17 完整资产合同 3/3 PASS，
 覆盖请求/Schema、manifest 精确字节/真实提交格式和网关 `/api/v1/power/**` 原样路由。该提交与测试只关闭
 资产可追溯门禁，不授权任何运行调用；tenant 123 十四类空事实新鲜度复核仍是后续门禁。
+
+1.0.44 新增 `.scripts/postgresql/td005-canary-tenant123/` 双库只读前检：`ruoyi-vue-pro20` 精确核对
+tenant 123 `codex测试`、user 132 `aotemane`、role 112、允许菜单 3900～3902 与禁止菜单 3903～3906；
+`iot-device20` 汇总产品、设备、模板、版本、成员索引、绑定、审计、Outbox/Inbox、collector release、引用标记、
+协调审计、workload projection 与幂等记录十四类事实。两个 SQL 均使用 `BEGIN TRANSACTION READ ONLY` 并
+显式 `ROLLBACK`，包装器拒绝非只读事务或 `COMMIT` 并固定 UTF-8。Java 17 完整合同 **4/4 PASS**；实际
+双库执行返回允许权限 3、禁止权限 0、残留 0，运行前新鲜度门禁转为 **PASS**。20:33:11 仅按 ID/状态/到期
+时间核对 access 6114 与 refresh 6113 均 active，未查询 Token 字段。上述证据不授权业务 API 调用或 Canary
+写入，identity→draft→validate→publish 仍须 owner 独立精确批准。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

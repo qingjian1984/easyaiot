@@ -506,3 +506,9 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   聚焦资产基准提交 `1ec8e801d33436b7d176709c45c115faefe3b41c` 已形成并回填 manifest；Java 17 完整
   请求/Schema/manifest/网关合同 **3/3 PASS**，逐字节 hash 与 40 位提交格式门禁关闭。tenant 123 十四类
   空事实的新鲜度复核仍未执行；下一步只允许准备并运行 read-only tenant 123 前检，关闭前不得申请 Canary 写入。
+- **tenant 123 Canary 只读运行前检已通过（2026-08-11，TD-005 1.0.44，未写入）**：新增双库只读 SQL、
+  UTF-8 包装器及防漂移合同，Java 17 完整合同 **4/4 PASS**。实际在 `postgres-server` 执行后，两事务均
+  `ROLLBACK`；tenant 123 / user 132 / role 112 身份精确匹配，允许菜单 3900～3902=3、禁止 3903～3906=0，
+  `iot-device20` 十四类 Canary 业务事实残留=0。20:33:11 只读核对 access 6114 / refresh 6113 的 ID、状态和
+  到期时间均 active，未查询 Token 字段。运行前身份/权限/空事实新鲜度门禁已关闭；下一步是 owner 独立批准
+  identity→draft→validate→publish 单次 Canary 写入，现有认证和只读前检均不构成该授权。

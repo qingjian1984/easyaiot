@@ -10,12 +10,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** TD-005 1.0.41：tenant 123 隔离模板 Canary 请求资产静态合同。 */
+/** TD-005 1.0.44：tenant 123 隔离模板 Canary 资产与只读前检静态合同。 */
 class PowerModelCanaryAssetContractTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -84,6 +85,39 @@ class PowerModelCanaryAssetContractTest {
         assertTrue(route.contains("Path=/api/v1/power/**"));
         assertFalse(route.contains("StripPrefix"));
         assertFalse(route.contains("RewritePath"));
+    }
+
+    @Test
+    void tenant123PreflightRemainsReadOnlyAndChecksExactCanaryScope() throws Exception {
+        Path directory = root().resolve(".scripts/postgresql/td005-canary-tenant123");
+        String identity = Files.readString(directory.resolve("preflight_canary_identity.sql"));
+        String tenantData = Files.readString(directory.resolve("preflight_canary_tenant_data.sql"));
+        String wrapper = Files.readString(directory.resolve("run_readonly_preflight.ps1"));
+
+        for (String sql : List.of(identity, tenantData)) {
+            assertTrue(sql.contains("BEGIN TRANSACTION READ ONLY;"));
+            assertTrue(sql.contains("ROLLBACK;"));
+            assertFalse(sql.matches("(?is).*\\bCOMMIT\\s*;.*"));
+            assertFalse(sql.contains("tenant_id = 122"));
+        }
+        assertTrue(identity.contains("id = 123 AND name = 'codex测试'"));
+        assertTrue(identity.contains("id = 132 AND tenant_id = 123 AND username = 'aotemane'"));
+        assertTrue(identity.contains("id = 112 AND tenant_id = 123"));
+        assertTrue(identity.contains("menu_id IN (3900, 3901, 3902)"));
+        assertTrue(identity.contains("menu_id IN (3903, 3904, 3905, 3906)"));
+
+        for (String table : List.of(
+                "product", "device", "power_model_template", "power_model_template_version",
+                "power_model_member_index", "power_product_model_binding", "power_model_audit",
+                "power_model_release_outbox", "power_model_event_inbox", "iot_collector_config_release",
+                "power_model_template_reference_mark", "power_model_coordination_audit",
+                "collector_workload_binding_projection", "power_idempotency_record")) {
+            assertTrue(tenantData.contains("FROM public." + table + " WHERE tenant_id = 123"), table);
+        }
+        assertTrue(wrapper.contains("preflight_canary_identity.sql"));
+        assertTrue(wrapper.contains("preflight_canary_tenant_data.sql"));
+        assertTrue(wrapper.contains("[Text.UTF8Encoding]::new($false)"));
+        assertTrue(wrapper.contains("TD005_CANARY_PREFLIGHT_NOT_READ_ONLY"));
     }
 
     private static String sha256(Path path) throws Exception {
