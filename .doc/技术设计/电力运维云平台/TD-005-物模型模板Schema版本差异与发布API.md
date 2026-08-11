@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.31
+> 版本：1.0.32
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -44,6 +44,7 @@
 | 1.0.29 | 形成默认只读的 Secret 注入窗口执行器：双因子执行门禁、仅重建 iot-device、健康/挂载/阶段 2 复验及基础 Compose 自动回退 |
 | 1.0.30 | 形成 tenant 122 隔离模板 Canary 三请求资产与独立窗口：单只读测点、无产品/设备/绑定，运行标识服务端或窗口生成，未执行 API 写入 |
 | 1.0.31 | 提交模板 API 与运行准备资产并将 Canary manifest 回填资产基准 commit af41b515；请求/Schema hash 不变，运行门禁仍 OPEN |
+| 1.0.32 | 修复 Windows PowerShell 管道未固定 UTF-8 导致 Canary 中文租户名假漂移；新增仅允许运行两份 READ ONLY SQL 的封装入口 |
 
 ## 1. 结论
 
@@ -590,6 +591,14 @@ draftId、ETag、幂等键、requestId 或 secret。未来执行顺序固定为 
 `af41b51517bee12e36a50c75b6009e96d76f4dea`，Canary manifest 已回填该资产基准提交；三个请求及生产
 Schema 均相对该提交无漂移。manifest 仍为 `REVIEW_CANDIDATE`，提交号只关闭可追溯门禁，不授权角色、
 Secret 注入、容器重建、template API 开启或 Canary 写入。
+
+1.0.32 提交后只读复验首次因 Windows PowerShell native pipeline 默认编码误报
+`TD005_CANARY_TENANT_MISMATCH`；独立查询确认 tenant 122、role 111、活动用户 1 和 TD-005 关联 0 均未
+漂移。显式设置无 BOM UTF-8 后，角色 preflight、tenant 14 类空事实 preflight 与阶段 2 16 项基线全部
+PASS。新增 `run_readonly_preflight.ps1` 固定 UTF-8，并在执行前拒绝不含 `BEGIN TRANSACTION READ ONLY`
+或包含独立 `COMMIT` 的 SQL；封装入口不引用 apply/rollback。该修复不改变数据库或运行态。
+
+只读封装实跑 PASS，两事务均显式 ROLLBACK；扩展后的 Canary 角色与编码安全合同 2/2 PASS、0 skipped。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

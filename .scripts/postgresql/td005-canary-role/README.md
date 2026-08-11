@@ -9,3 +9,12 @@
 执行前必须依次运行两个只读 preflight、重新备份 `ruoyi-vue-pro20` 并取得独立角色授权批准。apply/rollback
 均要求 `psql -1 -v ON_ERROR_STOP=1`，以 5 秒有界锁关闭并发重复；verify 必须确认恰好三项授权且四项禁止
 权限均不存在。普通“继续”不构成授权批准。
+
+Windows PowerShell 必须使用只读封装入口：
+
+```powershell
+.scripts/postgresql/td005-canary-role/run_readonly_preflight.ps1
+```
+
+该入口显式把 native pipeline 固定为 UTF-8；禁止直接使用未设置 `$OutputEncoding` 的
+`Get-Content | docker exec -i`，否则中文租户名可能被错误编码并误报 `TD005_CANARY_TENANT_MISMATCH`。

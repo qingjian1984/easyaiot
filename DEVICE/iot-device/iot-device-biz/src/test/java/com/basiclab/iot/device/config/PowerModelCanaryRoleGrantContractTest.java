@@ -47,6 +47,21 @@ class PowerModelCanaryRoleGrantContractTest {
         assertFalse(hasStandaloneCommit(rollback));
     }
 
+    @Test
+    void windowsWrapperForcesUtf8AndCanOnlyRunReadOnlyPreflights() throws Exception {
+        Path directory = root().resolve(".scripts/postgresql/td005-canary-role");
+        String wrapper = Files.readString(directory.resolve("run_readonly_preflight.ps1"));
+        assertTrue(wrapper.contains("Get-Content -Raw -Encoding UTF8"));
+        assertTrue(wrapper.contains("$OutputEncoding = [Text.UTF8Encoding]::new($false)"));
+        assertTrue(wrapper.contains("preflight_canary_role.sql"));
+        assertTrue(wrapper.contains("preflight_canary_tenant_data.sql"));
+        assertTrue(wrapper.contains("BEGIN TRANSACTION READ ONLY"));
+        assertTrue(wrapper.contains("TD005_CANARY_PREFLIGHT_NOT_READ_ONLY"));
+        assertFalse(wrapper.contains("apply_canary_role_grant.sql"));
+        assertFalse(wrapper.contains("rollback_canary_role_grant.sql"));
+        assertFalse(wrapper.contains("docker cp"));
+    }
+
     private static Path root() {
         Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
         while (current != null) {

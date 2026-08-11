@@ -27,7 +27,7 @@
 | [TD-002 SQLite Outbox 与恢复迁移](./TD-002-SQLite-Outbox与恢复迁移.md) | 1.0.2 | In Review |
 | [TD-003 遥测 Inbox、ACK 与时序投影](./TD-003-遥测Inbox-ACK与时序投影.md) | 1.0.1 | In Review |
 | [TD-004 电力对象、别名、二维码与历史编码兼容](./TD-004-电力对象别名二维码与历史编码兼容.md) | 1.0.3 | In Review |
-| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.31 | In Review |
+| [TD-005 物模型模板 Schema、版本差异与发布 API](./TD-005-物模型模板Schema版本差异与发布API.md) | 1.0.32 | In Review |
 | [TD-005 运行模型兼容与删除链技术设计](./TD-005-运行模型兼容与删除链技术设计.md) | 0.1.9 | In Review |
 | [TD-005 版本、绑定、审计与 Outbox 迁移回滚设计](./TD-005-版本绑定审计Outbox迁移与回滚设计.md) | 0.1.7 | In Review / Migration Candidate |
 | [TD-005 孤儿属性处置方案](./TD-005-孤儿属性处置方案.md) | 0.2.0 | Executed / Verified |
@@ -387,3 +387,9 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   `af41b51517bee12e36a50c75b6009e96d76f4dea`；Canary manifest 已回填该提交，三个请求与生产 Schema
   相对提交无漂移。用户配置 `.claude/settings.json`、`CLAUDE.md`、`DEVICE/.claude/` 未纳入提交。该动作
   只关闭资产可追溯门禁，四项运行批准仍为 OPEN。
+- **提交后 Canary 只读复验与 UTF-8 调用修复（2026-08-11，TD-005 1.0.32）**：首次复验因 Windows
+  PowerShell native pipeline 未固定 UTF-8，中文租户名被误编码并触发假 `TENANT_MISMATCH`；独立事实查询
+  确认 tenant/role/用户/权限关联无漂移。显式 UTF-8 后，角色与 tenant 空数据 preflight、阶段 2 运行基线
+  全部 PASS。新增只读封装入口，只接受两份含 `BEGIN TRANSACTION READ ONLY` 且无 `COMMIT` 的 SQL，绝不
+  引用 apply/rollback；封装实跑 PASS、两事务均 ROLLBACK，扩展合同 **2/2 PASS、0 skipped**，当前目标
+  集合更新为 **58/58 PASS、0 skipped**。无数据库或容器写入。
