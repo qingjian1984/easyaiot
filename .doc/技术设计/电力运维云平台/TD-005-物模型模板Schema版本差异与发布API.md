@@ -1,7 +1,7 @@
 # TD-005：物模型模板 Schema、版本差异与发布 API
 
 > 文档状态：In Review  
-> 版本：1.0.34
+> 版本：1.0.35
 > 日期：2026-08-11
 > 适用版本：standard / full 共用同一实现；mini 不创建、导入、发布、绑定或升级电力物模型模板  
 > 上游：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[SPEC-001 1.3.0](../../规格/电力运维云平台/SPEC-001-电力对象与测点编码规范.md)、[SPEC-002 1.3.0](../../规格/电力运维云平台/SPEC-002-电力设备物模型模板.md)、[ADR-009 物模型模板版本策略](../../架构决策/电力运维云平台/ADR-009-物模型模板版本策略.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)  
@@ -47,6 +47,7 @@
 | 1.0.32 | 修复 Windows PowerShell 管道未固定 UTF-8 导致 Canary 中文租户名假漂移；新增仅允许运行两份 READ ONLY SQL 的封装入口 |
 | 1.0.33 | owner 批准后在仓库外生成 HMAC Secret：CSPRNG 48 字节→64 字节 Base64，严格 UTF-8/无换行/收紧 ACL 预检 PASS；尚未注入或重建容器 |
 | 1.0.34 | owner 独立批准后完成 Config Tree Secret 注入与仅重建 iot-device；补 Kafka 重新入组有界等待，最终挂载 64/明文 0/API false/阶段 2 PASS |
+| 1.0.35 | owner 独立批准并在新备份校验成功后，仅向 tenant 122 / role 111 授予 read/edit/publish；禁止权限为 0，API/Secret/容器/Canary 均未变化 |
 
 ## 1. 结论
 
@@ -544,7 +545,8 @@ canary 角色选择和 `system_role_menu` 授权是三个独立动作；均需�
 1 个活动用户；它已有 180 项菜单，不是全局最小权限角色，因此授权设计只保证“增量最小化”，仅新增
 3900～3902 的 read/edit/publish，明确拒绝 3903～3906。双库冻结 preflight 已实跑 PASS 并回滚，授权范围、
 资产 hash、备份与精确撤销见
-[TD-005 Canary 角色授权窗口申请单](./TD-005Canary角色授权窗口申请单-20260811.md)；当前待批准、未授权。
+[TD-005 Canary 角色授权窗口申请单](./TD-005Canary角色授权窗口申请单-20260811.md)。该候选后续已在
+1.0.35 按独立批准完成授权和验收，仅 3900～3902 生效；3903～3906 保持为 0。
 
 1.0.26 将服务端 HMAC secret 的推荐运行时保管方式冻结为“仓库外绝对路径文件 → Compose secret →
 `/run/secrets/` → Spring Config Tree”。安全覆盖层
@@ -584,8 +586,9 @@ Config Tree 挂载不少于 32 字节、容器明文环境 secret 为 0，再复
 `canary-meter-122`，内容仅有一个只读 A 相电压测点，events/services 为空，不携带 tenant、actor、
 draftId、ETag、幂等键、requestId 或 secret。未来执行顺序固定为 identity→draft→validate→publish，
 且发布必须另获单次 Canary 写入批准；不得调用产品绑定或创建产品/设备。执行边界见
-[TD-005 隔离模板 Canary 窗口申请单](./TD-005隔离模板Canary窗口申请单-20260811.md)。当前仅离线候选，
-角色授权、Secret 注入、template API 开启和 Canary 写入仍为独立 OPEN 门禁。
+[TD-005 隔离模板 Canary 窗口申请单](./TD-005隔离模板Canary窗口申请单-20260811.md)。当前仍仅是离线
+请求候选；Secret 注入和角色授权已分别完成，但 template API 开启与单次 Canary 写入仍是两个独立 OPEN
+门禁。
 
 请求语义与 manifest 逐字节 hash 契约 2/2 PASS、0 skipped；生产 Schema hash 同时精确匹配。
 
@@ -613,6 +616,12 @@ Secret 注入环境变量、Nacos、仓库或容器；`iot-device` 未重建，t
 后在同一批准范围重试成功。最终 `iot-device` healthy，Config Tree 挂载 64 字节，容器明文环境 Secret=0，
 template/binding API=false，阶段 2 16 项、数据库基线和消费组全部 PASS。角色关联与 tenant 122 事实仍为
 0；未启用 API、未授权角色、未写 Canary 数据。
+
+1.0.35 按 `USER-APPROVAL-20260811-TD005-CANARY-ROLE-GRANT` 执行。冻结资产 hash 与双库只读 preflight
+均 PASS；仓库外 custom-format 备份经容器/宿主机 SHA-256 一致性和 `pg_restore -l` 校验后，单事务仅新增
+tenant 122 / role 111 到菜单 3900～3902 的三条关系。独立 verify 精确返回 read/edit/publish 三项，
+3903～3906 为 0，tenant 122 业务事实仍为 0。template/binding API=false，Secret 未修改，`iot-device`
+启动时间未变化，阶段 2 16/16 PASS；未创建或调用 Canary 业务数据。
 
 manifest 必须指向包含对应资产字节的真实 Git commit；`UNCOMMITTED` 或相对该提交发生内容漂移时不得进入运行窗口。
 

@@ -403,3 +403,10 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   healthy、Config Tree=64 字节、明文环境=0、template/binding API=false、阶段 2 16/16 PASS、消费组
   6 分区在线 lag=0、数据库积压 `0/0/0/0`、业务 `4/4/17`。role 111 关联=0、tenant 122 残留=0；当前
   目标集合更新为 **59/59 PASS、0 skipped**。未授权角色、未启用 API、未写 Canary 数据。
+- **Canary 角色最小增量授权已完成（2026-08-11，TD-005 1.0.35）**：owner 以
+  `USER-APPROVAL-20260811-TD005-CANARY-ROLE-GRANT` 批准新备份成功后，仅向 tenant 122 / role 111
+  授予菜单 3900～3902。五项冻结 hash 与双库 preflight PASS；仓库外 custom-format 备份 1,112,181 字节、
+  SHA-256 `8bfc32f04b2075f00a0dc49e3e68f7cd2428c266bb42b875116e09b009b8062b`，hash 一致且
+  `pg_restore -l` 1024 条目 PASS。apply 单事务 `INSERT 0 3`；verify 精确返回 read/edit/publish，3903～3906
+  为 0，tenant 122 残留仍为 0。template/binding API=false、Secret 未修改、`iot-device` 未重启、阶段 2
+  **16/16 PASS**。下一步仍需独立批准 template API 启用；本授权不允许执行任何 Canary 请求。
