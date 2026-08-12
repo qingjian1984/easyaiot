@@ -666,3 +666,7 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   子进程 `CrashWriter` commit 50 行后 `halt(137)` 模拟 kill -9（不关闭连接、不执行 shutdown checkpoint），
   WAL 文件保留，重开 SQLite replay 恢复全部 50 行——§21-④ 最严格掉电证据。**P0-3 SQLite 证据累计 11 测试 PASS**
   （核心持久性 6 + 损坏/索引 4 + 真崩溃 1）。ENOSPC + 候选参数压测需特殊环境（小磁盘/性能基准），标 OPEN。
+- **P0-3 §21-④ 候选参数压测 Spike（2026-08-12）**：`SqliteLoadSpikeTest` 3/3 PASS——appendBatch 10000 行 @ 500/批
+  **132667 rows/s**（候选参数 500 envelope/批可行性，远超 1000 阈值）、PK lookup/claim **0ms**（10k 行）、
+  incremental_vacuum 页数稳定不增。**P0-3 SQLite 证据累计 14 测试 PASS**（核心持久性 6 + 损坏/索引 4 + 真崩溃 1 + 压测 3）。
+  ENOSPC（磁盘满错误处理）需 Docker 小卷/物理小分区，7 天连续稳定性需真实硬件长跑——两项标 OPEN（特殊环境）。
