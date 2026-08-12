@@ -679,3 +679,8 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   代码层证据汇总（§21-④ SQLite 14 测试 + §27-⑤ TDengine CLI+Java）+ 运维签字清单（§21-6/§27-6/7）+
   协同冻结约束（TD-002/003 互相依赖，同时转 Approved）。ENOSPC + 7 天稳定性作为上线前门禁（不阻塞代码层冻结）。
   冻结后解锁 P1（collector Profile / SQLite Outbox / Envelope·Inbox·ACK / TelemetryStore）。待 owner 组织运维评审会议签字。
+- **P0-4 协同冻结完成（2026-08-12，TD-002 1.0.2 + TD-003 1.0.1 转 Approved/Frozen）**：owner 以
+  `USER-APPROVAL-20260812-TD002-003-JOINT-FREEZE` 签字 7 项运维评审清单（[签字记录](../../开发规范/TD-002-003运维评审签字记录-20260812.md)）。
+  TD-002（SQLite Outbox）+ TD-003（遥测 Inbox/投影）协同转 **Approved/Frozen**。ENOSPC + 7 天稳定性作为上线前门禁
+  （不阻塞代码层冻结）。**P0 完整闭环**（P0-1 决策 + P0-2 TDengine + P0-3 SQLite + P0-4 冻结）。冻结解锁 **P1 采集主链路编码**
+  （collector Profile / SQLite Outbox / Envelope·Inbox·ACK / TelemetryStore）。
