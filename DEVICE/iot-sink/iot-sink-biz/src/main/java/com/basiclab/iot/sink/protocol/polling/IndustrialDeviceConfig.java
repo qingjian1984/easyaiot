@@ -13,6 +13,10 @@ public class IndustrialDeviceConfig {
 
     private String type;
     private Boolean enabled = true;
+    /** collector 已发布快照中的站点编码；中心轮询形态可不提供。 */
+    private String siteCode;
+    /** collector 已发布快照版本；中心轮询形态可不提供。 */
+    private Long configVersion;
     private String host;
     private Integer port;
     private Integer unitId = 1;
@@ -48,6 +52,8 @@ public class IndustrialDeviceConfig {
         private String wordOrder = "BIG_ENDIAN";
         private Double scale = 1D;
         private Double offset = 0D;
+        /** collector 快照固化的数据优先级；不得由中心按当前模板重算。 */
+        private String dataPriority;
         private String nodeId;
         private Boolean writable = false;
 

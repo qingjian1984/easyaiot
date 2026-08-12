@@ -26,7 +26,7 @@ flowchart LR
 ```
 
 - NODE 负责部署、启停、版本和健康状态，不承载轮询业务；具体采用 ADR-007 的受控容器工作负载契约。
-- M1 的 EDGE 不包含 Modbus RTU 协议实现；是否在 EDGE 运行 Poller 延至 M2 通过新 ADR 重新评估。
+- EDGE 已按 ADR-016 退役，不包含且不再评估 Modbus RTU Poller；后续采集扩展必须复用 `iot-sink collector` 契约，改变该边界须以新 ADR 显式替代 ADR-016。
 - 中心 `iot-sink` 只有在物理串口直接连接中心主机时才可作为 Poller；该形态属于受控例外，必须由架构负责人审批，登记串口资产、单实例互斥、资源配额、故障域和回退方案，并纳入与站点 collector 相同的健康、升级和审计契约。
 - 新增 collector profile，供 standard/full 站点按部署拓扑裁剪非必需依赖；电力 collector 不部署到 mini。
 - 同一物理串口同一时刻只能由一个 collector 实例持有；调度/迁移前必须释放所有权。
@@ -52,4 +52,4 @@ flowchart LR
 
 ## 回滚
 
-保留现有中心 `iot-sink` 轮询开关。若 collector profile 未通过资源或稳定性验收，可仅在串口直连的 standard/full 节点启用，不能临时把协议复制到 EDGE。
+保留现有中心 `iot-sink` 轮询开关。若 collector profile 未通过资源或稳定性验收，可仅在串口直连的 standard/full 节点启用，不能临时把协议复制到 RUNTIME 或新边缘服务。

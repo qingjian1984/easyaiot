@@ -1,0 +1,24 @@
+# TD-001 collector 形态：工业采集结果必须先进入 SQLite Outbox。
+easyaiot:
+  outbox:
+    enabled: true
+    volume-path: ${EASYAIOT_COLLECTOR_OUTBOX_PATH:/var/lib/easyaiot/outbox}
+    queue-capacity: ${EASYAIOT_COLLECTOR_OUTBOX_QUEUE_CAPACITY:4096}
+
+basiclab:
+  iot:
+    sink:
+      protocol:
+        http:
+          enabled: false
+        modbus:
+          enabled: false
+        modbus-rtu:
+          enabled: true
+          scan-interval-ms: ${EASYAIOT_COLLECTOR_SCAN_INTERVAL_MS:1000}
+          request-timeout-ms: ${EASYAIOT_COLLECTOR_REQUEST_TIMEOUT_MS:5000}
+          worker-threads: ${EASYAIOT_COLLECTOR_WORKER_THREADS:2}
+        opcua:
+          enabled: false
+        mqtt:
+          enabled: false

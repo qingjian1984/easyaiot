@@ -13,6 +13,8 @@ import com.basiclab.iot.sink.protocol.mqtt.router.IotMqttDownstreamHandler;
 import com.basiclab.iot.sink.protocol.modbus.IotModbusPollingProtocol;
 import com.basiclab.iot.sink.protocol.modbus.IotModbusRtuPollingProtocol;
 import com.basiclab.iot.sink.protocol.opcua.IotOpcUaPollingProtocol;
+import com.basiclab.iot.sink.protocol.polling.CollectorTelemetryWriter;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
 import com.basiclab.iot.sink.protocol.tcp.IotTcpDownstreamSubscriber;
 import com.basiclab.iot.sink.protocol.tcp.IotTcpUpstreamProtocol;
 import com.basiclab.iot.sink.protocol.tcp.manager.IotTcpConnectionManager;
@@ -31,11 +33,20 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Profile;
+
+import java.time.Duration;
 
 @Configuration
 @EnableConfigurationProperties(IotGatewayProperties.class)
 @Slf4j
 public class IotGatewayConfiguration {
+
+    @Bean
+    @Profile("collector")
+    public CollectorTelemetryWriter collectorTelemetryWriter(TelemetryOutboxPort telemetryOutboxPort) {
+        return new CollectorTelemetryWriter(telemetryOutboxPort, Duration.ofSeconds(5));
+    }
 
     /**
  * IotGatewayConfiguration
@@ -144,9 +155,11 @@ public class IotGatewayConfiguration {
                                                                   DeviceMapper deviceMapper,
                                                                   IotDeviceMessageService messageService,
                                                                   @Lazy IotMessageBus messageBus,
-                                                                  DeviceServerIdService deviceServerIdService) {
+                                                                  DeviceServerIdService deviceServerIdService,
+                                                                  org.springframework.beans.factory.ObjectProvider<CollectorTelemetryWriter> writer) {
             return new IotModbusPollingProtocol(gatewayProperties.getProtocol().getModbus(), deviceMapper,
-                    messageService, messageBus, deviceServerIdService, IotDeviceMessageUtils.generateServerId(1502));
+                    messageService, messageBus, deviceServerIdService, IotDeviceMessageUtils.generateServerId(1502),
+                    writer.getIfAvailable());
         }
     }
 
@@ -159,10 +172,11 @@ public class IotGatewayConfiguration {
                                                                         DeviceMapper deviceMapper,
                                                                         IotDeviceMessageService messageService,
                                                                         @Lazy IotMessageBus messageBus,
-                                                                        DeviceServerIdService deviceServerIdService) {
+                                                                        DeviceServerIdService deviceServerIdService,
+                                                                        org.springframework.beans.factory.ObjectProvider<CollectorTelemetryWriter> writer) {
             return new IotModbusRtuPollingProtocol(gatewayProperties.getProtocol().getModbusRtu(), deviceMapper,
                     messageService, messageBus, deviceServerIdService,
-                    IotDeviceMessageUtils.generateServerId(1503));
+                    IotDeviceMessageUtils.generateServerId(1503), writer.getIfAvailable());
         }
     }
 
@@ -175,9 +189,11 @@ public class IotGatewayConfiguration {
                                                                 DeviceMapper deviceMapper,
                                                                 IotDeviceMessageService messageService,
                                                                 @Lazy IotMessageBus messageBus,
-                                                                DeviceServerIdService deviceServerIdService) {
+                                                                DeviceServerIdService deviceServerIdService,
+                                                                org.springframework.beans.factory.ObjectProvider<CollectorTelemetryWriter> writer) {
             return new IotOpcUaPollingProtocol(gatewayProperties.getProtocol().getOpcua(), deviceMapper,
-                    messageService, messageBus, deviceServerIdService, IotDeviceMessageUtils.generateServerId(14840));
+                    messageService, messageBus, deviceServerIdService, IotDeviceMessageUtils.generateServerId(14840),
+                    writer.getIfAvailable());
         }
     }
 

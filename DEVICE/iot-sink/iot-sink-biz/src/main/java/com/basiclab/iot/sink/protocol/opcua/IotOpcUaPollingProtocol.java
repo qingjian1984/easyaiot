@@ -8,6 +8,7 @@ import com.basiclab.iot.sink.messagebus.publisher.message.IotDeviceMessageServic
 import com.basiclab.iot.sink.messagebus.core.IotMessageBus;
 import com.basiclab.iot.sink.mq.message.IotDeviceMessage;
 import com.basiclab.iot.sink.protocol.polling.AbstractIndustrialPollingProtocol;
+import com.basiclab.iot.sink.protocol.polling.CollectorTelemetryWriter;
 import com.basiclab.iot.sink.protocol.polling.IndustrialDeviceConfig;
 import com.basiclab.iot.sink.service.DeviceServerIdService;
 import com.basiclab.iot.sink.util.IotDeviceMessageUtils;
@@ -40,7 +41,18 @@ public class IotOpcUaPollingProtocol extends AbstractIndustrialPollingProtocol {
                                    IotMessageBus messageBus,
                                    DeviceServerIdService deviceServerIdService,
                                    String serverId) {
-        super(PROTOCOL_TYPE, serverId, properties, deviceMapper, messageService, messageBus, deviceServerIdService);
+        this(properties, deviceMapper, messageService, messageBus, deviceServerIdService, serverId, null);
+    }
+
+    public IotOpcUaPollingProtocol(IotGatewayProperties.PollingProtocolProperties properties,
+                                   DeviceMapper deviceMapper,
+                                   IotDeviceMessageService messageService,
+                                   IotMessageBus messageBus,
+                                   DeviceServerIdService deviceServerIdService,
+                                   String serverId,
+                                   CollectorTelemetryWriter collectorTelemetryWriter) {
+        super(PROTOCOL_TYPE, serverId, properties, deviceMapper, messageService, messageBus,
+                deviceServerIdService, collectorTelemetryWriter);
     }
 
     @Override

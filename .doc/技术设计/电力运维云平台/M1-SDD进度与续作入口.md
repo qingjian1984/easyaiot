@@ -9,8 +9,8 @@
 
 本项目所有需求、PRD、SPEC、ADR、TD、开发、测试、评审、发布和运维变更，必须同时依据：
 
-- [平台功能计划 1.4.0](../../架构设计/平台功能计划.md)：产品范围、版本、部署档位、模块归属、里程碑和优先级基线；
-- [EasyAIoT 项目开发宪法 1.5.0](../../开发规范/EasyAIoT项目开发宪法.md)：安全、架构、数据、兼容、开发流程、质量门禁和 DoD 基线。
+- [平台功能计划 1.5.0](../../架构设计/平台功能计划.md)：产品范围、版本、部署档位、模块归属、里程碑和优先级基线；
+- [EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)：安全、架构、数据、兼容、开发流程、质量门禁和 DoD 基线。
 
 不得只读取或遵循其中一份。下游文档、代码或既有实现与双基线冲突时，必须先停止开发并完成基线修订或 ADR 决策；未获得实际代码、测试、构建、数据库和运行证据的事项继续标记为 `OPEN`。
 
@@ -18,8 +18,8 @@
 
 | 文档 | 版本 | 状态 |
 |---|---:|---|
-| 平台功能计划 | 1.4.0 | 当前产品基线 |
-| EasyAIoT 项目开发宪法 | 1.5.0 | 当前开发治理基线 |
+| 平台功能计划 | 1.5.0 | 当前产品基线 |
+| EasyAIoT 项目开发宪法 | 1.6.0 | 当前开发治理基线 |
 | PRD-01 站点设备与数据采集 | 1.2.0 | Approved / Baselined（M1） |
 | SPEC-001～004 集合 | 1.4.0 | Approved / Frozen |
 | ADR-001～012（ADR-005 Superseded） | 当前索引基线 | Accepted / Superseded |
@@ -684,3 +684,16 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   TD-002（SQLite Outbox）+ TD-003（遥测 Inbox/投影）协同转 **Approved/Frozen**。ENOSPC + 7 天稳定性作为上线前门禁
   （不阻塞代码层冻结）。**P0 完整闭环**（P0-1 决策 + P0-2 TDengine + P0-3 SQLite + P0-4 冻结）。冻结解锁 **P1 采集主链路编码**
   （collector Profile / SQLite Outbox / Envelope·Inbox·ACK / TelemetryStore）。
+- **ADR-016 与 P1 采集主链第一批落地（2026-08-12）**：按主线代码事实新增 ADR-016，明确 EDGE 退役、TASK 迁移为
+  RUNTIME；同步修订平台功能计划 1.5.0、项目开发宪法 1.6.0、ADR 索引和 ADR-001。采集实现新增
+  `application-collector.yaml`、`CollectorTelemetryWriter`，三种工业 Poller 在 collector Profile 下将一次轮询结果作为
+  原子批次写 `TelemetryOutboxPort`，不再走原 `IotDeviceMessageService` 直发路径；普通中心 Profile 保持兼容。
+  Envelope 映射拒绝占位 siteCode、缺失/非法 configVersion、未知点位、缺失 dataPriority 和非十进制值，忽略 `_raw`
+  诊断键，固化毫秒 RFC 3339、点位优先级和单调 sequence。Java 17 Reactor 编译 PASS；映射/Writer + SQLite
+  append/durability/concurrency 与 collector 装配合同定向测试 17/17 PASS。仓库默认 Maven 曾异常以 source=8 编译，显式使用 POM 声明的
+  `maven.compiler.source/target=17` 后通过；该默认参数漂移继续作为构建治理 OPEN。
+- **告警/视频/运维续作盘点（2026-08-12）**：最新媒体底座已形成 `RUNTIME/VIDEO → iot-sink → NFS/MinIO`，但检测事实
+  仍只写 VIDEO `alert`，录像按 device/time 窗口回填 `record_path`；ADR-010 要求的 `alarm_record`、
+  `AlarmRaised/AlarmRecovered`、`sourceType + sourceId → alarmId` 映射和 `device.alarm.created/recovered.v1` 尚无代码/DDL。
+  `iot-maintenance` 模块亦尚未创建。下一批顺序冻结为：统一告警 Schema/状态机/迁移 TD → 来源事件与媒体证据映射 →
+  告警详情视频回看合同 → 以 alarmId 创建设备缺陷/简化工单首个运维闭环；不得直接把 VIDEO alertId 当统一 alarmId。

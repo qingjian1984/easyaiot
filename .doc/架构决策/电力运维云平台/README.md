@@ -1,8 +1,8 @@
 # EasyAIoT 电力运维云平台 ADR 索引
 
-> 索引版本：1.4.0
-> 日期：2026-08-10
-> 产品基线：[平台功能计划 1.4.0](../../架构设计/平台功能计划.md)、[项目开发宪法 1.5.0](../../开发规范/EasyAIoT项目开发宪法.md)
+> 索引版本：1.5.0
+> 日期：2026-08-12
+> 产品基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 
 ## 当前决策集
 
@@ -23,6 +23,7 @@
 | [ADR-013](./ADR-013-受控数据库迁移执行器.md) | Accepted | 1.5.2：受控 runner 已冻结并执行 V001 窗口；后续 V003/V004/Inbox 仍须逐窗口批准 |
 | [ADR-014](./ADR-014-Outbox事件Transport与消费者Inbox.md) | Accepted | 1.3.7：Kafka Outbox/Inbox、消费循环、CI 合同、调度、指标和 JDBC 合同证据已落地；V005 已受控落入目标集成实例，任务 7 与双发对账仍 OPEN |
 | [ADR-015](./ADR-015-collector-workload-binding设备侧投影.md) | Accepted | 1.1.1：iot-device 库独立可变 workload binding 投影；V004 已受控落入目标集成实例并通过 PG 合同，任务 7 写入状态机仍 OPEN |
+| [ADR-016](./ADR-016-EDGE退役与RUNTIME边缘执行边界.md) | Accepted | EDGE 退役；电力采集固定由 NODE + iot-sink collector 承担，边缘推理由 RUNTIME 承担，告警媒体统一经 iot-sink 归档 |
 
 ## 开发解释顺序
 
@@ -37,3 +38,4 @@
 - full 是 standard 的严格能力超集，共享功能禁止复制开发。
 - standard/full 的认证、授权、租户隔离、遥控安全、审计、幂等、数据质量和回滚要求一致。
 - 遥测后端差异封装于 `TelemetryStore`；档位差异统一由 capability manifest 表达。
+- EDGE/TASK 不再是现行实施模块；采集、RUNTIME 推理和媒体归档边界遵循 ADR-016。

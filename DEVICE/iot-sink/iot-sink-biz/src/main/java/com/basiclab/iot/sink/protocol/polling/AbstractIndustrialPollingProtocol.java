@@ -36,6 +36,7 @@ public abstract class AbstractIndustrialPollingProtocol implements IotMessageSub
     protected final IotDeviceMessageService messageService;
     private final IotMessageBus messageBus;
     private final DeviceServerIdService deviceServerIdService;
+    private final CollectorTelemetryWriter collectorTelemetryWriter;
 
     /** 同一设备连续失败时，完整堆栈仅首次打印；之后按该间隔汇总，避免刷屏 */
     private static final long FAIL_LOG_INTERVAL_MS = 60_000L;
@@ -59,6 +60,18 @@ public abstract class AbstractIndustrialPollingProtocol implements IotMessageSub
                                                 IotDeviceMessageService messageService,
                                                 IotMessageBus messageBus,
                                                 DeviceServerIdService deviceServerIdService) {
+        this(protocolType, serverId, properties, deviceMapper, messageService, messageBus,
+                deviceServerIdService, null);
+    }
+
+    protected AbstractIndustrialPollingProtocol(String protocolType,
+                                                String serverId,
+                                                IotGatewayProperties.PollingProtocolProperties properties,
+                                                DeviceMapper deviceMapper,
+                                                IotDeviceMessageService messageService,
+                                                IotMessageBus messageBus,
+                                                DeviceServerIdService deviceServerIdService,
+                                                CollectorTelemetryWriter collectorTelemetryWriter) {
         this.protocolType = protocolType;
         this.serverId = serverId;
         this.properties = properties;
@@ -66,6 +79,7 @@ public abstract class AbstractIndustrialPollingProtocol implements IotMessageSub
         this.messageService = messageService;
         this.messageBus = messageBus;
         this.deviceServerIdService = deviceServerIdService;
+        this.collectorTelemetryWriter = collectorTelemetryWriter;
     }
 
     @PostConstruct
@@ -112,10 +126,10 @@ public abstract class AbstractIndustrialPollingProtocol implements IotMessageSub
             TenantUtils.execute(device.getTenantId(), () -> {
                 try {
                     Map<String, Object> values = poll(device, config);
-                    markPollSuccess(device.getId());
                     if (values != null && !values.isEmpty()) {
-                        reportProperties(device, values);
+                        reportProperties(device, config, values);
                     }
+                    markPollSuccess(device.getId());
                 } catch (Exception e) {
                     deviceMapper.updatePollingDeviceStatus(device.getId(), device.getTenantId(), "OFFLINE", null);
                     logPollFailure(device, config, e);
@@ -180,7 +194,12 @@ public abstract class AbstractIndustrialPollingProtocol implements IotMessageSub
         return cause.getClass().getSimpleName();
     }
 
-    private void reportProperties(DeviceDO device, Map<String, Object> values) {
+    private void reportProperties(DeviceDO device, IndustrialDeviceConfig config, Map<String, Object> values) {
+        if (collectorTelemetryWriter != null) {
+            collectorTelemetryWriter.store(device, config, values, protocolType);
+            deviceMapper.updatePollingDeviceStatus(device.getId(), device.getTenantId(), "ONLINE", LocalDateTime.now());
+            return;
+        }
         String topic = IotDeviceTopicEnum.PROPERTY_UPSTREAM_REPORT.buildTopic(
                 device.getProductIdentification(), device.getDeviceIdentification());
         IotDeviceMessage message = IotDeviceMessage.requestOf(
