@@ -652,3 +652,11 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   application.yaml/compose/preflight + nginx.conf rtc-host 修复 + 全部测试（30/30 PASS）+ 3 申请单 + 3 执行证据
   + 进度入口 1.0.54→1.0.58。排除用户配置（`.claude/settings.json`、`CLAUDE.md`）。**TD-005 Canary 写链端到端闭环完成**
   （1.0.48 identity 404 → 1.0.57 PUBLISHED → 1.0.58 token 清理 → 1.0.59 提交）。
+- **M1 采集主线 P0 启动：决策签字 + TDengine Spike + SQLite 核心持久性 Spike（2026-08-12）**：C 梳理确认
+  TD-001/002/003 采集主线几乎零代码（SQLite Outbox/Envelope V1/中心 Inbox 全未实现）。owner 签字 6 项决策
+  （[裁定记录](../../开发规范/TD-002-003采集主线决策裁定记录-20260812.md)）：SQLite JDBC **3.46.x LTS**、TDengine
+  **保留 3.1.0**、H-03/M-04/M-03 确认、unknown_ack 12 次候选。TDengine CLI Spike 验证确定性幂等
+  （同 message_id+ts → 物理行=1，upsert 覆盖，不依赖 exactly-once）。P0-3 SQLite 核心持久性 Spike **6/6 PASS**
+  （`SqliteWalFullDurabilitySpikeTest`）：WAL+synchronous=FULL 已 commit 跨连接关闭持久、未 commit 丢失、
+  批量原子、messageId 主键约束、PRAGMA 验证；发现"SQLite 关闭最后连接自动 checkpoint"。§21-④ 完整子项
+  （真崩溃子进程/ENOSPC/损坏页/dispatch 索引/候选参数压测）待续。
