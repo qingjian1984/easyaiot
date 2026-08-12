@@ -4,13 +4,13 @@
 > 日期：2026-07-30  
 > 决策范围：M1 站点设备与数据采集  
 > 关联：POWER-SPEC-003  
-> 产品基线：平台功能计划 1.4.0 / 项目开发宪法 1.4.0
+> 产品基线：平台功能计划 1.5.0 / 项目开发宪法 1.6.0
 
 配套决策：[ADR-007 collector 打包与 NODE 管理](./ADR-007-collector打包与NODE管理契约.md)。ADR-005 已因 mini 排除电力功能而废止。
 
 ## 背景
 
-仓库已经在 `iot-sink` 中实现 `IotModbusRtuPollingProtocol`、轮询调度、串口互斥和下行写入。EDGE 当前定位为轻量算法运行时，若在 EDGE 再实现 RTU，会产生两套协议栈、点表解释和升级路径。
+仓库已经在 `iot-sink` 中实现 `IotModbusRtuPollingProtocol`、轮询调度、串口互斥和下行写入。EDGE 已按 ADR-016 退役（原定位为轻量算法运行时），若在 EDGE 再实现 RTU，会产生两套协议栈、点表解释和升级路径。
 
 ## 决策
 
