@@ -1,6 +1,6 @@
 # API Gateway + Monitoring Layer 详细架构
 
-> 基于整体架构文件 V9.17.0 + DEVICE 源码深入分析
+> 基于整体架构文件 V9.18.0 + DEVICE 源码深入分析
 > 核心组件: iot-gateway (Spring Cloud Gateway) + SkyWalking APM + Spring Boot Admin
 
 ---
@@ -444,5 +444,11 @@ iot-common-web: GlobalExceptionHandler
 ```
 
 ---
+
+## 十二、修订记录
+
+| 版本 | 日期 | 变更摘要 | 触发来源 |
+|------|------|----------|----------|
+| V9.18.0 | 2026-08-12 | 版本号同步对齐 V9.18.0；本文档内容（API 网关 / 过滤器链 / 安全架构 / SkyWalking / Spring Boot Admin 可观测性）未受 2026-08-11 NFS + MQTT + 删 EDGE 重构直接影响，基线版本跟随整体架构文件升级 | 基线同步 |
 
 > **一句话总结:** API 网关与监控层是 EasyAIot 的流量入口和可观测性中枢，Spring Cloud Gateway 通过 4 层过滤器 (CORS→Token认证→灰度路由→响应修复) 为 12 个微服务提供统一路由和双层安全防御，SkyWalking + Spring Boot Admin 提供从链路追踪到服务监控的完整可观测性能力。

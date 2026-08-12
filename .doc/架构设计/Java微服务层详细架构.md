@@ -1,6 +1,6 @@
 # Control Plane — Java 微服务层详细架构
 
-> 基于整体架构文件 V9.17.0 + DEVICE 源码深入分析
+> 基于整体架构文件 V9.18.0 + DEVICE 源码深入分析（分析日期 2026-08-12）
 > 代码规模: 14 个 Maven 模块 / 2,655+ Java 文件 / Spring Boot 2.7 + Spring Cloud Alibaba
 
 ---
@@ -142,6 +142,7 @@ iot-xxx/
 | 关系型 | PostgreSQL (主库) | 42.5.0 |
 | 时序 | TDengine | JDBC 3.1.0 |
 | 对象存储 | MinIO | latest |
+| 共享媒体存储 | NFS（挂载根 `/mnt/easyaiot-media`） | — |
 | 消息队列 | Kafka | 3.1.4 |
 | 消息队列 | RocketMQ | 2.2.3 |
 | 消息队列 | Redis Stream (内置MQ) | — |
@@ -198,10 +199,18 @@ iot-xxx/
     │   iot-sink      │   │  iot-tdengine     │  ← 数据入口 + 时序存储
     │   (48086)       │   │  (48090)          │
     │ MQTT/TCP/Modbus │   │  时序数据库集成    │
-    └─────────────────┘   └───────────────────┘
+    │ +NFS/MQTT 总线  │   │                   │
+    └────────┬────────┘   └───────────────────┘
+             │
+             ▼
+    ┌─────────────────┐
+    │ NFS 共享媒体卷    │ ← 录像/告警媒体归档源
+    │ /mnt/easyaiot-  │
+    │   media         │
+    └─────────────────┘
                │
     ┌──────────┴──────┐   ┌───────────────────┐
-    │   iot-node      │   │  iot-gb28181      │  ← 边缘编排 + 视频信令
+    │   iot-node      │   │  iot-gb28181      │  ← NFS 媒体纳管 + 视频信令
     │   (48085)       │   │  (48089)          │
     └─────────────────┘   └───────────────────┘
                │
@@ -515,7 +524,7 @@ Gateway Device
 
 ### 7.3 iot-sink (234 文件, 端口 48086) — 协议适配层
 
-**全协议接入中心**，支持 5 种物联网协议，是设备数据进入平台的第一站。
+**全协议接入中心**，支持 5 种物联网协议，是设备数据进入平台的第一站。同时承担录像回调处理与告警媒体归档（NFS 共享媒体存储）以及 MQTT 算法总线消费。
 
 #### 协议适配器矩阵
 
@@ -561,6 +570,8 @@ class IotLocalMessageBus implements IotMessageBus { ... }
   └── topic: /devices/{productId}/{deviceId}/service/call
         └── ServiceCallEventHandler → 下行控制响应
 
+告警经 MQTT 总线上行（RUNTIME AlgoMqttBus → `mqtt/iot-alert-notification`）→ IotAlgoBusMqttHandler 订阅消费（详见 7.3.x 媒体归档与算法总线）
+
 云端指令 → IotMqttDownstreamSubscriber
   ├── topic: /devices/{productId}/{deviceId}/property/set → 属性设置
   ├── topic: /devices/{productId}/{deviceId}/service/invoke → 服务调用
@@ -568,6 +579,27 @@ class IotLocalMessageBus implements IotMessageBus { ... }
   ├── OtaDownstreamPushHandler → OTA 升级下发
   └── BroadcastDownstreamHandler → 广播指令
 ```
+
+#### 7.3.x 媒体归档与算法总线（2026-08-11 重构新增）
+
+除协议适配外，iot-sink 还承担两类媒体/告警流水线职责：
+
+**(1) 录像回调与归档（NFS 共享媒体存储 → MinIO）**
+
+| 组件 | 职责 |
+|------|------|
+| **MediaHookController** | 暴露 `/media/hook`，接收 SRS `on_dvr` 与 ZLM `on_record_mp4` 录像回调 Hook，委托 `DvrUploadService` 处理。 |
+| **DvrUploadService / Impl** | DVR Hook 处理主流程：`NfsMediaPathResolver` 解析 NFS 路径 → 等待文件写完 → 查/建 `record_space`（`record-<deviceId>`）→ MinIO 上传 → 写 `playback` 表 + 回填 `alert.record_path` → `removeLocalAfterUpload` 时删 NFS 本地 flv。 |
+| **NfsMediaPathResolver** | 容器内路径 `/data/...` ↔ NFS 挂载根 `/mnt/easyaiot-media/...` 互转；`nfsOnly=true` 时强制路径落在 `mountRoot` 下，越界抛异常。 |
+| **NfsMediaProperties** | 配置前缀 `basiclab.media.*`：`mountRoot=/mnt/easyaiot-media`、`containerDataRoot=/data`、`nfsOnly`、`removeLocalAfterUpload`。 |
+
+**(2) MQTT 算法总线消费（告警上行）**
+
+| 组件 | 职责 |
+|------|------|
+| **IotAlgoBusMqttHandler** | 订阅 EMQX 算法总线 `mqtt/iot-*`（用 `$share/algo-sink/` 共享订阅组），处理告警：`normalizePayload` → 补必填字段 → 从节点表补边缘维度 → **从 VIDEO 库 `algorithm_task` 补齐通知配置**（`channels`/`notifyUsers`）→ `AlertService` 落库 → 命中时转发 Kafka topic `iot-alert-notification-send` 做下游通知；后处理消息入队 `PostProcessService`。 |
+
+**MQTT 契约**：envelope `{version,msgId,msgType,tenant,ts,payload}`；三对 topic/msgType —— `mqtt/iot-alert-notification`/`alert.notification`、`mqtt/iot-snapshot-alert`/`alert.snapshot`、`mqtt/iot-post-process-request`/`post_process.request`。RUNTIME 侧总开关 `ALGO_BUS_TRANSPORT`（默认空=MQTT；`http/off/0/false/no`=关闭回退 HTTP）。心跳仍走 HTTP→VIDEO。
 
 #### 设备认证 (类阿里云物联网平台)
 
@@ -672,7 +704,7 @@ FileClientFactory
 
 ### 8.2 iot-node (129 文件, 端口 48085) — 集群节点管理
 
-**边缘计算集群编排中心**，负责节点的全生命周期管理和远程部署。
+**集群节点编排中心**，负责节点的全生命周期管理、远程部署与共享媒体存储纳管。
 
 | 功能域 | 核心能力 |
 |--------|----------|
@@ -683,6 +715,20 @@ FileClientFactory
 | **SSH 远程执行** | JSch 远程命令/文件传输 |
 | **WebSocket** | 实时部署进度推送 |
 | **集群监控** | GPU/CPU/内存/磁盘/网络指标 |
+| **媒体存储** | NFS 共享卷纳管 + Ceph 拓扑/集群分配（原 Ceph OSD/Client 部署脚本已替换为 `install_nfs_server`/`install_nfs_client`/`mount-all`/`check_nfs_health`） |
+
+#### NodeStorageService — NFS 共享媒体存储纳管
+
+`NodeStorageService` 接口（命名保留 `Ceph` 前缀以兼容前端，语义已改为 NFS 共享媒体节点拓扑）：
+
+| 方法 / DTO | 职责 |
+|------------|------|
+| `getCephTopology()` | 返回 NFS 共享媒体节点拓扑（`NodeCephTopologyRespVO`），命名保留语义改 NFS。 |
+| `assignNfsCluster(NodeNfsClusterAssignReqVO)` | 分配/切换 NFS 集群：指定服务端与客户端节点，写节点 tags。 |
+| `NodeNfsClusterAssignReqVO` | 入参：`serverNodeId` / `clientNodeIds` / `mountRoot=/mnt/easyaiot-media/nfsExport` / `nfsMountOpts=vers=3,tcp,nolock,_netdev`。 |
+| `NodeCephTopologyRespVO` | 出参：`center` / `nodes` / `links` / `summary`；`node.kind=platform|storage_nfs|nfs_client`；含 `@Deprecated` 旧 Ceph 字段以兼容前端。 |
+
+**SYNC_RELATIVE_FILES** 中同步到边缘节点的脚本清单已由 Ceph 系脚本（`install_ceph_*`/`ceph_deploy_*`）替换为 NFS 系脚本（`install_nfs_server`、`install_nfs_client`、`mount-all`、`check_nfs_health`）。
 
 ---
 
@@ -864,10 +910,10 @@ LambdaQueryWrapperX<T>
 | **iot-system** | 48099 | 基础 | common-*, captcha-plus, aliyun-sdk | Auth, User, Role, Menu, OAuth2 |
 | **iot-infra** | 48082 | 基础 | iot-system-api, minio | Codegen, File, Job, Redis Monitor |
 | **iot-device** | 48083 | 核心 | sink-api, message-api, tdengine-api, onnxruntime | Product, Device, Shadow, OTA |
-| **iot-sink** | 48086 | 核心 | device-api, tdengine-api, vert.x, modbus, milo | MQTT/TCP/Modbus/OPC UA 协议 |
+| **iot-sink** | 48086 | 核心 | device-api, tdengine-api, vert.x, modbus, milo | MQTT/TCP/Modbus/OPC UA 协议 + 录像回调/告警 MQTT 总线 |
 | **iot-message** | 48088 | 基础 | system-api, weixin-java, dingtalk-sdk | 7 渠道消息推送 |
 | **iot-dataset** | 48087 | 业务 | file-api, minio | 数据集标注/导入导出 |
-| **iot-node** | 48085 | 业务 | jsch, websocket | 节点/工作负载/媒体堆栈 |
+| **iot-node** | 48085 | 业务 | jsch, websocket | 节点/工作负载/媒体堆栈 + NFS 媒体纳管 |
 | **iot-file** | 48084 | 基础 | minio | 文件存储抽象 |
 | **iot-gb28181** | 48089 | 业务 | jain-sip-ri, websocket, protobuf | SIP 信令, 国标全功能 |
 | **iot-tdengine** | 48090 | 基础 | taos-jdbcdriver | 时序数据库 |
@@ -891,6 +937,14 @@ Spring Boot 版本已从 2.7.18 升级到 **3.3.7**，相应版本链升级:
 - OpenFeign 4.x 包名变更
 - MyBatis-Plus 需要升级到 3.5.5+ 以确保兼容性
 - SpringDoc OpenAPI 升级到 2.x 系列
+
+---
+
+## 十四、修订记录
+
+| 版本 | 日期 | 变更摘要 | 触发来源 |
+|------|------|----------|----------|
+| V9.18.0 | 2026-08-12 | iot-sink 新增录像回调与告警媒体归档（NFS 共享媒体存储 + MediaHookController/DvrUploadService/NfsMediaPathResolver）与 MQTT 算法总线消费（IotAlgoBusMqttHandler）；iot-node 存储语义由 Ceph 改为 NFS 纳管（NodeStorageService.assignNfsCluster/getCephTopology，命名保留语义改 NFS）；删除 EDGE 措辞（模块依赖图、8.2 节正文） | commits f13c491d/3b7c7f5c/242f8f31/ac3b08a6/28a2c318/42945f3f/7c47d3b9/847b3c85 |
 
 ---
 

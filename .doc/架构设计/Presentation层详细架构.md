@@ -1,6 +1,6 @@
 # Presentation Layer — WEB 管理控制台详细架构
 
-> 基于整体架构文件 V9.17.0 + WEB 源码深入分析
+> 基于整体架构文件 V9.18.0 + WEB 源码深入分析
 > 代码规模: 747 个 Vue 组件 / 610 TypeScript 文件 / Vue 3.4 + Vite 4
 
 ---
@@ -96,7 +96,7 @@ WEB/
     ├── views/                         ← 页面组件 (509 .vue 文件)
     │   ├── camera/ (100)              ← 📹 摄像头管理 (最大模块)
     │   ├── system/ (55)               ← ⚙️ 系统管理
-    │   ├── node/ (53)                 ← 🖥️ 集群节点管理
+    │   ├── node/ (56)                 ← 🖥️ 集群节点管理
     │   ├── notice/ (48)               ← 📬 通知管理
     │   ├── devices/ (43)              ← 📡 设备管理
     │   ├── dataset/ (36)              ← 📊 数据集管理
@@ -219,7 +219,7 @@ Router (History 模式)
   │     ├── /gb28181-view/*     ← GB28181 通道/录像
   │     ├── /face-manage/:id    ← 人脸库详情
   │     ├── /plate-manage/:id   ← 车牌库详情
-  │     ├── /record-space-manage/:id ← 录像回放
+  │     ├── /record-space-manage/:id ← 录像回放 (NFS 共享存储归档)
   │     ├── /snap-space-manage/:id   ← 快照空间
   │     ├── /dataset/sam-model-setup ← SAM 模型安装
   │     ├── /algorithm-post-process/:id ← 算法后处理 IDE
@@ -340,7 +340,7 @@ Pinia Store
 | 目录 | 模块数 | 职责 |
 |------|--------|------|
 | `api/base/` | 4 | 登录/用户/上传/个人中心 |
-| `api/device/` | **37** | 摄像头/设备/产品/物模型/GB28181/训练/部署/数据集/OTA/告警/录像/快照/车牌/人脸/LLM/SAM/流转发/ONVIF/巡航/可视化 |
+| `api/device/` | **37** | 摄像头/设备/产品/物模型/GB28181/训练/部署/数据集/OTA/告警/录像/快照/车牌/人脸/LLM/SAM/流转发/ONVIF/巡航/可视化（告警经 iot-sink MQTT 总线归档，录像经 iot-sink NFS→MinIO 归档） |
 | `api/system/` | 25 | 用户/角色/菜单/部门/岗位/字典/通知/短信/邮件/OAuth2/租户/权限/日志 |
 | `api/infra/` | 12 | 代码生成/文件/配置/定时任务/Redis/API日志 |
 | `api/mp/` | 11 | 微信公众号(账号/菜单/消息/素材/标签) |
@@ -368,7 +368,7 @@ Pinia Store
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
 │  │  Train   │ │ Dataset │ │  Alert   │ │  Notice  │ │  Node   │  │
 │  │ 模型训练  │ │ 数据集  │ │ 告警管理 │ │ 通知管理 │ │ 集群管理 │  │
-│  │ 35 组件  │ │ 36 组件 │ │  8 组件  │ │ 48 组件 │ │ 53 组件 │  │
+│  │ 35 组件  │ │ 36 组件 │ │  8 组件  │ │ 48 组件 │ │ 56 组件 │  │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
 │                                                                     │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐              │
@@ -391,14 +391,14 @@ Pinia Store
 | Gb28181DeviceCard | GB28181 设备卡片 (通道选择/PTZ控制) |
 | NvrDeviceCard | NVR 设备卡片 (多通道管理) |
 | AlgorithmTask | 算法任务管理 (实时/快照分析) |
-| PlaybackList | 录像回放列表 |
+| PlaybackList | 录像回放列表 (关联 iot-sink NFS→MinIO 归档链路) |
 | SnapTask | 快照任务管理 |
 | StreamForward | 流转发管理 |
 | FrameExtractor | 帧提取服务 |
 | SplitScreenMonitor | 分屏监控 (1/4/9/16 画面) |
 | FaceLibrary | 人脸库管理 |
 | PlateLibrary | 车牌库管理 |
-| RecordSpace | 录像空间管理 |
+| RecordSpace | 录像空间管理 (关联 NFS 共享存储 / Ceph 拓扑面板) |
 | ScenarioPoseLibrary | 场景姿态库 |
 
 #### ⚙️ System (55 组件) — 系统管理
@@ -420,7 +420,7 @@ Pinia Store
 | loginLog | 登录日志 |
 | operateLog | 操作日志 |
 
-#### 🖥️ Node (53 组件) — 集群节点管理
+#### 🖥️ Node (56 组件) — 集群节点管理
 
 | 子模块 | 功能 |
 |--------|------|
@@ -430,6 +430,9 @@ Pinia Store
 | MqttStackDeploy | MQTT堆栈部署 (EMQX) |
 | GPUClusterMonitor | GPU 集群监控 |
 | NodeCheck | 节点健康检查 |
+| CephTopologyPanel | NFS 共享媒体节点拓扑面板 (命名沿用，语义为 NFS 共享媒体拓扑；center/nodes/links/summary 可视化，对应后端 NodeCephTopologyRespVO) |
+| MediaPathReadinessBar | 媒体路径就绪状态条 (alert_images/playbacks/snaps 子目录探测，对应 iot-sink NfsMediaPathResolver 与 iot-node check_nfs_health) |
+| MediaEnvBatch | 媒体环境批量配置 (NFS 服务端/客户端分配、mountRoot/nfsExport/nfsMountOpts，对应 NodeNfsClusterAssignReqVO) |
 
 #### 📡 Devices (43 组件) — 设备管理
 
@@ -471,8 +474,8 @@ Pinia Store
 | DeviceCatalog | 设备目录 (组织/区域/设备) |
 | ChannelList | 通道列表 |
 | SplitScreen | 分屏监控 |
-| CloudRecord | 云端录像 |
-| DeviceRecord | 设备端录像 |
+| CloudRecord | 云端录像 (关联 NFS 共享存储归档) |
+| DeviceRecord | 设备端录像 (关联 NFS 共享存储归档) |
 | PullProxy | 拉流代理 |
 
 #### 📈 Visualize (16 组件) — 可视化大屏
@@ -670,6 +673,14 @@ Dockerfile (多阶段构建)
 | **天地图 (Tianditu)** | 2D/卫星/地形底图，设备位置标注，GIS 分析 |
 | **高德地图 (AMap)** | 国内地址解析、POI 搜索、路径规划 |
 | **OpenLayers (ol)** | 通用地图框架，支持 WMS/WMTS/TMS/矢量切片 |
+
+---
+
+## 十六、修订记录
+
+| 版本 | 日期 | 变更摘要 | 触发来源 |
+|------|------|----------|----------|
+| V9.18.0 | 2026-08-12 | Node 节点页新增 NFS/Ceph 拓扑相关 3 个组件（CephTopologyPanel/MediaPathReadinessBar/MediaEnvBatch），组件计数 53→56；录像/告警 API 注释关联 iot-sink MQTT 总线与 NFS→MinIO 归档新链路 | commits f13c491d/3b7c7f5c/242f8f31/ac3b08a6/28a2c318/42945f3f/7c47d3b9 |
 
 ---
 
