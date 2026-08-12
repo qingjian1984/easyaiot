@@ -647,3 +647,8 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   全库活动计数 2689/2689 → 2687/2687；业务基线 `4/4/17` + canary-meter-123 模板 1 行保留作 M1 证据、role 112 权限 `3/0` 不变。
   Canary 写链闭环清理完成。剩余收尾：删除临时 `.td005-auth-allowlist.js` + git 提交全部改动（provider + harness +
   nginx.conf + 测试 + 全部申请单/证据 + 进度入口）。
+- **收尾提交完成（2026-08-12，TD-005 1.0.59，commit `857184e9`）**：删除临时 `.td005-auth-allowlist.js`，
+  git 提交 Canary 闭环全部改动（27 files, +851/-196）：直接文件 provider + Guard/4 写服务注入 +
+  application.yaml/compose/preflight + nginx.conf rtc-host 修复 + 全部测试（30/30 PASS）+ 3 申请单 + 3 执行证据
+  + 进度入口 1.0.54→1.0.58。排除用户配置（`.claude/settings.json`、`CLAUDE.md`）。**TD-005 Canary 写链端到端闭环完成**
+  （1.0.48 identity 404 → 1.0.57 PUBLISHED → 1.0.58 token 清理 → 1.0.59 提交）。
