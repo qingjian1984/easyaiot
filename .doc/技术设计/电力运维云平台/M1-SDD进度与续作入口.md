@@ -675,3 +675,7 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   val=2.0）。补 CLI 证据的 Java 驱动层（§27-⑤ "驱动版本 + 重复写行为证据"）。TDengine 写入即持久（无 WAL replay），
   客户端崩溃后数据已落库，重投 = upsert → 1 行（§27-⑤ 确定性幂等闭合）。**P0-2 TDengine 证据完整**（CLI + Java）；
   批量写部分失败逐条结果留 P1 adapter 实现时 Spike。**P0-2/P0-3 代码层证据完整**，P0-4 冻结待运维评审签字（§21-6/§27-6/7）。
+- **P0-4 冻结申请就绪（2026-08-12）**：形成 [TD-002/003 协同冻结申请](../../开发规范/TD-002-003协同冻结申请-20260812.md)。
+  代码层证据汇总（§21-④ SQLite 14 测试 + §27-⑤ TDengine CLI+Java）+ 运维签字清单（§21-6/§27-6/7）+
+  协同冻结约束（TD-002/003 互相依赖，同时转 Approved）。ENOSPC + 7 天稳定性作为上线前门禁（不阻塞代码层冻结）。
+  冻结后解锁 P1（collector Profile / SQLite Outbox / Envelope·Inbox·ACK / TelemetryStore）。待 owner 组织运维评审会议签字。
