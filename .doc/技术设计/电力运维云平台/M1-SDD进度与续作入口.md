@@ -660,3 +660,9 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   （`SqliteWalFullDurabilitySpikeTest`）：WAL+synchronous=FULL 已 commit 跨连接关闭持久、未 commit 丢失、
   批量原子、messageId 主键约束、PRAGMA 验证；发现"SQLite 关闭最后连接自动 checkpoint"。§21-④ 完整子项
   （真崩溃子进程/ENOSPC/损坏页/dispatch 索引/候选参数压测）待续。
+- **P0-3 §21-④ Spike 续：损坏检测 + 索引 + 真崩溃 WAL replay（2026-08-12）**：扩展 SQLite 证据包。
+  `SqliteCorruptionIndexSpikeTest` 4/4 PASS（损坏主库触发 `SQLITE_CORRUPT` 不静默重建 §13、claim 查询用
+  dispatch 索引 `idx_outbox_dispatch`、message_id 走 PK 索引、integrity_check=ok）。`CrashReplayTest` 1/1 PASS：
+  子进程 `CrashWriter` commit 50 行后 `halt(137)` 模拟 kill -9（不关闭连接、不执行 shutdown checkpoint），
+  WAL 文件保留，重开 SQLite replay 恢复全部 50 行——§21-④ 最严格掉电证据。**P0-3 SQLite 证据累计 11 测试 PASS**
+  （核心持久性 6 + 损坏/索引 4 + 真崩溃 1）。ENOSPC + 候选参数压测需特殊环境（小磁盘/性能基准），标 OPEN。
