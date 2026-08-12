@@ -4,6 +4,7 @@ import com.basiclab.iot.common.capability.CapabilityService;
 import com.basiclab.iot.common.core.service.TenantFrameworkService;
 import com.basiclab.iot.common.exception.ServiceException;
 import com.basiclab.iot.common.utils.SnowflakeIdUtil;
+import com.basiclab.iot.device.config.PowerModelIdempotencySecretProvider;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplatePublishRequest;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplatePublishResponse;
 import com.basiclab.iot.device.event.PowerModelEventEnvelope;
@@ -20,7 +21,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -29,7 +29,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
-import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -71,8 +70,7 @@ public class PowerModelTemplatePublishService {
                                             PowerModelTemplateContentValidator contentValidator,
                                             PowerModelOutboxService outboxService,
                                             JdbcPowerIdempotencyStore idempotencyStore,
-                                            @Value("${easyaiot.power-model.idempotency-hmac-secret:}")
-                                            String idempotencySecret) {
+                                            PowerModelIdempotencySecretProvider secretProvider) {
         this.jdbc = new NamedParameterJdbcTemplate(Objects.requireNonNull(dataSource, "dataSource"));
         this.mapper = Objects.requireNonNull(mapper, "mapper");
         this.capabilityService = Objects.requireNonNull(capabilityService, "capabilityService");
@@ -81,8 +79,8 @@ public class PowerModelTemplatePublishService {
         this.contentValidator = Objects.requireNonNull(contentValidator, "contentValidator");
         this.outboxService = Objects.requireNonNull(outboxService, "outboxService");
         this.idempotencyStore = Objects.requireNonNull(idempotencyStore, "idempotencyStore");
-        this.idempotencySecret = Objects.requireNonNull(idempotencySecret, "idempotencySecret")
-                .getBytes(StandardCharsets.UTF_8);
+        this.idempotencySecret = Objects.requireNonNull(secretProvider, "secretProvider")
+                .getSecret();
     }
 
     @Transactional(rollbackFor = Exception.class)

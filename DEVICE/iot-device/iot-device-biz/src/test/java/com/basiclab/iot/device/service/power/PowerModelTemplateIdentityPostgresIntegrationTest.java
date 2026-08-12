@@ -1,6 +1,8 @@
 package com.basiclab.iot.device.service.power;
 
 import com.basiclab.iot.common.capability.CapabilityService;
+import com.basiclab.iot.device.config.PowerModelIdempotencySecretProvider;
+import java.nio.charset.StandardCharsets;
 import com.basiclab.iot.common.core.service.TenantFrameworkService;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateCreateRequest;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateCreateResponse;
@@ -78,10 +80,13 @@ class PowerModelTemplateIdentityPostgresIntegrationTest {
         CapabilityService capability = mock(CapabilityService.class);
         TenantFrameworkService tenant = mock(TenantFrameworkService.class);
         when(capability.isEnabled(PowerModelTemplateIdentityService.CAPABILITY_CODE)).thenReturn(true);
+        PowerModelIdempotencySecretProvider secretProvider = mock(PowerModelIdempotencySecretProvider.class);
+        when(secretProvider.getSecret()).thenReturn(
+                "td010-review-secret-must-be-at-least-32-bytes".getBytes(StandardCharsets.UTF_8));
         PowerModelTemplateIdentityService service = new PowerModelTemplateIdentityService(
                 dataSource, new ObjectMapper(), capability, tenant,
                 new JdbcPowerIdempotencyStore(dataSource),
-                "td010-review-secret-must-be-at-least-32-bytes");
+                secretProvider);
         return new TestContext(dataSource, jdbc, new DataSourceTransactionManager(dataSource), service);
     }
 

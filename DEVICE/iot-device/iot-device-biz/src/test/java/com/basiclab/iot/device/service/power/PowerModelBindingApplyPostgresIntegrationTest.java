@@ -1,6 +1,8 @@
 package com.basiclab.iot.device.service.power;
 
 import com.basiclab.iot.common.capability.CapabilityService;
+import com.basiclab.iot.device.config.PowerModelIdempotencySecretProvider;
+import java.nio.charset.StandardCharsets;
 import com.basiclab.iot.common.core.service.TenantFrameworkService;
 import com.basiclab.iot.device.controller.power.dto.PowerModelBindingApplyRequest;
 import com.basiclab.iot.device.controller.power.dto.PowerModelBindingApplyResponse;
@@ -265,10 +267,13 @@ class PowerModelBindingApplyPostgresIntegrationTest {
         when(capability.isEnabled(PowerModelBindingApplyService.CAPABILITY_CODE)).thenReturn(true);
         PowerModelOutboxService outbox = new PowerModelOutboxService(
                 new JdbcPowerModelOutboxRepository(dataSource), capability);
+        PowerModelIdempotencySecretProvider secretProvider = mock(PowerModelIdempotencySecretProvider.class);
+        when(secretProvider.getSecret()).thenReturn(
+                "td008-review-secret-must-be-at-least-32-bytes".getBytes(StandardCharsets.UTF_8));
         PowerModelBindingApplyService service = new PowerModelBindingApplyService(
                 dataSource, mapper, capability, tenantFramework, outbox,
                 new JdbcPowerIdempotencyStore(dataSource),
-                "td008-review-secret-must-be-at-least-32-bytes");
+                secretProvider);
         return new TestContext(dataSource, jdbc, manager, mapper, service);
     }
 

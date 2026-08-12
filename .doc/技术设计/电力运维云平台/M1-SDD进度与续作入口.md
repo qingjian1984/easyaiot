@@ -574,3 +574,76 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   application YAML 动态合同 3/3 PASS，实际容器属性源差异仍 OPEN。下一步实现 fail-closed 直接文件 provider，
   完成测试和新候选后再另批部署；同一候选与本次批准均不得复用。证据见
   [`iot-device-configtree-runtime-repair-deploy-attempt-20260811.md`](./assets/td005-canary/iot-device-configtree-runtime-repair-deploy-attempt-20260811.md)。
+- **直接文件 provider 代码与候选 JAR 已就绪（2026-08-12，TD-005 1.0.54 候选，未部署）**：评审 1.0.53 §4
+  `DIRECT_FILE_PROVIDER_REQUIRED` 后，新增 `PowerModelIdempotencySecretProvider`（`@Component`，fail-closed 读
+  `EASYAIOT_POWER_MODEL_HMAC_SECRET_FILE` 指向的文件，启动期严格校验绝对路径/普通文件/UTF-8/无 BOM/无换行/无
+  NUL/≥32 字节，异常消息只含原因类别不泄密）；`PowerModelActivationGuard` 与 4 写服务（Binding/Publish/Identity/
+  Draft）统一构造注入 provider，删除全部 `@Value` secret 与 `spring.config.import: optional:configtree:/run/secrets/`；
+  Compose secret target 改为不含 `.` 的 `easyaiot_power_model_hmac`，activation preflight 同步检查新路径
+  `direct-file-provider`；删除废弃的 legacy 回滚覆盖层与 `PowerModelConfigTreeRuntimeContractTest`。Java 17 main
+  + test 编译 PASS，provider/ActivationGuard/SecretMount 合同 **30/30 PASS**（provider 16 + Guard 8 + SecretMount
+  6），4 写服务集成测试改 mock provider 后 test-compile PASS；静态合同 grep 无 `@Value` secret 残留、无
+  `configtree`、provider 源码无日志输出。候选 JAR 暂存 `DEVICE/target/jars/iot-device-biz.jar`，279,673,823 字节，
+  SHA-256 `9dd19363303769c27c7a98dff344fa37e50a5c5a1f639a6d8118797e603ff421`，含 provider +
+  `PowerModelTemplateController` + 4 写服务全部类。本轮未部署、未调用 API、未改运行态、未触碰仓库外 Secret。
+  下一步须 owner 独立批准仅重建 iot-device 的部署窗口（见
+  [TD-005直接文件Provider部署窗口申请单-20260812](./TD-005直接文件Provider部署窗口申请单-20260812.md)），1.0.51/
+  1.0.52/1.0.53 旧批准均不得复用。
+- **直接文件 provider iot-device 部署成功（2026-08-12，TD-005 1.0.55）**：owner 以
+  `USER-APPROVAL-20260812-TD005-IOT-DEVICE-DIRECT-FILE-PROVIDER-DEPLOY` 精确批准后，以候选 JAR SHA-256
+  `9dd1936…` 构建新镜像 `3860dce5da25`（镜像内 `/app/app.jar` hash 精确匹配候选），`--no-deps --force-recreate`
+  重建 iot-device；Secret 挂载从 legacy `-file-content`（含 `.` target）切换到直接文件 provider 的
+  `easyaiot_power_model_hmac`（不含 `.`，杜绝 Config Tree 文件名映射）。新容器 `52d798735144` **healthy**
+  （~40s）、restartCount=0；启动日志**无** `POWER_MODEL_IDEMPOTENCY_SECRET_INVALID`（1.0.51/1.0.52/1.0.53 三次
+  Config Tree 失败的根因正式解除）、无 `POWER_MODEL_ACTIVATION_INCOMPLETE`，`Started DeviceServerApplication
+  in 22.87s`、Tomcat 48083。路由探针 `POST /api/v1/power/model-templates` → **HTTP 400**（1.0.48 是 404，证明
+  `PowerModelTemplateController` 路由已注册，identity 404 根因正式解除）。数据库业务 `4/4/17`、迁移 V001～V007
+  = 7 SUCCEEDED、积压 `0/0/0/0` 无漂移；其他 6 容器（iot-system/iot-infra/postgres-server/kafka-server/
+  iot-gateway/web-service）ID 与启动时间全部不变。仓库外 iot-device20 备份 SHA-256 `92dfc45b…`；旧镜像
+  `4fa869302238` 保留回退标签 `rollback-td005-direct-file-provider-predeploy-20260812`。下一步：owner 独立批准
+  harness REAUTH-V3 认证 → identity→draft→validate→publish 单次 Canary 模板写入 → 收尾提交。详见
+  [`iot-device-direct-file-provider-deploy-execution-20260812.md`](./assets/td005-canary/iot-device-direct-file-provider-deploy-execution-20260812.md)。
+- **REAUTH-V3 harness 认证成功（2026-08-12，TD-005 1.0.56）**：owner 批准
+  `USER-APPROVAL-20260812-TD005-REAUTH-V3` 后，用户本人在独立 Chrome 完成 `/td005-auth-harness` 认证
+  （tenant 123 `codex测试` / user 132 `aotemane` / rememberMe=false），四步全绿（tenant/captcha/login/
+  permission-info），页面停在 harness 未进 Dashboard，网络门禁未触发业务 API。`ruoyi-vue-pro20` user 132
+  新增 active access 1 条（ID 6120，expires 2026-08-12 00:55:45，未过期）、active refresh 1 条（ID 6119，
+  expires 2026-08-13 00:25:45，未过期），未查询 token 值；`iot-device20` tenant 123 业务仍 `0/0/0/0`，
+  role 112 权限仍 `3/0`，6 容器 ID/启动时间不变。当前唯一未关闭门禁是 owner 独立批准
+  identity→draft→validate→publish 单次 Canary 模板写入（冻结资产 `canary-meter-123`）；本认证不构成 Canary
+  写入授权。详见
+  [`auth-harness-reauth-v3-window-20260812.md`](./assets/td005-canary/auth-harness-reauth-v3-window-20260812.md)。
+- **单次 Canary 写入窗口申请单已就绪（2026-08-12，TD-005 1.0.57 候选，未执行）**：V3 认证获得 access 6120 /
+  refresh 6119 后，形成 [TD-005单次模板Canary写入窗口申请单-20260812](./TD-005单次模板Canary写入窗口申请单-20260812.md)，
+  冻结资产 identity/draft/publish + 生产 Schema hash（manifest 1.1.0，gitCommit `1ec8e801d33436b7d176709c45c115faefe3b41c`）。
+  **时效约束**：access 6120 expires 2026-08-12 00:55:45（~30 分钟有效），Canary 写入（identity→draft→validate→publish
+  4 API）须在 token 有效期内完成；**过期则窗口失效，需 REAUTH-V4（用户本人 harness 重新认证）+ 新写入批准**。执行方式待
+  owner 决定（浏览器 DevConsole sessionStorage token / 受控 CDP 脚本），token 不导出/不入库/不进聊天。本轮未调用电力 API、
+  未写 Canary、未改容器/Secret/角色/数据库业务数据。**下次会话续作起点**：若 access 6120 未过期且 owner 批准
+  `USER-APPROVAL-20260812-TD005-CANARY-TEMPLATE-SINGLE-WRITE-V2`，执行 4 API 写入并验收（power_model_template
+  PUBLISHED + member_index + outbox POWER_MODEL_TEMPLATE_PUBLISHED_V1 PENDING）；若 token 已过期，先 REAUTH-V4
+  （[TD-005Canary REAUTH-V3 认证窗口](./assets/td005-canary/auth-harness-reauth-v3-window-20260812.md) 流程复用）再申请写入。
+  当前运行态：iot-device `52d798735144`（直接文件 provider 1.0.55，healthy）、template=true、binding=false、release/events=true、
+  Secret 64 字节挂载 `/run/secrets/easyaiot_power_model_hmac`；其他容器不变；仓库外 iot-device20 备份 `92dfc45b...` 保留。
+- **单次 Canary 模板写入端到端成功（2026-08-12，TD-005 1.0.57）**：1.0.57 候选后 access 6120 过期，先 REAUTH-V4
+  产生 access 6122 / refresh 6121（user 132 / tenant 123）；途中 web-service 崩溃（nginx.conf L252 `rtc-host` 解析失败），
+  owner 批准选项 A 修复（`rtc-host` → `srs-host`）后恢复 healthy。owner 批准
+  `USER-APPROVAL-20260812-TD005-CANARY-TEMPLATE-SINGLE-WRITE-V2` 后，用户本人在 harness tab DevConsole 执行受控脚本
+  （token 留 `localStorage.jwt_token` 不导出，iframe native fetch 绕过 harness 网络门禁），按序调用 identity→createDraft
+  →validate→publish 4 API，body 与冻结资产（manifest 1.1.0，gitCommit `1ec8e801`）逐字节一致。identity **201**
+  （templateId `8382352661430272`）、draft **201**（draftId `8382353080860672`，etag `"0"`，contentHash
+  `sha256:f97ceb90…`）、validate **200**（valid=true, errors=[]）、publish **200**（lifecycle PUBLISHED）。数据库只读核验：
+  tenant 123 `power_model_template` 1 行 PUBLISHED、`power_model_member_index` 1 行（PROPERTY voltage-a）、
+  `power_model_release_outbox` 1 行 POWER_MODEL_TEMPLATE_PUBLISHED_V1 **status=PUBLISHED**（Outbox relay 已投递 Kafka）、
+  `power_model_event_inbox` 1 行（消费者已消费，**ADR-014 端到端事件链验证**）。业务基线 `4/4/17`（模板不影响产品）、
+  迁移 `7/7`、role 112 权限 `3/0` 无漂移。**M1 电力物模型模板发布链首次端到端成功**（1.0.48 identity 404 → 1.0.57 PUBLISHED），
+  直接文件 provider（1.0.55）+ 模板 Controller（1.0.50 修复）+ Outbox/Inbox（ADR-014）全链路验证通过。详见
+  [`canary-template-write-execution-20260812.md`](./assets/td005-canary/canary-template-write-execution-20260812.md)。
+  下一步：token 处置（access 6120/6122 + refresh 6119/6121 撤销）+ 收尾提交（删 `.td005-auth-allowlist.js` + 提交全部代码/证据）。
+- **Canary token 处置完成（2026-08-12，TD-005 1.0.58）**：owner 以
+  `USER-APPROVAL-20260812-TD005-TOKEN-DISPOSAL-6119-6122` 批准后，仓库外备份 ruoyi-vue-pro20（1,118,689 字节，
+  SHA-256 `026788bedcc5190928078336facb1ba6c365af45265fe02e1e4aa04e98d3ce97`），单事务软撤销 user 132 的
+  access 6120/6122 + refresh 6119/6121（各 `UPDATE 2`）。4 行 `deleted=1`，user 132 active access/refresh 恢复 `0/0`；
+  全库活动计数 2689/2689 → 2687/2687；业务基线 `4/4/17` + canary-meter-123 模板 1 行保留作 M1 证据、role 112 权限 `3/0` 不变。
+  Canary 写链闭环清理完成。剩余收尾：删除临时 `.td005-auth-allowlist.js` + git 提交全部改动（provider + harness +
+  nginx.conf + 测试 + 全部申请单/证据 + 进度入口）。

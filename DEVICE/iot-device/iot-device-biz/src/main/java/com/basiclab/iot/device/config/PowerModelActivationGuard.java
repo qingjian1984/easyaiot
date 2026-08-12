@@ -4,7 +4,6 @@ import com.basiclab.iot.common.capability.CapabilityService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
@@ -24,15 +23,16 @@ public final class PowerModelActivationGuard {
             @Value("${easyaiot.power-model.collector-release-port-enabled:false}")
             boolean collectorReleasePortEnabled,
             @Value("${power.model.events.enabled:false}") boolean eventsEnabled,
-            @Value("${easyaiot.power-model.idempotency-hmac-secret:}") String idempotencySecret) {
+            PowerModelIdempotencySecretProvider secretProvider) {
         verify(capabilityService, templateApiEnabled, bindingApiEnabled,
-                collectorReleasePortEnabled, eventsEnabled, idempotencySecret);
+                collectorReleasePortEnabled, eventsEnabled,
+                Objects.requireNonNull(secretProvider, "secretProvider").getSecret());
     }
 
     static void verify(CapabilityService capabilityService, boolean templateApiEnabled,
                        boolean bindingApiEnabled,
                        boolean collectorReleasePortEnabled, boolean eventsEnabled,
-                       String idempotencySecret) {
+                       byte[] idempotencySecret) {
         CapabilityService required = Objects.requireNonNull(capabilityService, "capabilityService");
         if (!templateApiEnabled && !bindingApiEnabled
                 && !collectorReleasePortEnabled && !eventsEnabled) {
@@ -59,7 +59,7 @@ public final class PowerModelActivationGuard {
                     + " requires collector release port");
         }
         if ((templateApiEnabled || bindingApiEnabled) && (idempotencySecret == null
-                || idempotencySecret.getBytes(StandardCharsets.UTF_8).length < 32)) {
+                || idempotencySecret.length < 32)) {
             throw new IllegalStateException("POWER_MODEL_IDEMPOTENCY_SECRET_INVALID:"
                     + " write API requires at least 32 UTF-8 bytes");
         }

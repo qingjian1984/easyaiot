@@ -4,6 +4,7 @@ import com.basiclab.iot.common.capability.CapabilityService;
 import com.basiclab.iot.common.core.service.TenantFrameworkService;
 import com.basiclab.iot.common.exception.ServiceException;
 import com.basiclab.iot.common.utils.SnowflakeIdUtil;
+import com.basiclab.iot.device.config.PowerModelIdempotencySecretProvider;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateCreateRequest;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateCreateResponse;
 import com.basiclab.iot.device.service.idempotency.IdempotencyArbiter;
@@ -12,14 +13,12 @@ import com.basiclab.iot.device.service.model.JcsCanonicalizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Objects;
@@ -53,16 +52,15 @@ public class PowerModelTemplateIdentityService {
                                              CapabilityService capabilityService,
                                              TenantFrameworkService tenantFrameworkService,
                                              JdbcPowerIdempotencyStore idempotencyStore,
-                                             @Value("${easyaiot.power-model.idempotency-hmac-secret:}")
-                                             String idempotencySecret) {
+                                             PowerModelIdempotencySecretProvider secretProvider) {
         this.jdbc = new NamedParameterJdbcTemplate(Objects.requireNonNull(dataSource, "dataSource"));
         this.mapper = Objects.requireNonNull(mapper, "mapper");
         this.capabilityService = Objects.requireNonNull(capabilityService, "capabilityService");
         this.tenantFrameworkService = Objects.requireNonNull(tenantFrameworkService,
                 "tenantFrameworkService");
         this.idempotencyStore = Objects.requireNonNull(idempotencyStore, "idempotencyStore");
-        this.idempotencySecret = Objects.requireNonNull(idempotencySecret, "idempotencySecret")
-                .getBytes(StandardCharsets.UTF_8);
+        this.idempotencySecret = Objects.requireNonNull(secretProvider, "secretProvider")
+                .getSecret();
     }
 
     @Transactional(rollbackFor = Exception.class)

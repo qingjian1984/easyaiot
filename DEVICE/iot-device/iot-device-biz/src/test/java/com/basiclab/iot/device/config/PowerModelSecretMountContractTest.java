@@ -13,24 +13,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PowerModelSecretMountContractTest {
 
     @Test
-    void composeOverlayUsesConfigTreeAndResetsPlainEnvironmentSecret() throws Exception {
+    void composeOverlayUsesDirectFileProviderAndResetsPlainEnvironmentSecret() throws Exception {
         Path root = root();
         String application = Files.readString(root.resolve(
                 "DEVICE/iot-device/iot-device-biz/src/main/resources/application.yaml"));
         String overlay = Files.readString(root.resolve("DEVICE/docker-compose.power-model-secret.yml"));
         String preflight = Files.readString(root.resolve(
                 ".scripts/docker/power_model_activation_preflight.ps1"));
-        assertTrue(application.contains("optional:configtree:/run/secrets/"));
-        assertTrue(application.contains(
+        // 直接文件 provider：application.yaml 不再依赖 Config Tree，改暴露非敏感文件路径属性
+        assertFalse(application.contains("optional:configtree:/run/secrets/"));
+        assertFalse(application.contains(
                 "idempotency-hmac-secret: ${EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET:}"));
+        assertTrue(application.contains(
+                "idempotency-hmac-secret-file: ${EASYAIOT_POWER_MODEL_HMAC_SECRET_FILE:}"));
+        // Compose secrets 挂载到不含 '.' 的 target，杜绝 Config Tree 文件名映射
         assertTrue(overlay.contains("EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET: !reset null"));
         assertTrue(overlay.contains("EASYAIOT_POWER_MODEL_HMAC_SECRET_FILE:?"));
-        assertTrue(overlay.contains("target: easyaiot.power-model.idempotency-hmac-secret"));
+        assertTrue(overlay.contains("target: easyaiot_power_model_hmac"));
+        assertTrue(overlay.contains(
+                "EASYAIOT_POWER_MODEL_HMAC_SECRET_FILE: /run/secrets/easyaiot_power_model_hmac"));
         assertFalse(overlay.matches("(?s).*idempotency-hmac-secret:\\s*[A-Za-z0-9+/=]{32,}.*"));
-        assertTrue(preflight.contains("source=$source"));
-        assertTrue(preflight.contains("configtree-file"));
-        assertTrue(preflight.contains(
-                "/run/secrets/easyaiot.power-model.idempotency-hmac-secret"));
+        // activation preflight 检查直接文件 provider 路径
+        assertTrue(preflight.contains("direct-file-provider"));
+        assertTrue(preflight.contains("/run/secrets/easyaiot_power_model_hmac"));
+        assertFalse(preflight.contains("configtree-file"));
         assertFalse(preflight.contains("idempotency-hmac-secret-file-content"));
         assertTrue(preflight.contains("@('events', 'template-api', 'api')"));
     }

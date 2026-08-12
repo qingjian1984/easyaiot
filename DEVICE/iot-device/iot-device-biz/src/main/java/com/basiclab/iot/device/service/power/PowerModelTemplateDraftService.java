@@ -4,6 +4,7 @@ import com.basiclab.iot.common.capability.CapabilityService;
 import com.basiclab.iot.common.core.service.TenantFrameworkService;
 import com.basiclab.iot.common.exception.ServiceException;
 import com.basiclab.iot.common.utils.SnowflakeIdUtil;
+import com.basiclab.iot.device.config.PowerModelIdempotencySecretProvider;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateDraftResponse;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateDraftWriteRequest;
 import com.basiclab.iot.device.service.idempotency.IdempotencyArbiter;
@@ -47,8 +48,7 @@ public class PowerModelTemplateDraftService {
                                           CapabilityService capabilityService,
                                           TenantFrameworkService tenantFrameworkService,
                                           JdbcPowerIdempotencyStore idempotencyStore,
-                                          @Value("${easyaiot.power-model.idempotency-hmac-secret:}")
-                                          String idempotencySecret,
+                                          PowerModelIdempotencySecretProvider secretProvider,
                                           @Value("${easyaiot.power-model.max-template-canonical-bytes:1048576}")
                                           int maxCanonicalBytes) {
         this.jdbc = new NamedParameterJdbcTemplate(Objects.requireNonNull(dataSource, "dataSource"));
@@ -57,8 +57,8 @@ public class PowerModelTemplateDraftService {
         this.tenantFrameworkService = Objects.requireNonNull(tenantFrameworkService,
                 "tenantFrameworkService");
         this.idempotencyStore = Objects.requireNonNull(idempotencyStore, "idempotencyStore");
-        this.idempotencySecret = Objects.requireNonNull(idempotencySecret, "idempotencySecret")
-                .getBytes(StandardCharsets.UTF_8);
+        this.idempotencySecret = Objects.requireNonNull(secretProvider, "secretProvider")
+                .getSecret();
         if (maxCanonicalBytes <= 0) throw new IllegalArgumentException("maxCanonicalBytes 必须为正数");
         this.maxCanonicalBytes = maxCanonicalBytes;
     }

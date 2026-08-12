@@ -1,6 +1,8 @@
 package com.basiclab.iot.device.service.power;
 
 import com.basiclab.iot.common.capability.CapabilityService;
+import com.basiclab.iot.device.config.PowerModelIdempotencySecretProvider;
+import java.nio.charset.StandardCharsets;
 import com.basiclab.iot.common.core.service.TenantFrameworkService;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateCreateRequest;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateDraftResponse;
@@ -146,7 +148,9 @@ class PowerModelTemplateDraftPostgresIntegrationTest {
         when(capability.isEnabled(PowerModelTemplateIdentityService.CAPABILITY_CODE)).thenReturn(true);
         when(capability.isEnabled(PowerModelTemplateDraftService.CAPABILITY_CODE)).thenReturn(true);
         JdbcPowerIdempotencyStore store = new JdbcPowerIdempotencyStore(dataSource);
-        String secret = "td011-review-secret-must-be-at-least-32-bytes";
+        PowerModelIdempotencySecretProvider secretProvider = mock(PowerModelIdempotencySecretProvider.class);
+        when(secretProvider.getSecret()).thenReturn(
+                "td011-review-secret-must-be-at-least-32-bytes".getBytes(StandardCharsets.UTF_8));
         PowerModelTemplateContentValidator validator = new PowerModelTemplateContentValidator(
                 mapper.readTree(PowerModelTemplateDraftPostgresIntegrationTest.class
                         .getClassLoader().getResourceAsStream(
@@ -154,9 +158,9 @@ class PowerModelTemplateDraftPostgresIntegrationTest {
         return new TestContext(dataSource, jdbc, mapper,
                 new DataSourceTransactionManager(dataSource),
                 new PowerModelTemplateIdentityService(dataSource, mapper, capability, tenant,
-                        store, secret),
+                        store, secretProvider),
                 new PowerModelTemplateDraftService(dataSource, mapper, capability, tenant,
-                        store, secret, 1024 * 1024),
+                        store, secretProvider, 1024 * 1024),
                 new PowerModelTemplateValidationService(dataSource, mapper, capability, tenant,
                         validator));
     }

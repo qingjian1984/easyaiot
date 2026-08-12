@@ -133,11 +133,6 @@ aj:
 
 --- #################### BasicLab相关配置 ####################
 
-# 可选 Docker/Compose secret 文件目录。只有显式挂载时才产生属性；默认不存在且不改变运行态。
-spring:
-  config:
-    import: optional:configtree:/run/secrets/
-
 iot:
   info:
     version: 1.0.0
@@ -223,8 +218,9 @@ easyaiot:
     template-api-enabled: ${EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED:false}
     binding-apply-api-enabled: ${EASYAIOT_POWER_MODEL_BINDING_APPLY_API_ENABLED:false}
     collector-release-port-enabled: ${EASYAIOT_POWER_MODEL_COLLECTOR_RELEASE_PORT_ENABLED:false}
-    # Config Tree 挂载优先；直接环境变量仅作为非 Compose 场景的兼容回退。
-    idempotency-hmac-secret: ${EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET:}
+    # 直接文件 provider（PowerModelIdempotencySecretProvider）读取仓库外 HMAC secret 文件路径；
+    # 路径为空返回空 secret（mini/未启用合法），路径非空 fail-closed 校验≥32 UTF-8 字节。
+    idempotency-hmac-secret-file: ${EASYAIOT_POWER_MODEL_HMAC_SECRET_FILE:}
 
 # Outbox relay、Kafka listener 与消费协调器的总开关；默认不装配后台任务。
 power:

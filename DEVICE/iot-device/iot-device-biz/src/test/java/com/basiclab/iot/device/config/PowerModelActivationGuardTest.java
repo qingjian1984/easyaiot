@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -18,12 +19,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** 双基线配置组合门禁：mini 全关，standard/full 只允许完整写链启用。 */
 class PowerModelActivationGuardTest {
 
-    private static final String TEST_SECRET = "0123456789abcdef0123456789abcdef";
+    private static final byte[] TEST_SECRET =
+            "0123456789abcdef0123456789abcdef".getBytes(StandardCharsets.UTF_8);
 
     @Test
     void allDisabledIsSafeForMini() {
         assertDoesNotThrow(() -> PowerModelActivationGuard.verify(
-                ManifestCapabilityService.disabled("mini"), false, false, false, false, ""));
+                ManifestCapabilityService.disabled("mini"), false, false, false, false, new byte[0]));
     }
 
     @Test
@@ -52,11 +54,12 @@ class PowerModelActivationGuardTest {
         CapabilityService standard = load("electric-standard.json");
         IllegalStateException missing = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        standard, true, true, true, true, ""));
+                        standard, true, true, true, true, new byte[0]));
         assertTrue(missing.getMessage().startsWith("POWER_MODEL_IDEMPOTENCY_SECRET_INVALID"));
         IllegalStateException shortSecret = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        standard, true, true, true, true, "不足三十二字节"));
+                        standard, true, true, true, true,
+                        "不足三十二字节".getBytes(StandardCharsets.UTF_8)));
         assertTrue(shortSecret.getMessage().startsWith("POWER_MODEL_IDEMPOTENCY_SECRET_INVALID"));
     }
 
@@ -65,7 +68,7 @@ class PowerModelActivationGuardTest {
         IllegalStateException mini = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
                         ManifestCapabilityService.disabled("mini"), false, false,
-                        false, true, ""));
+                        false, true, new byte[0]));
         assertTrue(mini.getMessage().startsWith("POWER_MODEL_PROFILE_NOT_SUPPORTED"));
         IllegalStateException disabled = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
@@ -78,12 +81,12 @@ class PowerModelActivationGuardTest {
     void standardMayStageReleasePortButRejectsEventsWithoutIt() throws Exception {
         CapabilityService standard = load("electric-standard.json");
         assertDoesNotThrow(() -> PowerModelActivationGuard.verify(
-                standard, false, false, true, false, ""));
+                standard, false, false, true, false, new byte[0]));
         assertDoesNotThrow(() -> PowerModelActivationGuard.verify(
-                standard, false, false, true, true, ""));
+                standard, false, false, true, true, new byte[0]));
         IllegalStateException eventsOnly = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        standard, false, false, false, true, ""));
+                        standard, false, false, false, true, new byte[0]));
         assertTrue(eventsOnly.getMessage().startsWith("POWER_MODEL_ACTIVATION_INCOMPLETE"));
     }
 
@@ -94,7 +97,7 @@ class PowerModelActivationGuardTest {
                 standard, true, false, true, true, TEST_SECRET));
         IllegalStateException noSecret = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(
-                        standard, true, false, true, true, ""));
+                        standard, true, false, true, true, new byte[0]));
         assertTrue(noSecret.getMessage().startsWith("POWER_MODEL_IDEMPOTENCY_SECRET_INVALID"));
         IllegalStateException bindingWithoutTemplate = assertThrows(IllegalStateException.class,
                 () -> PowerModelActivationGuard.verify(

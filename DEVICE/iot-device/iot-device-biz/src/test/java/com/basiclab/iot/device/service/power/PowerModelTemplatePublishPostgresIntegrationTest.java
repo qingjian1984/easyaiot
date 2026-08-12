@@ -1,6 +1,8 @@
 package com.basiclab.iot.device.service.power;
 
 import com.basiclab.iot.common.capability.CapabilityService;
+import com.basiclab.iot.device.config.PowerModelIdempotencySecretProvider;
+import java.nio.charset.StandardCharsets;
 import com.basiclab.iot.common.core.service.TenantFrameworkService;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateCreateRequest;
 import com.basiclab.iot.device.controller.power.dto.PowerModelTemplateDraftResponse;
@@ -324,13 +326,15 @@ class PowerModelTemplatePublishPostgresIntegrationTest {
         PowerModelOutboxRepository repository = suppliedRepository == null
                 ? new JdbcPowerModelOutboxRepository(dataSource) : suppliedRepository;
         PowerModelOutboxService outbox = new PowerModelOutboxService(repository, capability);
+        PowerModelIdempotencySecretProvider secretProvider = mock(PowerModelIdempotencySecretProvider.class);
+        when(secretProvider.getSecret()).thenReturn(SECRET.getBytes(StandardCharsets.UTF_8));
         return new TestContext(dataSource, jdbc, new DataSourceTransactionManager(dataSource), mapper,
                 new PowerModelTemplateIdentityService(dataSource, mapper, capability, tenant,
-                        idempotency, SECRET),
+                        idempotency, secretProvider),
                 new PowerModelTemplateDraftService(dataSource, mapper, capability, tenant,
-                        idempotency, SECRET, 1024 * 1024),
+                        idempotency, secretProvider, 1024 * 1024),
                 new PowerModelTemplatePublishService(dataSource, mapper, capability, tenant,
-                        validator, outbox, idempotency, SECRET));
+                        validator, outbox, idempotency, secretProvider));
     }
 
     private static int count(JdbcTemplate jdbc, String table, long tenantId) {

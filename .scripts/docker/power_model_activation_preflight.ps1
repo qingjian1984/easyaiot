@@ -166,24 +166,18 @@ if ($null -ne $device) {
     }
 
     if ($Stage -in @('template-api', 'api')) {
-        $secret = if ($environment.ContainsKey('EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET')) {
-            [string]$environment['EASYAIOT_POWER_MODEL_IDEMPOTENCY_HMAC_SECRET']
-        } else { '' }
-        $environmentBytes = [Text.Encoding]::UTF8.GetByteCount($secret)
+        # 直接文件 provider：读容器内 EASYAIOT_POWER_MODEL_HMAC_SECRET_FILE 指向的挂载文件字节数
         $secretFileResult = Invoke-Docker -Arguments @('exec', $DeviceContainer, 'sh', '-c',
-            'p=/run/secrets/easyaiot.power-model.idempotency-hmac-secret; if [ -f "$p" ]; then wc -c < "$p"; else echo 0; fi')
+            'f=${EASYAIOT_POWER_MODEL_HMAC_SECRET_FILE:-/run/secrets/easyaiot_power_model_hmac}; if [ -f "$f" ]; then wc -c < "$f"; else echo 0; fi')
         $secretFileBytes = 0
         if ($secretFileResult.Code -eq 0 -and $secretFileResult.Text.Trim() -match '^\d+$') {
             $secretFileBytes = [int]$secretFileResult.Text.Trim()
         }
-        $valid = $environmentBytes -ge 32 -or $secretFileBytes -ge 32
-        if ($valid) {
-            $source = if ($secretFileBytes -ge 32) { 'configtree-file' } else { 'environment-compatibility' }
-            Add-Check 'IDEMPOTENCY_SECRET' 'PASS' "configured=true source=$source utf8BytesGe32=true"
+        if ($secretFileBytes -ge 32) {
+            Add-Check 'IDEMPOTENCY_SECRET' 'PASS' 'configured=true source=direct-file-provider utf8BytesGe32=true'
         } else {
-            Add-Check 'IDEMPOTENCY_SECRET' 'BLOCKED' 'configured=false-or-short sources=environment,configtree-file'
+            Add-Check 'IDEMPOTENCY_SECRET' 'BLOCKED' 'configured=false-or-short source=direct-file-provider'
         }
-        $secret = $null
     } else {
         Add-Check 'IDEMPOTENCY_SECRET' 'PASS' 'not required before write API stages; value not read or printed'
     }
