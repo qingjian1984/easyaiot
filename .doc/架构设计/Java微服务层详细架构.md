@@ -588,7 +588,7 @@ class IotLocalMessageBus implements IotMessageBus { ... }
 
 | 组件 | 职责 |
 |------|------|
-| **MediaHookController** | 暴露 `/media/hook`，接收 SRS `on_dvr` 与 ZLM `on_record_mp4` 录像回调 Hook，委托 `DvrUploadService` 处理。 |
+| **MediaHookController** | 暴露 `/media/hook`，接收 SRS `on_dvr` 与 ZLM `on_record_mp4` 录像回调 Hook，委托 `DvrUploadService` 处理。**Hook 路由不对称**：仅录像 Hook（`on_dvr`/`on_record_mp4`）迁至 iot-sink；`on_publish`/`on_unpublish` 仍由 VIDEO 处理（见中间件部署 §3.8 SRS / §3.9 ZLMediaKit）。 |
 | **DvrUploadService / Impl** | DVR Hook 处理主流程：`NfsMediaPathResolver` 解析 NFS 路径 → 等待文件写完 → 查/建 `record_space`（`record-<deviceId>`）→ MinIO 上传 → 写 `playback` 表 + 回填 `alert.record_path` → `removeLocalAfterUpload` 时删 NFS 本地 flv。 |
 | **NfsMediaPathResolver** | 容器内路径 `/data/...` ↔ NFS 挂载根 `/mnt/easyaiot-media/...` 互转；`nfsOnly=true` 时强制路径落在 `mountRoot` 下，越界抛异常。 |
 | **NfsMediaProperties** | 配置前缀 `basiclab.media.*`：`mountRoot=/mnt/easyaiot-media`、`containerDataRoot=/data`、`nfsOnly`、`removeLocalAfterUpload`。 |
@@ -726,7 +726,7 @@ FileClientFactory
 | `getCephTopology()` | 返回 NFS 共享媒体节点拓扑（`NodeCephTopologyRespVO`），命名保留语义改 NFS。 |
 | `assignNfsCluster(NodeNfsClusterAssignReqVO)` | 分配/切换 NFS 集群：指定服务端与客户端节点，写节点 tags。 |
 | `NodeNfsClusterAssignReqVO` | 入参：`serverNodeId` / `clientNodeIds` / `mountRoot=/mnt/easyaiot-media/nfsExport` / `nfsMountOpts=vers=3,tcp,nolock,_netdev`。 |
-| `NodeCephTopologyRespVO` | 出参：`center` / `nodes` / `links` / `summary`；`node.kind=platform|storage_nfs|nfs_client`；含 `@Deprecated` 旧 Ceph 字段以兼容前端。 |
+| `NodeCephTopologyRespVO` | 出参：`center` / `nodes` / `links` / `summary`；`node.kind=platform|storage_nfs|nfs_client`；含 `@Deprecated` 旧 Ceph 字段以兼容前端。**命名兼容退出**：类名 `Ceph*`、方法 `getCephTopology()`、前端 `CephTopologyPanel` 沿用 Ceph 前缀仅为前端兼容，语义已全改为 NFS；`@Deprecated` 旧 Ceph 字段在前端切换到 `nfs*` 字段后下线，类名/方法/组件的重命名纳入后续前后端协同清理（不阻塞当前功能）。 |
 
 **SYNC_RELATIVE_FILES** 中同步到边缘节点的脚本清单已由 Ceph 系脚本（`install_ceph_*`/`ceph_deploy_*`）替换为 NFS 系脚本（`install_nfs_server`、`install_nfs_client`、`mount-all`、`check_nfs_health`）。
 
