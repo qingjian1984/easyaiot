@@ -54,8 +54,13 @@ public final class SqliteTelemetryOutbox implements TelemetryOutboxPort {
         }
     }
 
-    /** 优雅关闭 writer 线程。 */
+    /** 优雅关闭 writer 线程（等待 Connection 关闭，释放 Windows 文件锁）。 */
     public void shutdown() {
         writer.shutdown();
+        try {
+            writer.join(5000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
