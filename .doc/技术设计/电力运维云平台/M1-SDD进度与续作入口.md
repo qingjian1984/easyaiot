@@ -670,3 +670,8 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   **132667 rows/s**（候选参数 500 envelope/批可行性，远超 1000 阈值）、PK lookup/claim **0ms**（10k 行）、
   incremental_vacuum 页数稳定不增。**P0-3 SQLite 证据累计 14 测试 PASS**（核心持久性 6 + 损坏/索引 4 + 真崩溃 1 + 压测 3）。
   ENOSPC（磁盘满错误处理）需 Docker 小卷/物理小分区，7 天连续稳定性需真实硬件长跑——两项标 OPEN（特殊环境）。
+- **P0-2 TDengine Java 确定性幂等 Spike（2026-08-12）**：`TDengineIdempotencySpikeTest` 1/1 PASS
+  （taos-jdbcdriver 3.1.0 REST，`jdbc:TAOS-RS://localhost:6041`）：同 message_id+ts 重投 → **物理行=1**（upsert 覆盖，
+  val=2.0）。补 CLI 证据的 Java 驱动层（§27-⑤ "驱动版本 + 重复写行为证据"）。TDengine 写入即持久（无 WAL replay），
+  客户端崩溃后数据已落库，重投 = upsert → 1 行（§27-⑤ 确定性幂等闭合）。**P0-2 TDengine 证据完整**（CLI + Java）；
+  批量写部分失败逐条结果留 P1 adapter 实现时 Spike。**P0-2/P0-3 代码层证据完整**，P0-4 冻结待运维评审签字（§21-6/§27-6/7）。
