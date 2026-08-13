@@ -744,3 +744,13 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   iot-sink-biz compiler 全为 `<release>17</release>`、无 `<source>1.8</source>`；无 `-D` source flag 下
   PG 合同测试 5/5 PASS。**此后跑 iot-sink 测试只需 `-Dmaven.test.skip=false`，不再需要编译 flag。**
   构建治理 OPEN 关闭。
+- **P1-T7 TDengine Store 运行验证 + Store 层合同测试全绿（2026-08-13，TD-003 §13/§15）**：
+  `TDengineTelemetryStoreContractTest` 在真实 tdengine-server（taosAdapter REST 6041，
+  root/taosdata）3/3 PASS——writeSample STORED / 同 messageId 同 ts upsert 物理表保持 1 行
+  （确定性幂等 §27-⑤）/ 不同 messageId 各 1 行。修复点：REST URL 缺 db path
+  （`jdbc:TAOS-RS://host:port/?...`），taosAdapter `/rest/sql`（无 db）只允许 CREATE DATABASE/SHOW，
+  INSERT/CREATE STABLE/SELECT 需 `/rest/sql/<db>`；原 `init()` 建库成功但建表/写入报
+  `db is not specified`。改 `urlBootstrap`（无 db，建库）+ `url`（含 `/iot_telemetry`，建表/INSERT/SELECT）
+  两阶段；表名占位 `INSERT INTO ?` 实测工作（非根因）。**至此 Store 层（standard PG + full TDengine）
+  + Inbox 两层幂等合同测试 5+3 全绿**（真实 PG `iot-device20` + TDengine `iot_telemetry`）。
+  待验证：端到端 MQTT（collector↔center 真实 broker 往返，需起 iot-sink-biz + nacos 配置）+ 7天稳定性（部署后运行时）。
