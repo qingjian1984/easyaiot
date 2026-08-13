@@ -58,12 +58,27 @@ public final class SqliteTelemetryOutbox implements TelemetryOutboxPort {
 
     @Override
     public ClaimBatchResult claimBatch(int maxCount, Duration lease) {
-        throw new UnsupportedOperationException("claimBatch: P1-T4 pending implementation");
+        CompletableFuture<ClaimBatchResult> future = new CompletableFuture<>();
+        queue.offer(new OutboxCommand.Claim(maxCount, lease.toMillis(), future), Duration.ofSeconds(5));
+        try {
+            return future.get(DEFAULT_FUTURE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new OutboxBackpressureException("interrupted waiting for claim");
+        } catch (TimeoutException e) {
+            throw new OutboxUnavailableException("claim future timeout");
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new OutboxUnavailableException("claim failed", cause);
+        }
     }
 
     @Override
     public void applyAck(AckCommand ack) {
-        throw new UnsupportedOperationException("applyAck: P1-T4 pending implementation");
+        queue.offer(new OutboxCommand.ApplyAck(ack), Duration.ofSeconds(5));
     }
 
     /** 优雅关闭 writer 线程（等待 Connection 关闭，释放 Windows 文件锁）。 */
