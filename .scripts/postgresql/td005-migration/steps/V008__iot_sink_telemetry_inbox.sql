@@ -7,8 +7,8 @@ CREATE SCHEMA IF NOT EXISTS iot_sink;
 -- §10 telemetry_inbox：两层幂等（UNIQUE tenant_id+message_id + content_sha256 校验）
 CREATE TABLE IF NOT EXISTS iot_sink.telemetry_inbox (
     id                      BIGSERIAL PRIMARY KEY,
-    message_id              UUID NOT NULL,
-    message_id_wire         VARCHAR(36),                           -- 兼容 32 位无连字符 messageId
+    message_id              VARCHAR(64) NOT NULL,                  -- UUID v4 小写 36 字符（兼容 32 无连字符）
+    message_id_wire         VARCHAR(64),                           -- 兼容 32 位无连字符 messageId
     request_id              VARCHAR(64) NOT NULL,                  -- 重试不刷新，ACK 回显
     tenant_id               BIGINT NOT NULL,                       -- 租户编号
     site_code               VARCHAR(128) NOT NULL,                 -- 站点编码（非空）
@@ -50,7 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_inbox_lease
 -- §13 telemetry_sample：standard PostgreSQL 月分区时序表
 CREATE TABLE IF NOT EXISTS iot_sink.telemetry_sample (
     tenant_id               BIGINT NOT NULL,                       -- 租户编号
-    message_id              UUID NOT NULL,                         -- 幂等键
+    message_id              VARCHAR(64) NOT NULL,                 -- 幂等键
     content_sha256          CHAR(64) NOT NULL,                     -- canonical SHA-256
     site_code               VARCHAR(128) NOT NULL,                 -- 站点编码
     device_identification   VARCHAR(128) NOT NULL,                 -- 设备标识

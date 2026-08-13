@@ -725,3 +725,12 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   **M1 采集主线从设备/RS485 → Poller → SQLite Outbox → MQTT QoS1 → 中心 Inbox → TelemetryStore（standard PG / full TDengine）
   全链路代码实现完成**（~50 新建文件 + ~15 修改 + 52+ tests PASS，全 mvn -D17 BUILD SUCCESS）。
   16 commit 待 push（网络间歇性 reset）；端到端验证需 PG+EMQX+TDengine 运行环境 + V008 runner 落库窗口。
+- **P1-T6 PG 合同测试闭环（2026-08-13，TD-003 §10/§13）**：`JdbcTelemetryInboxContractTest` 在真实
+  `iot-device20`（postgres-server 容器）上 5/5 PASS——3 Store（STORED/DUPLICATE/同 messageId 不同 hash 仍 STORED）+
+  2 Inbox（新 envelope 入库 / 同 messageId 同 hash 第二次返回 0 行，验证两层幂等 UNIQUE + ON CONFLICT DO NOTHING）。
+  修复点：① V008 DDL `updated_at_ms BIGINT NOT NULL` 无默认值，`JdbcTelemetryInbox.INSERT_SQL` 原未写该列 →
+  补 `updated_at_ms` 列 + VALUES 占位 + jdbc.update 第 15 参 `now`；② 仓库默认 `maven.test.skip=true` 且
+  reactor compiler 默认回落 source=1.8（`DEVICE/pom.xml` compiler 用 `${maven.compiler.source}`），显式
+  `-Dmaven.compiler.source/target=17 -Dmaven.test.skip=false` 后通过；③ iot-sink-api 旧 jar 导致
+  `InboxEnvelope ClassNotFoundException`，`install -am` 重建后解决。PG 凭证经 `TD008_PG_PASSWORD` 注入。
+  构建治理 OPEN：source=1.8 默认漂移仍未根因修复（iot-parent 无 compiler `<build>`，依赖 `-D` 显式覆盖）。

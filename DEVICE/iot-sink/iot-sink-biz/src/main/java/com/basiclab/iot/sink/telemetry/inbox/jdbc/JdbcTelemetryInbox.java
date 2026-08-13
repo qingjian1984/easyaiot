@@ -29,8 +29,8 @@ public final class JdbcTelemetryInbox implements TelemetryInboxPort {
             + "(message_id, message_id_wire, request_id, tenant_id, site_code,"
             + " device_identification, property_code, payload, content_sha256,"
             + " collected_at_ms, sequence_no, source, config_version,"
-            + " projection_state, received_at_ms)"
-            + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'RECEIVED', ?)"
+            + " projection_state, received_at_ms, updated_at_ms)"
+            + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'RECEIVED', ?, ?)"
             + " ON CONFLICT (tenant_id, message_id) DO NOTHING";
 
     private static final String SELECT_HASH_SQL = "SELECT content_sha256"
@@ -67,6 +67,7 @@ public final class JdbcTelemetryInbox implements TelemetryInboxPort {
                     env.sequence(),
                     env.source(),
                     env.configVersion(),
+                    now,
                     now);
 
             if (rows > 0) {
