@@ -81,6 +81,12 @@ public final class SqliteTelemetryOutbox implements TelemetryOutboxPort {
         queue.offer(new OutboxCommand.ApplyAck(ack), Duration.ofSeconds(5));
     }
 
+    /** 租约回收（LeaseReclaimer 周期调用，fire-and-forget）。 */
+    public void reclaimExpiredLeases() {
+        queue.offer(new OutboxCommand.ReclaimExpiredLeases(
+                System.currentTimeMillis(), 1000L, 1_800_000L), Duration.ofSeconds(5));
+    }
+
     /** 优雅关闭 writer 线程（等待 Connection 关闭，释放 Windows 文件锁）。 */
     public void shutdown() {
         writer.shutdown();

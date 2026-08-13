@@ -4,24 +4,30 @@ import com.basiclab.iot.sink.telemetry.outbox.OutboxBackpressureException;
 
 import java.time.Duration;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
- * TD-002 §9 有界命令队列（MPSC 语义，候选 4096 命令/16MiB，待 TD-001 压测冻结）。
- * 队列满且超时 → {@link OutboxBackpressureException}（Poller 保留原 messageId 重试）。
+ * TD-002 §9 有界命令队列（双队列：控制命令优先于数据命令）。
+ *
+ * <p>控制命令（Claim/ApplyAck/Reclaim）入 controlQueue，数据命令（AppendBatch）入 dataQueue。
+ * take() 优先从 controlQueue 取，controlQueue 空时取 dataQueue，确保 ACK/Claim 不被 AppendBatch 饿死。
  */
 final class OutboxCommandQueue {
 
-    private final ArrayBlockingQueue<OutboxCommand> queue;
+    private final BlockingQueue<OutboxCommand> controlQueue;
+    private final BlockingQueue<OutboxCommand> dataQueue;
 
     OutboxCommandQueue(int capacity) {
-        this.queue = new ArrayBlockingQueue<>(capacity);
+        int half = Math.max(1, capacity / 2);
+        this.controlQueue = new ArrayBlockingQueue<>(half);
+        this.dataQueue = new ArrayBlockingQueue<>(capacity - half);
     }
 
-    /** 入队（背压超时抛 OutboxBackpressureException）。 */
     void offer(OutboxCommand cmd, Duration timeout) {
+        BlockingQueue<OutboxCommand> q = isControl(cmd) ? controlQueue : dataQueue;
         try {
-            if (!queue.offer(cmd, timeout.toNanos(), TimeUnit.NANOSECONDS)) {
+            if (!q.offer(cmd, timeout.toNanos(), TimeUnit.NANOSECONDS)) {
                 throw new OutboxBackpressureException("outbox queue full after " + timeout);
             }
         } catch (InterruptedException e) {
@@ -30,16 +36,25 @@ final class OutboxCommandQueue {
         }
     }
 
-    /** Writer 线程阻塞取出。 */
     OutboxCommand take() throws InterruptedException {
-        return queue.take();
+        OutboxCommand cmd = controlQueue.poll();
+        if (cmd != null) {
+            return cmd;
+        }
+        return dataQueue.take();
     }
 
     boolean isEmpty() {
-        return queue.isEmpty();
+        return controlQueue.isEmpty() && dataQueue.isEmpty();
     }
 
     int size() {
-        return queue.size();
+        return controlQueue.size() + dataQueue.size();
+    }
+
+    private static boolean isControl(OutboxCommand cmd) {
+        return cmd instanceof OutboxCommand.Claim
+                || cmd instanceof OutboxCommand.ApplyAck
+                || cmd instanceof OutboxCommand.ReclaimExpiredLeases;
     }
 }
