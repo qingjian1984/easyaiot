@@ -754,3 +754,15 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   两阶段；表名占位 `INSERT INTO ?` 实测工作（非根因）。**至此 Store 层（standard PG + full TDengine）
   + Inbox 两层幂等合同测试 5+3 全绿**（真实 PG `iot-device20` + TDengine `iot_telemetry`）。
   待验证：端到端 MQTT（collector↔center 真实 broker 往返，需起 iot-sink-biz + nacos 配置）+ 7天稳定性（部署后运行时）。
+- **端到端 MQTT 验证（center 侧）+ subscriber host 修复（2026-08-13，TD-003 §7/§10/§13）**：
+  本地起 iot-sink-biz center（`--spring.profiles.active=local --easyaiot.telemetry.inbox.enabled=true
+  --easyaiot.telemetry.mqtt.enabled=true`，Started in 37s），CenterMqttInboxSubscriber 匿名连真实 EMQX 1883
+  订阅 `/telemetry/#`。用 paho-mqtt 模拟 collector 发 Envelope V1 上行 topic（`/telemetry/site-e2e/voltage-a`）→
+  验证全链路打通：subscriber 收 → parseEnvelope → JdbcTelemetryInbox 两层幂等写入（RECEIVED）→
+  TelemetryProjectionOrchestrator 500ms claim（FOR UPDATE SKIP LOCKED）→ JdbcTelemetryStore →
+  PG `telemetry_inbox`(COMPLETED) + `telemetry_sample`(value_numeric=225.5)。重复发同 messageId，inbox/sample
+  仍各 1 行（端到端两层幂等）。修复 CenterMqttInboxSubscriber 构造器 host/port 参数被忽略、start() 用硬编码
+  localhost 的 bug（改字段注入，支持非 localhost 部署）。**center 侧真实 broker 往返 + Spring 装配 + Inbox + Store
+  端到端验证通过**。坑：Git Bash MSYS2 把命令行 `--topic=/telemetry/#` 路径转换为 `C:/Program Files/Git/telemetry/#`，
+  需用默认值或不经 shell 注入。EMQX 匿名允许（subscriber 无凭证连）。待补：collector 侧 outbox→publish 往返
+  （需设备数据或手动注入 outbox）+ ACK 回环 + 7天稳定性（部署后运行时）。

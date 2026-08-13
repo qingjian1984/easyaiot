@@ -34,6 +34,8 @@ public class CenterMqttInboxSubscriber implements AutoCloseable {
     private final ObjectMapper mapper;
     private final Vertx vertx;
     private final MqttClient client;
+    private final String host;
+    private final int port;
     private final String topicFilter;
 
     public CenterMqttInboxSubscriber(TelemetryInboxPort inbox,
@@ -42,6 +44,8 @@ public class CenterMqttInboxSubscriber implements AutoCloseable {
         this.inbox = inbox;
         this.mapper = new ObjectMapper();
         this.vertx = Vertx.vertx();
+        this.host = host;
+        this.port = port;
         this.topicFilter = topicFilter;
         MqttClientOptions options = new MqttClientOptions()
                 .setClientId(clientId)
@@ -51,7 +55,7 @@ public class CenterMqttInboxSubscriber implements AutoCloseable {
     }
 
     public void start() {
-        client.connect(properties().port, properties().host, ar -> {
+        client.connect(port, host, ar -> {
             if (ar.succeeded()) {
                 log.info("center MQTT connected, subscribing: {}", topicFilter);
                 client.subscribe(topicFilter, 1);
@@ -138,10 +142,6 @@ public class CenterMqttInboxSubscriber implements AutoCloseable {
         }
     }
 
-    private Properties properties() {
-        return new Properties();
-    }
-
     @Override
     public void close() {
         try {
@@ -149,10 +149,5 @@ public class CenterMqttInboxSubscriber implements AutoCloseable {
         } catch (Exception ignore) {
         }
         vertx.close();
-    }
-
-    private record Properties() {
-        static final String host = "localhost";
-        static final int port = 1883;
     }
 }
