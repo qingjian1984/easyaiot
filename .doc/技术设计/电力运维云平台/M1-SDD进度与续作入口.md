@@ -734,3 +734,13 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   `-Dmaven.compiler.source/target=17 -Dmaven.test.skip=false` 后通过；③ iot-sink-api 旧 jar 导致
   `InboxEnvelope ClassNotFoundException`，`install -am` 重建后解决。PG 凭证经 `TD008_PG_PASSWORD` 注入。
   构建治理 OPEN：source=1.8 默认漂移仍未根因修复（iot-parent 无 compiler `<build>`，依赖 `-D` 显式覆盖）。
+- **构建治理根因修复：reactor compiler 锁定 `--release 17`（2026-08-13）**：`DEVICE/pom.xml` pluginManagement
+  的 maven-compiler-plugin 原用 `<source>/<target>` 依赖 `${maven.compiler.source}`，但该 property 被
+  maven-compiler-plugin 默认值机制覆盖（effective-pom 实测解析为 1.8；同理 `java.version` 被 JVM sysprop
+  覆盖为 19.0.2），全 reactor 静默以 Java 8 编译——record/sealed/switch/pattern matching 报错，需显式
+  `-Dmaven.compiler.source/target=17` 才能绕过，properties 声明的 `=17` 形同虚设。修复：改用字面量
+  `<release>17</release>`（不依赖任何被覆盖的 property），pluginManagement config 继承对所有子模块生效
+  （含独立声明 source/target 的 iot-gb28181-biz——release 优先于 source/target）。effective-pom 验证
+  iot-sink-biz compiler 全为 `<release>17</release>`、无 `<source>1.8</source>`；无 `-D` source flag 下
+  PG 合同测试 5/5 PASS。**此后跑 iot-sink 测试只需 `-Dmaven.test.skip=false`，不再需要编译 flag。**
+  构建治理 OPEN 关闭。

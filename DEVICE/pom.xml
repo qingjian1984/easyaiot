@@ -230,8 +230,12 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>${maven-compiler-plugin.version}</version>
                     <configuration>
-                        <source>${maven.compiler.source}</source>
-                        <target>${maven.compiler.target}</target>
+                        <!-- 根因修复：maven.compiler.source/target property 会被 maven-compiler-plugin
+                             默认值机制覆盖（实测 effective-pom 解析为 1.8，且 java.version 被 JVM sysprop
+                             覆盖为 19.0.2），导致 <source>/<target> 依赖 property 时静默回落 Java 8。
+                             改用字面量 release 锁定 Java 17——config 继承（已验证工作）对所有子模块生效，
+                             不再依赖任何被覆盖的 property。 -->
+                        <release>17</release>
                         <encoding>${project.build.sourceEncoding}</encoding>
                         <!-- 保留方法参数名，供 Spring Cache SpEL（#paramName）等使用 -->
                         <parameters>true</parameters>
