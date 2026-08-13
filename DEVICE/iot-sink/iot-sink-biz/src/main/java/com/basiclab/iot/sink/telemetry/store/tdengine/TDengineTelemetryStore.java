@@ -38,12 +38,17 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
             + " TAGS (?, ?, ?, ?, ?)"
             + " VALUES (?, ?, ?)";
 
+    /** REST 连接需在 URL path 指定 db（taosAdapter /rest/sql/<db>）；CREATE DATABASE 用无 db 的 bootstrap 连接。 */
+    private static final String DB_NAME = "iot_telemetry";
+    private final String urlBootstrap;
     private final String url;
     private final Properties props;
     private volatile boolean initialized = false;
 
     public TDengineTelemetryStore(String host, int port, String username, String password) {
-        this.url = "jdbc:TAOS-RS://" + host + ":" + port + "/?user=" + username + "&password=" + password;
+        String auth = "?user=" + username + "&password=" + password;
+        this.urlBootstrap = "jdbc:TAOS-RS://" + host + ":" + port + "/" + auth;
+        this.url = "jdbc:TAOS-RS://" + host + ":" + port + "/" + DB_NAME + auth;
         this.props = new Properties();
     }
 
@@ -51,10 +56,17 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
         if (initialized) {
             return;
         }
-        try (Connection c = DriverManager.getConnection(url, props);
-             Statement s = c.createStatement()) {
-            s.execute(CREATE_DB_SQL);
-            s.execute(CREATE_STABLE_SQL);
+        try {
+            // 1) 建库：REST 不依赖默认 db，用无 db 连接执行 CREATE DATABASE
+            try (Connection c = DriverManager.getConnection(urlBootstrap, props);
+                 Statement s = c.createStatement()) {
+                s.execute(CREATE_DB_SQL);
+            }
+            // 2) 建超级表：REST 的 INSERT/DDL 需连接指定 db（taosAdapter /rest/sql/<db>），用含 db 连接
+            try (Connection c = DriverManager.getConnection(url, props);
+                 Statement s = c.createStatement()) {
+                s.execute(CREATE_STABLE_SQL);
+            }
             initialized = true;
             log.info("TDengine telemetry store initialized: {}", url.replaceAll("password=[^&]*", "password=***"));
         } catch (Exception e) {
