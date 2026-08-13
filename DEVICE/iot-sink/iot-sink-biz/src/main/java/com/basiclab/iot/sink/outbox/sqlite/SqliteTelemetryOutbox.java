@@ -81,6 +81,11 @@ public final class SqliteTelemetryOutbox implements TelemetryOutboxPort {
         queue.offer(new OutboxCommand.ApplyAck(ack), Duration.ofSeconds(5));
     }
 
+    /** 暴露内部队列供 CleanupTask/CheckpointTask 使用。 */
+    OutboxCommandQueue getQueue() {
+        return queue;
+    }
+
     /** 租约回收（LeaseReclaimer 周期调用，fire-and-forget）。 */
     public void reclaimExpiredLeases() {
         queue.offer(new OutboxCommand.ReclaimExpiredLeases(

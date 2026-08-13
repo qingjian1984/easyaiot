@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
  * <p>控制命令（Claim/ApplyAck/Reclaim）入 controlQueue，数据命令（AppendBatch）入 dataQueue。
  * take() 优先从 controlQueue 取，controlQueue 空时取 dataQueue，确保 ACK/Claim 不被 AppendBatch 饿死。
  */
-final class OutboxCommandQueue {
+public final class OutboxCommandQueue {
 
     private final BlockingQueue<OutboxCommand> controlQueue;
     private final BlockingQueue<OutboxCommand> dataQueue;
@@ -24,7 +24,7 @@ final class OutboxCommandQueue {
         this.dataQueue = new ArrayBlockingQueue<>(capacity - half);
     }
 
-    void offer(OutboxCommand cmd, Duration timeout) {
+    public void offer(OutboxCommand cmd, Duration timeout) {
         BlockingQueue<OutboxCommand> q = isControl(cmd) ? controlQueue : dataQueue;
         try {
             if (!q.offer(cmd, timeout.toNanos(), TimeUnit.NANOSECONDS)) {

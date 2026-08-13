@@ -4,6 +4,8 @@ import com.basiclab.iot.sink.outbox.dispatch.CollectorMqttAckSubscriber;
 import com.basiclab.iot.sink.outbox.dispatch.CollectorMqttProperties;
 import com.basiclab.iot.sink.outbox.dispatch.CollectorMqttPublisher;
 import com.basiclab.iot.sink.outbox.dispatch.LeaseReclaimer;
+import com.basiclab.iot.sink.outbox.dispatch.OutboxCleanupTask;
+import com.basiclab.iot.sink.outbox.dispatch.OutboxCheckpointTask;
 import com.basiclab.iot.sink.outbox.dispatch.OutboxDispatcher;
 import com.basiclab.iot.sink.outbox.dispatch.VertxCollectorMqttPublisher;
 import com.basiclab.iot.sink.telemetry.envelope.EnvelopeCanonicalCodec;
@@ -71,5 +73,21 @@ public class SqliteOutboxAutoConfiguration {
                 outbox, publisher.getMqttClient(), ackFilter);
         subscriber.start();
         return subscriber;
+    }
+
+    @Bean(destroyMethod = "stop")
+    @ConditionalOnProperty(name = "easyaiot.collector.mqtt.enabled", havingValue = "true")
+    public OutboxCleanupTask outboxCleanupTask(SqliteTelemetryOutbox outbox) {
+        OutboxCleanupTask task = new OutboxCleanupTask(outbox.getQueue(), 10_000L, 300_000L, 1000);
+        task.start();
+        return task;
+    }
+
+    @Bean(destroyMethod = "stop")
+    @ConditionalOnProperty(name = "easyaiot.collector.mqtt.enabled", havingValue = "true")
+    public OutboxCheckpointTask outboxCheckpointTask(SqliteTelemetryOutbox outbox) {
+        OutboxCheckpointTask task = new OutboxCheckpointTask(outbox.getQueue(), 30_000L);
+        task.start();
+        return task;
     }
 }

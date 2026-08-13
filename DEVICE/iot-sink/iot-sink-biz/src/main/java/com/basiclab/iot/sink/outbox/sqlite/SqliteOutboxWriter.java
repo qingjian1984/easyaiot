@@ -94,6 +94,10 @@ final class SqliteOutboxWriter extends Thread {
                         executeApplyAck(aa.ack());
                     } else if (cmd instanceof OutboxCommand.ReclaimExpiredLeases r) {
                         executeReclaimExpiredLeases(r.nowMs());
+                    } else if (cmd instanceof OutboxCommand.CleanupAcked ca) {
+                        executeCleanupAcked(ca.keepBeforeMs(), ca.batchSize());
+                    } else if (cmd instanceof OutboxCommand.Checkpoint cp) {
+                        executeCheckpoint();
                     }
                 } catch (InterruptedException e) {
                     if (!running) {
@@ -370,6 +374,44 @@ final class SqliteOutboxWriter extends Thread {
                 p.setLong(2, nowMs);
                 p.setLong(3, nowMs);
                 reclaimed = p.executeUpdate();
+            }
+            connection.commit();
+        } catch (SQLException e) {
+            try {
+                connection.rollback();
+            } catch (SQLException ignore) {
+            }
+        }
+    }
+
+    // ==================== cleanupAcked (P1-T5 §13) ====================
+
+    private void executeCleanupAcked(long keepBeforeMs, int batchSize) {
+        try {
+            try (PreparedStatement p = connection.prepareStatement(
+                    "DELETE FROM telemetry_outbox WHERE id IN ("
+                    + "SELECT id FROM telemetry_outbox "
+                    + "WHERE status = 'ACKED' AND created_at_ms < ? "
+                    + "ORDER BY id ASC LIMIT ?)")) {
+                p.setLong(1, keepBeforeMs);
+                p.setInt(2, batchSize);
+                p.executeUpdate();
+            }
+            connection.commit();
+        } catch (SQLException e) {
+            try {
+                connection.rollback();
+            } catch (SQLException ignore) {
+            }
+        }
+    }
+
+    // ==================== checkpoint (P1-T5 §13) ====================
+
+    private void executeCheckpoint() {
+        try {
+            try (Statement s = connection.createStatement()) {
+                s.execute("PRAGMA wal_checkpoint(PASSIVE)");
             }
             connection.commit();
         } catch (SQLException e) {

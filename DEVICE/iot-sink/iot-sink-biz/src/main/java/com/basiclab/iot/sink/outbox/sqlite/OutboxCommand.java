@@ -9,10 +9,11 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * TD-002 §9 outbox 命令（sealed）。P1-T4 扩展 Claim/ApplyAck/ReclaimExpiredLeases。
+ * TD-002 §9 outbox 命令（sealed）。P1-T4 扩展 Claim/ApplyAck/ReclaimExpiredLeases；P1-T5 扩展 CleanupAcked/Checkpoint。
  */
-sealed interface OutboxCommand permits OutboxCommand.AppendBatch, OutboxCommand.Claim,
-        OutboxCommand.ApplyAck, OutboxCommand.ReclaimExpiredLeases {
+public sealed interface OutboxCommand permits OutboxCommand.AppendBatch, OutboxCommand.Claim,
+        OutboxCommand.ApplyAck, OutboxCommand.ReclaimExpiredLeases,
+        OutboxCommand.CleanupAcked, OutboxCommand.Checkpoint {
 
     record AppendBatch(
             List<TelemetryEnvelope> envelopes,
@@ -37,5 +38,14 @@ sealed interface OutboxCommand permits OutboxCommand.AppendBatch, OutboxCommand.
             long backoffBaseMs,
             long backoffCapMs
     ) implements OutboxCommand {
+    }
+
+    record CleanupAcked(
+            long keepBeforeMs,
+            int batchSize
+    ) implements OutboxCommand {
+    }
+
+    record Checkpoint() implements OutboxCommand {
     }
 }
