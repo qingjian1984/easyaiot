@@ -37,11 +37,16 @@ public final class OutboxCommandQueue {
     }
 
     OutboxCommand take() throws InterruptedException {
-        OutboxCommand cmd = controlQueue.poll();
-        if (cmd != null) {
-            return cmd;
+        while (true) {
+            OutboxCommand cmd = controlQueue.poll();
+            if (cmd != null) {
+                return cmd;
+            }
+            cmd = dataQueue.poll(50, TimeUnit.MILLISECONDS);
+            if (cmd != null) {
+                return cmd;
+            }
         }
-        return dataQueue.take();
     }
 
     boolean isEmpty() {
