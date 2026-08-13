@@ -45,5 +45,14 @@ class CollectorTelemetryWriterTest {
             return new AppendBatchResult.Success(
                     envelopes.stream().map(TelemetryEnvelope::messageId).toList(), List.of());
         }
+
+        @Override
+        public com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult claimBatch(int maxCount, Duration lease) {
+            return new com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult.Empty();
+        }
+
+        @Override
+        public void applyAck(com.basiclab.iot.sink.telemetry.outbox.AckCommand ack) {
+        }
     }
 }

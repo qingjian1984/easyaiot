@@ -24,8 +24,22 @@ class CollectorTelemetryConfigurationTest {
         assertArrayEquals(new String[]{"collector"}, profile.value());
         assertEquals(TelemetryOutboxPort.class, factory.getParameterTypes()[0]);
 
-        TelemetryOutboxPort outbox = (envelopes, timeout) -> new AppendBatchResult.Success(
-                envelopes.stream().map(envelope -> envelope.messageId()).toList(), List.of());
+        TelemetryOutboxPort outbox = new TelemetryOutboxPort() {
+            @Override
+            public AppendBatchResult appendBatch(
+                    java.util.List<com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope> envelopes,
+                    java.time.Duration timeout) {
+                return new AppendBatchResult.Success(
+                        envelopes.stream().map(e -> e.messageId()).toList(), List.of());
+            }
+            @Override
+            public com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult claimBatch(int maxCount, java.time.Duration lease) {
+                return new com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult.Empty();
+            }
+            @Override
+            public void applyAck(com.basiclab.iot.sink.telemetry.outbox.AckCommand ack) {
+            }
+        };
         CollectorTelemetryWriter writer = new IotGatewayConfiguration().collectorTelemetryWriter(outbox);
         assertNotNull(writer);
     }

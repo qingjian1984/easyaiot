@@ -348,7 +348,7 @@ final class SqliteOutboxWriter extends Thread {
                 + "(message_id, tenant_id, site_code, device_identification, property_code,"
                 + " stage, reason_code, gap_first_seen_ms, gap_last_seen_ms, created_at_ms)"
                 + " SELECT message_id, tenant_id, site_code, device_identification, property_code,"
-                + " 'EDGE_DELIVERY', ?, ?, ?"
+                + " 'EDGE_DELIVERY', ?, ?, ?, ?"
                 + " FROM telemetry_outbox WHERE message_id = ?")) {
             p.setString(1, ack.errorCode() != null ? ack.errorCode() : "UNKNOWN");
             p.setLong(2, now);
