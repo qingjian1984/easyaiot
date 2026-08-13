@@ -1,13 +1,13 @@
 # M1 SDD 进度与续作入口
 
 > 检查点日期：2026-08-13
-> Git 分支：`cfdqiot`（远端同步至 `543810f2`，工作区 clean）
+> Git 分支：`cfdqiot`（远端同步至 `22279a77`，工作区 clean）
 > 当前阶段：M1 采集管线编码侧 + 本地验证完成；部署后运行时待办
 > 说明：本文件用于下次会话恢复上下文；状态以各正式文档为准
 
 ## 当前快照与下一步（2026-08-13）
 
-**M1 采集主线编码侧 + 本地验证全部闭环**：设备/RS485 → Poller → SQLite Outbox → MQTT QoS1 → 中心 Inbox → TelemetryStore（standard PG / full TDengine）全链路代码实现 + 验证完成。
+**M1 采集主线编码侧 + 本地验证全部闭环；B 类部署前硬化完成（2026-08-13）**：设备/RS485 → Poller → SQLite Outbox → MQTT QoS1 → 中心 Inbox → TelemetryStore（standard PG / full TDengine）全链路代码实现 + 验证完成；4 项硬化（EMQX 凭证 / MQTT 配置块 / SHA-256 子表名 / 共享 codec + 补零契约修复）见下「编码侧硬化」段。
 
 ### 本会话（2026-08-13）成果（commit `1e31edba`～`543810f2`，均 push）
 - PG Inbox + Store 合同测试 5/5（真实 `iot-device20`，修复 `updated_at_ms` NOT NULL + `message_id` UUID→VARCHAR(64)）
@@ -21,11 +21,17 @@
 - **ACK 回环**：center → collector `/telemetry/ack/...`（CenterMqttAckPublisher），需 collector CollectorMqttAckSubscriber 在线。
 - **7天稳定性**：M1 §10 验收，collector/center 容器部署后长期观察。
 
-### 编码侧潜在改进（部署前可考虑，非阻塞，无 commit）
-- CenterMqttInboxSubscriber 缺 EMQX 凭证（`MqttClientOptions` 未设 username/password）——生产 EMQX 禁匿名时需补
-- `application-collector.yaml` 缺 telemetry publish MQTT 配置（`easyaiot.collector.mqtt.*`，enabled 默认 false）
-- TDengineTelemetryStore.buildSubTableName 用 `hashCode`（碰撞风险，tag message_id 区分但可改稳定 ID）
-- JdbcTelemetryStore/TDengineTelemetryStore.parseValue 从 JSON 提取 value（简化实现，可精确化为 Envelope V1 解析器直供 BigDecimal）
+### 编码侧硬化（B 类，2026-08-13 完成；commit `17050dc3` / `7dc19930` / `22279a77`）
+- ✅ B-1 center subscriber EMQX 凭证 + 配置块：新建 `TelemetryMqttProperties` @ConfigurationProperties（对称 CollectorMqttProperties），AutoConfiguration 改用 Properties 替代 @Value，subscriber 构造器加 username/password 条件注入；application.yaml 加 telemetry.mqtt 连接段（凭证环境变量占位），local/standard/prod 加 inbox+mqtt enabled=true（原靠命令行系统属性启用）
+- ✅ B-2 collector MQTT 配置块：application-collector.yaml 加 `easyaiot.collector.mqtt`（Java 零改动，CollectorMqttProperties + VertxCollectorMqttPublisher 已支持凭证）
+- ✅ B-3 TDengine 子表名 SHA-256：buildSubTableName 改 SHA-256 取前 8 字节 → 无符号 long（消除 `Math.abs(Integer.MIN_VALUE)` 负号边界缺陷，碰撞空间 2^32→2^64；碰撞本不影响正确性，message_id tag 兜底；TDengine 合同 3/3 仍绿）
+- ✅ B-4 共享 TelemetryValueCodec + 修补零契约：两 store parseValue 去重 + 单例 ObjectMapper；value 缺失返 null（对齐 TD-003 §6 禁止补 0）；PG 侧 jdbc.update 传 null → value_numeric 写 NULL（修契约），codec 单测 6/6
+
+> **TDengine 引擎限制（已知妥协）**：TDengine DOUBLE 列强制非空，spike 验证 `CREATE STABLE ... DOUBLE NULL` → syntax error，无法写 NULL。B-4 中 TDengine 侧 value 缺失时回退 0.0 + warn 日志（PG 侧已正确写 NULL）。代码注释 + 此处标注。
+
+### 编码侧剩余潜在改进（仍未做，非阻塞）
+- CenterMqttAckPublisher 已存在但**未装配**（TelemetryInboxAutoConfiguration 未建 bean）——ACK 回环启用时需补
+- JdbcTelemetryStore.INSERT_SQL 未写 TD-003 §14 的 value_present/quality/value_text 列（设计 DDL 有这些列，当前 INSERT 未覆盖）——独立的字段覆盖差距，非 B-4 范围
 
 ### 复用要点（下次会话）
 - 跑 iot-sink 测试：`mvn -f DEVICE/pom.xml test -pl iot-sink/iot-sink-biz -Dtest=<TestClass> -DfailIfNoTests=false -Dmaven.test.skip=false`（compiler 已锁 release 17，无需 source flag）
