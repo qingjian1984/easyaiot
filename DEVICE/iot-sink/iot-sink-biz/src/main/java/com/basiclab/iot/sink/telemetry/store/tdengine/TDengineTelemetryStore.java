@@ -2,6 +2,7 @@ package com.basiclab.iot.sink.telemetry.store.tdengine;
 
 import com.basiclab.iot.sink.telemetry.inbox.InboxEnvelope;
 import com.basiclab.iot.sink.telemetry.store.TelemetryStorePort;
+import com.basiclab.iot.sink.telemetry.store.TelemetryValueCodec;
 import com.basiclab.iot.sink.telemetry.store.WriteResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,7 +84,7 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
             }
         }
         String subTable = buildSubTableName(envelope);
-        BigDecimal value = parseValue(envelope);
+        BigDecimal value = TelemetryValueCodec.parseDecimalValue(envelope.canonicalBytes());
 
         try (Connection c = DriverManager.getConnection(url, props);
              PreparedStatement p = c.prepareStatement(INSERT_SQL)) {
@@ -94,7 +95,15 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
             p.setString(5, envelope.deviceIdentification());
             p.setString(6, envelope.propertyCode());
             p.setLong(7, envelope.collectedAtMs());
-            p.setDouble(8, value.doubleValue());
+            // TDengine DOUBLE 列强制非空（引擎不支持 NULL；spike 验证 CREATE STABLE ... DOUBLE NULL → syntax error）。
+            // value 缺失（无效质量，TD-003 §6 可省略 value）时回退 0.0 + 告警：PG 侧正确写 NULL，此处的 0 是引擎妥协。
+            if (value == null) {
+                log.warn("TDengine DOUBLE requires non-null; writing 0.0 for missing value (engine compromise): messageId={}",
+                        envelope.messageId());
+                p.setDouble(8, 0.0);
+            } else {
+                p.setDouble(8, value.doubleValue());
+            }
             p.setString(9, envelope.contentSha256());
             p.executeUpdate();
 
@@ -153,17 +162,6 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
             return java.security.MessageDigest.getInstance("SHA-256").digest(input);
         } catch (Exception e) {
             throw new RuntimeException("SHA-256 unavailable", e);
-        }
-    }
-
-    private static BigDecimal parseValue(InboxEnvelope envelope) {
-        try {
-            String json = new String(envelope.canonicalBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            com.fasterxml.jackson.databind.JsonNode node =
-                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
-            return new BigDecimal(node.path("value").asText("0"));
-        } catch (Exception e) {
-            return BigDecimal.ZERO;
         }
     }
 }
