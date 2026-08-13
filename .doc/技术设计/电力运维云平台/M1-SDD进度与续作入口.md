@@ -1,9 +1,37 @@
 # M1 SDD 进度与续作入口
 
-> 检查点日期：2026-08-11
-> Git 分支：`cfdqiot`  
-> 当前阶段：Technical Design 进行中  
+> 检查点日期：2026-08-13
+> Git 分支：`cfdqiot`（远端同步至 `543810f2`，工作区 clean）
+> 当前阶段：M1 采集管线编码侧 + 本地验证完成；部署后运行时待办
 > 说明：本文件用于下次会话恢复上下文；状态以各正式文档为准
+
+## 当前快照与下一步（2026-08-13）
+
+**M1 采集主线编码侧 + 本地验证全部闭环**：设备/RS485 → Poller → SQLite Outbox → MQTT QoS1 → 中心 Inbox → TelemetryStore（standard PG / full TDengine）全链路代码实现 + 验证完成。
+
+### 本会话（2026-08-13）成果（commit `1e31edba`～`543810f2`，均 push）
+- PG Inbox + Store 合同测试 5/5（真实 `iot-device20`，修复 `updated_at_ms` NOT NULL + `message_id` UUID→VARCHAR(64)）
+- TDengine Store 合同测试 3/3（真实 `iot_telemetry`，修复 REST URL 缺 db path；表名占位 `INSERT INTO ?` 实测工作）
+- 构建治理根因修复：reactor compiler 锁 `--release 17`（治 `maven.compiler.source` 被覆盖致 source=1.8 静默漂移）
+- center 侧端到端 MQTT 实测：paho → EMQX 1883 → CenterMqttInboxSubscriber → JdbcTelemetryInbox → ProjectionOrchestrator → JdbcTelemetryStore，`telemetry_inbox` COMPLETED + `telemetry_sample` value_numeric=225.5 + 端到端两层幂等
+- CenterMqttInboxSubscriber host 硬编码 bug 修复（构造器 host/port 参数被忽略）
+
+### 下一步（部署后运行时，已归此类）
+- **collector 侧 outbox→publish 往返**：硬约束——collector 靠 modbus-rtu 轮询真实设备产数据，无设备则 outbox 空。需接真实设备或手动注入 outbox 记录验证 dispatch→publish→center 收。collector 侧 57 单元/合同测试已覆盖 dispatch/publish/状态机。
+- **ACK 回环**：center → collector `/telemetry/ack/...`（CenterMqttAckPublisher），需 collector CollectorMqttAckSubscriber 在线。
+- **7天稳定性**：M1 §10 验收，collector/center 容器部署后长期观察。
+
+### 编码侧潜在改进（部署前可考虑，非阻塞，无 commit）
+- CenterMqttInboxSubscriber 缺 EMQX 凭证（`MqttClientOptions` 未设 username/password）——生产 EMQX 禁匿名时需补
+- `application-collector.yaml` 缺 telemetry publish MQTT 配置（`easyaiot.collector.mqtt.*`，enabled 默认 false）
+- TDengineTelemetryStore.buildSubTableName 用 `hashCode`（碰撞风险，tag message_id 区分但可改稳定 ID）
+- JdbcTelemetryStore/TDengineTelemetryStore.parseValue 从 JSON 提取 value（简化实现，可精确化为 Envelope V1 解析器直供 BigDecimal）
+
+### 复用要点（下次会话）
+- 跑 iot-sink 测试：`mvn -f DEVICE/pom.xml test -pl iot-sink/iot-sink-biz -Dtest=<TestClass> -DfailIfNoTests=false -Dmaven.test.skip=false`（compiler 已锁 release 17，无需 source flag）
+- PG 合同测试凭证：`docker exec postgres-server printenv POSTGRES_PASSWORD` → `TD008_PG_PASSWORD` 注入
+- TDengine 合同测试：默认 localhost:6041 root/taosdata（REST）
+- push origin：经 Clash 代理 `git -c http.proxy=http://127.0.0.1:7890 push origin cfdqiot`（直连 github:443 超时）
 
 ## 0. 项目强制双基线
 
