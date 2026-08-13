@@ -29,6 +29,12 @@
 
 > **TDengine 引擎限制（已知妥协）**：TDengine DOUBLE 列强制非空，spike 验证 `CREATE STABLE ... DOUBLE NULL` → syntax error，无法写 NULL。B-4 中 TDengine 侧 value 缺失时回退 0.0 + warn 日志（PG 侧已正确写 NULL）。代码注释 + 此处标注。
 
+### 部署链路修复（V008 接入 runner，2026-08-13；commit `a21a93fb`）
+- **问题**：V008（`iot_sink.telemetry_inbox` + `telemetry_sample`）此前只落了 SQL 文件、未接入 `td005_migration` runner，且错位放在 `steps/`（V 系列约定在 ASSET_DIR）。`install_linux.sh` 部署后 PG 表不建 → iot-sink 首次写 inbox 因表不存在失败（部署阻塞）。
+- **修复**：V008 SQL 移到 ASSET_DIR（对齐 V001-V007）；runner 接入 8 处（`V008_SQL` 变量 + `APPLY_STEPS` + `step_sql_path` case + 事务型执行分支 + 帮助文本 4 处）；补 V008 落库窗口申请单（ADR-013 流程）。
+- **验证**：`dry-run` 列出 V008（sha256=`693c0473...`）；本地 `apply --step V008` SUCCEEDED + history 落库 + `iot_sink` 两表建。
+- **部署须知**：`install_linux.sh` 设计上**不自动跑受控 migration**（ADR-013）；部署流程需手动执行一次 `td005_migration.sh apply --step V008 --approval <生产审批单> --yes`（带 `BACKUP_DIR` 仓库外备份 + precheck）。申请单见 `.doc/技术设计/电力运维云平台/assets/td005-migration/V008落库窗口申请单-20260813.md`。
+
 ### 编码侧剩余潜在改进（仍未做，非阻塞）
 - CenterMqttAckPublisher 已存在但**未装配**（TelemetryInboxAutoConfiguration 未建 bean）——ACK 回环启用时需补
 - JdbcTelemetryStore.INSERT_SQL 未写 TD-003 §14 的 value_present/quality/value_text 列（设计 DDL 有这些列，当前 INSERT 未覆盖）——独立的字段覆盖差距，非 B-4 范围
