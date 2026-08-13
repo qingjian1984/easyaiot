@@ -134,9 +134,26 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
 
     /**
      * 物理子表名（内部稳定 ID，不拼外部编码）。
+     *
+     * <p>SHA-256 取前 8 字节 → 无符号 long → 十进制：字母开头、纯数字主体、无负号、
+     * 最长 22 字符（&lt; TDengine 表名 191 字节上限）、碰撞空间 2^64。
+     * （message_id 作为 tag 兜底正确性，子表名碰撞不影响数据。）
      */
     private static String buildSubTableName(InboxEnvelope envelope) {
-        return "d_" + Math.abs(envelope.messageId().hashCode());
+        byte[] hash = sha256(envelope.messageId().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        long l = 0;
+        for (int i = 0; i < 8; i++) {
+            l = (l << 8) | (hash[i] & 0xff);
+        }
+        return "d_" + Long.toUnsignedString(l);
+    }
+
+    private static byte[] sha256(byte[] input) {
+        try {
+            return java.security.MessageDigest.getInstance("SHA-256").digest(input);
+        } catch (Exception e) {
+            throw new RuntimeException("SHA-256 unavailable", e);
+        }
     }
 
     private static BigDecimal parseValue(InboxEnvelope envelope) {
