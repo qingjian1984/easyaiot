@@ -291,3 +291,18 @@ logging:
     # 保持其他 Kafka 相关日志为 INFO 级别
     org.apache.kafka: INFO
     org.springframework.kafka: INFO
+
+--- #################### EasyAIoT Telemetry 相关配置（center MQTT subscriber 连接参数） ####################
+
+# TD-003 §7 center telemetry MQTT subscriber 连接参数。
+# inbox/mqtt 启用开关由各部署 profile 显式置 true（默认 false，见 TelemetryMqttProperties）。
+# 凭证默认空（EMQX 允许匿名）；生产禁匿名时通过环境变量注入。
+easyaiot:
+  telemetry:
+    mqtt:
+      host: ${EASYAIOT_TELEMETRY_MQTT_HOST:localhost}
+      port: ${EASYAIOT_TELEMETRY_MQTT_PORT:1883}
+      client-id: ${EASYAIOT_TELEMETRY_MQTT_CLIENT_ID:center-inbox}
+      topic-filter: ${EASYAIOT_TELEMETRY_MQTT_TOPIC:/telemetry/#}
+      username: ${EASYAIOT_TELEMETRY_MQTT_USERNAME:}
+      password: ${EASYAIOT_TELEMETRY_MQTT_PASSWORD:}

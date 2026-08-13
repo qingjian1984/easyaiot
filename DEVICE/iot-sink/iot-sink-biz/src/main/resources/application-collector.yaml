@@ -4,6 +4,19 @@ easyaiot:
     enabled: true
     volume-path: ${EASYAIOT_COLLECTOR_OUTBOX_PATH:/var/lib/easyaiot/outbox}
     queue-capacity: ${EASYAIOT_COLLECTOR_OUTBOX_QUEUE_CAPACITY:4096}
+  collector:
+    mqtt:
+      # 启用 collector MQTT publisher + ACK subscriber（装配由 SqliteOutboxAutoConfiguration 的
+      # @ConditionalOnProperty(easyaiot.collector.mqtt.enabled=true) 控制）。
+      # VertxCollectorMqttPublisher 已支持 username/password 条件注入（生产 EMQX 禁匿名时通过环境变量注入）。
+      enabled: true
+      host: ${EASYAIOT_COLLECTOR_MQTT_HOST:localhost}
+      port: ${EASYAIOT_COLLECTOR_MQTT_PORT:1883}
+      client-id: ${EASYAIOT_COLLECTOR_MQTT_CLIENT_ID:collector-telemetry}
+      username: ${EASYAIOT_COLLECTOR_MQTT_USERNAME:}
+      password: ${EASYAIOT_COLLECTOR_MQTT_PASSWORD:}
+      qos: 1
+      ack-topic-prefix: /telemetry/ack/
 
 basiclab:
   iot:

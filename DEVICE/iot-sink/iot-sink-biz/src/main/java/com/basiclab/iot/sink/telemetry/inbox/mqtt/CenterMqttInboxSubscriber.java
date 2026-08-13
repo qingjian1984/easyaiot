@@ -40,7 +40,8 @@ public class CenterMqttInboxSubscriber implements AutoCloseable {
 
     public CenterMqttInboxSubscriber(TelemetryInboxPort inbox,
                                      String host, int port, String clientId,
-                                     String topicFilter) {
+                                     String topicFilter,
+                                     String username, String password) {
         this.inbox = inbox;
         this.mapper = new ObjectMapper();
         this.vertx = Vertx.vertx();
@@ -51,6 +52,10 @@ public class CenterMqttInboxSubscriber implements AutoCloseable {
                 .setClientId(clientId)
                 .setCleanSession(false)
                 .setKeepAliveInterval(60);
+        if (username != null && !username.isBlank()) {
+            options.setUsername(username);
+            options.setPassword(password);
+        }
         this.client = MqttClient.create(vertx, options);
     }
 

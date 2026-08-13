@@ -4,13 +4,14 @@ import com.basiclab.iot.sink.telemetry.inbox.jdbc.JdbcTelemetryInbox;
 import com.basiclab.iot.sink.telemetry.inbox.jdbc.TelemetryProjectionOrchestrator;
 import com.basiclab.iot.sink.telemetry.inbox.mqtt.CenterMqttAckPublisher;
 import com.basiclab.iot.sink.telemetry.inbox.mqtt.CenterMqttInboxSubscriber;
+import com.basiclab.iot.sink.telemetry.inbox.mqtt.TelemetryMqttProperties;
 import com.basiclab.iot.sink.telemetry.store.TelemetryStorePort;
 import com.basiclab.iot.sink.telemetry.store.jdbc.JdbcTelemetryStore;
 import io.vertx.mqtt.MqttClient;
 import io.vertx.core.Vertx;
 import io.vertx.mqtt.MqttClientOptions;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -22,6 +23,7 @@ import javax.sql.DataSource;
  */
 @Configuration
 @ConditionalOnProperty(name = "easyaiot.telemetry.inbox.enabled", havingValue = "true", matchIfMissing = false)
+@EnableConfigurationProperties(TelemetryMqttProperties.class)
 public class TelemetryInboxAutoConfiguration {
 
     @Bean
@@ -47,12 +49,15 @@ public class TelemetryInboxAutoConfiguration {
     @ConditionalOnProperty(name = "easyaiot.telemetry.mqtt.enabled", havingValue = "true")
     public CenterMqttInboxSubscriber centerMqttInboxSubscriber(
             TelemetryInboxPort inbox,
-            @Value("${easyaiot.telemetry.mqtt.host:localhost}") String host,
-            @Value("${easyaiot.telemetry.mqtt.port:1883}") int port,
-            @Value("${easyaiot.telemetry.mqtt.clientId:center-inbox}") String clientId,
-            @Value("${easyaiot.telemetry.mqtt.topic:/telemetry/#}") String topicFilter) {
+            TelemetryMqttProperties mqttProps) {
         CenterMqttInboxSubscriber subscriber = new CenterMqttInboxSubscriber(
-                inbox, host, port, clientId, topicFilter);
+                inbox,
+                mqttProps.getHost(),
+                mqttProps.getPort(),
+                mqttProps.getClientId(),
+                mqttProps.getTopicFilter(),
+                mqttProps.getUsername(),
+                mqttProps.getPassword());
         subscriber.start();
         return subscriber;
     }

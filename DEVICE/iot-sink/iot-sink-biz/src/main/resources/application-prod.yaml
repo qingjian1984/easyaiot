@@ -343,3 +343,14 @@ basiclab:
             key-path: # SSL 私钥路径
             trust-store-path: # 信任存储路径
             trust-store-password: # 信任存储密码
+
+--- #################### EasyAIoT Telemetry 启用（center 侧 Inbox + MQTT subscriber） ####################
+
+# TD-003 center 侧 telemetry inbox + MQTT subscriber 启用开关。
+# 连接参数（host/port/credentials）见 application.yaml 的 easyaiot.telemetry.mqtt 段。
+easyaiot:
+  telemetry:
+    inbox:
+      enabled: true
+    mqtt:
+      enabled: true
