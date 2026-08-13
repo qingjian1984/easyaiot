@@ -1,5 +1,6 @@
 package com.basiclab.iot.sink.outbox.sqlite;
 
+import com.basiclab.iot.sink.outbox.dispatch.CollectorMqttAckSubscriber;
 import com.basiclab.iot.sink.outbox.dispatch.CollectorMqttProperties;
 import com.basiclab.iot.sink.outbox.dispatch.CollectorMqttPublisher;
 import com.basiclab.iot.sink.outbox.dispatch.LeaseReclaimer;
@@ -58,5 +59,17 @@ public class SqliteOutboxAutoConfiguration {
         LeaseReclaimer reclaimer = new LeaseReclaimer(outbox, 30_000L);
         reclaimer.start();
         return reclaimer;
+    }
+
+    @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(name = "easyaiot.collector.mqtt.enabled", havingValue = "true")
+    public CollectorMqttAckSubscriber ackSubscriber(TelemetryOutboxPort outbox,
+                                                    VertxCollectorMqttPublisher publisher,
+                                                    CollectorMqttProperties mqttProps) {
+        String ackFilter = mqttProps.getAckTopicPrefix() + "#";
+        CollectorMqttAckSubscriber subscriber = new CollectorMqttAckSubscriber(
+                outbox, publisher.getMqttClient(), ackFilter);
+        subscriber.start();
+        return subscriber;
     }
 }
