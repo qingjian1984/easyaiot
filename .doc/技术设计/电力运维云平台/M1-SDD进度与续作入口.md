@@ -697,3 +697,31 @@ node -e "const fs=require('fs'),Ajv=require('./WEB/node_modules/ajv/dist/2020').
   `AlarmRaised/AlarmRecovered`、`sourceType + sourceId → alarmId` 映射和 `device.alarm.created/recovered.v1` 尚无代码/DDL。
   `iot-maintenance` 模块亦尚未创建。下一批顺序冻结为：统一告警 Schema/状态机/迁移 TD → 来源事件与媒体证据映射 →
   告警详情视频回看合同 → 以 alarmId 创建设备缺陷/简化工单首个运维闭环；不得直接把 VIDEO alertId 当统一 alarmId。
+- **ADR-016 评审处置完成（2026-08-12，ADR-016 1.1.0）**：采纳评审 M-01/M-03/M-04 与 L-01～L-05，部分采纳
+  M-02。补充 ADR-010 `alarm_record` 来源周期映射、独立告警 Inbox 双层幂等、Envelope V1 与 `configVersion` 边界、
+  HTTP→VIDEO 心跳和 MQTT→iot-sink 告警双通道、NODE 受控 RUNTIME 工作负载目标以及 NFS/MinIO 分级降级。
+  ADR-014 当前只覆盖 TD-005 物模型事件，因此只复用其稳定 ID/摘要/Inbox/重试/DLQ 原则，不宣称现有
+  `IotAlgoBusMqttHandler` 已满足应用 ACK 或持久 Inbox。继续 OPEN：告警 Schema/DDL/消费者 Inbox、稳定 `msgId` 重试、
+  RUNTIME 原生进程/容器生命周期 TD、媒体归档持久重试及最终一致性参数、历史 EDGE 现行实施表述审计。评审报告作为审计输入
+  保留在 `开发规范/ADR-016评审报告.md`，不把 Accepted 状态误解为上述实现门禁已关闭。
+- **M1 采集主线 P1-T4～T7 全链路代码实现（2026-08-13，TD-002 §20 T-4/T-5 + TD-003 §6/§9/§10/§11/§13/§15）**：
+  P1-T4（claim/ACK/调度）：端口层（AckCommand/AckResultCode/ClaimedEnvelope/ClaimBatchResult + TelemetryOutboxPort
+  扩展 claimBatch/applyAck）→ Schema V2（补 attempts/in_flight/ack_deadline/gap 等 9 列 + telemetry_gap 表 + 索引重建）→
+  OutboxCommand 扩展（Claim/ApplyAck/ReclaimExpiredLeases/CleanupAcked/Checkpoint sealed）→ SqliteOutboxWriter 全状态机
+  （executeClaim SELECT→UPDATE IN_FLIGHT / executeApplyAck ACCEPTED→ACKED+RETRYABLE→PENDING+退避+FINAL→gap+DEAD_LETTER /
+  executeReclaimExpiredLeases 过期回收 / executeCleanupAcked DELETE / executeCheckpoint wal_checkpoint PASSIVE）→
+  双队列优先级（control 优先 ACK/Claim 不饿死 data AppendBatch）→ OutboxDispatcher（100ms claim→publish）→
+  VertxCollectorMqttPublisher（QoS1 canonical bytes）→ CollectorMqttAckSubscriber（订阅 ACK Topic→parse→applyAck）→
+  LeaseReclaimer（30s）→ OutboxCleanupTask（10s ACKED 清理）→ OutboxCheckpointTask（30s WAL checkpoint）→
+  FullJitterBackoff（base 1s cap 30min）→ 52/52 测试 PASS（Claim 5 + 状态机 5 + 退避 42）。
+  P1-T5（清理/checkpoint）：ACKED 批量 DELETE + WAL PASSIVE + AutoConfig 装配。
+  P1-T6（中心 Inbox + Store）：端口层（InboxEnvelope/TelemetryInboxPort/TelemetryStorePort/WriteResult）→
+  JdbcTelemetryInbox（PG ON CONFLICT 幂等 + hash 碰撞检测）→ JdbcTelemetryStore（PG telemetry_sample NUMERIC 幂等）→
+  CenterMqttInboxSubscriber（订阅上行 Topic→parse→receiveEnvelopes）→ CenterMqttAckPublisher（ACK V1→collector）→
+  TelemetryProjectionOrchestrator（500ms claim RECEIVED FOR UPDATE SKIP LOCKED→writeSample→COMPLETED/DEAD_LETTER+retry）→
+  V008 DDL（iot_sink.telemetry_inbox + telemetry_sample 含中文 COMMENT）→ AutoConfig 全装配。
+  P1-T7（TelemetryStore full TDengine）：TDengineTelemetryStore（超级表 upsert messageId tag+ts PK 确定性幂等，
+  taos-jdbcdriver 3.1.0 REST，content_sha256 第二层校验，lazy init）。
+  **M1 采集主线从设备/RS485 → Poller → SQLite Outbox → MQTT QoS1 → 中心 Inbox → TelemetryStore（standard PG / full TDengine）
+  全链路代码实现完成**（~50 新建文件 + ~15 修改 + 52+ tests PASS，全 mvn -D17 BUILD SUCCESS）。
+  16 commit 待 push（网络间歇性 reset）；端到端验证需 PG+EMQX+TDengine 运行环境 + V008 runner 落库窗口。
