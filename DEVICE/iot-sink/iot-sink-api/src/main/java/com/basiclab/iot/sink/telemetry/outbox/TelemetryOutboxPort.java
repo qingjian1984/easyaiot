@@ -23,4 +23,20 @@ public interface TelemetryOutboxPort {
      * @throws OutboxUnavailableException  存储不可用（损坏/只读/磁盘故障）
      */
     AppendBatchResult appendBatch(List<TelemetryEnvelope> envelopes, Duration enqueueTimeout);
+
+    /**
+     * Claim 一批待发送 envelope（PENDING → IN_FLIGHT，attempts+1，设租约）。
+     *
+     * @param maxCount 最大 claim 条数
+     * @param lease    租约时长（ACK deadline）
+     * @return claim 结果（Claimed/Empty）
+     */
+    ClaimBatchResult claimBatch(int maxCount, Duration lease);
+
+    /**
+     * 应用 ACK（TD-002 §10 状态机：ACKED/PENDING+退避/DEAD_LETTER+gap）。
+     *
+     * @param ack ACK 命令（messageId/resultCode/errorCode/observedAt）
+     */
+    void applyAck(AckCommand ack);
 }
