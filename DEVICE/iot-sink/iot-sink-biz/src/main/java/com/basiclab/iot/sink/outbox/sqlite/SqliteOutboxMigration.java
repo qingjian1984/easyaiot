@@ -7,32 +7,30 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * TD-002 §7 DDL + §8 PRAGMA migration。
+ * TD-002 §7 DDL + §8 PRAGMA migration（V2：claim/ACK 状态机 + gap 表）。
  *
- * <p>复用 P0-3 Spike 验证的 PRAGMA 套件（WAL/FULL/busy_timeout/wal_autocheckpoint/trusted_schema）。
- * STRICT 表 + dispatch 索引（claim 查询规划，Spike 已证 SEARCH USING INDEX）。
+ * <p>V1→V2 补列兼容：新库 CREATE TABLE 直接含全部列；已存在 V1 库通过 ALTER TABLE ADD COLUMN 补列。
  */
 public final class SqliteOutboxMigration {
 
     private SqliteOutboxMigration() {
     }
 
-    /** Schema 版本（PRAGMA user_version）。 */
-    public static final int USER_VERSION = 1;
+    public static final int USER_VERSION = 2;
 
-    /** 应用 §8 PRAGMA（每次连接）+ 建表（首次）+ user_version。 */
     public static void migrate(Path dbPath) throws SQLException {
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
              Statement s = c.createStatement()) {
             applyPragmas(s);
             createTelemetryOutbox(s);
+            migrateV1toV2(s);
+            createTelemetryGap(s);
             createOutboxMeta(s);
-            createIndexes(s);
+            rebuildIndexes(s);
             s.execute("PRAGMA user_version = " + USER_VERSION);
         }
     }
 
-    /** §8 PRAGMA（WAL + FULL + busy_timeout + 不自动 checkpoint + 禁可信 schema）。 */
     public static void applyPragmas(Statement s) throws SQLException {
         s.execute("PRAGMA journal_mode=WAL");
         s.execute("PRAGMA synchronous=FULL");
@@ -41,7 +39,7 @@ public final class SqliteOutboxMigration {
         s.execute("PRAGMA trusted_schema=OFF");
     }
 
-    /** §7 telemetry_outbox（STRICT，核心列；M1 不含 gap 表，留给 T-5）。 */
+    /** telemetry_outbox V2（含 claim/ACK 全列）。 */
     private static void createTelemetryOutbox(Statement s) throws SQLException {
         s.execute("CREATE TABLE IF NOT EXISTS telemetry_outbox ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -60,13 +58,62 @@ public final class SqliteOutboxMigration {
                 + "envelope_size INTEGER NOT NULL CHECK (envelope_size > 0),"
                 + "status TEXT NOT NULL DEFAULT 'PENDING'"
                 + " CHECK (status IN ('PENDING','IN_FLIGHT','ACKED','DEAD_LETTER')),"
+                + "delivery_class TEXT NOT NULL DEFAULT 'REALTIME'"
+                + " CHECK (delivery_class IN ('REALTIME','BACKFILL')),"
+                + "attempts INTEGER NOT NULL DEFAULT 0,"
+                + "unknown_ack_count INTEGER NOT NULL DEFAULT 0,"
+                + "next_retry_at_ms INTEGER,"
+                + "in_flight_at_ms INTEGER,"
+                + "ack_deadline_at_ms INTEGER,"
+                + "acked_at_ms INTEGER,"
+                + "last_error_code TEXT,"
+                + "last_error_detail TEXT,"
                 + "created_at_ms INTEGER NOT NULL,"
                 + "updated_at_ms INTEGER NOT NULL,"
                 + "config_version INTEGER NOT NULL CHECK (config_version >= 0)"
                 + ") STRICT");
     }
 
-    /** §7 outbox_meta（键值元数据）。 */
+    /** V1→V2 补列（已存在列 ALTER 报错安全忽略）。 */
+    private static void migrateV1toV2(Statement s) {
+        String[] v2Columns = {
+            "delivery_class TEXT NOT NULL DEFAULT 'REALTIME'",
+            "attempts INTEGER NOT NULL DEFAULT 0",
+            "unknown_ack_count INTEGER NOT NULL DEFAULT 0",
+            "next_retry_at_ms INTEGER",
+            "in_flight_at_ms INTEGER",
+            "ack_deadline_at_ms INTEGER",
+            "acked_at_ms INTEGER",
+            "last_error_code TEXT",
+            "last_error_detail TEXT"
+        };
+        for (String col : v2Columns) {
+            try {
+                s.execute("ALTER TABLE telemetry_outbox ADD COLUMN " + col);
+            } catch (SQLException ignored) {
+                // 列已存在（V2 新库或已迁移）
+            }
+        }
+    }
+
+    /** §7 telemetry_gap（DEAD_LETTER 同事务 gap 写入）。 */
+    private static void createTelemetryGap(Statement s) throws SQLException {
+        s.execute("CREATE TABLE IF NOT EXISTS telemetry_gap ("
+                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "message_id TEXT NOT NULL,"
+                + "tenant_id TEXT NOT NULL,"
+                + "site_code TEXT NOT NULL,"
+                + "device_identification TEXT NOT NULL,"
+                + "property_code TEXT NOT NULL,"
+                + "stage TEXT NOT NULL CHECK (stage IN ('EDGE_DELIVERY','CENTER_PROJECTION')),"
+                + "reason_code TEXT NOT NULL,"
+                + "gap_first_seen_ms INTEGER NOT NULL,"
+                + "gap_last_seen_ms INTEGER NOT NULL,"
+                + "created_at_ms INTEGER NOT NULL"
+                + ") STRICT");
+    }
+
+    /** §7 outbox_meta。 */
     private static void createOutboxMeta(Statement s) throws SQLException {
         s.execute("CREATE TABLE IF NOT EXISTS outbox_meta ("
                 + "meta_key TEXT PRIMARY KEY,"
@@ -75,12 +122,18 @@ public final class SqliteOutboxMigration {
                 + ") STRICT");
     }
 
-    /** §7 索引（dispatch claim + cleanup + sequence）。 */
-    private static void createIndexes(Statement s) throws SQLException {
+    /** V2 索引重建（drop old V1 dispatch + create 6 列 dispatch + inflight + cleanup + sequence）。 */
+    private static void rebuildIndexes(Statement s) throws SQLException {
+        try {
+            s.execute("DROP INDEX IF EXISTS idx_outbox_dispatch");
+        } catch (SQLException ignored) {
+        }
         s.execute("CREATE INDEX IF NOT EXISTS idx_outbox_dispatch "
-                + "ON telemetry_outbox(status, priority_rank, created_at_ms, id)");
+                + "ON telemetry_outbox(status, delivery_class, priority_rank, next_retry_at_ms, created_at_ms, id)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_outbox_inflight "
+                + "ON telemetry_outbox(status, ack_deadline_at_ms)");
         s.execute("CREATE INDEX IF NOT EXISTS idx_outbox_cleanup "
-                + "ON telemetry_outbox(status, created_at_ms, id)");
+                + "ON telemetry_outbox(status, acked_at_ms, id)");
         s.execute("CREATE INDEX IF NOT EXISTS idx_outbox_sequence "
                 + "ON telemetry_outbox(tenant_id, device_identification, property_code, sequence_no)");
     }

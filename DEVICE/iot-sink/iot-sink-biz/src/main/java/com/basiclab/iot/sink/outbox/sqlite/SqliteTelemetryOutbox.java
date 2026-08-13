@@ -2,7 +2,9 @@ package com.basiclab.iot.sink.outbox.sqlite;
 
 import com.basiclab.iot.sink.telemetry.envelope.EnvelopeCanonicalCodec;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
+import com.basiclab.iot.sink.telemetry.outbox.AckCommand;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
+import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.OutboxBackpressureException;
 import com.basiclab.iot.sink.telemetry.outbox.OutboxUnavailableException;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
@@ -52,6 +54,16 @@ public final class SqliteTelemetryOutbox implements TelemetryOutboxPort {
             }
             throw new OutboxUnavailableException("append failed", cause);
         }
+    }
+
+    @Override
+    public ClaimBatchResult claimBatch(int maxCount, Duration lease) {
+        throw new UnsupportedOperationException("claimBatch: P1-T4 pending implementation");
+    }
+
+    @Override
+    public void applyAck(AckCommand ack) {
+        throw new UnsupportedOperationException("applyAck: P1-T4 pending implementation");
     }
 
     /** 优雅关闭 writer 线程（等待 Connection 关闭，释放 Windows 文件锁）。 */
