@@ -99,14 +99,17 @@ services:
       retries: 3
       start_period: 90s
 
-    # 资源限制（GPU 配置，如果 NVIDIA Container Toolkit 未配置，请注释掉以下部分）
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all      # 使用全部 GPU
-              capabilities: [gpu]
+    # 资源限制（GPU 配置）
+    # 注意：本机仅 Intel Arc GPU，无 NVIDIA GPU；请求 nvidia 设备会导致 docker start
+    # 卡死在 Created 状态。需 GPU 推理时，在装有 NVIDIA GPU + NVIDIA Container Toolkit
+    # 的机器上恢复以下 deploy.resources 配置（推理代码已默认 CPUExecutionProvider 兜底）。
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all      # 使用全部 GPU
+    #           capabilities: [gpu]
 
     # 注意：使用network_mode: host后，不再需要networks配置
     # 容器将直接使用宿主机的网络栈，可以：

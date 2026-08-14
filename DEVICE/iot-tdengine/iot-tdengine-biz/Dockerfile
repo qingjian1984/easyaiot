@@ -7,7 +7,8 @@ FROM cimg/openjdk:17.0.17 AS runtime
 USER root
 
 # 安全设置：创建非root用户
-RUN groupadd -r appgroup -g 1001 && useradd -r -u 1001 -g appgroup appuser
+RUN userdel -r circleci 2>/dev/null || true && \
+    groupadd -r appgroup -g 1001 && useradd -r -u 1001 -g appgroup appuser
 
 # 创建工作目录并设置权限
 RUN mkdir -p /app && chown -R appuser:appgroup /app

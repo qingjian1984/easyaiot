@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:labs
+# BuildKit 内置前端即可（支持 RUN --mount=type=cache、FROM --platform）；不声明 syntax=docker/dockerfile:labs，避免从 docker.io 拉取 frontend 镜像失败/缓存损坏（同 AI/Dockerfile）
 
 # ---------------------------------------------------------------------------
 # Stage 1: 从 vendor/go2rtc 编译 go2rtc 二进制

@@ -51,8 +51,12 @@ detect_arch() {
 }
 
 find_conda_sh() {
-  local candidates=(
-    "${CONDA_EXE%/*}/../etc/profile.d/conda.sh"
+  local candidates=()
+  # CONDA_EXE 仅在已激活 conda 的 shell 中导出；set -u 下直接引用未定义变量会中止函数
+  if [[ -n "${CONDA_EXE:-}" ]]; then
+    candidates+=("${CONDA_EXE%/*}/../etc/profile.d/conda.sh")
+  fi
+  candidates+=(
     "$HOME/miniconda3/etc/profile.d/conda.sh"
     "$HOME/anaconda3/etc/profile.d/conda.sh"
     /opt/conda/etc/profile.d/conda.sh
