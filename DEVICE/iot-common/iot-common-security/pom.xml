@@ -64,6 +64,18 @@
             <artifactId>iot-common-redis</artifactId> <!-- 需要使用它，进行 Token 的校验 -->
         </dependency>
 
+        <!-- LC02A-0 内部服务 HMAC + Redis nonce；仅在显式 client configuration 中挂载 Feign signer -->
+        <dependency>
+            <groupId>io.github.openfeign</groupId>
+            <artifactId>feign-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.basiclab.iot</groupId>
+            <artifactId>iot-common-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- 工具类相关 -->
         <dependency>
             <groupId>com.google.guava</groupId>
