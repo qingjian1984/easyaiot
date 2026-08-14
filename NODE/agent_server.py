@@ -5,6 +5,13 @@ import logging
 import os
 from flask import Flask, jsonify, request
 
+from agent_security import (
+    AgentAuthError,
+    FileAgentSigningKeyProvider,
+    PersistentNonceStore,
+    verify_agent_request,
+)
+
 from workload_manager import WorkloadManager, find_available_port
 from media_manager import MediaStackManager
 from mqtt_manager import MqttStackManager
@@ -25,8 +32,8 @@ def _ok(data=None):
     return jsonify({'code': 0, 'msg': 'success', 'data': data or {}})
 
 
-def _err(msg: str, code: int = 1):
-    return jsonify({'code': code, 'msg': msg, 'data': None}), 400
+def _err(msg: str, code=1, status: int = 400):
+    return jsonify({'code': code, 'msg': msg, 'data': None}), status
 
 
 def _check_token():
@@ -36,12 +43,48 @@ def _check_token():
     return True
 
 
+_agent_signing_key_provider = FileAgentSigningKeyProvider()
+_agent_nonce_store = None
+
+
+def _requires_hmac(path: str) -> bool:
+    """collector 配置及其状态端点禁止退回 token-only。"""
+    return path == '/workload/collector/config' or path.startswith('/workload/collector/')
+
+
+def _get_agent_nonce_store():
+    global _agent_nonce_store
+    if _agent_nonce_store is None:
+        replay_db = os.environ.get(
+            'AGENT_REPLAY_DB',
+            '/var/lib/easyaiot/node-agent/replay-window.db',
+        )
+        _agent_nonce_store = PersistentNonceStore(replay_db)
+    return _agent_nonce_store
+
+
 @app.before_request
 def auth_middleware():
     if request.path in ('/health',):
         return None
+    if _requires_hmac(request.path):
+        try:
+            verify_agent_request(
+                request.method,
+                request.full_path[:-1] if request.full_path.endswith('?') else request.full_path,
+                request.get_data(cache=True),
+                request.headers,
+                _agent_signing_key_provider,
+                _get_agent_nonce_store(),
+            )
+            return None
+        except AgentAuthError as exc:
+            return _err(exc.code, 'AGENT_AUTH_FAILED', 401)
+        except (OSError, RuntimeError):
+            # 凭据文件/nonce 数据库不可用时必须拒绝，而不是退回 bearer token。
+            return _err('AGENT_SIGNING_KEY_UNAVAILABLE', 'AGENT_AUTH_FAILED', 503)
     if not _check_token():
-        return _err('Agent 认证失败', 401)
+        return _err('Agent 认证失败', 401, 401)
 
 
 @app.get('/health')

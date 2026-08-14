@@ -200,6 +200,11 @@ AI/yolov*.names.json
 # 安装脚本生成的本地 docker env（模板见 .env.docker）
 .scripts/docker/.env
 
+# NODE Agent 本地凭据（只提交 agent.env.example；真实 token/key 禁止进入 Git）
+/NODE/agent.env
+/NODE/agent.env.*
+!/NODE/agent.env.example
+
 # ZLMediaKit 挂载目录（与 docker-compose 中 ../zlmediakit 对应）；运行时数据
 
 # opc-ua-demo 本地 Python 虚拟环境（demo 运行时生成，不随仓库分发）

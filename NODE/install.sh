@@ -17,6 +17,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="${INSTALL_DIR:-/opt/easyaiot/node-agent}"
+AGENT_CREDENTIAL_DIR="${AGENT_CREDENTIAL_DIR:-/etc/easyaiot/node-agent}"
+AGENT_CREDENTIAL_FILE="${AGENT_CREDENTIAL_FILE:-${AGENT_CREDENTIAL_DIR}/agent-signing-key}"
 SERVICE_NAME="${SERVICE_NAME:-easyaiot-node-agent}"
 PYTHON="${PYTHON:-python3}"
 if command -v "$PYTHON" >/dev/null 2>&1; then
@@ -177,6 +179,11 @@ cmd_clean() {
 do_install() {
   echo "==> 安装目录: $INSTALL_DIR"
   echo "==> Python: $PYTHON ($($PYTHON --version 2>&1))"
+  # 签名密钥与源码/agent.env 分离；不自动生成明文或占位密钥，未配置时新 API fail-closed。
+  sudo install -d -m 0750 "$AGENT_CREDENTIAL_DIR"
+  if [ -e "$AGENT_CREDENTIAL_FILE" ]; then
+    sudo chmod 0600 "$AGENT_CREDENTIAL_FILE"
+  fi
   sync_agent_sources
   local resolved_install_dir
   resolved_install_dir="$(readlink -f "$INSTALL_DIR")"
