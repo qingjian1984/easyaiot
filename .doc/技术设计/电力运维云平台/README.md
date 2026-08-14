@@ -1,7 +1,7 @@
 # EasyAIoT 电力运维云平台 Technical Design 索引
 
-> 索引版本：1.7.2
-> 日期：2026-08-06
+> 索引版本：1.10.0
+> 日期：2026-08-13
 > 上游基线：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[M1 Spec 集合基线 1.4.0](../../规格/电力运维云平台/M1-SPEC评审冻结记录.md)、[ADR 决策集](../../架构决策/电力运维云平台/README.md)
 > 续作入口：[M1 SDD 进度与续作入口](./M1-SDD进度与续作入口.md)
 
@@ -17,6 +17,14 @@
 | [TD-005-RUNTIME-001](./TD-005-运行模型兼容与删除链技术设计.md) | 根属性/服务参数单一事实、DO/VO/Mapper、租户约束和产品删除链（0.1.9；内部八表持久化、TEN-001～008、稳定错误及版本层 migration 前置已对齐） | In Review | 版本层原子合同、公开接口、DDL/rollback、Feign 合同、DEL-001～010、性能和三档端到端回归全部通过 |
 | [TD-005-MIG-001](./TD-005-版本绑定审计Outbox迁移与回滚设计.md) | 模板版本、产品绑定、领域审计与发布 Outbox 的原子事务、迁移及回滚（0.1.6；宪法专项评审已处置；ADR-013 1.3.0/ADR-014 1.0.0 Proposed、候选 runner Spike、V001/U001 DDL 骨架与事件/Inbox 候选已形成） | In Review / Migration Candidate | 关闭 ADR-013/014、完整画像、幂等表落库、product unique/binding FK、DDL/rollback、事件 Schema/transport/消费者 Inbox、故障注入、压测与备份恢复全部通过；批准前不得执行 DDL |
 | [TD-005-DATA-001](./TD-005-孤儿属性处置方案.md) | 4 条过期演示种子孤儿属性的证据、决策、预检、修复与回滚（0.2.0） | Executed / Verified | 初始化基线与目标库均为0，修复后画像已验证 |
+
+## M1 本地收口任务包
+
+| ID | 主题 | 状态 | 实现门禁 |
+|---|---|---|---|
+| [M1-LC-01](./M1-LC-01-Inbox接收结果合同任务单.md) | Inbox 新增/重复/碰撞逐消息结果合同 | Implemented / Verified-Local | LC01-01～14 与模块编译验证通过；未提前实现 ACK、审计、DDL、投影或 Store 变更 |
+| [M1-LC-02A](./M1-LC-02A-Collector版本配置应用链任务单.md) | 内部/NODE HMAC、ConfigSnapshot 1.1、iot-node 派发、NODE 原子落盘与 collector 本地应用 | LC02A-0 Approved / Frozen | ADR-017/018 已接受；先交付 02A-0，验证后由 Sol 复核并逐包解锁 02A-1～4 |
+| [M1-LC-02](./M1-LC-02-遥测Topic与产品路由身份收口任务单.md) | canonical 遥测 Topic 与产品路由身份持久化 | Review-Ready / Blocked by LC-02A | Topic 五项技术决策已由 Sol 收敛；ADR-017 Accepted 且 LC-02A Verified-Local 后才能冻结交付 Luna Max |
 
 ## 状态规则
 

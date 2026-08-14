@@ -1,7 +1,7 @@
 # EasyAIoT 电力运维云平台 ADR 索引
 
-> 索引版本：1.5.0
-> 日期：2026-08-12
+> 索引版本：1.8.0
+> 日期：2026-08-13
 > 产品基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 
 ## 当前决策集
@@ -24,6 +24,8 @@
 | [ADR-014](./ADR-014-Outbox事件Transport与消费者Inbox.md) | Accepted | 1.3.7：Kafka Outbox/Inbox、消费循环、CI 合同、调度、指标和 JDBC 合同证据已落地；V005 已受控落入目标集成实例，任务 7 与双发对账仍 OPEN |
 | [ADR-015](./ADR-015-collector-workload-binding设备侧投影.md) | Accepted | 1.1.1：iot-device 库独立可变 workload binding 投影；V004 已受控落入目标集成实例并通过 PG 合同，任务 7 写入状态机仍 OPEN |
 | [ADR-016](./ADR-016-EDGE退役与RUNTIME边缘执行边界.md) | Accepted | EDGE 退役；电力采集固定由 NODE + iot-sink collector 承担，边缘推理由 RUNTIME 承担，告警媒体统一经 iot-sink 归档 |
+| [ADR-017](./ADR-017-遥测可靠链路Topic与产品路由身份收口.md) | Accepted | 遥测可靠链路回归既有 `/iot/{product}/{device}/property/**` Topic；产品身份作为持久化路由元数据，按 expand→backfill→enforce 迁移；LC-02 仍等待 LC-02A 前置验证 |
+| [ADR-018](./ADR-018-控制面内部服务与NODE请求认证.md) | Accepted | collector 配置链采用两段隔离认证：微服务内部 HMAC 服务身份与 iot-node→NODE 节点级 HMAC；已授权 LC-02A-0，禁止 token-only 降级 |
 
 ## 开发解释顺序
 

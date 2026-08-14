@@ -1,11 +1,34 @@
 # M1 SDD 进度与续作入口
 
-> 检查点日期：2026-08-13
-> Git 分支：`cfdqiot`（远端同步至 `22279a77`，工作区 clean）
-> 当前阶段：M1 采集管线编码侧 + 本地验证完成；部署后运行时待办
+> 检查点日期：2026-08-15
+> Git 分支：`cfdqiot`（当前工作区含 M1-LC-01 未提交实现与 LC-02 设计门禁文档）
+> 当前阶段：M1-LC-01 已完成真实 JDBC 验证；ADR-017/018 已接受，LC02A-0 已冻结并完成本地实现与定向测试；凭据已完成受控轮换与索引清理，现场/部署后验证待续
 > 说明：本文件用于下次会话恢复上下文；状态以各正式文档为准
 
 ## 当前快照与下一步（2026-08-13）
+
+### 会话暂停检查点（2026-08-14，下一次从此处续作）
+
+- **决策状态**：ADR-017 1.0.0、ADR-018 1.0.0 已由决策所有者接受；LC02A-0 已 `Approved / Frozen`，LC02A-1～4 继续 Blocked。
+- **执行模型门禁**：当前运行环境只暴露 `gpt-5.6-sol`、`gpt-5.6-terra`，Luna Max 不可用；本轮按已获授权由 Sol 完成 LC02A-0 本地实现与定向测试，未将其冒充为 Luna 执行。
+- **仓库凭据治理**：`.gitignore` 已忽略 `NODE/agent.env` 及其本地变体，仅允许 `NODE/agent.env.example`；已执行 `git rm --cached NODE/agent.env`，当前索引为该文件的暂存删除，本地文件仍保留且不得提交或回显。
+- **外部轮换现状**：控制面恢复后，正式 `reset-agent-token?id=1` 对平台节点返回业务拒绝；按授权采用受控 DB fallback。数据库、本地 `NODE/agent.env`、bootstrap 返回值一致，一次性 Agent register/heartbeat 均 `code=0`；旧值已失效且未进入索引。
+- **安全约束**：不在文档、日志或交付说明中回显任何凭据值；仅保留布尔值、节点 ID 与测试结果作为证据。
+- **本次完成门槛**：`.git/index.lock` 已清理，SQL 转储清理已暂存；cached/worktree secret scan 通过，`NODE/agent.env` 不在索引且保持 ignored。部署后/现场/7 天稳定性验证仍保持 `OPEN`。
+- **执行模型说明**：当前运行环境只暴露 `gpt-5.6-sol`、`gpt-5.6-terra`，Luna Max 不可用；LC02A-0 已按已获授权由 Sol 完成，未将其冒充为 Luna 执行。后续若 Luna 仍不可用，需先取得新的明确授权。
+
+### LC-02 前置冲突门禁（2026-08-13，OPEN）
+
+- **决策接受（2026-08-14）**：决策所有者已接受 ADR-017 1.0.0 与 ADR-018 1.0.0，并授权凭据移除与外部轮换；M1-LC-02A-0 已转为 Approved / Frozen，LC02A-1～4 仍按顺序保持门禁。
+
+- **事实冲突**：ADR-003 与 TD-003 要求复用 `/iot/{productIdentification}/{deviceIdentification}/property/**`；现有可靠链路实现却使用 `/telemetry/**`，而且 Envelope、SQLite Outbox 与 PostgreSQL Inbox 均未保存 `productIdentification`。
+- **处置**：新增 [ADR-017](../../架构决策/电力运维云平台/ADR-017-遥测可靠链路Topic与产品路由身份收口.md)（Proposed）和 [M1-LC-02 任务单](./M1-LC-02-遥测Topic与产品路由身份收口任务单.md)（Review-Ready / Blocked）。Topic 必须回归既有 `/iot/**`；产品身份作为可靠路由元数据按 expand→backfill→enforce 持久化，禁止默认产品或旧 Topic 回退。
+- **重新排序**：LC-02 仅收口产品路由身份和双端 canonical Topic；LC-03 才实现成功 ACK V1 与重启对账；LC-04 实现拒绝审计及 FINAL/RETRYABLE ACK。
+- **Sol 收敛结果**：ConfigSnapshot 升级为 1.1 并由服务端固化产品身份；历史 V2 outbox 只接受中心受控清单回填；ACK 精确订阅集合取“已应用路由 ∪ 未终态 outbox 路由”；V009 使用可空 expand；安全证据由 broker ACL 与 center 注册事实校验分层提供。
+- **新增前置事实**：TD-001 设计的 NODE `/workload/collector/config`、iot-node 发布单派发器和 collector 本地 `PollingConfigProvider` 尚未实现；现有 collector 仍直接读取当前 `DeviceDO.extension`。已拆出 [M1-LC-02A](./M1-LC-02A-Collector版本配置应用链任务单.md)，按认证加固、1.1 发布合同、NODE 原子状态、collector 本地 Provider、iot-node 派发对账五包顺序执行。
+- **安全事实**：现有微服务只透传用户/租户 Header，`iot-node` 还存在全路径放行；NODE 只有可重放的单值 Agent Token，且仓库基线中存在本地凭据文件。已新增 [ADR-018](../../架构决策/电力运维云平台/ADR-018-控制面内部服务与NODE请求认证.md)，把内部服务 HMAC 与节点 HMAC 分域，禁止 token-only 降级；凭据值不得在文档或输出中复述。
+- **当前下一步**：LC02A-0 本地实现、定向测试、凭据轮换和索引清理已完成；现在只推进 TD-001/OPEN-03 的联合评审与证据门禁（Linux PTY、资源压测、Windows 发布资格），未冻结前不得启动 LC02A-1～4 或执行 V009。
+- **历史更正**：下方既有记录中的 `/telemetry/ack/...` 只代表当时测试代码事实，不再是目标架构或后续实现授权。
 
 **M1 采集主线编码侧 + 本地验证全部闭环；B 类部署前硬化完成（2026-08-13）**：设备/RS485 → Poller → SQLite Outbox → MQTT QoS1 → 中心 Inbox → TelemetryStore（standard PG / full TDengine）全链路代码实现 + 验证完成；4 项硬化（EMQX 凭证 / MQTT 配置块 / SHA-256 子表名 / 共享 codec + 补零契约修复）见下「编码侧硬化」段。
 
@@ -231,6 +254,17 @@
 7. 所有门禁通过后更新资产 manifest 的真实 Git commit/hash，再决定 TD-005 是否转 Approved / Frozen。
 
 TD-005 评审可以与 TD-001～004 的证据准备并行，但任何生产代码不得绕过各 TD 的冻结门禁。
+
+## LC02A-0 本地执行续作记录（2026-08-15）
+
+- 本轮按双基线执行：项目开发宪法 1.6.0（SHA-256 `76BF30903A5A62C957A75B57E24080AA7132DE6992D56C262EEAFBE7BE553C4D`）与平台功能计划 1.5.0（SHA-256 `F0E5734C8FADA6D0E4DAB98F7D12F58940077F9C60AA8DA42AC8EF45C6F69869`）。
+- LC02A-0 已完成本地代码批次：Java common-security 内部服务 HMAC/allowlist/Redis nonce、iot-node 节点 key Provider/signer、NODE HMAC/replay/credential Provider 与安装权限基线。
+- 证据：Java common-security 3/3、iot-node 2/2、NODE pytest 3 passed；Flask 集成用例 1 skipped（环境未安装 Flask）。Java 两个定向 Maven reactor 均 `BUILD SUCCESS`；`py_compile` 通过。
+- 复跑证据（2026-08-15）：`NODE/tests` 在工作区可写临时目录为 `3 passed, 1 skipped`；`InternalServiceAuthContractTest` 3/3、`NodeAgentSigningKeyProviderTest` 2/2，两个 Maven reactor 均 `BUILD SUCCESS`。当前 Windows 的 WSL 实例创建返回 `E_ACCESSDENIED`，因此 Linux PTY 端到端证据仍保持 `OPEN`。
+- 凭据状态：`NODE/agent.env` 已从 index 移除并被 ignore；PostgreSQL 初始化转储中的旧节点令牌已清除；旧令牌当前工作树匹配数 0。外部轮换与旧值失效已完成，cached/worktree secret scan 均通过；部署后/现场验证仍 `OPEN`。
+- 轮换续作（2026-08-15）：控制面恢复后，正式 `reset-agent-token?id=1` 对平台节点返回业务拒绝；按既有授权执行受控 DB fallback。数据库、本地 `agent.env`、bootstrap 返回值一致；一次性 Agent register/heartbeat 均 `code=0`。未启动常驻 Agent；`.git/index.lock` 已清理，清理后的 SQL 已进入待提交索引，索引扫描通过。
+- 暂存状态：仓库锁已清理，SQL 转储清理已进入待提交索引；`NODE/agent.env` 仍只保留在本地受保护文件且不在索引中。
+- 继续门禁：LC02A-1～4 仍 Blocked；现场串口、跨主机网络、NTP、部署后稳定性和 7 天稳定性保持 OPEN，不得从本地测试推断已验证。
 
 ## 6. 可直接复跑的检查点
 
