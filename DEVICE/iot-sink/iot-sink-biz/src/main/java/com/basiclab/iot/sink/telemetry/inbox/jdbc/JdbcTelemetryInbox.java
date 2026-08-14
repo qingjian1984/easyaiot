@@ -6,9 +6,12 @@ import com.basiclab.iot.sink.telemetry.inbox.TelemetryInboxPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,65 +36,104 @@ public final class JdbcTelemetryInbox implements TelemetryInboxPort {
             + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'RECEIVED', ?, ?)"
             + " ON CONFLICT (tenant_id, message_id) DO NOTHING";
 
-    private static final String SELECT_HASH_SQL = "SELECT content_sha256"
+    private static final String SELECT_EXISTING_SQL = "SELECT content_sha256, request_id, message_id_wire,"
+            + " site_code, device_identification, property_code, received_at_ms"
             + " FROM iot_sink.telemetry_inbox WHERE tenant_id = ? AND message_id = ?";
 
     private final JdbcTemplate jdbc;
+    private final TransactionTemplate transactionTemplate;
 
     public JdbcTelemetryInbox(DataSource dataSource) {
         this.jdbc = new JdbcTemplate(dataSource);
+        this.transactionTemplate = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
     public InboxReceiveResult receiveEnvelopes(List<InboxEnvelope> envelopes) {
-        if (envelopes == null || envelopes.isEmpty()) {
-            return new InboxReceiveResult.Received(List.of());
+        if (envelopes == null) {
+            throw new NullPointerException("envelopes");
         }
-        List<String> received = new ArrayList<>();
-        List<String> duplicates = new ArrayList<>();
-        List<String> collisions = new ArrayList<>();
-        long now = System.currentTimeMillis();
-
-        for (InboxEnvelope env : envelopes) {
-            int rows = jdbc.update(INSERT_SQL,
-                    env.messageId(),
-                    env.messageId(),
-                    env.requestId(),
-                    Long.parseLong(env.tenantId()),
-                    env.siteCode(),
-                    env.deviceIdentification(),
-                    env.propertyCode(),
-                    env.canonicalBytes(),
-                    env.contentSha256(),
-                    env.collectedAtMs(),
-                    env.sequence(),
-                    env.source(),
-                    env.configVersion(),
-                    now,
-                    now);
-
-            if (rows > 0) {
-                received.add(env.messageId());
-            } else {
-                String existingHash = queryExistingHash(env.tenantId(), env.messageId());
-                if (existingHash != null && existingHash.equals(env.contentSha256())) {
-                    duplicates.add(env.messageId());
-                } else {
-                    collisions.add(env.messageId());
-                    log.warn("INBOX_COLLISION: messageId={} existing={} incoming={}",
-                            env.messageId(), existingHash, env.contentSha256());
-                }
+        List<InboxReceiveResult.Item> items = new java.util.ArrayList<>(envelopes.size());
+        for (int i = 0; i < envelopes.size(); i++) {
+            final int inputIndex = i;
+            InboxEnvelope env = envelopes.get(i);
+            if (env == null) {
+                throw new NullPointerException("envelopes[" + i + "]");
             }
+            items.add(transactionTemplate.execute(status -> receiveOne(env, inputIndex)));
         }
-        return new InboxReceiveResult.Received(received);
+        return new InboxReceiveResult.Batch(items);
     }
 
-    private String queryExistingHash(String tenantId, String messageId) {
-        try {
-            return jdbc.queryForObject(SELECT_HASH_SQL, String.class,
-                    Long.parseLong(tenantId), messageId);
-        } catch (Exception e) {
-            return null;
+    private InboxReceiveResult.Item receiveOne(InboxEnvelope env, int inputIndex) {
+        long now = System.currentTimeMillis();
+        int rows = jdbc.update(INSERT_SQL,
+                env.messageId(),
+                env.messageId(),
+                env.requestId(),
+                Long.parseLong(env.tenantId()),
+                env.siteCode(),
+                env.deviceIdentification(),
+                env.propertyCode(),
+                env.canonicalBytes(),
+                env.contentSha256(),
+                env.collectedAtMs(),
+                env.sequence(),
+                env.source(),
+                env.configVersion(),
+                now,
+                now);
+
+        if (rows > 0) {
+            return new InboxReceiveResult.Item(inputIndex, env.messageId(), env.requestId(),
+                    InboxReceiveResult.Status.ACCEPTED_DURABLE, now);
+        }
+
+        ExistingInbox existing = queryExisting(env.tenantId(), env.messageId());
+        if (existing == null) {
+            throw new IllegalStateException("Inbox conflict row disappeared: messageId=" + env.messageId());
+        }
+        if (existing.matches(env)) {
+            return new InboxReceiveResult.Item(inputIndex, env.messageId(), env.requestId(),
+                    InboxReceiveResult.Status.DUPLICATE, existing.receivedAtMs());
+        }
+        log.warn("INBOX_COLLISION: messageId={} reason=existing_identity_or_hash_diff", env.messageId());
+        return new InboxReceiveResult.Item(inputIndex, env.messageId(), env.requestId(),
+                InboxReceiveResult.Status.MESSAGE_ID_COLLISION, null);
+    }
+
+    private ExistingInbox queryExisting(String tenantId, String messageId) {
+        List<ExistingInbox> rows = jdbc.query(SELECT_EXISTING_SQL, EXISTING_ROW_MAPPER,
+                Long.parseLong(tenantId), messageId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    private static final RowMapper<ExistingInbox> EXISTING_ROW_MAPPER = (rs, rowNum) -> new ExistingInbox(
+            rs.getString("content_sha256"),
+            rs.getString("request_id"),
+            rs.getString("message_id_wire"),
+            rs.getString("site_code"),
+            rs.getString("device_identification"),
+            rs.getString("property_code"),
+            rs.getLong("received_at_ms"));
+
+    private record ExistingInbox(
+            String contentSha256,
+            String requestId,
+            String messageIdWire,
+            String siteCode,
+            String deviceIdentification,
+            String propertyCode,
+            long receivedAtMs) {
+
+        boolean matches(InboxEnvelope env) {
+            return java.util.Objects.equals(contentSha256, env.contentSha256())
+                    && java.util.Objects.equals(requestId, env.requestId())
+                    && java.util.Objects.equals(messageIdWire, env.messageId())
+                    && java.util.Objects.equals(siteCode, env.siteCode())
+                    && java.util.Objects.equals(deviceIdentification, env.deviceIdentification())
+                    && java.util.Objects.equals(propertyCode, env.propertyCode());
         }
     }
 }

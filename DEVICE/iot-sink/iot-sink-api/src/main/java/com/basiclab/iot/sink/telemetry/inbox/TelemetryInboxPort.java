@@ -11,7 +11,7 @@ public interface TelemetryInboxPort {
      * 接收一批 envelopes，写入 Inbox（两层幂等：同 messageId 同 hash → DUPLICATE；不同 hash → COLLISION）。
      *
      * @param envelopes 已解析的 ClaimedEnvelope（含 canonical bytes）
-     * @return 接收结果（Received/Duplicate/Collision per messageId）
+     * @return 按输入顺序返回逐消息 Batch/Item 结果（新增、重复或 messageId 碰撞）
      */
     InboxReceiveResult receiveEnvelopes(List<InboxEnvelope> envelopes);
 }
