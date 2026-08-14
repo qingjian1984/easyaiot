@@ -332,6 +332,8 @@ def create_app(start_background_tasks=None):
                         ('scheme', 'VARCHAR(8)'),
                         ('rtsp_url', 'TEXT'),
                         ('source', 'VARCHAR(32)'),
+                        ('rtsp_template', 'TEXT'),
+                        ('rtsp_port', 'SMALLINT'),
                         ('created_at', 'TIMESTAMP WITHOUT TIME ZONE'),
                         ('updated_at', 'TIMESTAMP WITHOUT TIME ZONE'),
                     ):
