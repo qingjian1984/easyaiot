@@ -376,7 +376,7 @@ ALTER TABLE ONLY public.edge_node ALTER COLUMN id SET DEFAULT nextval('public.ed
 --
 
 COPY public.compute_node (id, name, host, ssh_port, agent_port, status, node_role, region, tags, capabilities, max_gpu_count, max_task_count, weight, agent_token, remark, last_heartbeat_at, creator, create_time, updater, update_time, deleted, control_plane_id) FROM stdin;
-1	控制面节点	172.16.13.220	22	9100	online	hybrid	\N	\N	{"zlm": true, "srs_ai": true, "platform": true, "srs_live": true, "auto_label": true, "model_train": true, "ai_inference": true, "llm_inference": true, "algorithm_snap": true, "stream_forward": true, "algorithm_patrol": true, "algorithm_realtime": true}	0	50	100	feba85c09c7a4b0db169d7d2b0630ba3	平台控制面宿主机，自动纳管	2026-07-14 16:55:54.469051	\N	2026-07-14 16:35:07.615462	\N	2026-07-14 16:55:54.46921	0	1
+1	控制面节点	172.16.13.220	22	9100	online	hybrid	\N	\N	{"zlm": true, "srs_ai": true, "platform": true, "srs_live": true, "auto_label": true, "model_train": true, "ai_inference": true, "llm_inference": true, "algorithm_snap": true, "stream_forward": true, "algorithm_patrol": true, "algorithm_realtime": true}	0	50	100	\N	平台控制面宿主机，自动纳管	2026-07-14 16:55:54.469051	\N	2026-07-14 16:35:07.615462	\N	2026-07-14 16:55:54.46921	0	1
 \.
 
 
