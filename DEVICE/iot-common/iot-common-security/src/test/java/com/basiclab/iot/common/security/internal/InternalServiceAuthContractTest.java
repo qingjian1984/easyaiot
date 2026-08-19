@@ -13,7 +13,9 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InternalServiceAuthContractTest {
 
@@ -84,6 +86,31 @@ class InternalServiceAuthContractTest {
                 () -> redisFailure.verify(new InternalServiceAuthRequest("GET", "/internal-api/device/release",
                         new byte[0], headers)));
         assertEquals("SERVICE_AUTH_NONCE_STORE_UNAVAILABLE", redisError.getCode());
+    }
+
+    @Test
+    void releaseIdTemplateMatchesOneNonEmptyPathSegmentOnly() {
+        InternalServiceAuthRoute route = new InternalServiceAuthRoute(
+                "GET", "/internal-api/device/collector-config/releases/{releaseId}");
+
+        assertTrue(route.matches("GET", "/internal-api/device/collector-config/releases/123"));
+        assertTrue(route.matches("get", "/internal-api/device/collector-config/releases/abc-1"));
+        assertFalse(route.matches("POST", "/internal-api/device/collector-config/releases/123"));
+        assertFalse(route.matches("GET", "/internal-api/device/collector-config/releases/"));
+        assertFalse(route.matches("GET", "/internal-api/device/collector-config/releases/123/extra"));
+        assertFalse(route.matches("GET", "/internal-api/device/collector-config/releases/123?limit=1"));
+        assertFalse(route.matches("GET", "/internal-api/device/collector-config/releases/123/"));
+        assertFalse(route.matches("GET", "/internal-api/device/collector-config/releases/%2Fetc"));
+        assertFalse(route.matches("GET", "/internal-api/device/collector-config/releases/%3Fsecret"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new InternalServiceAuthRoute("GET", "/internal-api/{releaseId}/tail/{releaseId}"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new InternalServiceAuthRoute("GET", "/internal-api/releases/{releaseId}?x=1"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new InternalServiceAuthRoute("GET", "/internal-api/releases/{name}*"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new InternalServiceAuthRoute("GET", "/internal-api/releases/{name}//detail"));
     }
 
     private static InternalServiceAuthVerifier verifier(InternalServiceKeyProvider keys,
