@@ -11,9 +11,13 @@ spring:
 
 # TD-003 center 侧 telemetry inbox + MQTT subscriber 启用开关。
 # 连接参数（host/port/credentials）见 application.yaml 的 easyaiot.telemetry.mqtt 段。
+# query（PRD §4.5 查询/导出）默认 false：mini 档 fail-closed；standard/full
+# 部署评审通过后经 EASYAIOT_TELEMETRY_QUERY_ENABLED=true 启用。
 easyaiot:
   telemetry:
     inbox:
       enabled: true
     mqtt:
       enabled: true
+    query:
+      enabled: ${EASYAIOT_TELEMETRY_QUERY_ENABLED:false}

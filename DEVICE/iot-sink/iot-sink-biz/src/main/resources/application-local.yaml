@@ -307,3 +307,6 @@ easyaiot:
       enabled: true
     mqtt:
       enabled: true
+    # PRD §4.5 查询/导出（local 默认启用，配合 WEB 遥测历史页联调）
+    query:
+      enabled: true
