@@ -1,8 +1,8 @@
 # M1 SDD 进度与续作入口
 
-> 检查点日期：2026-08-19
-> Git 分支：`cfdqiot`（OPEN03-01～08A 实现成果已分 7 个提交落库：`afd86b0a`/`74bd87fa`/`4d31f6c3`/`4c93ac77`/`2629da22`/`5c87b338`/`3eb0b15c`）
-> 当前阶段：OPEN03-08 v2 全部 13.6 节验收命令已执行通过（见下方 2026-08-19 记录），待 Sol 独立复核后门禁 1/2/3/6 标 `CLOSED-LOCAL`；LC02A-1～4 继续 Blocked；现场/部署后验证待续
+> 检查点日期：2026-08-19（二次更新）
+> Git 分支：`cfdqiot`（OPEN03-01～08A 七提交 + TQ 查询/展示面五提交 + V010 runner 接线均已落库并推送 origin）
+> 当前阶段：OPEN03-08 v2 验收命令全量通过待 Sol 复核；TQ-01~04（遥测查询 API + WEB 展示面）编码侧完成、V010 runner 就绪待批准窗口、部署清单已备；LC02A-1～4 继续 Blocked
 > 说明：本文件用于下次会话恢复上下文；状态以各正式文档为准
 
 ## 当前快照与下一步（2026-08-13）
@@ -22,6 +22,7 @@
 - **OPEN03-06 已由 Sol 验收、OPEN03-07 已解锁（2026-08-17）**：collector 本地 Provider、版本原子应用、唯一 RTU 引擎/center bridge 与 SQLite outbox 写入已落地。Sol 首轮否决全包扫描下的伪 profile 隔离，次轮否决测试强制非 Web而生产入口未固化的差异；最终以生产同款 collector CLI 启动真实 Spring 白名单上下文，确认无中心 DB/service/controller/message bus、Redis、Nacos/Feign，首次无配置写 `WAITING_CONFIG`。Sol 独立冻结集 Java 27/27、NODE 37/37、Skipped=0，三份 Schema hash、`compileall`、`git diff --check` 与临时清理通过。当前唯一授权 OPEN03-07；所有运行期资格继续 OPEN。
 - **OPEN03-08A 及 S1 已由 Sol 验收，OPEN03-08 v2 已恢复（2026-08-17）**：OPEN03-08 首批实现暴露 TD-003 §13 批量 Store 与当前逐条代码事实冲突，Sol 否决错误断言后冻结 OPEN03-08A，Luna Max 已完成批量主接口、四状态逐条结果、projector 单次批量调用和两个 adapter 顺序隔离，旧 `writeSample` 仅保留 deprecated bridge。Sol 独立完整冻结矩阵 `34/34 PASS`、Skipped=0，真实 PostgreSQL 残留 0；之后发现并收敛 Apache HTTP DEBUG 凭据头泄露，S1 日志合同 `2/2 PASS`、TDengine 相关 `7/7 PASS`、敏感输出扫描 0 命中。OPEN03-08 v2 已恢复授权 GPT-5.6 Luna（max reasoning）；运行期资格继续 OPEN。
 - **OPEN03-08 v2 验收命令全量执行通过，待 Sol 复核（2026-08-19）**：fixture、编排器与全部 5 个指定测试类经查已由前会话实现完毕（含 `CollectorCrossTdContractTest`/`CollectorHealthAggregatorTest`/`CollectorOpen03CombinedStageTest`/`CollectorOpen03CombinedApplyStageTest`/`test_open03_08_path_contract.py`），本轮零代码改动，只执行 13.6 节全部验收命令：组合编排器 E2E 成功链+失败链 PASS（无 skip）；iot-sink 9 类 `36/36`、iot-node 5 类 `32/32`、iot-device 2 类（真实 PG 实连）`8/8`，全部 Failures:0/Errors:0/Skipped:0；NODE pytest `58 passed`；三模块 `compile` exit 0、`compileall` OK、`git diff --check` OK。**本轮唯一修复为环境性阻塞**：iot-device 合同测试首跑 2 个用例报 `SERVICE_AUTH_UNKNOWN_CALLER`，隔离复现证明路由模板匹配正确，根因是本地 Maven 仓库 `iot-common-security` 旧版 jar 不含 8/17 的 `{releaseId}` 模板路由匹配；`mvn install -pl iot-common/iot-common-security -DskipTests` 刷新后 6/6 全绿，零源码改动（Sol 复核重跑时需 `-am` 全量构建或先 install 该模块，避免踩同样旧 jar）。后置检查：仓库无 key/replay DB/SQLite 生成物、PG `iot_collector_config_release` 0 行残留、生产开关默认关闭（`EASYAIOT_INTERNAL_SERVICE_AUTH_ENABLED:false`、`EASYAIOT_COLLECTOR_CONFIG_DISPATCH_ENABLED:false`）、临时文件已清。未执行运行项如实保持 OPEN（Linux PTY/串口/压测/7 天/Windows/现场）。按任务单约束未 commit。
+- **TQ 遥测查询 API + WEB 展示面编码侧完成，四决策点已锁定（2026-08-19，决策所有者批准）**：补齐「TelemetryStore 只有写入、无任何查询能力」的未排期缺口（PRD §4.4/4.5）。TQ-01 `TelemetryQueryPort`（api 模块独立 query 包，不动已冻结只写端口）+ PG 适配器（date_bin 聚合/DISTINCT ON latest/租户 fail-closed/配额前置：series ≤10、跨度 ≤31 天、pageSize ≤1000、累计 ≤100,000，稳定码 `TELEMETRY_QUERY_QUOTA_EXCEEDED`）；TQ-02 双 Store 补 quality/received_at（构造时列探测降级，V010 落库前后行为一致；`parseQuality` 入共享 `TelemetryValueCodec`，canonical payload 受控枚举缺省 GOOD）；TQ-03 Controller（raw/aggregate/latest/export，CSV 流式导出同配额）+ TDengine 适配器（INTERVAL 窗口；引擎差异处理：TAG 不能作 INTERVAL SELECT 列，聚合/latest 按 series 循环回填）+ gateway `/admin-api/telemetry/**` 路由 + `EASYAIOT_TELEMETRY_QUERY_ENABLED` 开关默认关；TQ-04 WEB 遥测历史页（多测点/粒度/聚合/echarts 对比/明细/CSV 下载）+ QualityTag（8 类质量码→PRD 文案色）+ MetricPicker + 前端静态路由。验收：查询套件 25/25 + store 回归 45/45 全绿（真实 PG + 真实 TDengine）、`vite build` 通过。**遗留边界如实记录**：Detail.vue/TingModelCardList 数据源切换待部署窗口（现在切会空白）；V010 runner 已接线（dry-run `08d809a4...`，V001~V008 hash 未漂移；临时库双向演练 apply/回滚通过，`iot-device20` 未触碰），正式落库待批准单。**四决策点经决策所有者确认（2026-08-19）**：① V010 先于 V009 落库（不同表对象无依赖）；② quality 维持 canonicalBytes 解析方案（TD-003 §6 payload 本含字段，Envelope V1 冻结不出 V2）；③ TDengine ALTER 复用适配器内置幂等 ALTER+列探测（真实实例合同已验证）；④ `/admin-api/telemetry` M1 走登录态+租户头，细粒度权限点列 M2。提交：`61ebb00b`/`95c55500`/`2eb7d50e`/`77a8ee5f`/`0223a3ee`。部署操作见 `TQ-部署窗口清单-20260819.md`。
 
 ### LC-02 前置冲突门禁（2026-08-13，OPEN）
 
