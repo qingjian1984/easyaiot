@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "open03-08-fixture/1",
+  "workloadId": "collector-open03-e2e-a",
+  "fixtures": {
+    "success": {
+      "file": "collector-config-v1-success.json",
+      "configVersion": 1,
+      "sha256": "0d776f23d9ed5e780cb98d8d33983e71232a815beadd8c2f5c41e825eecfd05e",
+      "canonicalLengthBytes": 797,
+      "releaseId": "9003001",
+      "expectedTerminal": "APPLIED"
+    },
+    "failure": {
+      "file": "collector-config-v2-apply-failure.json",
+      "configVersion": 2,
+      "sha256": "3d926222916e3e319eb469b7751684747e945f7edab8f1e5058c39e45b2d27ba",
+      "canonicalLengthBytes": 797,
+      "releaseId": "9003002",
+      "expectedTerminal": "FAILED",
+      "expectedErrorCode": "COLLECTOR_CONFIG_APPLY_FAILED"
+    }
+  }
+}

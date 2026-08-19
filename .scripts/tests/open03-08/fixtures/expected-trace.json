@@ -1,0 +1,16 @@
+{
+  "success": [
+    "PUBLISHED",
+    "AGENT_ACCEPTED",
+    "DESIRED_WRITTEN",
+    "COLLECTOR_APPLIED",
+    "DEVICE_APPLIED"
+  ],
+  "failure": [
+    "PUBLISHED",
+    "AGENT_ACCEPTED",
+    "DESIRED_WRITTEN",
+    "COLLECTOR_FAILED",
+    "DEVICE_FAILED"
+  ]
+}
