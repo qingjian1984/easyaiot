@@ -213,6 +213,18 @@ debug: false
 # 电力物模型写 API 的安全配置。空值保持 fail-closed；standard/full 部署必须通过
 # 环境变量或配置中心注入至少 32 UTF-8 字节的随机 secret，禁止提交真实 secret。
 easyaiot:
+  # ADR-018 collector provider routes are explicitly registered, but the verifier
+  # remains disabled until the independent credential/deployment gate is approved.
+  security:
+    internal:
+      enabled: ${EASYAIOT_INTERNAL_SERVICE_AUTH_ENABLED:false}
+      routes:
+        - method: GET
+          path: /internal-api/device/collector-config/releases/pending
+        - method: GET
+          path: /internal-api/device/collector-config/releases/{releaseId}
+        - method: POST
+          path: /internal-api/device/collector-config/releases/{releaseId}/observed
   power-model:
     # ADR-015 首发投影闭环完成专项评审前禁止开放写入口。
     template-api-enabled: ${EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED:false}

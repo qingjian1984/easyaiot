@@ -109,9 +109,9 @@ public class PowerModelBindingApplyService {
         String bindingCanonical = canonicalizer.canonicalize(bindingSnapshot);
         String bindingHash = canonicalizer.contentHash(bindingSnapshot);
         ObjectNode collectorPayload = enrichCollectorSnapshot(
-                request.getCollectorSnapshot(), configVersion, now);
+                request.getCollectorSnapshot(), product.identification, configVersion, now);
         CollectorConfigSnapshotContract.Artifact collectorArtifact =
-                collectorContract.validateAndCanonicalize(collectorPayload);
+                collectorContract.validateAndCanonicalizeV11(collectorPayload);
 
         long bindingId = nextId();
         long auditId = nextId();
@@ -156,7 +156,8 @@ public class PowerModelBindingApplyService {
                                         PowerModelBindingApplyRequest request, long actorId,
                                         String idempotencyKey, String requestId) {
         if (tenantId <= 0 || actorId <= 0) invalid("tenant/actor 必须是正整数");
-        nonBlank(productIdentification, "productIdentification");
+        CollectorConfigSnapshotContract.requireProductIdentification(
+                productIdentification, "productIdentification");
         Objects.requireNonNull(request, "request");
         nonBlank(request.getTemplateCode(), "templateCode");
         nonBlank(request.getTemplateVersion(), "templateVersion");
@@ -174,10 +175,18 @@ public class PowerModelBindingApplyService {
         Set<String> names = new HashSet<String>();
         source.fieldNames().forEachRemaining(names::add);
         if (!COLLECTOR_SOURCE_FIELDS.equals(names)) {
-            invalid("collectorSnapshot 源字段集合不匹配");
+            throw new IllegalArgumentException(CollectorConfigSnapshotContract.CODE_INVALID
+                    + ": collectorSnapshot 源字段集合不匹配");
+        }
+        if (!CollectorConfigSnapshotContract.SCHEMA_VERSION.equals(
+                text(source, "schemaVersion"))) {
+            throw new IllegalArgumentException(CollectorConfigSnapshotContract.CODE_INVALID
+                    + ": collectorSnapshot.schemaVersion 仅支持 "
+                    + CollectorConfigSnapshotContract.SCHEMA_VERSION);
         }
         if (!Long.toString(tenantId).equals(text(source, "tenantId"))) {
-            invalid("collectorSnapshot.tenantId 与安全上下文不一致");
+            throw new IllegalArgumentException(CollectorConfigSnapshotContract.CODE_INVALID
+                    + ": collectorSnapshot.tenantId 与安全上下文不一致");
         }
         nonBlank(text(source, "workloadId"), "collectorSnapshot.workloadId");
     }
@@ -300,8 +309,11 @@ public class PowerModelBindingApplyService {
         return Objects.requireNonNull(value, "configVersion");
     }
 
-    private ObjectNode enrichCollectorSnapshot(JsonNode source, long configVersion, Instant now) {
+    private ObjectNode enrichCollectorSnapshot(JsonNode source, String productIdentification,
+                                               long configVersion, Instant now) {
         ObjectNode result = source.deepCopy();
+        result.put("schemaVersion", CollectorConfigSnapshotContract.SCHEMA_VERSION_V1_1);
+        result.put("productIdentification", productIdentification);
         result.put("configVersion", configVersion);
         result.put("generatedAt", now.toString());
         return result;
@@ -413,7 +425,7 @@ public class PowerModelBindingApplyService {
                         .addValue("siteCode", text(payload, "siteCode"))
                         .addValue("workloadId", text(payload, "workloadId"))
                         .addValue("nodeId", nodeId).addValue("configVersion", payload.get("configVersion").longValue())
-                        .addValue("schemaVersion", CollectorConfigSnapshotContract.SCHEMA_VERSION)
+                        .addValue("schemaVersion", CollectorConfigSnapshotContract.SCHEMA_VERSION_V1_1)
                         .addValue("canonicalizationVersion", CollectorConfigSnapshotContract.CANONICALIZATION_VERSION)
                         .addValue("canonical", artifact.canonical()).addValue("sha256", artifact.sha256())
                         .addValue("length", artifact.lengthBytes()).addValue("productId", productId)

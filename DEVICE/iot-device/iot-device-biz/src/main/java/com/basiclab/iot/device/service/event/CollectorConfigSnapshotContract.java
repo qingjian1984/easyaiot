@@ -13,7 +13,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * TD-001 §6/§6.1：collector-config/1.0 快照的发布侧合同。
+ * TD-001 §6/§6.1：collector-config/1.0 与 1.1 快照的发布侧合同。
  *
  * <p>本类在持久化之前完成 fail-closed 校验，并只生成一次 canonical 文本；
  * 发布单 payload、SHA-256、长度以及后续下发必须复用 {@link Artifact} 中的同一
@@ -22,6 +22,7 @@ import java.util.regex.Pattern;
 public final class CollectorConfigSnapshotContract {
 
     public static final String SCHEMA_VERSION = "1.0";
+    public static final String SCHEMA_VERSION_V1_1 = "1.1";
     public static final String CANONICALIZATION_VERSION = "jcs-rfc8785-v1";
     public static final String CODE_INVALID = "COLLECTOR_CONFIG_SNAPSHOT_INVALID";
     public static final String CODE_FACT_MISSING = "COLLECTOR_CONFIG_SOURCE_FACT_MISSING";
@@ -30,6 +31,9 @@ public final class CollectorConfigSnapshotContract {
     private static final Pattern DECIMAL = Pattern.compile("^[+-]?(0|[1-9][0-9]*)(\\.[0-9]+)?$");
     private static final Set<String> ROOT_FIELDS = fields("schemaVersion", "workloadId", "tenantId",
             "siteId", "siteCode", "configVersion", "generatedAt", "serialBuses");
+    private static final Set<String> ROOT_FIELDS_V1_1 = fields("schemaVersion", "productIdentification",
+            "workloadId", "tenantId", "siteId", "siteCode", "configVersion", "generatedAt",
+            "serialBuses");
     private static final Set<String> BUS_FIELDS = fields("busId", "serialPort", "baudRate", "dataBits",
             "stopBits", "parity", "transmitDelayMs", "rs485Mode", "devices");
     private static final Set<String> DEVICE_FIELDS = fields("deviceId", "deviceIdentification", "unitId",
@@ -45,6 +49,19 @@ public final class CollectorConfigSnapshotContract {
     private final JcsCanonicalizer canonicalizer = new JcsCanonicalizer();
 
     public Artifact validateAndCanonicalize(JsonNode root) {
+        if (root != null && root.isObject() && root.has("schemaVersion")
+                && root.get("schemaVersion").isTextual()
+                && SCHEMA_VERSION_V1_1.equals(root.get("schemaVersion").textValue())) {
+            return validateAndCanonicalizeV11(root);
+        }
+        return validateAndCanonicalizeV1(root);
+    }
+
+    /**
+     * Validates a historical 1.0 snapshot without changing its field set or
+     * canonical bytes.  Keep this path stable for already persisted releases.
+     */
+    private Artifact validateAndCanonicalizeV1(JsonNode root) {
         requireObject(root, "$", ROOT_FIELDS);
         requireEquals(text(root, "schemaVersion", "$"), SCHEMA_VERSION, "$.schemaVersion");
         nonBlank(text(root, "workloadId", "$"), "$.workloadId");
@@ -68,6 +85,48 @@ public final class CollectorConfigSnapshotContract {
         byte[] utf8 = canonical.getBytes(StandardCharsets.UTF_8);
         String prefixedHash = canonicalizer.contentHash(root);
         return new Artifact(canonical, utf8, prefixedHash.substring("sha256:".length()));
+    }
+
+    /** ConfigSnapshot 1.1: 1.0 plus the server-injected product identity. */
+    public Artifact validateAndCanonicalizeV11(JsonNode root) {
+        requireObject(root, "$", ROOT_FIELDS_V1_1);
+        requireEquals(text(root, "schemaVersion", "$"), SCHEMA_VERSION_V1_1,
+                "$.schemaVersion");
+        requireProductIdentification(text(root, "productIdentification", "$"),
+                "$.productIdentification");
+        nonBlank(text(root, "workloadId", "$"), "$.workloadId");
+        decimalId(text(root, "tenantId", "$"), "$.tenantId");
+        decimalId(text(root, "siteId", "$"), "$.siteId");
+        nonBlank(text(root, "siteCode", "$"), "$.siteCode");
+        positiveInteger(root.get("configVersion"), "$.configVersion", Long.MAX_VALUE);
+        try {
+            OffsetDateTime.parse(text(root, "generatedAt", "$"));
+        } catch (DateTimeParseException e) {
+            invalid("$.generatedAt 必须是带偏移 RFC 3339 时间");
+        }
+
+        JsonNode buses = array(root, "serialBuses", "$", false);
+        Set<String> busIds = new HashSet<String>();
+        for (int i = 0; i < buses.size(); i++) {
+            validateBus(buses.get(i), "$.serialBuses[" + i + "]", busIds);
+        }
+
+        String canonical = canonicalizer.canonicalize(root);
+        byte[] utf8 = canonical.getBytes(StandardCharsets.UTF_8);
+        String prefixedHash = canonicalizer.contentHash(root);
+        return new Artifact(canonical, utf8, prefixedHash.substring("sha256:".length()));
+    }
+
+    /** Shared product identity rule for the API path and ConfigSnapshot 1.1. */
+    public static String requireProductIdentification(String value, String path) {
+        if (value == null || value.trim().isEmpty()) {
+            invalid(path + " 不得为空");
+        }
+        int length = value.codePointCount(0, value.length());
+        if (length < 1 || length > 128) {
+            invalid(path + " 长度必须在 1～128 个字符之间");
+        }
+        return value;
     }
 
     private static void validateBus(JsonNode bus, String path, Set<String> busIds) {

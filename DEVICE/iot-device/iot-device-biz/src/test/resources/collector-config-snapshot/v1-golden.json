@@ -1,0 +1,48 @@
+{
+  "canonicalizationVersion": "jcs-rfc8785-v1",
+  "schemaVersion": "1.0",
+  "canonicalBase64": "eyJjb25maWdWZXJzaW9uIjo2LCJnZW5lcmF0ZWRBdCI6IjIwMjYtMDctMzFUMDk6MDA6MDArMDg6MDAiLCJzY2hlbWFWZXJzaW9uIjoiMS4wIiwic2VyaWFsQnVzZXMiOlt7ImJhdWRSYXRlIjo5NjAwLCJidXNJZCI6ImJ1cy1hIiwiZGF0YUJpdHMiOjgsImRldmljZXMiOlt7ImRldmljZUlkIjoiMjAwMDEiLCJkZXZpY2VJZGVudGlmaWNhdGlvbiI6Ik1FVEVSLTAxIiwibWF4UmV0cmllcyI6MiwicG9pbnRzIjpbeyJhZGRyZXNzIjowLCJieXRlT3JkZXIiOiJCSUdfRU5ESUFOIiwiZGF0YVByaW9yaXR5IjoiTUVURVJJTkdfVE9UQUwiLCJkYXRhVHlwZSI6IkZMT0FUMzIiLCJmdW5jdGlvbiI6IkhPTERJTkdfUkVHSVNURVIiLCJvZmZzZXQiOiIwIiwicG9sbEdyb3VwIjoibm9ybWFsIiwicHJvcGVydHlDb2RlIjoiYWN0aXZlLXBvd2VyIiwicXVhbnRpdHkiOjIsInNjYWxlIjoiMSIsIndvcmRPcmRlciI6IkJJR19FTkRJQU4iLCJ3cml0YWJsZSI6ZmFsc2V9XSwicG9sbEludGVydmFsTXMiOjUwMDAsInJlcXVlc3RUaW1lb3V0TXMiOjEwMDAsInVuaXRJZCI6MX1dLCJwYXJpdHkiOiJOT05FIiwicnM0ODVNb2RlIjp0cnVlLCJzZXJpYWxQb3J0IjoiL2Rldi9lYXN5YWlvdC9yczQ4NS0wIiwic3RvcEJpdHMiOiIxIiwidHJhbnNtaXREZWxheU1zIjowfV0sInNpdGVDb2RlIjoicGxhbnQtYSIsInNpdGVJZCI6IjEwMDEiLCJ0ZW5hbnRJZCI6IjEwMCIsIndvcmtsb2FkSWQiOiJjb2xsZWN0b3Itc2l0ZS0xMDAxLWEifQ==",
+  "bytes": 745,
+  "sha256": "288b792c4220a51efab403cf2fafc3461a3eaf2c4fc1ab9c36278b3045f4244d",
+  "input": {
+    "schemaVersion": "1.0",
+    "workloadId": "collector-site-1001-a",
+    "tenantId": "100",
+    "siteId": "1001",
+    "siteCode": "plant-a",
+    "configVersion": 6,
+    "generatedAt": "2026-07-31T09:00:00+08:00",
+    "serialBuses": [{
+      "busId": "bus-a",
+      "serialPort": "/dev/easyaiot/rs485-0",
+      "baudRate": 9600,
+      "dataBits": 8,
+      "stopBits": "1",
+      "parity": "NONE",
+      "transmitDelayMs": 0,
+      "rs485Mode": true,
+      "devices": [{
+        "deviceId": "20001",
+        "deviceIdentification": "METER-01",
+        "unitId": 1,
+        "pollIntervalMs": 5000,
+        "requestTimeoutMs": 1000,
+        "maxRetries": 2,
+        "points": [{
+          "propertyCode": "active-power",
+          "function": "HOLDING_REGISTER",
+          "address": 0,
+          "quantity": 2,
+          "dataType": "FLOAT32",
+          "byteOrder": "BIG_ENDIAN",
+          "wordOrder": "BIG_ENDIAN",
+          "scale": "1",
+          "offset": "0",
+          "dataPriority": "METERING_TOTAL",
+          "writable": false,
+          "pollGroup": "normal"
+        }]
+      }]
+    }]
+  }
+}

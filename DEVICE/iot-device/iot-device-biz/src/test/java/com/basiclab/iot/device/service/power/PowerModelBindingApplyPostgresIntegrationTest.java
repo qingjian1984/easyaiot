@@ -10,6 +10,7 @@ import com.basiclab.iot.device.event.PowerModelEventEnvelope;
 import com.basiclab.iot.device.service.event.JdbcPowerModelOutboxRepository;
 import com.basiclab.iot.device.service.event.JdbcCollectorConfigReleasePort;
 import com.basiclab.iot.device.service.event.JdbcCollectorWorkloadImpactPort;
+import com.basiclab.iot.device.service.event.CollectorConfigSnapshotContract;
 import com.basiclab.iot.device.service.event.JdbcPowerModelCoordinationAuditPort;
 import com.basiclab.iot.device.service.event.JdbcPowerModelInboxRepository;
 import com.basiclab.iot.device.service.event.JdbcPowerModelTemplateReferencePort;
@@ -98,14 +99,21 @@ class PowerModelBindingApplyPostgresIntegrationTest {
                     String.class, TENANT, "wl-td008-success");
             assertEquals("ACTIVE:1:1", projection);
             String[] canonicalFact = ctx.jdbc.queryForObject(
-                    "SELECT payload_canonical,payload_sha256,canonical_length_bytes::text"
+                    "SELECT schema_version,payload_canonical,payload_sha256,canonical_length_bytes::text"
                             + " FROM public.iot_collector_config_release WHERE tenant_id=?",
-                    (rs, rowNum) -> new String[]{rs.getString(1), rs.getString(2), rs.getString(3)},
+                    (rs, rowNum) -> new String[]{rs.getString(1), rs.getString(2),
+                            rs.getString(3), rs.getString(4)},
                     TENANT);
-            assertEquals(PowerModelEventEnvelope.payloadHash(canonicalFact[0])
-                    .substring("sha256:".length()), canonicalFact[1]);
-            assertEquals(canonicalFact[0].getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
-                    Long.parseLong(canonicalFact[2]));
+            assertEquals(CollectorConfigSnapshotContract.SCHEMA_VERSION_V1_1, canonicalFact[0]);
+            assertTrue(canonicalFact[1].contains("\"productIdentification\":\""
+                    + productIdentification + "\""));
+            assertEquals(productIdentification, ctx.jdbc.queryForObject(
+                    "SELECT payload->>'productIdentification' FROM public.iot_collector_config_release"
+                            + " WHERE tenant_id=?", String.class, TENANT));
+            assertEquals(PowerModelEventEnvelope.payloadHash(canonicalFact[1])
+                    .substring("sha256:".length()), canonicalFact[2]);
+            assertEquals(canonicalFact[1].getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
+                    Long.parseLong(canonicalFact[3]));
 
             String payload = ctx.jdbc.queryForObject(
                     "SELECT payload::text FROM public.power_model_release_outbox"
