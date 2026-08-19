@@ -5,7 +5,7 @@
 > 日期：2026-08-16  
 > 架构与冻结：GPT-5.6 Sol  
 > 实现与测试：GPT-5.6 Luna（max reasoning）  
-> 当前授权：`OPEN03-08A` 及安全收尾 S1 已由 Sol 验收；`OPEN03-08` v2 恢复授权 GPT-5.6 Luna（max reasoning）实现与测试
+> 当前授权：`OPEN03-08` v2 实现与 13.6 节全部验收命令已执行通过（2026-08-19，零代码改动；唯一环境修复为本地 Maven 仓库 `iot-common-security` 旧 jar 刷新，Sol 复核需 `-am` 全量构建）；**待 Sol 独立复核**，通过后门禁 1/2/3/6 标 `CLOSED-LOCAL`，门禁 4/5 继续 `OPEN-RUNTIME`
 
 ## 1. 目标与结论
 
@@ -488,9 +488,9 @@ Luna 每包必须交付：变更文件、合同差异、已执行命令与精确
 ## 15. 冻结签字
 
 - Sol 决定：门禁 1～3、6 的本地实现任务边界于 2026-08-16 冻结；
-- 当前执行授权：`OPEN03-08A` 及 S1 已由 Sol 验收，`OPEN03-08` v2 已恢复 Luna Max 实现与测试；
+- 当前执行授权：`OPEN03-08` v2 实现与 13.6 节全部验收命令已于 2026-08-19 执行通过（组合 E2E 成功+失败链 PASS、iot-sink 36/36、iot-node 32/32、iot-device 真实 PG 8/8、NODE pytest 58 passed，全部 Skipped=0；`compile`/`compileall`/`git diff --check` OK；零代码改动，唯一环境修复为本地 Maven 仓库 `iot-common-security` 旧 jar 刷新）；
 - Luna 模型要求：`gpt-5.6-luna`，`max reasoning`；
-- 下一状态：Luna Max 完成 OPEN03-08 v2 组合 E2E 与联合合同后交 Sol 独立复核。
+- 下一状态：Sol 独立重跑复核（建议带 `-am` 全量构建避免旧 jar）；复核通过后将门禁 1/2/3/6 标 `CLOSED-LOCAL`，门禁 4/5 继续 `OPEN-RUNTIME`，TD-001 与 OPEN-03 总体仍不得标为完成。
 
 ## 16. OPEN03-01 Sol 验收记录（2026-08-17）
 

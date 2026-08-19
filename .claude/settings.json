@@ -122,7 +122,18 @@
       "Bash(git commit -m 'feat\\(security\\): internal service auth route extension for collector release API *)",
       "Bash(git commit -m 'feat\\(node-py\\): collector config state machine + dedicated deploy \\(OPEN03-04/05\\) *)",
       "Bash(git commit -m 'test\\(open03-08\\): combined E2E golden fixtures + local orchestrator *)",
-      "Bash(git commit -m 'docs\\(m1\\): OPEN03 task sheet v1.4.2 + progress updates \\(01~08A accepted\\) *)"
+      "Bash(git commit -m 'docs\\(m1\\): OPEN03 task sheet v1.4.2 + progress updates \\(01~08A accepted\\) *)",
+      "Bash(python .scripts/tests/open03-08/run_open03_08_combined_e2e.py)",
+      "Bash(powershell.exe -NoProfile -Command \"Start-Process 'C:\\\\Program Files\\\\Docker\\\\Docker\\\\Docker Desktop.exe' -WindowStyle Hidden\")",
+      "Bash(grep -n \"MockHttpServletRequest request\\(String method, String path,\\\\s*$\\\\|static MockHttpServletRequest request\" iot-device/iot-device-biz/src/test/java/com/basiclab/iot/device/service/collector/CollectorConfigReleaseInternalApiContractTest.java)",
+      "Bash(awk '/private static MockHttpServletRequest request\\\\\\(String method, String path,/{c++} END{print \"重载数:\",c}' iot-device/iot-device-biz/src/test/java/com/basiclab/iot/device/service/collector/CollectorConfigReleaseInternalApiContractTest.java)",
+      "Bash(unzip -p ~/.m2/repository/org/springframework/spring-test/*/spring-test-*.jar org/springframework/mock/web/MockHttpServletRequest.class)",
+      "Bash(javap -p -classpath /tmp /tmp/../MockHttpServletRequest.class)",
+      "Read(//d/tmp/**)",
+      "Bash(javap -c org/springframework/mock/web/MockHttpServletRequest.class)",
+      "Bash(sed -n 144,330p /tmp/mockreq.txt | grep -E \"Method set|putfield.*requestURI|Method.*RequestURI\" | head -10; echo \"===\"; awk 'NR>=144 && NR<=340 && \\(/Method set/ || /requestURI/\\)' /tmp/mockreq.txt)",
+      "Read(//tmp/**)",
+      "Bash(awk 'NR>=190 && NR<=215' /tmp/mockreq.txt)"
     ]
   }
 }

@@ -1,8 +1,8 @@
 # M1 SDD 进度与续作入口
 
-> 检查点日期：2026-08-15
-> Git 分支：`cfdqiot`（当前工作区含 M1-LC-01 未提交实现与 LC-02 设计门禁文档）
-> 当前阶段：M1-LC-01 已完成真实 JDBC 验证；ADR-017/018 已接受，LC02A-0 已冻结并完成本地实现与定向测试；凭据已完成受控轮换与索引清理，现场/部署后验证待续
+> 检查点日期：2026-08-19
+> Git 分支：`cfdqiot`（OPEN03-01～08A 实现成果已分 7 个提交落库：`afd86b0a`/`74bd87fa`/`4d31f6c3`/`4c93ac77`/`2629da22`/`5c87b338`/`3eb0b15c`）
+> 当前阶段：OPEN03-08 v2 全部 13.6 节验收命令已执行通过（见下方 2026-08-19 记录），待 Sol 独立复核后门禁 1/2/3/6 标 `CLOSED-LOCAL`；LC02A-1～4 继续 Blocked；现场/部署后验证待续
 > 说明：本文件用于下次会话恢复上下文；状态以各正式文档为准
 
 ## 当前快照与下一步（2026-08-13）
@@ -21,6 +21,7 @@
 - **OPEN03-05 已由 Sol 验收、OPEN03-06 v2 已冻结（2026-08-17）**：NODE 已实现 ConfigSnapshot 1.1 严格接收、desired/active/observed/history 状态机、共同 workload 目录、原 canonical bytes、原子替换/恢复与 `02770/0660` 合同。Sol 独立冻结集 56/56 PASS、Skipped=0，Schema 长度 3853、hash `52FCC23AE0DF65BE19C902E604611A4078ABF9E89B13EF91E5DC05D088C7A28A`，`compileall`/`git diff --check`/临时清理通过。Sol 随后识别并修正“Compose 配置目录 `:ro` 但 Java 要写 active/observed”的跨进程冲突，冻结为精确单 workload `rw`、Agent/collector 正式文件分权、共同 record lock 和固定提交顺序。当前唯一授权 OPEN03-06 交 Luna Max；Linux 锁/owner/GID、PTY、压测、Windows 与现场仍不执行。
 - **OPEN03-06 已由 Sol 验收、OPEN03-07 已解锁（2026-08-17）**：collector 本地 Provider、版本原子应用、唯一 RTU 引擎/center bridge 与 SQLite outbox 写入已落地。Sol 首轮否决全包扫描下的伪 profile 隔离，次轮否决测试强制非 Web而生产入口未固化的差异；最终以生产同款 collector CLI 启动真实 Spring 白名单上下文，确认无中心 DB/service/controller/message bus、Redis、Nacos/Feign，首次无配置写 `WAITING_CONFIG`。Sol 独立冻结集 Java 27/27、NODE 37/37、Skipped=0，三份 Schema hash、`compileall`、`git diff --check` 与临时清理通过。当前唯一授权 OPEN03-07；所有运行期资格继续 OPEN。
 - **OPEN03-08A 及 S1 已由 Sol 验收，OPEN03-08 v2 已恢复（2026-08-17）**：OPEN03-08 首批实现暴露 TD-003 §13 批量 Store 与当前逐条代码事实冲突，Sol 否决错误断言后冻结 OPEN03-08A，Luna Max 已完成批量主接口、四状态逐条结果、projector 单次批量调用和两个 adapter 顺序隔离，旧 `writeSample` 仅保留 deprecated bridge。Sol 独立完整冻结矩阵 `34/34 PASS`、Skipped=0，真实 PostgreSQL 残留 0；之后发现并收敛 Apache HTTP DEBUG 凭据头泄露，S1 日志合同 `2/2 PASS`、TDengine 相关 `7/7 PASS`、敏感输出扫描 0 命中。OPEN03-08 v2 已恢复授权 GPT-5.6 Luna（max reasoning）；运行期资格继续 OPEN。
+- **OPEN03-08 v2 验收命令全量执行通过，待 Sol 复核（2026-08-19）**：fixture、编排器与全部 5 个指定测试类经查已由前会话实现完毕（含 `CollectorCrossTdContractTest`/`CollectorHealthAggregatorTest`/`CollectorOpen03CombinedStageTest`/`CollectorOpen03CombinedApplyStageTest`/`test_open03_08_path_contract.py`），本轮零代码改动，只执行 13.6 节全部验收命令：组合编排器 E2E 成功链+失败链 PASS（无 skip）；iot-sink 9 类 `36/36`、iot-node 5 类 `32/32`、iot-device 2 类（真实 PG 实连）`8/8`，全部 Failures:0/Errors:0/Skipped:0；NODE pytest `58 passed`；三模块 `compile` exit 0、`compileall` OK、`git diff --check` OK。**本轮唯一修复为环境性阻塞**：iot-device 合同测试首跑 2 个用例报 `SERVICE_AUTH_UNKNOWN_CALLER`，隔离复现证明路由模板匹配正确，根因是本地 Maven 仓库 `iot-common-security` 旧版 jar 不含 8/17 的 `{releaseId}` 模板路由匹配；`mvn install -pl iot-common/iot-common-security -DskipTests` 刷新后 6/6 全绿，零源码改动（Sol 复核重跑时需 `-am` 全量构建或先 install 该模块，避免踩同样旧 jar）。后置检查：仓库无 key/replay DB/SQLite 生成物、PG `iot_collector_config_release` 0 行残留、生产开关默认关闭（`EASYAIOT_INTERNAL_SERVICE_AUTH_ENABLED:false`、`EASYAIOT_COLLECTOR_CONFIG_DISPATCH_ENABLED:false`）、临时文件已清。未执行运行项如实保持 OPEN（Linux PTY/串口/压测/7 天/Windows/现场）。按任务单约束未 commit。
 
 ### LC-02 前置冲突门禁（2026-08-13，OPEN）
 
