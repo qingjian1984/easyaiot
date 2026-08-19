@@ -28,6 +28,12 @@ public final class JdbcTelemetryStore implements TelemetryStorePort {
 
     private static final String INSERT_SQL = "INSERT INTO iot_sink.telemetry_sample"
             + "(tenant_id, message_id, content_sha256, site_code, device_identification,"
+            + " property_code, value_numeric, collected_at_ms, sequence_no, source, config_version,"
+            + " quality, received_at_ms)"
+            + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
+    /** V010 落库前的兼容 INSERT（quality/received_at_ms 列不存在时使用）。 */
+    private static final String INSERT_SQL_LEGACY = "INSERT INTO iot_sink.telemetry_sample"
+            + "(tenant_id, message_id, content_sha256, site_code, device_identification,"
             + " property_code, value_numeric, collected_at_ms, sequence_no, source, config_version)"
             + " VALUES (?,?,?,?,?,?,?,?,?,?,?)";
     private static final String EXISTING_HASH_SQL = "SELECT DISTINCT content_sha256"
@@ -35,9 +41,24 @@ public final class JdbcTelemetryStore implements TelemetryStorePort {
             + " ORDER BY content_sha256";
 
     private final JdbcTemplate jdbc;
+    /** V010 quality/received_at_ms 列探测；探测失败按不存在降级（GOOD 由列 DEFAULT 兜底语义不变）。 */
+    private final boolean qualityColumnsPresent;
 
     public JdbcTelemetryStore(DataSource dataSource) {
         this.jdbc = new JdbcTemplate(dataSource);
+        this.qualityColumnsPresent = probeQualityColumns();
+    }
+
+    private boolean probeQualityColumns() {
+        try {
+            return Boolean.TRUE.equals(jdbc.queryForObject(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.columns"
+                            + " WHERE table_schema='iot_sink' AND table_name='telemetry_sample'"
+                            + " AND column_name='quality')", Boolean.class));
+        } catch (Exception error) {
+            log.warn("STORE_QUALITY_PROBE_FAILED: fallback to legacy insert columns");
+            return false;
+        }
     }
 
     @Override
@@ -91,9 +112,19 @@ public final class JdbcTelemetryStore implements TelemetryStorePort {
         }
         try {
             BigDecimal value = TelemetryValueCodec.parseDecimalValue(sample.canonicalBytes());
-            jdbc.update(INSERT_SQL, tenantId, messageId, sample.contentSha256(), sample.siteCode(),
-                    sample.deviceIdentification(), sample.propertyCode(), value, sample.collectedAtMs(),
-                    sample.sequence(), sample.source(), sample.configVersion());
+            if (qualityColumnsPresent) {
+                // TD-003 §14：quality 取 canonical payload 的受控枚举，缺省 GOOD；
+                // received_at_ms 记中心入库时刻（与采集时间并列展示，PRD §4.4）。
+                String quality = TelemetryValueCodec.parseQuality(sample.canonicalBytes());
+                jdbc.update(INSERT_SQL, tenantId, messageId, sample.contentSha256(), sample.siteCode(),
+                        sample.deviceIdentification(), sample.propertyCode(), value, sample.collectedAtMs(),
+                        sample.sequence(), sample.source(), sample.configVersion(),
+                        quality, System.currentTimeMillis());
+            } else {
+                jdbc.update(INSERT_SQL_LEGACY, tenantId, messageId, sample.contentSha256(), sample.siteCode(),
+                        sample.deviceIdentification(), sample.propertyCode(), value, sample.collectedAtMs(),
+                        sample.sequence(), sample.source(), sample.configVersion());
+            }
             return WriteItemResult.stored(messageId);
         } catch (org.springframework.dao.DataIntegrityViolationException error) {
             // A concurrent writer may have won the identity race; re-read the
@@ -152,4 +183,8 @@ public final class JdbcTelemetryStore implements TelemetryStorePort {
             return true;
         }
     }
+
+    /**
+     * TD-003 §6 质量码：共享解析在 {@link TelemetryValueCodec#parseQuality}。
+     */
 }

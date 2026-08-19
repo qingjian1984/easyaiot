@@ -36,9 +36,15 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
 
     private static final String CREATE_DB_SQL = "CREATE DATABASE IF NOT EXISTS iot_telemetry";
     private static final String CREATE_STABLE_SQL = "CREATE STABLE IF NOT EXISTS iot_telemetry.telemetry_sample"
-            + " (ts TIMESTAMP, value_numeric DOUBLE, content_sha256 NCHAR(64))"
+            + " (ts TIMESTAMP, value_numeric DOUBLE, content_sha256 NCHAR(64),"
+            + " quality NCHAR(32), received_at TIMESTAMP)"
             + " TAGS (tenant_id BIGINT, message_id NCHAR(64), site_code NCHAR(128),"
             + " device_identification NCHAR(128), property_code NCHAR(128))";
+    /** 已存在的旧超级表（无 quality/received_at 列）补列；失败按旧 schema 降级写入。 */
+    private static final String ALTER_STABLE_ADD_QUALITY_SQL =
+            "ALTER STABLE iot_telemetry.telemetry_sample ADD COLUMN quality NCHAR(32)";
+    private static final String ALTER_STABLE_ADD_RECEIVED_SQL =
+            "ALTER STABLE iot_telemetry.telemetry_sample ADD COLUMN received_at TIMESTAMP";
 
 
     /** REST 连接需在 URL path 指定 db（taosAdapter /rest/sql/<db>）；CREATE DATABASE 用无 db 的 bootstrap 连接。 */
@@ -47,6 +53,8 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
     private final String url;
     private final Properties props;
     private volatile boolean initialized = false;
+    /** init 后置 true：超级表已含 quality/received_at 列；false 按旧 schema 降级写入。 */
+    private volatile boolean qualityColumnsReady = false;
 
     public TDengineTelemetryStore(String host, int port, String username, String password) {
         String auth = "?user=" + username + "&password=" + password;
@@ -59,6 +67,11 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
         if (initialized) {
             return;
         }
+        // double-checked：并发首写时避免重复 init
+        synchronized (this) {
+            if (initialized) {
+                return;
+            }
         try {
             // 1) 建库：REST 不依赖默认 db，用无 db 连接执行 CREATE DATABASE
             try (Connection c = DriverManager.getConnection(urlBootstrap, props);
@@ -69,11 +82,32 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
             try (Connection c = DriverManager.getConnection(url, props);
                  Statement s = c.createStatement()) {
                 s.execute(CREATE_STABLE_SQL);
+                // 旧超级表补列（additive，幂等失败容忍——列已存在或权限不足时按旧 schema 降级）
+                try {
+                    s.execute(ALTER_STABLE_ADD_QUALITY_SQL);
+                    s.execute(ALTER_STABLE_ADD_RECEIVED_SQL);
+                } catch (Exception alterError) {
+                    log.info("TDENGINE_ALTER_STABLE_SKIPPED: legacy stable kept without quality columns");
+                }
             }
             initialized = true;
-            log.info("TDENGINE_INIT: code=STORE_AVAILABLE");
+            qualityColumnsReady = probeQualityColumns();
+            log.info("TDENGINE_INIT: code=STORE_AVAILABLE qualityColumns={}", qualityColumnsReady);
         } catch (Exception e) {
             log.warn("TDENGINE_INIT: code=STORE_UNAVAILABLE");
+        }
+        }
+    }
+
+    /** 超级表 quality 列探测（DESCRIBE 不可用则按旧 schema 降级）。 */
+    private boolean probeQualityColumns() {
+        try (Connection c = DriverManager.getConnection(url, props);
+             Statement s = c.createStatement();
+             ResultSet rs = s.executeQuery(
+                     "SELECT * FROM iot_telemetry.telemetry_sample LIMIT 1")) {
+            return rs.findColumn("quality") > 0;
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -133,8 +167,16 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
         }
         String subTable = buildSubTableName(sample);
         BigDecimal value = TelemetryValueCodec.parseDecimalValue(sample.canonicalBytes());
-        String insertSql = "INSERT INTO " + subTable + " USING iot_telemetry.telemetry_sample"
-                + " TAGS (?, ?, ?, ?, ?) VALUES (?, ?, ?)";
+        // TD-003 §14：quality 与 PG 侧同源解析（canonical payload，缺省 GOOD）。
+        String quality = TelemetryValueCodec.parseQuality(sample.canonicalBytes());
+        String insertSql;
+        if (qualityColumnsReady) {
+            insertSql = "INSERT INTO " + subTable + " USING iot_telemetry.telemetry_sample"
+                    + " TAGS (?, ?, ?, ?, ?) VALUES (?, ?, ?, ?, ?)";
+        } else {
+            insertSql = "INSERT INTO " + subTable + " USING iot_telemetry.telemetry_sample"
+                    + " TAGS (?, ?, ?, ?, ?) VALUES (?, ?, ?)";
+        }
 
         try (Connection c = DriverManager.getConnection(url, props);
              PreparedStatement p = c.prepareStatement(insertSql)) {
@@ -152,6 +194,11 @@ public final class TDengineTelemetryStore implements TelemetryStorePort {
                 p.setDouble(7, value.doubleValue());
             }
             p.setString(8, sample.contentSha256());
+            if (qualityColumnsReady) {
+                p.setString(9, quality);
+                // received_at：中心入库时刻（NCHAR/TIMESTAMP 由驱动适配）
+                p.setTimestamp(10, new java.sql.Timestamp(System.currentTimeMillis()));
+            }
             p.executeUpdate();
             return WriteItemResult.stored(messageId);
         } catch (Exception e) {
