@@ -88,6 +88,14 @@ spring:
           filters:
             # 去掉 /admin-api/sink 前缀，与 sink 内 @RequestMapping("/post-process") 等路径对齐（勿加 /admin）
             - RewritePath=/admin-api/sink/(?<segment>.*), /$\{segment}
+        # iot-sink 遥测查询/导出（PRD §4.5；/telemetry/raw|aggregate|latest|export）
+        - id: sink-telemetry-admin-api
+          uri: lb://sink-server
+          predicates:
+            - Path=/admin-api/telemetry/**
+          filters:
+            # /admin-api/telemetry/<x> → sink 内 /telemetry/<x>
+            - RewritePath=/admin-api/telemetry/(?<segment>.*), /telemetry/$\{segment}
         # 文件服务
         - id: file-admin-api
           uri: lb://file-server

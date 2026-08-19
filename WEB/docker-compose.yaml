@@ -34,25 +34,21 @@ services:
     # 添加hosts映射，使容器能够通过宿主机端口访问各业务服务
     # mini 形态：admin-api 直连 system-host:48099（无 iot-gateway）
     # standard/full：经 gateway:48080 转发
+    # 说明：host 网络容器（ai-service/video-service/SRS 等）运行在 docker-desktop VM 的
+    # host 命名空间。Docker Desktop 的 host-gateway（192.168.65.254，WSL2 NAT 模式）只代理
+    # 有端口映射的 bridge 容器，不转发 host 命名空间监听端口；而 easyaiot-network 网桥的
+    # 网关 172.18.0.1 就是 docker-desktop VM 自身，经它可达全部 host 服务（2026-08-19 实测
+    # 48080/48099/5000/6000/1985/6080/1984 全部连通）。
     extra_hosts:
-      - "gateway:host-gateway"
-      - "system-host:host-gateway"
-      - "video-host:host-gateway"  # 用于访问使用host网络模式的video-service（端口6000）
-      - "ai-host:host-gateway"  # 用于访问使用host网络模式的ai-service（端口5000）
-      - "srs-host:host-gateway"  # 用于访问使用host网络模式的SRS服务（端口1985）
-      - "zlm-host:host-gateway"  # 用于访问ZLMediaKit(WVP/GB28181)的ws-flv/http-flv播流端口（宿主机6080）
-      - "rtc-host:host-gateway"  # 用于访问 RTC/go2rtc 服务（1984 WebUI、6100 管理 API）
-      # 云端服务器备用方案：如果host-gateway不工作，取消下面的注释并替换为实际IP（注意！！这里的-绝对不能多出来多余的空格，否则配置失效导致nginx无法访问对应的服务！！）
-      # 示例（请根据实际情况修改）：
-     # - "gateway:192.168.11.28"        # Docker默认网关IP
-     # - "video-host:192.168.11.28"     # 宿主机IP（用于访问video-service:6000）
-     # - "ai-host:192.168.11.28"        # 宿主机IP（用于访问ai-service:5000）
-     # - "srs-host:192.168.11.28"       # 宿主机IP（用于访问SRS服务:1985）
-      # 或者使用宿主机实际IP（推荐）：
-      # - "gateway:YOUR_HOST_IP"      # 替换YOUR_HOST_IP为实际宿主机IP
-      # - "video-host:YOUR_HOST_IP"   # 替换YOUR_HOST_IP为实际宿主机IP
-      # - "ai-host:YOUR_HOST_IP"      # 替换YOUR_HOST_IP为实际宿主机IP
-      # - "srs-host:YOUR_HOST_IP"     # 替换YOUR_HOST_IP为实际宿主机IP
+      - "gateway:172.18.0.1"
+      - "system-host:172.18.0.1"
+      - "video-host:172.18.0.1"  # 用于访问使用host网络模式的video-service（端口6000）
+      - "ai-host:172.18.0.1"  # 用于访问使用host网络模式的ai-service（端口5000）
+      - "srs-host:172.18.0.1"  # 用于访问使用host网络模式的SRS服务（端口1985）
+      - "zlm-host:172.18.0.1"  # 用于访问ZLMediaKit(WVP/GB28181)的ws-flv/http-flv播流端口（宿主机6080）
+      - "rtc-host:172.18.0.1"  # 用于访问 RTC/go2rtc 服务（1984 WebUI、6100 管理 API）
+      # 若 easyaiot-network 重建导致网段变化，先 docker network inspect easyaiot-network
+      # 查询 Gateway 再更新；Linux 云服务器部署可改回 host-gateway 或宿主机实际 IP。
 
     # 重启策略
     restart: unless-stopped

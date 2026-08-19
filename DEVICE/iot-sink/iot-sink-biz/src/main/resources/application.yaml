@@ -310,3 +310,6 @@ easyaiot:
       topic-filter: ${EASYAIOT_TELEMETRY_MQTT_TOPIC:/telemetry/#}
       username: ${EASYAIOT_TELEMETRY_MQTT_USERNAME:}
       password: ${EASYAIOT_TELEMETRY_MQTT_PASSWORD:}
+    # PRD §4.5 遥测查询/导出（TD-003 §16）；默认关闭，上线窗口随部署评审启用
+    query:
+      enabled: ${EASYAIOT_TELEMETRY_QUERY_ENABLED:false}
