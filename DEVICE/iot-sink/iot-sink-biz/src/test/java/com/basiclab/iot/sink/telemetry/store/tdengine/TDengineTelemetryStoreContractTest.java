@@ -1,7 +1,9 @@
 package com.basiclab.iot.sink.telemetry.store.tdengine;
 
 import com.basiclab.iot.sink.telemetry.inbox.InboxEnvelope;
-import com.basiclab.iot.sink.telemetry.store.WriteResult;
+import com.basiclab.iot.sink.telemetry.store.TelemetrySample;
+import com.basiclab.iot.sink.telemetry.store.WriteItemResult;
+import com.basiclab.iot.sink.telemetry.store.WriteStatus;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -19,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * TD-003 §15 TelemetryStore full adapter（TDengine）合同测试（真实 tdengine-server）。
  *
- * <p>验证：① writeSample 返回 STORED；② 同 messageId 同 ts 重复写为 TDengine upsert 幂等
+ * <p>验证：① appendBatch 返回 STORED；② 同 messageId 同 ts 重复写为 TDengine 幂等
  * （物理表保持 1 行，而非 2 行）；③ 不同 messageId 各落 1 行。
  * 驱动 taos-jdbcdriver REST（jdbc:TAOS-RS://），凭证默认 root/taosdata。
  */
@@ -33,10 +35,16 @@ class TDengineTelemetryStoreContractTest {
     private static final String REST_URL = "jdbc:TAOS-RS://" + HOST + ":" + PORT + "/?user=" + USER + "&password=" + PASSWORD;
 
     private TDengineTelemetryStore store;
+    private String runPrefix;
 
     @BeforeAll
     void setup() {
         store = new TDengineTelemetryStore(HOST, PORT, USER, PASSWORD);
+        runPrefix = "td-contract-" + Long.toUnsignedString(System.nanoTime(), 36);
+    }
+
+    private String id(String suffix) {
+        return runPrefix + "-" + suffix;
     }
 
     private InboxEnvelope env(String msgId, String value, long ts) {
@@ -51,31 +59,39 @@ class TDengineTelemetryStoreContractTest {
     }
 
     @Test
-    void writeSampleReturnsStored() {
-        WriteResult r = store.writeSample(env("td-contract-msg-1", "220.5", System.currentTimeMillis()));
-        assertEquals(WriteResult.STORED, r, "首次写入应 STORED");
+    void appendBatchReturnsStored() {
+        WriteItemResult r = write(env(id("msg-1"), "220.5", System.currentTimeMillis()));
+        assertEquals(WriteStatus.STORED, r.status(), "首次写入应 STORED");
     }
 
     @Test
     void duplicateUpsertKeepsSingleRow() {
         long ts = System.currentTimeMillis();
-        InboxEnvelope e = env("td-contract-msg-2", "221.0", ts);
-        assertEquals(WriteResult.STORED, store.writeSample(e), "首次写入应 STORED");
-        // 同 messageId 同 ts 重复写 → TDengine upsert 覆盖，物理表保持 1 行（确定性幂等 §27-⑤）
-        assertEquals(WriteResult.STORED, store.writeSample(e), "重复 upsert 仍 STORED");
-        long count = countRows("td-contract-msg-2", ts);
+        String messageId = id("msg-2");
+        InboxEnvelope e = env(messageId, "221.0", ts);
+        assertEquals(WriteStatus.STORED, write(e).status(), "首次写入应 STORED");
+        // 同 messageId 同 ts 重复写 → 第二层 hash 校验返回 DUPLICATE，物理表保持 1 行
+        assertEquals(WriteStatus.DUPLICATE, write(e).status(), "重复写应 DUPLICATE");
+        long count = countRows(messageId, ts);
         assertEquals(1L, count, "同 messageId 同 ts 重复写后物理表应保持 1 行（upsert 幂等）");
     }
 
     @Test
     void differentMessageIdEachStored() {
         long ts = System.currentTimeMillis();
-        WriteResult r1 = store.writeSample(env("td-contract-msg-3", "230.0", ts));
-        WriteResult r2 = store.writeSample(env("td-contract-msg-4", "231.0", ts));
-        assertEquals(WriteResult.STORED, r1);
-        assertEquals(WriteResult.STORED, r2);
-        assertTrue(countRows("td-contract-msg-3", ts) == 1L, "msg-3 应 1 行");
-        assertTrue(countRows("td-contract-msg-4", ts) == 1L, "msg-4 应 1 行");
+        String messageId1 = id("msg-3");
+        String messageId2 = id("msg-4");
+        WriteItemResult r1 = write(env(messageId1, "230.0", ts));
+        WriteItemResult r2 = write(env(messageId2, "231.0", ts));
+        assertEquals(WriteStatus.STORED, r1.status());
+        assertEquals(WriteStatus.STORED, r2.status());
+        assertTrue(countRows(messageId1, ts) == 1L, "msg-3 应 1 行");
+        assertTrue(countRows(messageId2, ts) == 1L, "msg-4 应 1 行");
+    }
+
+    private WriteItemResult write(InboxEnvelope envelope) {
+        return store.appendBatch(java.util.List.of(TelemetrySample.fromInboxEnvelope(envelope)))
+                .items().get(0);
     }
 
     /** 直接查 TDengine 物理行数，验证 upsert 确定性幂等（不依赖被测类的 verifySingleRow）。 */

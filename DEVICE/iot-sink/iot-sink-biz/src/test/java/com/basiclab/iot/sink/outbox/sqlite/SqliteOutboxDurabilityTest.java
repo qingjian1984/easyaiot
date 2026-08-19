@@ -75,7 +75,7 @@ class SqliteOutboxDurabilityTest {
     }
 
     @Test
-    void userVersionIs1() throws Exception {
+    void userVersionMatchesMigration() throws Exception {
         outbox.shutdown();
         outbox = null;
         Path db = dir.resolve("outbox.db");
@@ -83,7 +83,8 @@ class SqliteOutboxDurabilityTest {
              Statement s = c.createStatement()) {
             try (ResultSet rs = s.executeQuery("PRAGMA user_version")) {
                 rs.next();
-                assertEquals(1, rs.getInt(1), "user_version = 1 (SqliteOutboxMigration.USER_VERSION)");
+                assertEquals(SqliteOutboxMigration.USER_VERSION, rs.getInt(1),
+                        "user_version = SqliteOutboxMigration.USER_VERSION");
             }
         }
     }

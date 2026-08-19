@@ -1,6 +1,8 @@
 package com.basiclab.iot.sink.protocol.polling;
 
 import com.basiclab.iot.sink.dal.dataobject.DeviceDO;
+import com.basiclab.iot.sink.polling.CollectorConfigSnapshot;
+import com.basiclab.iot.sink.polling.CollectorDevice;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
@@ -28,6 +30,13 @@ public final class CollectorTelemetryWriter {
                                    Map<String, Object> values, String protocolType) {
         List<TelemetryEnvelope> envelopes = PollingResultMapper.toEnvelopes(
                 device, config, values, protocolType);
+        return outbox.appendBatch(envelopes, enqueueTimeout);
+    }
+
+    /** Collector Profile overload: only the applied local snapshot supplies identity and priority. */
+    public AppendBatchResult store(CollectorConfigSnapshot snapshot, CollectorDevice device,
+                                   Map<String, Object> values, String protocolType) {
+        List<TelemetryEnvelope> envelopes = PollingResultMapper.toEnvelopes(snapshot, device, values, protocolType);
         return outbox.appendBatch(envelopes, enqueueTimeout);
     }
 }

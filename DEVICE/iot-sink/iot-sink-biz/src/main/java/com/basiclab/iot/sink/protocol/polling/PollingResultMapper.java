@@ -1,6 +1,9 @@
 package com.basiclab.iot.sink.protocol.polling;
 
 import com.basiclab.iot.sink.dal.dataobject.DeviceDO;
+import com.basiclab.iot.sink.polling.CollectorConfigSnapshot;
+import com.basiclab.iot.sink.polling.CollectorDevice;
+import com.basiclab.iot.sink.polling.CollectorPoint;
 import com.basiclab.iot.sink.telemetry.envelope.DataPriority;
 import com.basiclab.iot.sink.telemetry.envelope.EnvelopeCanonicalCodec;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
@@ -98,6 +101,64 @@ public final class PollingResultMapper {
                     source,
                     config.getConfigVersion()
             ));
+        }
+        return envelopes;
+    }
+
+    /** Collector-only mapping from the local immutable snapshot; no central DO is consulted. */
+    public static List<TelemetryEnvelope> toEnvelopes(
+            CollectorConfigSnapshot snapshot, CollectorDevice device,
+            Map<String, Object> values, String protocolType) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        if (snapshot == null || snapshot.tenantId() == null || snapshot.tenantId().isBlank()
+                || snapshot.siteCode() == null || snapshot.siteCode().isBlank()
+                || snapshot.configVersion() < 1 || snapshot.configVersion() > TelemetryEnvelope.MAX_SAFE_INTEGER) {
+            throw new IllegalArgumentException("collector telemetry requires published snapshot identity");
+        }
+        if (device == null || device.deviceIdentification() == null || device.deviceIdentification().isBlank()) {
+            throw new IllegalArgumentException("collector telemetry requires deviceIdentification");
+        }
+        if (protocolType == null || protocolType.isBlank()) {
+            throw new IllegalArgumentException("collector telemetry requires protocolType");
+        }
+        Map<String, DataPriority> priorities = new HashMap<>();
+        for (CollectorPoint point : device.points()) {
+            if (point == null || point.propertyCode() == null || point.propertyCode().isBlank()) {
+                continue;
+            }
+            DataPriority priority;
+            try {
+                priority = DataPriority.valueOf(point.dataPriority());
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException("unsupported dataPriority for " + point.propertyCode(), e);
+            }
+            if (priorities.putIfAbsent(point.propertyCode(), priority) != null) {
+                throw new IllegalArgumentException("duplicate collector propertyCode: " + point.propertyCode());
+            }
+        }
+        String now = Instant.now().truncatedTo(ChronoUnit.MILLIS).toString();
+        String source = protocolType.toLowerCase(Locale.ROOT).replace('_', '-');
+        List<TelemetryEnvelope> envelopes = new ArrayList<>(values.size());
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || "_raw".equals(entry.getKey())) {
+                continue;
+            }
+            DataPriority priority = priorities.get(entry.getKey());
+            if (priority == null) {
+                throw new IllegalArgumentException("collector telemetry property is not in published snapshot: "
+                        + entry.getKey());
+            }
+            envelopes.add(new TelemetryEnvelope(
+                    TelemetryEnvelope.SCHEMA_VERSION,
+                    TelemetryEnvelope.CANONICALIZATION_VERSION,
+                    EnvelopeCanonicalCodec.generateMessageId(),
+                    EnvelopeCanonicalCodec.generateMessageId(),
+                    snapshot.tenantId(), snapshot.siteCode(), device.deviceIdentification(), entry.getKey(),
+                    decimalString(entry.getValue(), entry.getKey()),
+                    TelemetryEnvelope.VALUE_ENCODING_DECIMAL_STRING, TelemetryQuality.GOOD, priority,
+                    now, now, nextSequence(), source, snapshot.configVersion()));
         }
         return envelopes;
     }

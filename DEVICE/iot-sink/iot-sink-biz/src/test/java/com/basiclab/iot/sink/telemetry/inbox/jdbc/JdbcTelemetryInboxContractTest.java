@@ -2,7 +2,9 @@ package com.basiclab.iot.sink.telemetry.inbox.jdbc;
 
 import com.basiclab.iot.sink.telemetry.inbox.InboxEnvelope;
 import com.basiclab.iot.sink.telemetry.inbox.InboxReceiveResult;
-import com.basiclab.iot.sink.telemetry.store.WriteResult;
+import com.basiclab.iot.sink.telemetry.store.TelemetrySample;
+import com.basiclab.iot.sink.telemetry.store.WriteItemResult;
+import com.basiclab.iot.sink.telemetry.store.WriteStatus;
 import com.basiclab.iot.sink.telemetry.store.jdbc.JdbcTelemetryStore;
 import org.apache.ibatis.datasource.pooled.PooledDataSource;
 import org.junit.jupiter.api.AfterAll;
@@ -202,26 +204,31 @@ class JdbcTelemetryInboxContractTest {
     @Test
     void storeWritesSample() {
         InboxEnvelope e = env("pg-store-test-1", "230.5");
-        WriteResult result = store.writeSample(e);
-        assertEquals(WriteResult.STORED, result);
+        WriteItemResult result = storeBatch(e);
+        assertEquals(WriteStatus.STORED, result.status());
     }
 
     @Test
     void storeDuplicateReturnsDuplicate() {
         InboxEnvelope e = env("pg-store-test-2", "231.0");
-        store.writeSample(e);
-        WriteResult result = store.writeSample(e);
-        assertEquals(WriteResult.DUPLICATE, result);
+        storeBatch(e);
+        WriteItemResult result = storeBatch(e);
+        assertEquals(WriteStatus.DUPLICATE, result.status());
     }
 
     @Test
-    void storeDifferentHashForSameMessageIdStored() {
-        // 同 messageId 不同 hash（不同 value）→ 不同 content_sha256 → 应 STORED（非 DUPLICATE）
+    void storeDifferentHashForSameMessageIdIsCollision() {
+        // 同 messageId 不同 hash（不同 value）→ FINAL/MESSAGE_ID_COLLISION，不能覆盖既有事实
         InboxEnvelope e1 = env("pg-store-test-3", "240.0");
-        store.writeSample(e1);
+        storeBatch(e1);
         InboxEnvelope e2 = env("pg-store-test-3", "241.0"); // 同 messageId 不同 value
-        WriteResult result = store.writeSample(e2);
-        assertEquals(WriteResult.STORED, result, "same messageId different hash should STORE (not DUPLICATE)");
+        WriteItemResult result = storeBatch(e2);
+        assertEquals(WriteStatus.FINAL_FAILED, result.status());
+        assertEquals("MESSAGE_ID_COLLISION", result.errorCode());
+    }
+
+    private WriteItemResult storeBatch(InboxEnvelope envelope) {
+        return store.appendBatch(List.of(TelemetrySample.fromInboxEnvelope(envelope))).items().get(0);
     }
 
     private static InboxReceiveResult.Batch batch(InboxReceiveResult result) {

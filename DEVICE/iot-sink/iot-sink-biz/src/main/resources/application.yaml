@@ -291,6 +291,10 @@ logging:
     # 保持其他 Kafka 相关日志为 INFO 级别
     org.apache.kafka: INFO
     org.springframework.kafka: INFO
+    # Apache HttpClient 调试日志不得泄露 Authorization/header 或 wire payload。
+    org.apache.http.headers: OFF
+    org.apache.http.wire: OFF
+    org.apache.http.impl: WARN
 
 --- #################### EasyAIoT Telemetry 相关配置（center MQTT subscriber 连接参数） ####################
 

@@ -1,17 +1,7 @@
 package com.basiclab.iot.sink.protocol.modbus;
 
 import cn.hutool.core.util.StrUtil;
-import com.basiclab.iot.sink.config.IotGatewayProperties;
-import com.basiclab.iot.sink.dal.dataobject.DeviceDO;
-import com.basiclab.iot.sink.dal.mapper.DeviceMapper;
-import com.basiclab.iot.sink.messagebus.core.IotMessageBus;
-import com.basiclab.iot.sink.messagebus.publisher.message.IotDeviceMessageService;
-import com.basiclab.iot.sink.mq.message.IotDeviceMessage;
-import com.basiclab.iot.sink.protocol.polling.AbstractIndustrialPollingProtocol;
-import com.basiclab.iot.sink.protocol.polling.CollectorTelemetryWriter;
 import com.basiclab.iot.sink.protocol.polling.IndustrialDeviceConfig;
-import com.basiclab.iot.sink.service.DeviceServerIdService;
-import com.basiclab.iot.sink.util.IotDeviceMessageUtils;
 import com.ghgande.j2mod.modbus.facade.ModbusSerialMaster;
 import com.ghgande.j2mod.modbus.procimg.InputRegister;
 import com.ghgande.j2mod.modbus.procimg.Register;
@@ -23,35 +13,47 @@ import java.nio.ByteOrder;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Modbus RTU master polling over an RS-485 serial interface. */
-public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtocol {
+/**
+ * The single Modbus RTU serial I/O engine.
+ *
+ * <p>This class intentionally has no central persistence or message-bus
+ * dependency. Center polling uses the bridge adapter and the
+ * collector runtime uses this engine directly from an applied local snapshot.
+ */
+public class IotModbusRtuPollingProtocol {
 
     public static final String PROTOCOL_TYPE = "MODBUS_RTU";
 
-    public IotModbusRtuPollingProtocol(IotGatewayProperties.PollingProtocolProperties properties,
-                                       DeviceMapper deviceMapper,
-                                       IotDeviceMessageService messageService,
-                                       IotMessageBus messageBus,
-                                       DeviceServerIdService deviceServerIdService,
-                                       String serverId) {
-        this(properties, deviceMapper, messageService, messageBus, deviceServerIdService, serverId, null);
+    private final long requestTimeoutMs;
+
+    public IotModbusRtuPollingProtocol() {
+        this(5_000L);
     }
 
-    public IotModbusRtuPollingProtocol(IotGatewayProperties.PollingProtocolProperties properties,
-                                       DeviceMapper deviceMapper,
-                                       IotDeviceMessageService messageService,
-                                       IotMessageBus messageBus,
-                                       DeviceServerIdService deviceServerIdService,
-                                       String serverId,
-                                       CollectorTelemetryWriter collectorTelemetryWriter) {
-        super(PROTOCOL_TYPE, serverId, properties, deviceMapper, messageService, messageBus,
-                deviceServerIdService, collectorTelemetryWriter);
+    public IotModbusRtuPollingProtocol(long requestTimeoutMs) {
+        if (requestTimeoutMs < 1) {
+            throw new IllegalArgumentException("requestTimeoutMs must be positive");
+        }
+        this.requestTimeoutMs = requestTimeoutMs;
     }
 
-    @Override
-    protected Map<String, Object> poll(DeviceDO device, IndustrialDeviceConfig config) throws Exception {
-        synchronized (portLock(config)) {
+    /** Poll one resolved device. No central state is read or written here. */
+    public Map<String, Object> poll(IndustrialDeviceConfig config) throws Exception {
+        if (config == null) {
+            throw new IllegalArgumentException("RTU config is required");
+        }
+        synchronized (ModbusSerialPortLocks.forPort(config.getSerialPort())) {
             return pollSerial(config);
+        }
+    }
+
+    /** Write values from a center bridge or collector command adapter. */
+    public void write(IndustrialDeviceConfig config, Map<String, Object> values) throws Exception {
+        if (config == null) {
+            throw new IllegalArgumentException("RTU config is required");
+        }
+        synchronized (ModbusSerialPortLocks.forPort(config.getSerialPort())) {
+            writeSerial(config, values == null ? Map.of() : values);
         }
     }
 
@@ -67,7 +69,7 @@ public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtoc
                     continue;
                 }
                 String propertyCode = point.resolvedPropertyCode();
-                IotModbusPollingProtocol.PointReadResult result = readPoint(master, unitId, point);
+                PointReadResult result = readPoint(master, unitId, point);
                 values.put(propertyCode, result.value());
                 rawValues.put(propertyCode, result.rawPayload());
             }
@@ -80,14 +82,7 @@ public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtoc
         return values;
     }
 
-    @Override
-    protected void write(DeviceDO device, IndustrialDeviceConfig config, IotDeviceMessage message) throws Exception {
-        synchronized (portLock(config)) {
-            writeSerial(config, message);
-        }
-    }
-
-    private void writeSerial(IndustrialDeviceConfig config, IotDeviceMessage message) throws Exception {
+    private void writeSerial(IndustrialDeviceConfig config, Map<String, Object> values) throws Exception {
         ModbusSerialMaster master = createMaster(config);
         int unitId = config.getUnitId() == null ? 1 : config.getUnitId();
         try {
@@ -97,7 +92,7 @@ public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtoc
                         || !point.hasResolvedPropertyCode()) {
                     continue;
                 }
-                Object value = IotDeviceMessageUtils.extractPropertyValue(message, point.resolvedPropertyCode());
+                Object value = values.get(point.resolvedPropertyCode());
                 if (value == null) {
                     continue;
                 }
@@ -105,7 +100,7 @@ public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtoc
                     boolean state = value instanceof Boolean bool ? bool : Boolean.parseBoolean(String.valueOf(value));
                     master.writeCoil(unitId, point.getAddress(), state);
                 } else if (value instanceof Number number) {
-                    Register[] registers = toRegisters(IotModbusPollingProtocol.encodeRegisters(number, point));
+                    Register[] registers = toRegisters(encodeRegisters(number, point));
                     if (registers.length == 1) {
                         master.writeSingleRegister(unitId, point.getAddress(), registers[0]);
                     } else {
@@ -118,8 +113,8 @@ public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtoc
         }
     }
 
-    private IotModbusPollingProtocol.PointReadResult readPoint(ModbusSerialMaster master, int unitId,
-                                                               IndustrialDeviceConfig.Point point) throws Exception {
+    private PointReadResult readPoint(ModbusSerialMaster master, int unitId,
+                                      IndustrialDeviceConfig.Point point) throws Exception {
         String function = StrUtil.blankToDefault(point.getFunction(), "HOLDING_REGISTER").toUpperCase();
         int quantity = Math.max(defaultQuantity(point.getDataType()),
                 point.getQuantity() == null ? 1 : point.getQuantity());
@@ -127,32 +122,27 @@ public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtoc
             case "COIL" -> {
                 boolean value = master.readCoils(unitId, point.getAddress(), quantity).getBit(0);
                 byte[] raw = {(byte) (value ? 1 : 0)};
-                yield new IotModbusPollingProtocol.PointReadResult(value,
-                        IotModbusPollingProtocol.formatResponsePdu(unitId, 0x01, raw));
+                yield new PointReadResult(value, formatResponsePdu(unitId, 0x01, raw));
             }
             case "DISCRETE_INPUT" -> {
                 boolean value = master.readInputDiscretes(unitId, point.getAddress(), quantity).getBit(0);
                 byte[] raw = {(byte) (value ? 1 : 0)};
-                yield new IotModbusPollingProtocol.PointReadResult(value,
-                        IotModbusPollingProtocol.formatResponsePdu(unitId, 0x02, raw));
+                yield new PointReadResult(value, formatResponsePdu(unitId, 0x02, raw));
             }
             case "INPUT_REGISTER" -> {
                 byte[] raw = toBytes(master.readInputRegisters(unitId, point.getAddress(), quantity));
-                yield new IotModbusPollingProtocol.PointReadResult(
-                        IotModbusPollingProtocol.decodeRegisters(raw, point),
-                        IotModbusPollingProtocol.formatResponsePdu(unitId, 0x04, raw));
+                yield new PointReadResult(decodeRegisters(raw, point), formatResponsePdu(unitId, 0x04, raw));
             }
             case "HOLDING_REGISTER" -> {
                 byte[] raw = toBytes(master.readMultipleRegisters(unitId, point.getAddress(), quantity));
-                yield new IotModbusPollingProtocol.PointReadResult(
-                        IotModbusPollingProtocol.decodeRegisters(raw, point),
-                        IotModbusPollingProtocol.formatResponsePdu(unitId, 0x03, raw));
+                yield new PointReadResult(decodeRegisters(raw, point), formatResponsePdu(unitId, 0x03, raw));
             }
             default -> throw new IllegalArgumentException("Unsupported Modbus function: " + function);
         };
     }
 
-    private ModbusSerialMaster createMaster(IndustrialDeviceConfig config) {
+    /** Protected for deterministic unit tests; production uses j2mod. */
+    protected ModbusSerialMaster createMaster(IndustrialDeviceConfig config) {
         if (StrUtil.isBlank(config.getSerialPort())) {
             throw new IllegalArgumentException("Modbus RTU serial port is missing");
         }
@@ -164,15 +154,11 @@ public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtoc
         parameters.setParity(StrUtil.blankToDefault(config.getParity(), "NONE"));
         parameters.setEncoding("rtu");
         parameters.setRs485Mode(!Boolean.FALSE.equals(config.getRs485Mode()));
-        return new ModbusSerialMaster(parameters, (int) requestTimeoutMs(),
+        return new ModbusSerialMaster(parameters, (int) requestTimeoutMs,
                 config.getTransmitDelayMs() == null ? 0 : Math.max(0, config.getTransmitDelayMs()));
     }
 
-    private Object portLock(IndustrialDeviceConfig config) {
-        return ModbusSerialPortLocks.forPort(config.getSerialPort());
-    }
-
-    private byte[] toBytes(InputRegister[] registers) {
+    private static byte[] toBytes(InputRegister[] registers) {
         ByteBuffer buffer = ByteBuffer.allocate(registers.length * 2).order(ByteOrder.BIG_ENDIAN);
         for (InputRegister register : registers) {
             buffer.putShort((short) register.getValue());
@@ -180,7 +166,7 @@ public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtoc
         return buffer.array();
     }
 
-    private Register[] toRegisters(byte[] bytes) {
+    private static Register[] toRegisters(byte[] bytes) {
         ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);
         Register[] registers = new Register[bytes.length / 2];
         for (int index = 0; index < registers.length; index++) {
@@ -189,16 +175,108 @@ public class IotModbusRtuPollingProtocol extends AbstractIndustrialPollingProtoc
         return registers;
     }
 
-    private int defaultQuantity(String dataType) {
+    private record PointReadResult(Object value, String rawPayload) {
+    }
+
+    private static String formatResponsePdu(int unitId, int functionCode, byte[] data) {
+        StringBuilder result = new StringBuilder();
+        appendHexByte(result, unitId);
+        appendHexByte(result, functionCode);
+        appendHexByte(result, data.length);
+        for (byte value : data) {
+            appendHexByte(result, value & 0xff);
+        }
+        return result.toString();
+    }
+
+    private static void appendHexByte(StringBuilder target, int value) {
+        if (!target.isEmpty()) {
+            target.append(' ');
+        }
+        target.append(String.format("%02X", value & 0xff));
+    }
+
+    private static Object decodeRegisters(byte[] source, IndustrialDeviceConfig.Point point) {
+        if (source == null || source.length < 2) {
+            throw new IllegalArgumentException("Modbus register response is empty");
+        }
+        byte[] bytes = source.clone();
+        if ("LITTLE_ENDIAN".equalsIgnoreCase(point.getByteOrder())) {
+            for (int index = 0; index + 1 < bytes.length; index += 2) {
+                byte value = bytes[index];
+                bytes[index] = bytes[index + 1];
+                bytes[index + 1] = value;
+            }
+        }
+        if ("LITTLE_ENDIAN".equalsIgnoreCase(point.getWordOrder()) && bytes.length > 2) {
+            for (int left = 0, right = bytes.length - 2; left < right; left += 2, right -= 2) {
+                byte first = bytes[left];
+                byte second = bytes[left + 1];
+                bytes[left] = bytes[right];
+                bytes[left + 1] = bytes[right + 1];
+                bytes[right] = first;
+                bytes[right + 1] = second;
+            }
+        }
+        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);
+        String dataType = StrUtil.blankToDefault(point.getDataType(), "UINT16").toUpperCase();
+        Number raw = switch (dataType) {
+            case "INT16" -> buffer.getShort();
+            case "UINT16" -> buffer.getShort() & 0xffff;
+            case "INT32" -> buffer.getInt();
+            case "UINT32" -> Integer.toUnsignedLong(buffer.getInt());
+            case "FLOAT32" -> buffer.getFloat();
+            case "INT64" -> buffer.getLong();
+            case "FLOAT64" -> buffer.getDouble();
+            default -> throw new IllegalArgumentException("Unsupported Modbus data type: " + dataType);
+        };
+        double scale = point.getScale() == null ? 1D : point.getScale();
+        double offset = point.getOffset() == null ? 0D : point.getOffset();
+        if (scale == 1D && offset == 0D && !dataType.startsWith("FLOAT")) {
+            return raw;
+        }
+        return raw.doubleValue() * scale + offset;
+    }
+
+    private static byte[] encodeRegisters(Number value, IndustrialDeviceConfig.Point point) {
+        double scale = point.getScale() == null || point.getScale() == 0D ? 1D : point.getScale();
+        double offset = point.getOffset() == null ? 0D : point.getOffset();
+        double raw = (value.doubleValue() - offset) / scale;
+        String dataType = StrUtil.blankToDefault(point.getDataType(), "UINT16").toUpperCase();
+        ByteBuffer buffer = switch (dataType) {
+            case "INT16", "UINT16" -> ByteBuffer.allocate(2).putShort((short) Math.round(raw));
+            case "INT32", "UINT32" -> ByteBuffer.allocate(4).putInt((int) Math.round(raw));
+            case "FLOAT32" -> ByteBuffer.allocate(4).putFloat((float) raw);
+            case "INT64" -> ByteBuffer.allocate(8).putLong(Math.round(raw));
+            case "FLOAT64" -> ByteBuffer.allocate(8).putDouble(raw);
+            default -> throw new IllegalArgumentException("Unsupported Modbus data type: " + dataType);
+        };
+        byte[] bytes = buffer.array();
+        if ("LITTLE_ENDIAN".equalsIgnoreCase(point.getWordOrder()) && bytes.length > 2) {
+            for (int left = 0, right = bytes.length - 2; left < right; left += 2, right -= 2) {
+                byte first = bytes[left];
+                byte second = bytes[left + 1];
+                bytes[left] = bytes[right];
+                bytes[left + 1] = bytes[right + 1];
+                bytes[right] = first;
+                bytes[right + 1] = second;
+            }
+        }
+        if ("LITTLE_ENDIAN".equalsIgnoreCase(point.getByteOrder())) {
+            for (int index = 0; index + 1 < bytes.length; index += 2) {
+                byte first = bytes[index];
+                bytes[index] = bytes[index + 1];
+                bytes[index + 1] = first;
+            }
+        }
+        return bytes;
+    }
+
+    private static int defaultQuantity(String dataType) {
         return switch (StrUtil.blankToDefault(dataType, "UINT16").toUpperCase()) {
             case "INT32", "UINT32", "FLOAT32" -> 2;
             case "INT64", "FLOAT64" -> 4;
             default -> 1;
         };
-    }
-
-    @Override
-    protected String connectionAddress(DeviceDO device, IndustrialDeviceConfig config) {
-        return config.getSerialPort();
     }
 }

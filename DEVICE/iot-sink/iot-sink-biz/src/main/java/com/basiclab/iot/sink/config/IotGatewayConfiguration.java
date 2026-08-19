@@ -11,9 +11,15 @@ import com.basiclab.iot.sink.protocol.mqtt.IotMqttUpstreamProtocol;
 import com.basiclab.iot.sink.protocol.mqtt.manager.IotMqttConnectionManager;
 import com.basiclab.iot.sink.protocol.mqtt.router.IotMqttDownstreamHandler;
 import com.basiclab.iot.sink.protocol.modbus.IotModbusPollingProtocol;
-import com.basiclab.iot.sink.protocol.modbus.IotModbusRtuPollingProtocol;
+import com.basiclab.iot.sink.protocol.modbus.CenterModbusRtuPollingAdapter;
 import com.basiclab.iot.sink.protocol.opcua.IotOpcUaPollingProtocol;
 import com.basiclab.iot.sink.protocol.polling.CollectorTelemetryWriter;
+import com.basiclab.iot.sink.protocol.polling.CollectorPollingRuntime;
+import com.basiclab.iot.sink.protocol.polling.LocalFilePollingConfigProvider;
+import com.basiclab.iot.sink.protocol.polling.LocalFilePollingStatusReporter;
+import com.basiclab.iot.sink.polling.PollingConfigProvider;
+import com.basiclab.iot.sink.polling.PollingStatusReporter;
+import com.basiclab.iot.sink.protocol.modbus.IotModbusRtuPollingProtocol;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
 import com.basiclab.iot.sink.protocol.tcp.IotTcpDownstreamSubscriber;
 import com.basiclab.iot.sink.protocol.tcp.IotTcpUpstreamProtocol;
@@ -34,6 +40,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Duration;
 
@@ -48,6 +55,38 @@ public class IotGatewayConfiguration {
         return new CollectorTelemetryWriter(telemetryOutboxPort, Duration.ofSeconds(5));
     }
 
+    @Bean
+    @Profile("collector")
+    public LocalFilePollingConfigProvider collectorPollingConfigProvider(
+            @Value("${easyaiot.collector.config-directory:/var/lib/easyaiot/config}") String configDirectory,
+            @Value("${easyaiot.collector.workload-id:}") String workloadId) {
+        return new LocalFilePollingConfigProvider(java.nio.file.Path.of(configDirectory), workloadId);
+    }
+
+    @Bean
+    @Profile("collector")
+    public PollingStatusReporter pollingStatusReporter(LocalFilePollingConfigProvider provider) {
+        return new LocalFilePollingStatusReporter(provider);
+    }
+
+    @Bean
+    @Profile("collector")
+    public IotModbusRtuPollingProtocol collectorModbusRtuEngine(
+            @Value("${basiclab.iot.sink.protocol.modbus-rtu.request-timeout-ms:5000}") long requestTimeoutMs) {
+        return new IotModbusRtuPollingProtocol(requestTimeoutMs);
+    }
+
+    @Bean(destroyMethod = "close")
+    @Profile("collector")
+    public CollectorPollingRuntime collectorPollingRuntime(PollingConfigProvider provider,
+                                                           PollingStatusReporter statusReporter,
+                                                           IotModbusRtuPollingProtocol engine,
+                                                           CollectorTelemetryWriter telemetryWriter,
+                                                           @Value("${easyaiot.collector.reconcile-interval-ms:1000}") long reconcileIntervalMs) {
+        return new CollectorPollingRuntime(provider, statusReporter, engine, telemetryWriter,
+                Duration.ofMillis(Math.max(1L, reconcileIntervalMs)));
+    }
+
     /**
  * IotGatewayConfiguration
  *
@@ -58,11 +97,13 @@ public class IotGatewayConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(DeviceServerIdService.class)
+    @Profile("!collector")
     public DeviceServerIdService deviceServerIdService(RedisService redisService) {
         return new DeviceServerIdServiceImpl(redisService);
     }
 
 @Configuration
+    @Profile("!collector")
     @ConditionalOnProperty(prefix = "basiclab.iot.sink.protocol.http", name = "enabled", havingValue = "true")
     @Slf4j
     public static class HttpProtocolConfiguration {
@@ -83,6 +124,7 @@ public class IotGatewayConfiguration {
      * IoT 网关 EMQX 协议配置类
      */
     @Configuration
+    @Profile("!collector")
     @ConditionalOnProperty(prefix = "basiclab.iot.sink.protocol.emqx", name = "enabled", havingValue = "true")
     @Slf4j
     public static class EmqxProtocolConfiguration {
@@ -115,6 +157,7 @@ public class IotGatewayConfiguration {
      * IoT 网关 TCP 协议配置类
      */
     @Configuration
+    @Profile("!collector")
     @ConditionalOnProperty(prefix = "basiclab.iot.sink.protocol.tcp", name = "enabled", havingValue = "true")
     @Slf4j
     public static class TcpProtocolConfiguration {
@@ -147,6 +190,7 @@ public class IotGatewayConfiguration {
     }
 
     @Configuration
+    @Profile("!collector")
     @ConditionalOnProperty(prefix = "basiclab.iot.sink.protocol.modbus", name = "enabled", havingValue = "true")
     public static class ModbusProtocolConfiguration {
 
@@ -164,23 +208,24 @@ public class IotGatewayConfiguration {
     }
 
     @Configuration
+    @Profile("!collector")
     @ConditionalOnProperty(prefix = "basiclab.iot.sink.protocol.modbus-rtu", name = "enabled", havingValue = "true")
     public static class ModbusRtuProtocolConfiguration {
 
         @Bean
-        public IotModbusRtuPollingProtocol iotModbusRtuPollingProtocol(IotGatewayProperties gatewayProperties,
-                                                                        DeviceMapper deviceMapper,
-                                                                        IotDeviceMessageService messageService,
-                                                                        @Lazy IotMessageBus messageBus,
-                                                                        DeviceServerIdService deviceServerIdService,
-                                                                        org.springframework.beans.factory.ObjectProvider<CollectorTelemetryWriter> writer) {
-            return new IotModbusRtuPollingProtocol(gatewayProperties.getProtocol().getModbusRtu(), deviceMapper,
+        public CenterModbusRtuPollingAdapter centerModbusRtuPollingAdapter(IotGatewayProperties gatewayProperties,
+                                                                            DeviceMapper deviceMapper,
+                                                                            IotDeviceMessageService messageService,
+                                                                            @Lazy IotMessageBus messageBus,
+                                                                            DeviceServerIdService deviceServerIdService) {
+            return new CenterModbusRtuPollingAdapter(gatewayProperties.getProtocol().getModbusRtu(), deviceMapper,
                     messageService, messageBus, deviceServerIdService,
-                    IotDeviceMessageUtils.generateServerId(1503), writer.getIfAvailable());
+                    IotDeviceMessageUtils.generateServerId(1503));
         }
     }
 
     @Configuration
+    @Profile("!collector")
     @ConditionalOnProperty(prefix = "basiclab.iot.sink.protocol.opcua", name = "enabled", havingValue = "true")
     public static class OpcUaProtocolConfiguration {
 
@@ -201,6 +246,7 @@ public class IotGatewayConfiguration {
      * IoT 网关 MQTT 协议配置类
      */
     @Configuration
+    @Profile("!collector")
     @ConditionalOnProperty(prefix = "basiclab.iot.sink.protocol.mqtt", name = "enabled", havingValue = "true")
     @Slf4j
     public static class MqttProtocolConfiguration {

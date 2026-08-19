@@ -1,10 +1,31 @@
 # TD-001 collector 形态：工业采集结果必须先进入 SQLite Outbox。
+spring:
+  main:
+    web-application-type: none
+  cloud:
+    # Do not create a Spring Cloud bootstrap context: collector configuration is
+    # exclusively the mounted local snapshot and must never fall back to Nacos.
+    bootstrap:
+      enabled: false
+    nacos:
+      # Collector reads only the mounted local snapshot; it never falls back to Nacos.
+      discovery:
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+
 easyaiot:
   outbox:
     enabled: true
     volume-path: ${EASYAIOT_COLLECTOR_OUTBOX_PATH:/var/lib/easyaiot/outbox}
     queue-capacity: ${EASYAIOT_COLLECTOR_OUTBOX_QUEUE_CAPACITY:4096}
   collector:
+    # Agent injects this fixed identity into the single-workload container.
+    workload-id: ${EASYAIOT_COLLECTOR_WORKLOAD_ID:}
+    config-directory: ${EASYAIOT_COLLECTOR_CONFIG_DIR:/var/lib/easyaiot/config}
+    reconcile-interval-ms: ${EASYAIOT_COLLECTOR_RECONCILE_INTERVAL_MS:1000}
     mqtt:
       # 启用 collector MQTT publisher + ACK subscriber（装配由 SqliteOutboxAutoConfiguration 的
       # @ConditionalOnProperty(easyaiot.collector.mqtt.enabled=true) 控制）。
@@ -27,7 +48,9 @@ basiclab:
         modbus:
           enabled: false
         modbus-rtu:
-          enabled: true
+          # Center DB polling is not assembled in collector Profile. The
+          # collector runtime owns the local snapshot and the shared RTU I/O engine.
+          enabled: false
           scan-interval-ms: ${EASYAIOT_COLLECTOR_SCAN_INTERVAL_MS:1000}
           request-timeout-ms: ${EASYAIOT_COLLECTOR_REQUEST_TIMEOUT_MS:5000}
           worker-threads: ${EASYAIOT_COLLECTOR_WORKER_THREADS:2}
