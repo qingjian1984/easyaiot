@@ -87,6 +87,17 @@ iot:
       - control_plane_peer
 
 easyaiot:
+  collector:
+    config-dispatch:
+      # 仅在完成节点/Agent capability 与服务身份配置后显式启用；默认关闭生产轮询。
+      enabled: ${EASYAIOT_COLLECTOR_CONFIG_DISPATCH_ENABLED:false}
+      batch-limit: ${EASYAIOT_COLLECTOR_CONFIG_DISPATCH_BATCH_LIMIT:100}
+      connect-timeout-ms: ${EASYAIOT_COLLECTOR_CONFIG_DISPATCH_CONNECT_TIMEOUT_MS:3000}
+      read-timeout-ms: ${EASYAIOT_COLLECTOR_CONFIG_DISPATCH_READ_TIMEOUT_MS:10000}
+      base-delay-ms: ${EASYAIOT_COLLECTOR_CONFIG_DISPATCH_BASE_DELAY_MS:1000}
+      max-delay-ms: ${EASYAIOT_COLLECTOR_CONFIG_DISPATCH_MAX_DELAY_MS:60000}
+      fixed-delay-ms: ${EASYAIOT_COLLECTOR_CONFIG_DISPATCH_FIXED_DELAY_MS:30000}
+      signing-key-file: ${EASYAIOT_COLLECTOR_CONFIG_DISPATCH_SIGNING_KEY_FILE:}
   scheduler:
     # 自动调度时是否优先选择 GPU 节点（可被单次 allocate 请求的 preferGpu 覆盖）
     prefer-gpu-default: ${EASYAIOT_SCHEDULER_PREFER_GPU:true}

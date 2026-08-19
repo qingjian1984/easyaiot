@@ -29,6 +29,11 @@
         </dependency>
         <dependency>
             <groupId>com.basiclab.iot</groupId>
+            <artifactId>iot-device-api</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.basiclab.iot</groupId>
             <artifactId>iot-common-data-permission</artifactId>
         </dependency>
         <dependency>

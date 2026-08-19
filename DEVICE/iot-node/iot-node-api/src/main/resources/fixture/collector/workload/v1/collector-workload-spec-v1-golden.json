@@ -1,0 +1,43 @@
+{
+  "specVersion": "1.0",
+  "workloadType": "iot-sink-collector",
+  "workloadId": "collector-site-1001-a",
+  "nodeId": "21",
+  "image": {
+    "repository": "registry.example/easyaiot/iot-sink-biz",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "springProfile": "collector",
+  "config": {
+    "version": 6,
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "targetPath": "/var/lib/easyaiot/config/active.json"
+  },
+  "resources": {
+    "cpuCores": "1.0",
+    "memoryBytes": 402653184
+  },
+  "serialDevices": [
+    {
+      "hostPath": "/dev/serial/by-id/usb-vendor-device",
+      "containerPath": "/dev/easyaiot/rs485-0",
+      "hardwareFingerprint": "usb:vid:pid:serial",
+      "readOnly": false
+    }
+  ],
+  "volumes": [
+    {
+      "name": "outbox",
+      "hostPath": "/var/lib/easyaiot/collector/collector-site-1001-a/outbox",
+      "containerPath": "/var/lib/easyaiot/outbox",
+      "mode": "rw"
+    }
+  ],
+  "brokerRef": "secret://node/21/collector/site-1001",
+  "updatePolicy": {
+    "dispatchAckTimeoutSeconds": 10,
+    "configApplyTimeoutSeconds": 60,
+    "healthWindowSeconds": 60,
+    "autoRollback": true
+  }
+}
