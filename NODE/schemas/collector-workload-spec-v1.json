@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/schema/collector/workload/v1/collector-workload-spec-v1.json",
+  "title": "EasyAIoT collector WorkloadSpec 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "specVersion",
+    "workloadType",
+    "workloadId",
+    "nodeId",
+    "image",
+    "springProfile",
+    "config",
+    "resources",
+    "serialDevices",
+    "volumes",
+    "brokerRef",
+    "updatePolicy"
+  ],
+  "properties": {
+    "specVersion": {
+      "type": "string",
+      "enum": ["1.0"]
+    },
+    "workloadType": {
+      "type": "string",
+      "enum": ["iot-sink-collector"]
+    },
+    "workloadId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "nodeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 19,
+      "pattern": "^[1-9][0-9]{0,18}$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "digest"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9][a-z0-9./_-]{0,254}$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "springProfile": {
+      "type": "string",
+      "enum": ["collector"]
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "sha256", "targetPath"],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "targetPath": {
+          "type": "string",
+          "const": "/var/lib/easyaiot/config/active.json"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpuCores", "memoryBytes"],
+      "properties": {
+        "cpuCores": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16,
+          "pattern": "^(?:0|[1-9]|[1-5][0-9]|6[0-3])(?:\\.[0-9]+)?$|^64(?:\\.0+)?$"
+        },
+        "memoryBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 68719476736
+        }
+      }
+    },
+    "serialDevices": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hostPath", "containerPath", "hardwareFingerprint", "readOnly"],
+        "properties": {
+          "hostPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "containerPath": {
+            "type": "string",
+            "pattern": "^/dev/easyaiot/rs485-[0-9]{1,2}$"
+          },
+          "hardwareFingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9:_./-]+$"
+          },
+          "readOnly": {
+            "type": "boolean",
+            "const": false
+          }
+        }
+      }
+    },
+    "volumes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "hostPath", "containerPath", "mode"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["outbox"]
+          },
+          "hostPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "containerPath": {
+            "type": "string",
+            "enum": ["/var/lib/easyaiot/outbox"]
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["rw"]
+          }
+        }
+      }
+    },
+    "brokerRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^secret://node/[1-9][0-9]{0,18}/collector/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "updatePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dispatchAckTimeoutSeconds",
+        "configApplyTimeoutSeconds",
+        "healthWindowSeconds",
+        "autoRollback"
+      ],
+      "properties": {
+        "dispatchAckTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "configApplyTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7200
+        },
+        "healthWindowSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "autoRollback": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

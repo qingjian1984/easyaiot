@@ -15,6 +15,18 @@ from agent_security import (
 from workload_manager import WorkloadManager, find_available_port
 from media_manager import MediaStackManager
 from mqtt_manager import MqttStackManager
+from collector_workload import (
+    CollectorDeploymentError,
+    CollectorDeploymentService,
+    DockerComposeCollectorExecutor,
+    load_collector_policy,
+)
+from collector_config_state import (
+    CollectorConfigStateError,
+    CollectorConfigStateService,
+    REQUEST_MAX_BYTES,
+    validate_config_envelope,
+)
 
 logger = logging.getLogger('easyaiot-node-agent.server')
 
@@ -26,6 +38,9 @@ app = Flask(__name__)
 manager = WorkloadManager()
 media_manager = MediaStackManager()
 mqtt_manager = MqttStackManager()
+collector_executor = DockerComposeCollectorExecutor()
+collector_service = CollectorDeploymentService(collector_executor)
+collector_config_state_service = None
 
 
 def _ok(data=None):
@@ -63,6 +78,29 @@ def _get_agent_nonce_store():
     return _agent_nonce_store
 
 
+def _get_collector_config_state_service():
+    """Resolve the state root only from local installation configuration."""
+
+    global collector_config_state_service
+    if collector_config_state_service is None:
+        collector_config_state_service = CollectorConfigStateService.from_env()
+    return collector_config_state_service
+
+
+def _config_state_status(code: str) -> int:
+    if code == "COLLECTOR_WORKLOAD_NOT_FOUND":
+        return 404
+    if code in {"CONFIG_VERSION_STALE", "CONFIG_VERSION_CONFLICT"}:
+        return 409
+    if code == "COLLECTOR_CONFIG_TOO_LARGE":
+        return 413
+    if code == "COLLECTOR_CONFIG_PERMISSION_INVALID":
+        return 503
+    if code in {"COLLECTOR_CONFIG_STATE_CORRUPT", "COLLECTOR_CONFIG_WRITE_FAILED"}:
+        return 500
+    return 400
+
+
 @app.before_request
 def auth_middleware():
     if request.path in ('/health',):
@@ -96,6 +134,10 @@ def health():
 def deploy_workload():
     try:
         spec = request.get_json(force=True) or {}
+        # 只要识别出 collector 类型即切断通用能力；即使 workloadId 或其它
+        # 字段缺失，也不得先走通用必填校验、端口探测或 WorkloadManager。
+        if spec.get('workloadType') == 'iot-sink-collector':
+            return _err('UNSUPPORTED_GENERIC_DEPLOY', 'UNSUPPORTED_GENERIC_DEPLOY', 400)
         if not spec.get('workloadType') or not spec.get('workloadId'):
             return _err('workloadType 和 workloadId 必填')
         env = spec.get('env') or {}
@@ -115,6 +157,87 @@ def deploy_workload():
     except Exception as e:
         logger.exception('部署失败')
         return _err(str(e))
+
+
+@app.post('/workload/collector/deploy')
+def deploy_collector_workload():
+    """只接受 WorkloadSpec 1.0；认证由 before_request 的 ADR-018 HMAC 完成。"""
+    try:
+        # auth_middleware 已在读取 JSON 之前执行 HMAC、body hash 和 nonce 检查。
+        spec = request.get_json(force=True)
+    except Exception:
+        return _err(
+            'COLLECTOR_WORKLOAD_SCHEMA_INVALID',
+            'COLLECTOR_WORKLOAD_SCHEMA_INVALID',
+            400,
+        )
+    if not isinstance(spec, dict):
+        return _err(
+            'COLLECTOR_WORKLOAD_SCHEMA_INVALID',
+            'COLLECTOR_WORKLOAD_SCHEMA_INVALID',
+            400,
+        )
+    try:
+        policy = load_collector_policy()
+        # 平台值来自 Agent 本地启动环境，不能由远端 WorkloadSpec 影响；未配置时
+        # collector_workload 按当前 OS 判定（Windows capability 默认关闭）。
+        agent_platform = os.environ.get('COLLECTOR_AGENT_PLATFORM') or None
+        data = collector_service.deploy(spec, policy, platform=agent_platform)
+        return _ok(data)
+    except CollectorDeploymentError as exc:
+        return _err(exc.code, exc.code, 400)
+    except Exception:
+        # 不记录请求原文、secret ref、签名、nonce 或异常堆栈。
+        logger.error('collector deployment failed')
+        return _err('COLLECTOR_DEPLOY_FAILED', 'COLLECTOR_DEPLOY_FAILED', 500)
+
+
+@app.put('/workload/collector/config')
+def put_collector_config():
+    """Accept a verified 1.1 envelope and atomically replace desired only."""
+
+    raw_body = request.get_data(cache=True)
+    if len(raw_body) > REQUEST_MAX_BYTES:
+        return _err(
+            'COLLECTOR_CONFIG_TOO_LARGE',
+            'COLLECTOR_CONFIG_TOO_LARGE',
+            413,
+        )
+    try:
+        # Complete envelope validation must precede local state-root resolution;
+        # malformed requests therefore cannot depend on installation state or
+        # create any directory/lock side effect.
+        validate_config_envelope(raw_body)
+        service = _get_collector_config_state_service()
+        result = service.put(raw_body)
+        return _ok(result.as_dict())
+    except CollectorConfigStateError as exc:
+        return _err(exc.code, exc.code, _config_state_status(exc.code))
+    except Exception:
+        logger.error('collector config state transition failed')
+        return _err(
+            'COLLECTOR_CONFIG_WRITE_FAILED',
+            'COLLECTOR_CONFIG_WRITE_FAILED',
+            500,
+        )
+
+
+@app.get('/workload/collector/<workload_id>')
+def get_collector_config(workload_id: str):
+    """Return redacted desired/active/observed summaries only."""
+
+    try:
+        service = _get_collector_config_state_service()
+        return _ok(service.get(workload_id))
+    except CollectorConfigStateError as exc:
+        return _err(exc.code, exc.code, _config_state_status(exc.code))
+    except Exception:
+        logger.error('collector config state read failed')
+        return _err(
+            'COLLECTOR_CONFIG_STATE_CORRUPT',
+            'COLLECTOR_CONFIG_STATE_CORRUPT',
+            500,
+        )
 
 
 @app.post('/workload/stop')

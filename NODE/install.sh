@@ -136,9 +136,15 @@ sync_agent_sources() {
   echo "==> 同步 Agent 源码: ${resolved_script_dir} -> ${resolved_install_dir}"
   sudo cp "$resolved_script_dir/run_agent.py" "$resolved_script_dir/agent_server.py" \
     "$resolved_script_dir/media_manager.py" "$resolved_script_dir/mqtt_manager.py" \
-    "$resolved_script_dir/workload_manager.py" \
+    "$resolved_script_dir/workload_manager.py" "$resolved_script_dir/collector_workload.py" \
+    "$resolved_script_dir/collector_config_state.py" \
     "$resolved_script_dir/requirements.txt" "$resolved_script_dir/agent.env.example" \
     "$resolved_script_dir/install.sh" "$resolved_install_dir/"
+  sudo install -d -m 0750 "$resolved_install_dir/schemas"
+  sudo install -m 0644 "$resolved_script_dir/schemas/collector-workload-spec-v1.json" \
+    "$resolved_install_dir/schemas/collector-workload-spec-v1.json"
+  sudo install -m 0644 "$resolved_script_dir/schemas/collector-config-snapshot-v1.1.json" \
+    "$resolved_install_dir/schemas/collector-config-snapshot-v1.1.json"
   sudo chmod +x "$resolved_install_dir/install.sh"
   if [ -d "$SCRIPT_DIR/pip-wheels" ]; then
     sudo rm -rf "$resolved_install_dir/pip-wheels"
@@ -257,11 +263,11 @@ WRAP
   verify_agent_imports() {
     if [ -d "$SITE_PKG" ]; then
       sudo env PYTHONPATH="$SITE_PKG" $PYTHON -c \
-        "import flask, psutil, requests, minio, mqtt_manager" 2>/dev/null \
+        "import flask, psutil, requests, minio, jsonschema, mqtt_manager, collector_workload, collector_config_state" 2>/dev/null \
         && return 0
     fi
     if [ -n "$RUN_PYTHON" ] && [ -x "$RUN_PYTHON" ]; then
-      sudo "$RUN_PYTHON" -c "import flask, psutil, requests, minio, mqtt_manager" 2>/dev/null \
+      sudo "$RUN_PYTHON" -c "import flask, psutil, requests, minio, jsonschema, mqtt_manager, collector_workload, collector_config_state" 2>/dev/null \
         && return 0
     fi
     return 1
