@@ -1,11 +1,11 @@
 # M1-LC-02A：Collector 版本配置应用链任务单
 
-> 状态：LC02A-0 Approved / Frozen；LC02A-1～4 Blocked
-> 版本：0.3.0
+> 状态：LC02A-0 Approved / Frozen；OPEN03 本地收敛任务单 Approved / Frozen；LC02A-1～4 整包仍 Blocked
+> 版本：0.4.9
 > 日期：2026-08-13
 > 架构负责人：GPT-5.6 Sol
 > 实现执行者：本任务 Frozen 后，按 02A-0→02A-4 顺序交由 GPT-5.6 Luna（max reasoning）
-> 当前实现授权：仅 LC02A-0；LC02A-1～4 需逐包复核后授权
+> 当前实现授权：OPEN03-08A（含 S1）已由 Sol 验收；OPEN03-08 v2 已恢复授权 Luna Max；OPEN03-01/02/03/04/05/06/07 已由 Sol 验收
 
 ## 1. 为什么必须先做本任务
 
@@ -185,7 +185,8 @@ HTTP_METHOD + "\n" + REQUEST_PATH + "\n" + TIMESTAMP + "\n" + NONCE + "\n" + BOD
 Linux M1 路径与权限候选冻结为：
 
 ```text
-宿主机：/var/lib/easyaiot/collector/{safeWorkloadId}/config
+宿主机：${COLLECTOR_STATE_ROOT}/{workloadIdentity}/config
+安装示例：/var/lib/easyaiot/collector-state/{workloadIdentity}/config
 容器内：/var/lib/easyaiot/config
 ```
 
@@ -331,6 +332,7 @@ mvn -f DEVICE/pom.xml -pl iot-device/iot-device-biz,iot-node/iot-node-biz,iot-si
 - 凭据治理：`NODE/agent.env` 不在 Git index 且被 ignore；初始化 SQL 转储中的旧节点令牌已移除；当前旧令牌工作树匹配数为 0。外部轮换与旧值失效已完成，cached/worktree secret scan 均通过；部署后/现场验证仍保持 `OPEN`。
 - 轮换续作：正式 `reset-agent-token?id=1` 对平台节点返回业务拒绝，因此按授权采用受控 DB fallback；数据库、本地受保护文件与 bootstrap 返回值一致，一次性 Agent register/heartbeat 均 `code=0`。`.git/index.lock` 已清理，清理后的 SQL 已进入待提交索引，索引 secret scan 通过。
 - 本地完成状态：LC02A-0 代码与定向测试证据可供复核；LC02A-1～4 继续 Blocked，不能据此宣称现场、跨主机 NTP 或 7 天稳定性已验证。
+- 人工执行约束（2026-08-16）：当前仅进行本地开发与合同测试；Linux PTY 端到端、资源压测、Windows 发布资格及其他部署/现场验证暂不执行，保持 `OPEN`，待决策所有者明确要求并提供相应环境后再执行。
 - 暂存状态：`.git/index.lock` 已清理；SQL 转储清理已进入待提交索引，cached/worktree secret scan 已复核通过。
 
 - [ ] ADR-017/018 Accepted，TD-001 相关接口/状态机评审关闭，本任务 Frozen；
@@ -349,10 +351,39 @@ mvn -f DEVICE/pom.xml -pl iot-device/iot-device-biz,iot-node/iot-node-biz,iot-si
 |---|---|---|
 | LC02A-OPEN-01 | ADR-017 决策所有者接受 | CLOSED（2026-08-14） |
 | LC02A-OPEN-02 | ADR-018 接受并冻结服务 HMAC、节点 HMAC、密钥 Provider 与轮换合同 | CLOSED-FOR-LC02A-0（2026-08-14；Provider 生产选型仍阻塞激活） |
-| LC02A-OPEN-03 | TD-001 配置 API、状态机、安全参数从 In Review 转为本任务 Frozen 基线 | OPEN |
+| LC02A-OPEN-03 | TD-001 配置 API、状态机、安全参数从 In Review 转为本任务 Frozen 基线 | OPEN / NOT_CONVERGED（Sol 复核，2026-08-16） |
 | LC02A-DECISION-04 | Linux 路径 `/var/lib/easyaiot/collector/{workload}/config`、固定组/GID、2770/0660、精确 bind mount | RESOLVED-DESIGN（安装实现待 Frozen） |
 | LC02A-OPEN-05 | Windows collector 保持 capability 关闭，直至 COM/服务账号/ACL 现场资格另行验证 | OPEN-RUNTIME（不阻塞 Linux 本地实现） |
 | LC02A-OPEN-06 | 已暴露 Agent token 完成外部轮换、旧值失效、Agent 验证与 secret scan | CLOSED-FOR-LC02A-0（DB/local/bootstrap/register/heartbeat 与 cached/worktree scan 已通过；部署后/现场验证仍 OPEN） |
+
+### LC02A-OPEN-03 本地接口与安全冻结审查记录（2026-08-16）
+
+本次仅按授权完成 OPEN-03 的接口冻结审查、安全约束冻结审查和联合记录；依据双基线 1.6.0/1.5.0 及 TD-001 v1.0.19。审查结果可在当前 Windows 工作区复核，但不改变 TD-001 `In Review` 状态、不把 OPEN-03 标记为 CLOSED、不启动 LC02A-1～4，也不执行 Linux PTY、资源压测、Windows 发布资格、现场或部署后验证。
+
+- **接口审查已执行**：现有 v1 `CollectorConfigSnapshotContractTest` 5/5；canonical UTF-8/hash/字节长度、生产非空总线、显式采集策略、十进制字段和缺失事实拒绝可复核。仓库当前尚无 1.1 schema、服务端注入 `productIdentification`、类型化 WorkloadSpec 机器合同、release 详情/observed CAS API、NODE collector config 路由或 LC02A-1～4 的状态机实现；因此版本、CAS、乱序/重复、失败保留旧 active、回滚新版本等条款仍仅是冻结候选合同，必须逐包实现后再验收。
+- **安全审查已执行**：内部服务 HMAC canonicalizer/verifier/allowlist/nonce 及节点 key Provider 的定向 Java 测试分别 3/3、2/2；NODE 安全测试在工作区可写临时目录为 `3 passed, 1 skipped`（Flask 集成用例缺依赖，未冒充通过）；collector outbox 装配/写入/路由定向测试 5/5。HMAC、时间戳、body hash、持久 nonce、防重放、secret Provider 的本地可复核部分保持通过，且不输出凭据值。
+- **安全缺口保持 OPEN**：当前 NODE 通用 `/workload/deploy`/`WorkloadManager` 仍接收任意 `command`、`workDir`、`logDir`、`gpuIds`、`env`/`files`；collector 专用 `UNSUPPORTED_GENERIC_DEPLOY`、镜像/路径 allowlist、固定模板及配置状态 API 尚未实现。`test_collector_routes_do_not_fallback_to_agent_token` 因当前环境未安装 Flask 被跳过；签名路由本身尚未实现，不能把 404 解释为业务链通过。
+- **联合记录**：TD-002/003 文档对 `TelemetryOutboxPort`、`/var/lib/easyaiot/outbox` 卷路径和 `process/config/serial/center` 健康摘要已有交叉引用；本地 writer/config/mapper 测试未发现形状冲突，但本次未作完整跨 TD 运行 E2E 或冻结签字。TD-001 §19 第 4、5 项按授权保持 OPEN；第 6 项仅记录为设计一致性待正式联合冻结，不能据此关闭 OPEN-03。
+
+本次复核未修改业务代码、配置、凭据或测试；工作区临时 pytest 目录已清理。LC02A-0 仍为 `Approved / Frozen`，LC02A-1～4 继续 `Blocked`。
+
+### Sol 最终复核决定（2026-08-16）
+
+Sol 接受 Luna Max 的本地测试与静态审查证据，决定 **不收敛 LC02A-OPEN-03**。TD-001 §19 门禁状态为：1、3 `OPEN`；2、6 `PARTIAL / OPEN`；4、5 按人工约束保持 `OPEN-RUNTIME`。因此 TD-001 继续 `In Review`，LC02A-1～4 不获得实现授权。
+
+本地继续推进前，须先形成并冻结以下有界任务：collector 本地 `PollingConfigProvider` 与中心依赖切断；ConfigSnapshot 1.1、类型化 WorkloadSpec、release/observed CAS 与状态机；NODE collector 专用 fail-closed/固定模板/allowlist；TD-002/003 正式联合冻结与可执行组合合同。Linux PTY、资源/稳定性压测和 Windows 资格不纳入当前本地执行范围。
+
+上述边界已由 Sol 拆为并冻结 [M1-TD001-OPEN03 本地收敛实现任务单](./M1-TD001-OPEN03-本地收敛实现任务单.md) 的 OPEN03-01～08。OPEN03-01/02/03/04/05/06/07 已于 2026-08-17 经 Sol 验收；OPEN03-08A 已按 expand→switch→compat 完成批量 Store 前置迁移，并完成 S1 凭据日志安全收尾，同日经 Sol 验收。OPEN03-08 v2 现已恢复 Luna Max 实现授权；LC02A-1～4 整包仍不得并行启动。
+
+OPEN03-03 已完成 pending/detail/observed 内部合同、PUBLISHED+ACTIVE 投影读取边界及真实 PostgreSQL CAS；ADR-018 动态单段 route、raw body hash、服务身份与未知字段均 fail-closed。Sol 独立证据为 Collector 8/8（PG 2/2、Skipped=0）、ADR-018 4/4、33 模块 SUCCESS、八类 fixture=0 和 `git diff --check` PASS。门禁 2 仍因 NODE/collector 状态机、派发与组合 E2E 保持 `PARTIAL / OPEN`。
+
+OPEN03-04 已完成 NODE collector 专用 HMAC deploy、通用入口精确早拒绝、Schema/镜像/路径/串口/资源 allowlist、固定 Linux Compose 与关闭默认的 Windows argv。Sol 首次否决 `brokerRef` 丢弃和 project 随 spec 漂移，修正后 ref 仅在内部不可变计划交给安全 resolver，任何缺失均在 subprocess 前拒绝；同 workload project 跨 spec 稳定。Sol 独立证据为冻结测试及 NODE 全量 26/26、Skipped=0，Schema 双副本 hash 一致、`compileall`/`git diff --check` PASS。门禁 3 的本地子缺口完成，但仍等待 OPEN03-08 联合冻结后标记 `CLOSED-LOCAL`；Docker/PTY/压测/Windows/现场均未执行。
+
+OPEN03-05 已完成 NODE 配置接收与本地版本状态机。PUT 只写 desired，不伪造 active/APPLIED；配置目录统一为 `${COLLECTOR_STATE_ROOT}/{workloadIdentity}/config`，desired/active/history 保留原 canonical bytes，observed 为闭合摘要，POSIX 权限合同为 `02770/0660`。Sol 独立复验为 56/56 PASS、Skipped=0，Schema 长度 3853、SHA-256 `52FCC23AE0DF65BE19C902E604611A4078ABF9E89B13EF91E5DC05D088C7A28A`，`compileall`/`git diff --check`/临时目录清理通过。解锁 OPEN03-06 前，Sol 识别出 Compose `:ro` 与 Java 需要写 active/observed 的不可执行冲突，已把精确单 workload `rw`、正式文件分权、共同锁和原子提交顺序写入 v2 冻结合同；不得扩大宿主路径。Linux 锁/owner/GID、PTY、压测、Windows 与现场仍不执行。
+
+OPEN03-06 已完成 collector 本地 Provider、原子配置应用、唯一 RTU 引擎、center bridge 与真实 collector 白名单启动图。Sol 先后否决“全包扫描下仅靠 `!collector` 注解隔离”和“测试强制非 Web、生产入口未固化”的差异，修正后以生产同款 `--spring.profiles.active=collector` 启动真实无 Web Spring 上下文，确认仅有本地 Provider/runtime/SQLite outbox，且无中心 DB/service/controller/message bus、Redis、Nacos/Feign；无配置写 `WAITING_CONFIG`。Sol 独立冻结集为 Java 27/27、NODE 37/37、Skipped=0，Schema 三副本 hash、`compileall`、`git diff --check` 与临时清理通过。当前只解锁 OPEN03-07；运行期资格仍保持 OPEN。
+
+OPEN03-07 已完成 iot-node typed release 派发、节点权威查询、固定 HMAC PUT/GET、observed 对账、稳定错误分类和有界指数退避。Sol 否决反射适配、无 Spring 装配的普通 job 及读取完整响应后才做大小检查；修正后默认开关关闭，开启时形成 typed Feign/Mapper/signer/service/scheduled job Bean 图，响应在完整缓冲前限制为 `1 MiB + 1 byte`。正式 Maven 冻结矩阵 `45/45 PASS`、Skipped=0，独立 compile 与 `git diff --check` 通过。门禁 2 只剩 OPEN03-08 组合 E2E；其 v2 已冻结并授权 Luna Max，运行期资格仍保持 OPEN。
 
 LC02A-0 已满足 Luna Max 无歧义实现条件；LC02A-1～4 仍等待 OPEN-03 与逐包复核。DECISION-04 已完成设计收敛，OPEN-05 是部署后运行期资格，不阻塞 Linux 本地实现。
 

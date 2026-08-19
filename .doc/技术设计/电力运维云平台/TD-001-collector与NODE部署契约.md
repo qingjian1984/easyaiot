@@ -1,7 +1,7 @@
 # TD-001：collector Profile 与 NODE 部署契约
 
 > TD ID：POWER-TD-001  
-> 版本：1.0.19
+> 版本：1.0.28
 > 状态：In Review  
 > 日期：2026-08-04  
 > 上游需求：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)  
@@ -128,7 +128,7 @@ DDL 资产（1.0.7 登记）：`assets/td005-migration/V003__iot_collector_coord
   "specVersion": "1.0",
   "workloadType": "iot-sink-collector",
   "workloadId": "collector-site-1001-a",
-  "nodeId": 21,
+  "nodeId": "21",
   "image": {
     "repository": "registry.example/easyaiot/iot-sink-biz",
     "digest": "sha256:<64-hex>"
@@ -137,7 +137,7 @@ DDL 资产（1.0.7 登记）：`assets/td005-migration/V003__iot_collector_coord
   "config": {
     "version": 6,
     "sha256": "<64-hex>",
-    "targetPath": "/var/lib/easyaiot/collector/config/active.json"
+    "targetPath": "/var/lib/easyaiot/config/active.json"
   },
   "resources": {
     "cpuCores": "1.0",
@@ -172,6 +172,8 @@ DDL 资产（1.0.7 登记）：`assets/td005-migration/V003__iot_collector_coord
 - 禁止 privileged、host network、额外 capability 和调用方自定义 entrypoint。
 - `brokerRef` 由 Agent 的节点密钥存储解析为权限 `0600` 的临时 secret 文件；不得写入 payload、命令行、普通环境变量或日志。
 - `memoryBytes=384 MiB` 只用于首轮压测候选，不是生产默认值；生产 manifest 在第 13 节门禁通过后冻结。
+- WorkloadSpec Schema 的 64 CPU/64 GiB 只用于传输层反滥用上限，不是档位配额；provider 必须显式注入安装侧 capability 配额，无配额时 fail-closed。
+- `config.targetPath` 是固定容器路径，不是宿主机输入；宿主机配置根只能由 Agent 本地安装配置决定。outbox hostPath 必须按 workloadId 精确绑定，不能只校验位于某个宽泛父目录。
 - 当前 Dockerfile 的 `-Xms512m -Xmx512m` 与 384 MiB 候选 limit 明确冲突；第 18 节任务 5 必须先完成 JVM/limit 一致性改造，否则不得使用该候选 spec 启动测试或生产容器。
 - `dispatchAckTimeoutSeconds=10`、`configApplyTimeoutSeconds=60`、`healthWindowSeconds=60` 均为首轮候选。冷启动压测必须分别统计 Agent 接单、配置应用和镜像健康窗口，按 P99 与安全余量冻结，不能用一个 60 秒超时覆盖三个阶段。
 
@@ -578,4 +580,120 @@ TD-001 转为 `Approved / Frozen` 前必须关闭：
 5. 完成第 13 节首轮资源压测，冻结 standard/full 生产 request/limit、串口/点位/周期配额；未完成不得形成销售承诺。
 6. TD-002/003 对 `TelemetryOutboxPort`、卷路径和健康摘要无冲突。
 
-评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则，1.0.5 新增 §6.2 事件驱动快照再生语义，1.0.6 登记 T-18 批次 1 落地，1.0.7 登记 V003 持久化资产，1.0.8 登记 ConfigSnapshot 机器合同，1.0.9～1.0.15 完成 V006/V007、对象查询和第四端口闭环，1.0.16 完成首次候选创建原子事务，1.0.17 识别并隔离 ADR-015 首发死循环，1.0.18 完成人工首发与真实 PG 端到端合同，1.0.19 冻结启动组合和灰度顺序。当前 OPEN 是实际启用窗口、资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review。
+### 19.1 OPEN-03 本地接口与安全审查记录（2026-08-16）
+
+本记录依据《EasyAIoT 项目开发宪法》1.6.0、《平台功能计划》1.5.0、TD-001 v1.0.19、TD-001 评审报告和 M1-LC-02A 任务单形成。只覆盖当前 Windows 工作区可复核的接口/安全设计与确定性合同测试；不改变本 TD 的状态，不授权 LC02A-1～4，也不把本地结果解释为 Linux PTY、现场、Windows 发布资格或资源/稳定性证据。
+
+| 门禁 | 本地审查结论 | 证据与未闭合项 |
+|---:|---|---|
+| 1 | OPEN | 文档要求 collector 不依赖中心库且复用单一 RTU 实现；当前 `iot-sink` 的 `ModbusRtuProtocolConfiguration` 仍注入 `DeviceMapper`/`IotDeviceMessageService`/`IotMessageBus`，`application-collector.yaml` 仍启用 `modbus-rtu`，尚无 `PollingConfigProvider` 本地快照替换证据。不得据 `CollectorTelemetryWriter` 测试通过关闭本门禁。 |
+| 2 | PARTIAL / OPEN | v1 `CollectorConfigSnapshotContract` 的 canonical/hash、非空总线、策略事实和拒绝默认补齐已有 5/5；但仓库尚无 ConfigSnapshot 1.1 schema、服务端注入 `productIdentification`、类型化 WorkloadSpec 机器合同、release 详情/observed CAS API 或 LC02A-1～4 的联合状态机实现/合同。 |
+| 3 | OPEN | NODE 当前通用 `/workload/deploy`/`WorkloadManager` 仍从请求接收任意 `command`、`workDir`、`logDir`、`gpuIds`、`env`/`files`；collector 专用类型化拒绝 `UNSUPPORTED_GENERIC_DEPLOY`、镜像/路径 allowlist 和固定 Compose/Windows 模板尚未落地。 |
+| 4 | OPEN（本次不执行） | Linux PTY/端到端串口记录、以及若以 Windows 为 M1 目标所需 COM 记录未在本次授权范围；Windows collector capability 继续关闭。 |
+| 5 | OPEN（本次不执行） | §13 首轮资源压测、standard/full request/limit、串口/点位/周期配额、7 天稳定性和 24 小时断网补传均未执行/冻结。 |
+| 6 | PARTIAL / OPEN | TD-002 已引用相同 `TelemetryOutboxPort`、`/var/lib/easyaiot/outbox` 卷根和 `center` 健康映射，TD-003 也引用 TD-001/TD-002；本地 collector writer/路由测试未发现接口形状冲突，但本次未进行完整跨 TD 联合冻结或运行 E2E，不能以此替代正式门禁。 |
+
+本地确定性测试记录（无凭据值）：
+
+```text
+python -m pytest NODE/tests -q --basetemp .codex-tmp\pytest
+  3 passed, 1 skipped（Flask 集成用例因当前环境未安装 Flask；未冒充通过）
+
+mvn -f DEVICE/pom.xml test -pl iot-common/iot-common-security -Dtest=InternalServiceAuthContractTest -DfailIfNoTests=false -Dmaven.test.skip=false
+  BUILD SUCCESS；3 tests, 0 failures, 0 errors, 0 skipped
+
+mvn -f DEVICE/pom.xml test -pl iot-node/iot-node-biz -Dtest=NodeAgentSigningKeyProviderTest -DfailIfNoTests=false -Dmaven.test.skip=false
+  BUILD SUCCESS；2 tests, 0 failures, 0 errors, 0 skipped
+
+mvn -f DEVICE/pom.xml test -pl iot-device/iot-device-biz -Dtest=CollectorConfigSnapshotContractTest -DfailIfNoTests=false -Dmaven.test.skip=false
+  BUILD SUCCESS；5 tests, 0 failures, 0 errors, 0 skipped
+
+mvn -f DEVICE/pom.xml test -pl iot-sink/iot-sink-biz -Dtest=CollectorTelemetryConfigurationTest,CollectorTelemetryWriterTest,PollingResultMapperTest -DfailIfNoTests=false -Dmaven.test.skip=false
+  BUILD SUCCESS；5 tests, 0 failures, 0 errors, 0 skipped
+```
+
+上述结果仅证明 LC02A-0 安全基线和现有 v1/collector outbox 边界的本地可复核部分；ConfigSnapshot 1.1、Agent 配置状态机、collector 本地 Provider、iot-node 派发对账及组合 E2E 仍由 LC02A-1～4 逐包实现和复核。TD-001 继续保持 `In Review`，OPEN-03 不关闭。
+
+### 19.2 Sol 收敛决定（2026-08-16）
+
+Sol 已独立复核 Luna Max 的测试记录、机器合同、NODE 通用部署入口、collector 当前装配依赖以及 TD-002/003 交叉引用，接受其事实证据；正式决定为 **`NOT_CONVERGED`**，OPEN-03 继续 `OPEN`。
+
+- 门禁 1 为 `OPEN`：collector 仍通过 `DeviceMapper`、`IotDeviceMessageService`、`IotMessageBus` 接入中心侧依赖，尚未形成仅依赖本地快照的 `PollingConfigProvider` 运行边界。
+- 门禁 2 为 `PARTIAL / OPEN`：现有 ConfigSnapshot v1 合同测试通过，但 1.1、类型化 WorkloadSpec、release/observed CAS、乱序与回滚状态机尚无完整机器合同和实现证据。
+- 门禁 3 为 `OPEN`：NODE 通用 `/workload/deploy` 仍可接收任意命令、路径、环境变量和文件，尚未形成 collector fail-closed、固定模板及 allowlist 边界。
+- 门禁 4、5 按决策所有者要求不执行，继续 `OPEN-RUNTIME`；不得以本地测试替代 Linux PTY、资源/稳定性压测或 Windows 发布资格。
+- 门禁 6 为 `PARTIAL / OPEN`：当前未发现 TD-002/003 文档形状冲突，但尚无正式联合冻结和组合 E2E 证据。
+
+因此本 TD 不转为 `Approved / Frozen`，不授权启动 LC02A-1～4。后续只能先为门禁 1～3、6 补齐边界清晰的实现/测试任务单；门禁 4、5 等待人工明确要求并提供相应环境。
+
+### 19.3 OPEN03-01 本地实现验收（2026-08-17）
+
+Sol 已按 [M1-TD001-OPEN03 本地收敛实现任务单](./M1-TD001-OPEN03-本地收敛实现任务单.md) 验收 ConfigSnapshot 1.1 子包：历史 v1 golden bytes/hash 不变；新发布由服务端注入 `productIdentification` 并以同一 artifact 固化 schema/canonical/hash/长度；客户端伪造产品身份和未知字段 fail-closed。自动证据为 Snapshot 10/10、源字段安全 2/2、真实 PostgreSQL 3/3（Skipped=0）及 33 模块 compile PASS。
+
+本记录只关闭门禁 2 的 ConfigSnapshot 1.1 子缺口。WorkloadSpec、release/observed CAS、NODE/collector 状态机、派发对账和组合 E2E 仍未完成，因此门禁 2 继续 `PARTIAL / OPEN`，TD 状态继续 `In Review`，OPEN-03 不关闭。运行期门禁 4、5 未执行。
+
+### 19.4 OPEN03-02 本地实现验收（2026-08-17）
+
+WorkloadSpec 1.0 的 JSON Schema、类型化 DTO、provider validator 和 golden fixture 已落地。Sol 首次复核否决“请求可选宿主机配置路径”和“无配置默认资源配额”，修正后合同固定容器配置路径、精确绑定 workload outbox、显式注入 capability 配额，并对 command/env/files、镜像漂移、恶意路径、跨 workload、mini 和超界资源 fail-closed。Sol 独立证据为 12/12 PASS、22 模块 reactor SUCCESS、Schema/字段一致性和 `git diff --check` PASS。
+
+门禁 2 的 WorkloadSpec 机器合同子缺口关闭，但 release/observed CAS、NODE/collector 状态机、派发对账与组合 E2E 仍未完成；门禁 2 继续 `PARTIAL / OPEN`，TD 状态继续 `In Review`。运行期门禁 4、5 未执行。
+
+### 19.5 OPEN03-03 本地实现验收（2026-08-17）
+
+iot-device 已实现 ADR-018 HMAC 保护的 pending/detail/observed 内部发布单接口。pending/detail 只读取仍为 `PUBLISHED` 且与 `ACTIVE` workload 投影完全匹配的发布单；detail 原样返回 canonical/hash/长度。observed 仅在 release/tenant/node/workload/version/hash 全匹配时以行锁事务和 `row_version` CAS 推进；`AGENT_ACCEPTED` 不伪装终态，`APPLIED/FAILED`、同终态幂等、错配和相反终态晚到语义已固化，Agent 不能自报 `APPLY_TIMEOUT`。
+
+Sol 首次复核发现 ADR-018 静态 allowlist 无法匹配 `{releaseId}` 真实路径，修正后通用 allowlist 只支持一个安全命名单段模板，不能跨路径、吞 query 或额外段；POST raw body hash、服务身份、token-only、错 hash、未知 JSON 字段和路由越界均 fail-closed。配置登记三条 route，启用环境门禁默认关闭且不含凭据。独立证据为 Collector 8/8（真实 PostgreSQL 2/2、Skipped=0）、ADR-018 4/4、33 模块 SUCCESS、八类 fixture=0 和 `git diff --check` PASS。
+
+本包关闭门禁 2 的 release/observed CAS 子缺口。NODE/collector 状态机、iot-node 派发和组合 E2E 尚未完成，门禁 2 继续 `PARTIAL / OPEN`；门禁 3 仍等待 OPEN03-04，TD 状态继续 `In Review`。运行期门禁 4、5 未执行。
+
+### 19.6 OPEN03-04 本地实现验收（2026-08-17）
+
+NODE 已落地 collector 专用部署安全边界：通用 `/workload/deploy` 对 collector 在通用必填校验和任何副作用前返回 `UNSUPPORTED_GENERIC_DEPLOY`；专用 `/workload/collector/deploy` 复用 ADR-018 HMAC/body hash/持久 nonce，只接受与 Java 资源逐字节一致的 WorkloadSpec 1.0。安装侧 profile、精确 `repository@digest`、collector/state root、串口 allowlist 和 CPU/内存上限全部显式注入，缺失即 fail-closed；mini 和 Windows 默认关闭。
+
+Linux 计划固定 Compose/argv、不可变且不接受远端 command/env/files/path/JVM/project/restart；project/container 仅由 workload identity 派生，同 workload 跨 spec 稳定，串口进入 `devices`，restart 为 `on-failure:5`。`brokerRef` 不再静默丢弃，只在不可序列化的内部计划字段中交给本地 resolver；响应、可序列化计划、argv、普通 env 和日志不含 ref/secret。resolver 或安全 lease 缺失时在 subprocess 前拒绝，lease 只进入固定 Compose secret source，失败释放、成功按 project 保留；当前未配置真实 resolver 时不会伪启动无 broker 凭据实例。
+
+Sol 首次复核否决了“丢弃 brokerRef”和“project 包含 spec hash”两个错误语义，修正后独立执行冻结测试和 NODE 全量均为 26/26 PASS、Skipped=0；Schema SHA-256 双副本同为 `013C597D80436C93901ED53D36B277C5385558DA42C28EF4ED3073CDB008D883`，`compileall`、`git diff --check`、临时目录清理通过，`workload_manager.py` 未改。未启动 Docker/Windows、未执行 Linux PTY、资源/稳定性或现场验证。
+
+门禁 3 的本地专用 fail-closed/固定模板/allowlist 子缺口已完成，但依据本地收敛任务单 §13，须等 OPEN03-08 组合合同与联合冻结后再统一标记 `CLOSED-LOCAL`。门禁 2 继续 `PARTIAL / OPEN`，下一授权为 OPEN03-05 NODE 配置状态机；TD 继续 `In Review`，门禁 4、5 继续 `OPEN-RUNTIME`。
+
+### 19.7 OPEN03-05 本地实现验收与 OPEN03-06 契约修正（2026-08-17）
+
+NODE 配置 API 与状态机已落地：HMAC 路由在业务解析前完成鉴权，闭合 envelope 对 canonical bytes、Schema 1.1、JCS、hash、长度、workload 和版本执行 fail-closed 校验；PUT 只原子写 `desired.json`，不得伪造 active/APPLIED。部署与状态统一使用 `${COLLECTOR_STATE_ROOT}/{workloadIdentity}/config`；desired/active/history 保存原 canonical bytes，observed 保存闭合摘要，同版本异 hash、损坏状态、符号链接和权限漂移拒绝。POSIX 目录/文件模式合同为 `02770/0660`。
+
+Sol 独立执行 OPEN03-05 冻结集为 56/56 PASS、Skipped=0；ConfigSnapshot 1.1 Schema 长度 3853、SHA-256 `52FCC23AE0DF65BE19C902E604611A4078ABF9E89B13EF91E5DC05D088C7A28A`，`compileall`、`git diff --check` 和临时目录清理通过。未启动 Docker/collector、未连接真实串口，未执行 Linux PTY、资源/稳定性、Windows 或现场验证。
+
+解锁 OPEN03-06 前，Sol 发现原 Compose 把配置目录挂为 `:ro`，但 collector 又被要求提交 active/observed/history，且 Java 容器无法调用 NODE Python 内部原语。修正后的机器合同只把精确单 workload 配置目录改为 `rw`，不扩大到 state root；Agent 独占 desired，collector 独占 active/observed/history，双方使用共同 record lock，collector 按 history→active 持久化→内存图→observed 顺序提交。容器真实 UID/GID、Linux 跨语言锁和 owner/GID 继续属于运行期资格 OPEN，不得由 Windows 本地测试替代。
+
+门禁 2 的 NODE 配置接收/状态机子缺口关闭，但 collector Provider、iot-node 派发和组合 E2E 仍未完成，因此门禁 2 继续 `PARTIAL / OPEN`；当前唯一授权为 OPEN03-06。门禁 3 等待 OPEN03-08 联合标记，门禁 4、5 继续 `OPEN-RUNTIME`。
+
+### 19.8 OPEN03-06 本地实现验收（2026-08-17）
+
+collector 已实现精确单 workload `rw` 配置卷、正式文件分权和共同 record-lock 合同；本地 Provider 按 history→active 持久化→内存图→observed 的固定顺序提交并覆盖失败回滚/重启恢复。RTU I/O 只保留一份无中心依赖引擎，center 通过 bridge adapter 保持原行为。应用入口把 center 全包扫描与 collector 白名单图分离；collector 以生产同款 profile CLI 在 bootstrap 前关闭 Nacos并按 profile 固化非 Web 运行，只导入本地 Provider/runtime 与 SQLite outbox。真实 Spring 上下文证明首次无配置为 `WAITING_CONFIG`，且不存在中心 DB/service/controller/message bus、Redis、Nacos/Feign Bean。
+
+Sol 独立冻结证据为 Java `27/27`、NODE `37/37`、Skipped=0，三份 Schema 长度 `3853` 且 SHA-256 同为 `52FCC23AE0DF65BE19C902E604611A4078ABF9E89B13EF91E5DC05D088C7A28A`，`compileall`、`git diff --check` 和临时清理通过。门禁 1 的本地 Provider/Profile 子缺口和门禁 2 的 collector 应用子缺口关闭；门禁 2 仍缺 OPEN03-07 iot-node 派发/对账和 OPEN03-08 组合 E2E，继续 `PARTIAL / OPEN`。当前唯一授权切换为 OPEN03-07；Linux owner/GID、真实跨语言锁、directory-fsync、资源/稳定性、Windows 与现场继续 `OPEN-RUNTIME`。
+
+### 19.9 OPEN03-07 本地实现验收（2026-08-17）
+
+iot-node 已实现 typed `CollectorConfigReleaseInternalApi` 拉取/回报、ComputeNode 权威地址校验、固定 HMAC PUT/GET、Agent observed 对账和有界指数退避。canonical 只在单次调用栈短暂存在，不落库/退避/日志；Agent 响应禁重定向并在完整缓冲前限制为 `1 MiB + 1 byte`。401/403/404/409/5xx、timeout、迟到/乱序/异 hash 与 FAILED allowlist 均有确定性测试，iot-node 不产生 `APPLY_TIMEOUT`。生产 job 继续默认关闭，开启时才条件装配 typed Feign/Mapper/signer/service/scheduled job。
+
+Sol 首轮否决反射适配、未装配 job 和事后响应限长；修正后正式 Maven 冻结矩阵 `45/45 PASS`、Failures=0、Errors=0、Skipped=0，独立 reactor compile 与 `git diff --check` 通过。门禁 2 的派发/对账子缺口关闭，只剩 OPEN03-08 组合 E2E，故继续 `PARTIAL / OPEN`；当前由 Sol 细化 OPEN03-08，Luna 未获实现授权。门禁 4、5 及 Linux/资源/Windows/现场资格继续 `OPEN-RUNTIME`。
+
+### 19.2.8 OPEN03-08 v2 联合冻结（2026-08-17）
+
+Sol 已将最后一个本地包冻结为共享 ConfigSnapshot 1.1 golden fixture、loopback 实际 NODE Flask Agent、真实 iot-node 派发/Agent client、真实 collector 本地 Provider 和文件持久 fake release 服务的串行跨进程编排。成功链必须闭合 `PUBLISHED → desired → APPLIED → release APPLIED`；失败候选必须只产生稳定 FAILED、保留上一 active/内存图且不生成候选 history。Java 模块不得增加跨 `*-biz` 依赖。
+
+同包还冻结 `TelemetryOutboxPort` 与 TD-003 `TelemetryStore` 的接口隔离、SQLite 返回前 durable commit/稳定异常、config/outbox host root 相等或嵌套 fail-closed，以及只含 `process/config/serial/center` 四 facet 的健康聚合。OPEN03-08 v2 已授权 GPT-5.6 Luna（max reasoning）实现与测试；完成后仍须 Sol 独立复核，复核前门禁 1、2、3、6 保持原状态，门禁 4、5 与 Linux/资源/Windows/现场资格继续 `OPEN-RUNTIME`。
+
+### 19.2.9 OPEN03-08 首轮合同冲突（2026-08-17）
+
+实现首轮确认 TD-003 §13 的 `TelemetryStore.appendBatch(List<TelemetrySample>)` 与当前 `TelemetryStorePort.writeSample(InboxEnvelope)` 并非同一合同；两个 Store adapter 和 projector 也实际使用逐条接口。该差异不能用“方法名不同所以隔离”解释，因为门禁 6 要求三份 TD 无冲突，且 LC-01 未授权修改 Store 合同。Sol 已停止 Luna，OPEN03-08 转 `BLOCKED-CONTRACT`；上游对齐方案重新冻结前，门禁 1、2、3、6 不关闭，门禁 4、5 继续 `OPEN-RUNTIME`。
+
+### 19.2.10 OPEN03-08A 前置迁移冻结（2026-08-17）
+
+经用户授权，Sol 选择保留 TD-003 批量逐条结果设计，并在本地收敛任务单 §25 冻结 OPEN03-08A。迁移只扩展 `iot-sink-api` Store 类型与批量主方法，把 PostgreSQL/TDengine adapter 和 projector 切换到同序逐条结果；旧单条方法保留一个兼容周期。禁止修改 DDL、Inbox/ACK/Topic、查询或生产开关。OPEN03-08A 已授权 Luna Max，OPEN03-08 暂停；08A 未经 Sol 验收不得关闭门禁 6 或恢复组合 E2E。
+
+### 19.2.11 OPEN03-08A 验收与 OPEN03-08 恢复（2026-08-17）
+
+OPEN03-08A 及凭据日志安全收尾 S1 已由 Sol 验收。真实 PostgreSQL+本地 TDengine 完整冻结矩阵 `34/34 PASS`、Skipped=0，PostgreSQL 测试租户残留 0；S1 日志合同 `2/2 PASS`，真实 TDengine 相关 `7/7 PASS`，凭据/header/wire 输出扫描 0 命中。OPEN03-08 v2 恢复 Luna Max 实现授权；门禁 1、2、3、6 在组合 E2E 验收前仍保持当前状态，运行期门禁继续 OPEN。
+
+评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则，1.0.5 新增 §6.2 事件驱动快照再生语义，1.0.6 登记 T-18 批次 1 落地，1.0.7 登记 V003 持久化资产，1.0.8 登记 ConfigSnapshot 机器合同，1.0.9～1.0.15 完成 V006/V007、对象查询和第四端口闭环，1.0.16 完成首次候选创建原子事务，1.0.17 识别并隔离 ADR-015 首发死循环，1.0.18 完成人工首发与真实 PG 端到端合同，1.0.19 冻结启动组合和灰度顺序。当前 OPEN 还包括 §19.2 所列本地实现/联合冻结缺口，以及实际启用窗口、资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review。

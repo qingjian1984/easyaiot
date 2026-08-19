@@ -10,12 +10,17 @@
 ### 会话暂停检查点（2026-08-14，下一次从此处续作）
 
 - **决策状态**：ADR-017 1.0.0、ADR-018 1.0.0 已由决策所有者接受；LC02A-0 已 `Approved / Frozen`，LC02A-1～4 继续 Blocked。
-- **执行模型门禁**：当前运行环境只暴露 `gpt-5.6-sol`、`gpt-5.6-terra`，Luna Max 不可用；本轮按已获授权由 Sol 完成 LC02A-0 本地实现与定向测试，未将其冒充为 Luna 执行。
+- **执行模型门禁**：当前环境已提供 `gpt-5.6-luna`；Sol 负责架构/范围收敛，本轮已将 OPEN-03 的有界接口、安全和联合审查/本地测试交给 Luna Max（max reasoning）执行。LC02A-0 早前由 Sol 按授权完成，未冒充为 Luna 执行。
 - **仓库凭据治理**：`.gitignore` 已忽略 `NODE/agent.env` 及其本地变体，仅允许 `NODE/agent.env.example`；已执行 `git rm --cached NODE/agent.env`，当前索引为该文件的暂存删除，本地文件仍保留且不得提交或回显。
 - **外部轮换现状**：控制面恢复后，正式 `reset-agent-token?id=1` 对平台节点返回业务拒绝；按授权采用受控 DB fallback。数据库、本地 `NODE/agent.env`、bootstrap 返回值一致，一次性 Agent register/heartbeat 均 `code=0`；旧值已失效且未进入索引。
 - **安全约束**：不在文档、日志或交付说明中回显任何凭据值；仅保留布尔值、节点 ID 与测试结果作为证据。
 - **本次完成门槛**：`.git/index.lock` 已清理，SQL 转储清理已暂存；cached/worktree secret scan 通过，`NODE/agent.env` 不在索引且保持 ignored。部署后/现场/7 天稳定性验证仍保持 `OPEN`。
-- **执行模型说明**：当前运行环境只暴露 `gpt-5.6-sol`、`gpt-5.6-terra`，Luna Max 不可用；LC02A-0 已按已获授权由 Sol 完成，未将其冒充为 Luna 执行。后续若 Luna 仍不可用，需先取得新的明确授权。
+- **人工执行约束（2026-08-16）**：当前仅进行本地开发与合同测试；Linux PTY 端到端、资源压测、Windows 发布资格及其他部署/现场验证暂不执行，保持 `OPEN`，待决策所有者明确要求并提供相应环境后再执行。
+- **执行模型说明（2026-08-16 更新）**：当前环境已提供 Luna Max；本轮按 Sol 的边界拆解，将 TD-001 OPEN-03 的 1～3 审查与本地合同测试交由 Luna Max（max reasoning）执行。第 4 项运行证据按人工要求保持不执行。
+- **OPEN03-04 已由 Sol 验收（2026-08-17）**：NODE collector 专用 HMAC deploy、通用入口 `UNSUPPORTED_GENERIC_DEPLOY` 精确早拒绝、WorkloadSpec/安装 capability allowlist、固定 Compose/关闭默认 Windows 计划已落地。Sol 首次否决 `brokerRef` 丢弃和 project 随 spec 漂移，Luna Max 修正后 Sol 独立执行冻结测试及 NODE 全量 26/26、Skipped=0，Schema 双副本 hash、`compileall`、`git diff --check` 与临时目录清理通过；未启动 Docker/PTY/压测/Windows/现场。
+- **OPEN03-05 已由 Sol 验收、OPEN03-06 v2 已冻结（2026-08-17）**：NODE 已实现 ConfigSnapshot 1.1 严格接收、desired/active/observed/history 状态机、共同 workload 目录、原 canonical bytes、原子替换/恢复与 `02770/0660` 合同。Sol 独立冻结集 56/56 PASS、Skipped=0，Schema 长度 3853、hash `52FCC23AE0DF65BE19C902E604611A4078ABF9E89B13EF91E5DC05D088C7A28A`，`compileall`/`git diff --check`/临时清理通过。Sol 随后识别并修正“Compose 配置目录 `:ro` 但 Java 要写 active/observed”的跨进程冲突，冻结为精确单 workload `rw`、Agent/collector 正式文件分权、共同 record lock 和固定提交顺序。当前唯一授权 OPEN03-06 交 Luna Max；Linux 锁/owner/GID、PTY、压测、Windows 与现场仍不执行。
+- **OPEN03-06 已由 Sol 验收、OPEN03-07 已解锁（2026-08-17）**：collector 本地 Provider、版本原子应用、唯一 RTU 引擎/center bridge 与 SQLite outbox 写入已落地。Sol 首轮否决全包扫描下的伪 profile 隔离，次轮否决测试强制非 Web而生产入口未固化的差异；最终以生产同款 collector CLI 启动真实 Spring 白名单上下文，确认无中心 DB/service/controller/message bus、Redis、Nacos/Feign，首次无配置写 `WAITING_CONFIG`。Sol 独立冻结集 Java 27/27、NODE 37/37、Skipped=0，三份 Schema hash、`compileall`、`git diff --check` 与临时清理通过。当前唯一授权 OPEN03-07；所有运行期资格继续 OPEN。
+- **OPEN03-08A 及 S1 已由 Sol 验收，OPEN03-08 v2 已恢复（2026-08-17）**：OPEN03-08 首批实现暴露 TD-003 §13 批量 Store 与当前逐条代码事实冲突，Sol 否决错误断言后冻结 OPEN03-08A，Luna Max 已完成批量主接口、四状态逐条结果、projector 单次批量调用和两个 adapter 顺序隔离，旧 `writeSample` 仅保留 deprecated bridge。Sol 独立完整冻结矩阵 `34/34 PASS`、Skipped=0，真实 PostgreSQL 残留 0；之后发现并收敛 Apache HTTP DEBUG 凭据头泄露，S1 日志合同 `2/2 PASS`、TDengine 相关 `7/7 PASS`、敏感输出扫描 0 命中。OPEN03-08 v2 已恢复授权 GPT-5.6 Luna（max reasoning）；运行期资格继续 OPEN。
 
 ### LC-02 前置冲突门禁（2026-08-13，OPEN）
 
@@ -27,7 +32,7 @@
 - **Sol 收敛结果**：ConfigSnapshot 升级为 1.1 并由服务端固化产品身份；历史 V2 outbox 只接受中心受控清单回填；ACK 精确订阅集合取“已应用路由 ∪ 未终态 outbox 路由”；V009 使用可空 expand；安全证据由 broker ACL 与 center 注册事实校验分层提供。
 - **新增前置事实**：TD-001 设计的 NODE `/workload/collector/config`、iot-node 发布单派发器和 collector 本地 `PollingConfigProvider` 尚未实现；现有 collector 仍直接读取当前 `DeviceDO.extension`。已拆出 [M1-LC-02A](./M1-LC-02A-Collector版本配置应用链任务单.md)，按认证加固、1.1 发布合同、NODE 原子状态、collector 本地 Provider、iot-node 派发对账五包顺序执行。
 - **安全事实**：现有微服务只透传用户/租户 Header，`iot-node` 还存在全路径放行；NODE 只有可重放的单值 Agent Token，且仓库基线中存在本地凭据文件。已新增 [ADR-018](../../架构决策/电力运维云平台/ADR-018-控制面内部服务与NODE请求认证.md)，把内部服务 HMAC 与节点 HMAC 分域，禁止 token-only 降级；凭据值不得在文档或输出中复述。
-- **当前下一步**：LC02A-0 本地实现、定向测试、凭据轮换和索引清理已完成；现在只推进 TD-001/OPEN-03 的联合评审与证据门禁（Linux PTY、资源压测、Windows 发布资格），未冻结前不得启动 LC02A-1～4 或执行 V009。
+- **当前下一步**：LC02A-0 本地实现、定向测试、凭据轮换和索引清理已完成；当前只保留本地开发/合同测试与文档评审，TD-001/OPEN-03 的 Linux PTY、资源压测、Windows 发布资格等外部证据待人工要求后执行；未冻结前不得启动 LC02A-1～4 或执行 V009。
 - **历史更正**：下方既有记录中的 `/telemetry/ack/...` 只代表当时测试代码事实，不再是目标架构或后续实现授权。
 
 **M1 采集主线编码侧 + 本地验证全部闭环；B 类部署前硬化完成（2026-08-13）**：设备/RS485 → Poller → SQLite Outbox → MQTT QoS1 → 中心 Inbox → TelemetryStore（standard PG / full TDengine）全链路代码实现 + 验证完成；4 项硬化（EMQX 凭证 / MQTT 配置块 / SHA-256 子表名 / 共享 codec + 补零契约修复）见下「编码侧硬化」段。
@@ -265,6 +270,54 @@ TD-005 评审可以与 TD-001～004 的证据准备并行，但任何生产代�
 - 轮换续作（2026-08-15）：控制面恢复后，正式 `reset-agent-token?id=1` 对平台节点返回业务拒绝；按既有授权执行受控 DB fallback。数据库、本地 `agent.env`、bootstrap 返回值一致；一次性 Agent register/heartbeat 均 `code=0`。未启动常驻 Agent；`.git/index.lock` 已清理，清理后的 SQL 已进入待提交索引，索引扫描通过。
 - 暂存状态：仓库锁已清理，SQL 转储清理已进入待提交索引；`NODE/agent.env` 仍只保留在本地受保护文件且不在索引中。
 - 继续门禁：LC02A-1～4 仍 Blocked；现场串口、跨主机网络、NTP、部署后稳定性和 7 天稳定性保持 OPEN，不得从本地测试推断已验证。
+
+## TD-001 OPEN-03 本地接口/安全联合审查（2026-08-16）
+
+本次审查依据项目开发宪法 1.6.0、平台功能计划 1.5.0、TD-001 v1.0.19、TD-001 评审报告和 M1-LC-02A 任务单，仅覆盖当前 Windows 工作区可执行的接口合同、安全约束和文档交叉核对。未启动 LC02A-1～4，未执行 Linux PTY、资源压测、Windows 发布资格、现场或部署后验证。
+
+### 1. 接口冻结审查
+
+- 当前 v1 `CollectorConfigSnapshotContract` 的 canonical UTF-8/hash/长度、生产非空总线、显式采集策略、十进制字段和缺失事实拒绝已有 5/5 定向测试；`CollectorTelemetryWriter`/配置/Profile 依赖 Outbox 的定向测试 5/5。
+- 当前仓库尚无 ConfigSnapshot 1.1 schema、服务端注入 `productIdentification`、类型化 WorkloadSpec 机器合同、release 详情/observed CAS API、NODE `/workload/collector/config` 路由或 LC02A-1～4 的完整状态机/组合 E2E。版本单调、同版同 hash 幂等、同版异 hash/低版本拒绝、乱序回报、失败保留旧 active、回滚生成新版本等仍是待逐包实现证据，不得以 v1 单元合同替代。
+- 当前 `iot-sink` collector 配置仍可从 `IotGatewayConfiguration` 的 RTU 配置注入 `DeviceMapper`、`IotDeviceMessageService` 和 `IotMessageBus`，且 `application-collector.yaml` 启用 `modbus-rtu`；因此“collector 无中心数据库依赖”的 §19 门禁尚未关闭。
+
+### 2. 安全约束冻结审查
+
+- `InternalServiceAuthContractTest` 3/3、`NodeAgentSigningKeyProviderTest` 2/2；`python -m pytest NODE/tests -q --basetemp .codex-tmp\pytest` 为 `3 passed, 1 skipped`。跳过项是因当前环境未安装 Flask 的集成测试，未冒充通过。
+- HMAC canonical request、时间戳/body hash、节点 key Provider、持久 nonce/防重放和 fail-closed secret Provider 的本地可复核部分保持通过；没有回显任何凭据值。
+- 当前 NODE 通用 `/workload/deploy`/`WorkloadManager` 仍接收 `command`、`workDir`、`logDir`、`gpuIds`、`env`/`files`，collector 专用类型拒绝、镜像/路径 allowlist 和固定模板尚未实现。签名保护的 collector 路由当前未实现；认证测试签名请求得到 404 只能证明未回退到 token-only，不能证明配置业务链通过。
+
+### 3. 联合记录与剩余 OPEN
+
+| 范围 | 结论 |
+|---|---|
+| 本地接口/安全合同 | 已执行、可复核；现有 deterministic tests 全部通过或明确 skip，缺失实现保持 OPEN |
+| TD-002/003 交叉形状 | 文档已交叉引用 `TelemetryOutboxPort`、`/var/lib/easyaiot/outbox` 和四 facet 健康摘要；本次未做完整跨 TD 运行 E2E/冻结签字，记为待正式联合冻结 |
+| TD-001 §19 门禁 1/2/3 | 1 OPEN（中心依赖/collector Provider）、2 PARTIAL/OPEN（v1 有证据，v1.1/WorkloadSpec/CAS/状态机缺失）、3 OPEN（通用 deploy 仍可接收任意命令/路径） |
+| TD-001 §19 门禁 4/5 | 按用户授权不执行，Linux PTY、资源/7 天稳定性、Windows 资格继续 OPEN |
+| OPEN-03 | 仍 OPEN；TD-001 继续 `In Review`，不改为 `Approved / Frozen`，LC02A-1～4 继续 `Blocked` |
+
+本次仅更新 TD-001、M1-LC-02A 和本进度记录；未修改业务代码、配置、凭据或测试。工作区临时 pytest 目录已清理。
+
+### Sol 最终复核（2026-08-16）
+
+Sol 已独立核对 Luna Max 的证据并接受其事实结论，正式状态为 `OPEN / NOT_CONVERGED`。门禁 1、3 仍 `OPEN`，门禁 2、6 为 `PARTIAL / OPEN`，门禁 4、5 按人工约束保持 `OPEN-RUNTIME`；TD-001 不升级为 `Approved / Frozen`，LC02A-1～4 不启动。下一次本地续作入口是先拆分并冻结门禁 1～3、6 的实现与合同测试任务单，运行期门禁等待人工明确要求。
+
+### OPEN-03 本地收敛任务冻结（2026-08-16）
+
+Sol 已完成 [M1-TD001-OPEN03 本地收敛实现任务单](./M1-TD001-OPEN03-本地收敛实现任务单.md) 的 OPEN03-01～08 拆分与冻结，顺序为 ConfigSnapshot 1.1 → WorkloadSpec → DEVICE CAS → NODE 专用安全边界 → NODE 配置状态机 → collector 本地 Provider → iot-node 派发 → 跨 TD 组合合同。当前只授权 GPT-5.6 Luna（max reasoning）执行 OPEN03-01；运行期门禁 4、5 继续不执行。
+
+### OPEN03-01 验收与 OPEN03-02 解锁（2026-08-17）
+
+Luna Max 已完成 ConfigSnapshot 1.1 与服务端 `productIdentification` 注入，Sol 独立复核并补跑本地真实 PostgreSQL 合同：Snapshot 10/10、源字段安全 2/2、JDBC 3/3（Skipped=0）、33 模块 compile 和 `git diff --check` 全部通过。OPEN03-01 状态为 `COMPLETE / SOL-ACCEPTED`；门禁 2 仍为 `PARTIAL / OPEN`，当前只解锁 OPEN03-02 WorkloadSpec 机器合同。Linux PTY、资源/稳定性压测和 Windows 资格继续不执行。
+
+### OPEN03-02 验收与 OPEN03-03 解锁（2026-08-17）
+
+Luna Max 已完成 WorkloadSpec 1.0 Schema/DTO/validator/fixture。Sol 首次复核发现并收紧固定配置容器路径与显式 capability 配额，修正后独立测试 12/12、22 模块 reactor、Schema/字段一致性和 `git diff --check` 全部通过。OPEN03-02 状态为 `COMPLETE / SOL-ACCEPTED`；门禁 2 仍为 `PARTIAL / OPEN`，当前只解锁 OPEN03-03 release 详情/observed CAS。运行期门禁 4、5 继续不执行。
+
+### OPEN03-03 验收与 OPEN03-04 解锁（2026-08-17）
+
+Luna Max 已完成 iot-device pending/detail/observed 内部合同和 PostgreSQL CAS。Sol 首次复核发现 ADR-018 动态 `releaseId` 路由无法被静态 allowlist 匹配，并收紧详情读取、未知字段、错 node/workload/version/hash 与相反终态晚到负例；修正后独立测试 Collector 8/8（真实 PostgreSQL 2/2、Skipped=0）、ADR-018 4/4，33 模块 SUCCESS、八类 fixture=0、`git diff --check` PASS。OPEN03-03 状态为 `COMPLETE / SOL-ACCEPTED`；门禁 2 仍为 `PARTIAL / OPEN`，当前只解锁 OPEN03-04 NODE collector 专用部署安全边界。运行期门禁 4、5 继续不执行。
 
 ## 6. 可直接复跑的检查点
 

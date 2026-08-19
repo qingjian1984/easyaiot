@@ -107,7 +107,22 @@
       "Bash(git commit -m 'feat\\(security\\): HMAC signing + replay protection for node agent API *)",
       "Bash(git commit -m 'feat\\(security\\): node-biz signing key provider + request signer \\(Java 侧\\) *)",
       "Bash(git commit -m 'docs\\(m1\\): LC-01/02 收口任务单 + ADR-017/018 + 索引与进度更新 *)",
-      "Bash(git commit -m 'chore\\(deploy\\): env 拆分、Dockerfile 与安装脚本修复 *)"
+      "Bash(git commit -m 'chore\\(deploy\\): env 拆分、Dockerfile 与安装脚本修复 *)",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec web-service sh -c \"grep -B2 -A4 'ai-host' /etc/nginx/nginx.conf | head -20\")",
+      "Bash(mkdir -p /tmp/easyaiot-logs)",
+      "Bash(docker cp *)",
+      "Read(//tmp/easyaiot-logs/**)",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec web-service sh -c \"grep -E 'upstream|server ai-host' /etc/nginx/nginx.conf | head -6; getent hosts ai-host 2>/dev/null || nslookup ai-host 2>/dev/null | tail -3\")",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec web-service sh -c \"wget --timeout=3 -q -O- http://ai-host:5000/health 2>&1 | head -3; echo exit=\\\\$?\")",
+      "Bash(MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-22.04 -- sh -c \"ss -tlnp 2>/dev/null | grep ':5000' | head -3\")",
+      "Bash(grep -iE \"agent.env$|agent.env.local|\\\\.db$|secret\")",
+      "Bash(git commit -m 'feat\\(device\\): collector config snapshot 1.1 + release/observed CAS \\(OPEN03-01/03\\) *)",
+      "Bash(git commit -m 'feat\\(node\\): typed workload spec + dispatch/reconcile \\(OPEN03-02/07\\) *)",
+      "Bash(git commit -m 'feat\\(sink\\): collector local provider + batch telemetry store \\(OPEN03-06/08A\\) *)",
+      "Bash(git commit -m 'feat\\(security\\): internal service auth route extension for collector release API *)",
+      "Bash(git commit -m 'feat\\(node-py\\): collector config state machine + dedicated deploy \\(OPEN03-04/05\\) *)",
+      "Bash(git commit -m 'test\\(open03-08\\): combined E2E golden fixtures + local orchestrator *)",
+      "Bash(git commit -m 'docs\\(m1\\): OPEN03 task sheet v1.4.2 + progress updates \\(01~08A accepted\\) *)"
     ]
   }
 }

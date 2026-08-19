@@ -1,7 +1,7 @@
 # TD-003：遥测 Envelope、中心 Inbox、应用 ACK 与时序投影
 
 > 文档状态：In Review  
-> 版本：1.0.1  
+> 版本：1.0.3
 > 日期：2026-07-31  
 > 适用版本：standard / full；mini 不启用电力遥测可靠链路  
 > 上游：[SPEC-004 1.4.0](../../规格/电力运维云平台/SPEC-004-遥测质量与断点补传.md)、[ADR-003 遥测 ACK](../../架构决策/电力运维云平台/ADR-003-遥测ACK机制.md)、[ADR-006 分档时序存储](../../架构决策/电力运维云平台/ADR-006-mini-standard时序存储方案.md)、[TD-001 1.0.3](./TD-001-collector与NODE部署契约.md)、[TD-002 1.0.2](./TD-002-SQLite-Outbox与恢复迁移.md)
@@ -656,3 +656,9 @@ TD-003 只有同时满足以下条件才可标记 `Approved / Frozen`：
 8. standard/full 只替换 Store adapter/配额，公共代码、API、Topic 和 Schema 无分叉。
 
 门禁未完成前保持 In Review。可以实现验证性 Spike 和测试基础设施，但不得把候选并发、SLO 或 TDengine 行为宣称为生产冻结值。
+
+## 28. OPEN03-08A 批量 Store 对齐记录（2026-08-17）
+
+代码核对发现现有 `TelemetryStorePort.writeSample(InboxEnvelope)` 与 §13 已冻结的批量逐条结果合同漂移。为保持兼容并恢复本 TD 事实，Sol 已在 M1-TD001-OPEN03 任务单 §25 冻结 expand→switch→compat 迁移：新增 `appendBatch(List<TelemetrySample>)` 及四状态逐条结果，projector 与 PostgreSQL/TDengine adapter 切到批量主路径，旧单条方法保留一个兼容周期。该包不修改 DDL、Inbox、ACK、Topic、查询或生产开关；完成证据未通过 Sol 复核前，本 TD 继续 `In Review`。
+
+Sol 已于 2026-08-17 验收该迁移及 S1 凭据日志安全收尾：带真实 PostgreSQL 与本地 TDengine 的冻结矩阵 `34/34 PASS`、Skipped=0，测试租户残留 0；日志合同 `2/2 PASS`，TDengine 相关 `7/7 PASS`，认证头/header/wire/带凭据 URL 输出扫描 0 命中。批量 Store 合同漂移已收敛，但本 TD 其余冻结门禁未全部完成，文档状态仍为 `In Review`。
