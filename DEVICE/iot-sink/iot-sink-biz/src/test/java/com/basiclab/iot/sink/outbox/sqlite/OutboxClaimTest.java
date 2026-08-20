@@ -6,6 +6,7 @@ import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryQuality;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimedEnvelope;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,7 +57,7 @@ class OutboxClaimTest {
 
     @Test
     void claimPendingReturnsClaimed() {
-        outbox.appendBatch(List.of(env("msg-1"), env("msg-2")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1"), env("msg-2")), Duration.ofSeconds(5));
         ClaimBatchResult r = outbox.claimBatch(100, Duration.ofMinutes(5));
         assertTrue(r instanceof ClaimBatchResult.Claimed);
         assertEquals(2, r.envelopes().size());
@@ -64,14 +65,14 @@ class OutboxClaimTest {
 
     @Test
     void claimRespectsMaxCount() {
-        outbox.appendBatch(List.of(env("msg-1"), env("msg-2"), env("msg-3")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1"), env("msg-2"), env("msg-3")), Duration.ofSeconds(5));
         ClaimBatchResult r = outbox.claimBatch(2, Duration.ofMinutes(5));
         assertEquals(2, r.envelopes().size());
     }
 
     @Test
     void claimedEnvelopeContainsCanonicalBytes() {
-        outbox.appendBatch(List.of(env("msg-1")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1")), Duration.ofSeconds(5));
         ClaimBatchResult r = outbox.claimBatch(100, Duration.ofMinutes(5));
         ClaimedEnvelope ce = r.envelopes().get(0);
         assertEquals("msg-1", ce.messageId());
@@ -84,9 +85,13 @@ class OutboxClaimTest {
 
     @Test
     void secondClaimAfterFirstReturnsEmpty() {
-        outbox.appendBatch(List.of(env("msg-1")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1")), Duration.ofSeconds(5));
         outbox.claimBatch(100, Duration.ofMinutes(5));
         ClaimBatchResult r2 = outbox.claimBatch(100, Duration.ofMinutes(5));
         assertTrue(r2 instanceof ClaimBatchResult.Empty, "all PENDING claimed → second claim empty");
+    }
+
+    private TelemetryOutboxBatch batch(TelemetryEnvelope... envelopes) {
+        return new TelemetryOutboxBatch("power-meter", List.of(envelopes));
     }
 }

@@ -5,6 +5,7 @@ import com.basiclab.iot.sink.telemetry.envelope.EnvelopeCanonicalCodec;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryQuality;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
@@ -77,7 +78,8 @@ class SqliteOutboxWriterConcurrencyTest {
                     for (int i = 0; i < perThread; i++) {
                         batch.add(env("msg-" + threadIdx + "-" + i));
                     }
-                    AppendBatchResult r = outbox.appendBatch(batch, Duration.ofSeconds(10));
+                    AppendBatchResult r = outbox.appendBatch(new TelemetryOutboxBatch("power-meter", batch),
+                            Duration.ofSeconds(10));
                     results.merge("stored", r.storedMessageIds().size(), Integer::sum);
                 } finally {
                     latch.countDown();
@@ -94,8 +96,9 @@ class SqliteOutboxWriterConcurrencyTest {
     @RepeatedTest(3)
     void interleavedAppendBatchAndDuplicate() {
         String msgId = "dup-" + UUID.randomUUID();
-        outbox.appendBatch(List.of(env(msgId)), Duration.ofSeconds(5));
-        AppendBatchResult r = outbox.appendBatch(List.of(env(msgId)), Duration.ofSeconds(5));
+        outbox.appendBatch(new TelemetryOutboxBatch("power-meter", List.of(env(msgId))), Duration.ofSeconds(5));
+        AppendBatchResult r = outbox.appendBatch(new TelemetryOutboxBatch("power-meter", List.of(env(msgId))),
+                Duration.ofSeconds(5));
         assertEquals(1, r.duplicateMessageIds().size(), "repeat same messageId → DUPLICATE");
     }
 }

@@ -1,11 +1,11 @@
 # M1-TD001-OPEN03：门禁 1～3、6 本地收敛实现任务单
 
-> 状态：Approved / Frozen（任务边界）  
-> 版本：1.4.2  
+> 状态：Implemented / Verified-Local（门禁 1、2、3、6）
+> 版本：1.4.3
 > 日期：2026-08-16  
 > 架构与冻结：GPT-5.6 Sol  
 > 实现与测试：GPT-5.6 Luna（max reasoning）  
-> 当前授权：`OPEN03-08` v2 实现与 13.6 节全部验收命令已执行通过（2026-08-19，零代码改动；唯一环境修复为本地 Maven 仓库 `iot-common-security` 旧 jar 刷新，Sol 复核需 `-am` 全量构建）；**待 Sol 独立复核**，通过后门禁 1/2/3/6 标 `CLOSED-LOCAL`，门禁 4/5 继续 `OPEN-RUNTIME`
+> 当前授权：OPEN03-01～08A/S1 已全部由 Sol 验收；门禁 1、2、3、6 为 `CLOSED-LOCAL`，门禁 4、5 继续 `OPEN-RUNTIME`；本任务无后续实现授权
 
 ## 1. 目标与结论
 
@@ -61,7 +61,7 @@
 | 6 | OPEN03-06 | 1 | collector 本地 Provider 与 Profile 去中心依赖 | COMPLETE / SOL-ACCEPTED（2026-08-17） |
 | 7 | OPEN03-07 | 2 | iot-node 派发、对账与超时分类 | COMPLETE / SOL-ACCEPTED（2026-08-17） |
 | 8A | OPEN03-08A | 6 | TD-003 批量 TelemetryStore 兼容迁移 | SOL-ACCEPTED（含 S1，2026-08-17） |
-| 8 | OPEN03-08 | 6 | TD-001/002/003 组合合同与联合冻结记录 | FROZEN / LUNA-MAX-AUTHORIZED（2026-08-17） |
+| 8 | OPEN03-08 | 6 | TD-001/002/003 组合合同与联合冻结记录 | COMPLETE / SOL-ACCEPTED（2026-08-20） |
 
 禁止并行实现共享合同。任一包需要扩大文件边界、改变公共契约或修改排除项时必须停止，由 Sol 修订并重新冻结任务单。
 
@@ -488,9 +488,9 @@ Luna 每包必须交付：变更文件、合同差异、已执行命令与精确
 ## 15. 冻结签字
 
 - Sol 决定：门禁 1～3、6 的本地实现任务边界于 2026-08-16 冻结；
-- 当前执行授权：`OPEN03-08` v2 实现与 13.6 节全部验收命令已于 2026-08-19 执行通过（组合 E2E 成功+失败链 PASS、iot-sink 36/36、iot-node 32/32、iot-device 真实 PG 8/8、NODE pytest 58 passed，全部 Skipped=0；`compile`/`compileall`/`git diff --check` OK；零代码改动，唯一环境修复为本地 Maven 仓库 `iot-common-security` 旧 jar 刷新）；
-- Luna 模型要求：`gpt-5.6-luna`，`max reasoning`；
-- 下一状态：Sol 独立重跑复核（建议带 `-am` 全量构建避免旧 jar）；复核通过后将门禁 1/2/3/6 标 `CLOSED-LOCAL`，门禁 4/5 继续 `OPEN-RUNTIME`，TD-001 与 OPEN-03 总体仍不得标为完成。
+- 完整执行证据：2026-08-19 组合 E2E 成功+失败链 PASS、iot-sink 36/36、iot-node 32/32、iot-device 真实 PG 8/8、NODE pytest 58 passed，全部 Skipped=0；`compile`/`compileall`/`git diff --check` OK；
+- Sol 复核：2026-08-20 在后续 TQ 提交后的当前 HEAD 重跑 iot-sink 36/36、iot-node 32/32、NODE 58/58，均为 0 failure/error/skipped；真实 PG 容器当日未运行，2 个 JDBC 用例明确报环境不可用，未冒充通过。验收沿用 2026-08-19 同一 `iot-device/common-security` 代码的真实 PG 2/2、零残留证据，并以 `48c446bf..HEAD` 无相关代码变化证明证据仍适用；
+- 最终状态：门禁 1、2、3、6 标记 `CLOSED-LOCAL`；门禁 4、5 继续 `OPEN-RUNTIME`，TD-001 与 OPEN-03 总体仍不得标为完成。
 
 ## 16. OPEN03-01 Sol 验收记录（2026-08-17）
 
@@ -708,3 +708,11 @@ Sol 在带真实 PostgreSQL/TDengine 的完整冻结矩阵中观测到 Apache Ht
 S1 将 Apache HTTP header/wire logger 固定关闭、implementation logger 固定 WARN；日志合同 `2/2 PASS`，batch+真实 TDengine `7/7 PASS`，对 `Authorization:`、header/wire logger 和带 user/password query URL 的输出扫描均为 0。`rg writeSample` 生产侧只命中 deprecated bridge，`git diff --check` 退出 0（仅已有换行提示）。现恢复 OPEN03-08 v2 的 Luna Max 实现授权；运行期资格仍保持 OPEN。
 
 OPEN03-08A 的回滚只恢复 Store 接口/adapter/projector、日志安全配置与直接测试，不触碰 OPEN03-01～07 或 OPEN03-08 fixture/health/path 草稿。
+
+## 28. OPEN03-08 Sol 最终验收记录（2026-08-20）
+
+结论：`ACCEPTED / VERIFIED-LOCAL`。组合编排器已使用实际 loopback NODE Agent、生产 HMAC/nonce 校验、真实 iot-node 派发客户端和 collector 本地 Provider 完成成功/失败六阶段；成功链闭合到 APPLIED，失败链保持 v1 active/内存图并将 v2 稳定回报 FAILED。跨 TD 合同证明 `TelemetryOutboxPort` 与批量 `TelemetryStorePort` 类型隔离、SQLite 返回前 durable commit、config/outbox 根路径 fail-closed，以及健康摘要仅含 `process/config/serial/center` 四 facet。
+
+冻结证据为：组合 E2E PASS；iot-sink `36/36`、iot-node `32/32`、iot-device `8/8`（其中真实 PostgreSQL `2/2`）、common-security `4/4`、NODE `58/58`，Failures=0、Errors=0、Skipped=0；三模块 compile、Python compileall、敏感输出扫描和 `git diff --check` 均通过。2026-08-20 Sol 在当前 HEAD 再次重跑 iot-sink、iot-node、NODE 合计 `126/126`；当日 Docker daemon 未运行，因此 JDBC 只执行到 6 个纯合同通过、2 个集成用例环境不可用。`48c446bf..HEAD` 影响分析确认 `iot-device`、common-security、iot-node 与 NODE 无代码变化，故保留 2026-08-19 的真实 PG 证据，不把本次环境错误计为通过或失败。
+
+临时 key/replay DB/SQLite/log、pytest 临时目录和测试进程均已清理；生产内部认证、collector 配置派发等开关保持默认关闭。由此门禁 1、2、3、6 统一关闭为 `CLOSED-LOCAL`。Linux PTY/owner/GID/directory-fsync、真实串口、资源与 7 天稳定性、Windows 发布资格及现场验证均未执行，门禁 4、5 继续 `OPEN-RUNTIME`。

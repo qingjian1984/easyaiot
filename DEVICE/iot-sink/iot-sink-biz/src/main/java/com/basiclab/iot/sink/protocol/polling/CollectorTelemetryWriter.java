@@ -5,6 +5,7 @@ import com.basiclab.iot.sink.polling.CollectorConfigSnapshot;
 import com.basiclab.iot.sink.polling.CollectorDevice;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
 
 import java.time.Duration;
@@ -30,13 +31,21 @@ public final class CollectorTelemetryWriter {
                                    Map<String, Object> values, String protocolType) {
         List<TelemetryEnvelope> envelopes = PollingResultMapper.toEnvelopes(
                 device, config, values, protocolType);
-        return outbox.appendBatch(envelopes, enqueueTimeout);
+        if (envelopes.isEmpty()) {
+            return new AppendBatchResult.Success(List.of(), List.of());
+        }
+        return outbox.appendBatch(new TelemetryOutboxBatch(device.getProductIdentification(), envelopes),
+                enqueueTimeout);
     }
 
     /** Collector Profile overload: only the applied local snapshot supplies identity and priority. */
     public AppendBatchResult store(CollectorConfigSnapshot snapshot, CollectorDevice device,
                                    Map<String, Object> values, String protocolType) {
         List<TelemetryEnvelope> envelopes = PollingResultMapper.toEnvelopes(snapshot, device, values, protocolType);
-        return outbox.appendBatch(envelopes, enqueueTimeout);
+        if (envelopes.isEmpty()) {
+            return new AppendBatchResult.Success(List.of(), List.of());
+        }
+        return outbox.appendBatch(new TelemetryOutboxBatch(snapshot.productIdentification(), envelopes),
+                enqueueTimeout);
     }
 }

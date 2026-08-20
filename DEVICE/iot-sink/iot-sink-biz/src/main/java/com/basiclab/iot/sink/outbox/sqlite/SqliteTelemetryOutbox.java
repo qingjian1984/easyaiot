@@ -1,17 +1,16 @@
 package com.basiclab.iot.sink.outbox.sqlite;
 
 import com.basiclab.iot.sink.telemetry.envelope.EnvelopeCanonicalCodec;
-import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.outbox.AckCommand;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.OutboxBackpressureException;
 import com.basiclab.iot.sink.telemetry.outbox.OutboxUnavailableException;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
 
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -37,9 +36,9 @@ public final class SqliteTelemetryOutbox implements TelemetryOutboxPort {
     }
 
     @Override
-    public AppendBatchResult appendBatch(List<TelemetryEnvelope> envelopes, Duration enqueueTimeout) {
+    public AppendBatchResult appendBatch(TelemetryOutboxBatch batch, Duration enqueueTimeout) {
         CompletableFuture<AppendBatchResult> future = new CompletableFuture<>();
-        queue.offer(new OutboxCommand.AppendBatch(envelopes, future), enqueueTimeout);
+        queue.offer(new OutboxCommand.AppendBatch(batch, future), enqueueTimeout);
         try {
             return future.get(DEFAULT_FUTURE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (InterruptedException e) {

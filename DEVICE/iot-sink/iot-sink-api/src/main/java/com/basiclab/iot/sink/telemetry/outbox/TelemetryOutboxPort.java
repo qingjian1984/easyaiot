@@ -3,7 +3,6 @@ package com.basiclab.iot.sink.telemetry.outbox;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 
 import java.time.Duration;
-import java.util.List;
 
 /**
  * TD-001 §9.2 Poller 解耦端口 + TD-002 §9 outbox 接口契约。
@@ -16,13 +15,13 @@ public interface TelemetryOutboxPort {
     /**
      * 追加一批遥测 envelope 到本地 outbox。
      *
-     * @param envelopes     一批 envelope（一次轮询结果）
+     * @param batch          一批 envelope 及其产品路由身份（一次轮询结果）
      * @param enqueueTimeout 入队等待超时（队列满时背压）
      * @return 批次结果（STORED/DUPLICATE/COLLISION 汇总）
      * @throws OutboxBackpressureException 队列满且超时
      * @throws OutboxUnavailableException  存储不可用（损坏/只读/磁盘故障）
      */
-    AppendBatchResult appendBatch(List<TelemetryEnvelope> envelopes, Duration enqueueTimeout);
+    AppendBatchResult appendBatch(TelemetryOutboxBatch batch, Duration enqueueTimeout);
 
     /**
      * Claim 一批待发送 envelope（PENDING → IN_FLIGHT，attempts+1，设租约）。

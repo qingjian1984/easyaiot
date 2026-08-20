@@ -7,16 +7,16 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * TD-002 §7 DDL + §8 PRAGMA migration（V2：claim/ACK 状态机 + gap 表）。
+ * TD-002 §7 DDL + §8 PRAGMA migration（V3：产品路由身份 + claim/ACK 状态机 + gap 表）。
  *
- * <p>V1→V2 补列兼容：新库 CREATE TABLE 直接含全部列；已存在 V1 库通过 ALTER TABLE ADD COLUMN 补列。
+ * <p>V1/V2→V3 补列兼容：新库 CREATE TABLE 直接含全部列；已存在库通过 ALTER TABLE ADD COLUMN 补列。
  */
 public final class SqliteOutboxMigration {
 
     private SqliteOutboxMigration() {
     }
 
-    public static final int USER_VERSION = 2;
+    public static final int USER_VERSION = 3;
 
     public static void migrate(Path dbPath) throws SQLException {
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
@@ -24,6 +24,7 @@ public final class SqliteOutboxMigration {
             applyPragmas(s);
             createTelemetryOutbox(s);
             migrateV1toV2(s);
+            migrateV2toV3(s);
             createTelemetryGap(s);
             createOutboxMeta(s);
             rebuildIndexes(s);
@@ -39,7 +40,7 @@ public final class SqliteOutboxMigration {
         s.execute("PRAGMA trusted_schema=OFF");
     }
 
-    /** telemetry_outbox V2（含 claim/ACK 全列）。 */
+    /** telemetry_outbox V3（含产品路由身份与 claim/ACK 全列）。 */
     private static void createTelemetryOutbox(Statement s) throws SQLException {
         s.execute("CREATE TABLE IF NOT EXISTS telemetry_outbox ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -47,6 +48,7 @@ public final class SqliteOutboxMigration {
                 + "request_id TEXT NOT NULL,"
                 + "tenant_id TEXT NOT NULL,"
                 + "site_code TEXT NOT NULL,"
+                + "product_identification TEXT,"
                 + "device_identification TEXT NOT NULL,"
                 + "property_code TEXT NOT NULL,"
                 + "sequence_no INTEGER NOT NULL CHECK (sequence_no >= 0),"
@@ -93,6 +95,15 @@ public final class SqliteOutboxMigration {
             } catch (SQLException ignored) {
                 // 列已存在（V2 新库或已迁移）
             }
+        }
+    }
+
+    /** V2→V3 additive product identity column; historical rows intentionally remain NULL. */
+    private static void migrateV2toV3(Statement s) {
+        try {
+            s.execute("ALTER TABLE telemetry_outbox ADD COLUMN product_identification TEXT");
+        } catch (SQLException ignored) {
+            // Column already exists (fresh V3 database or a repeated migration).
         }
     }
 

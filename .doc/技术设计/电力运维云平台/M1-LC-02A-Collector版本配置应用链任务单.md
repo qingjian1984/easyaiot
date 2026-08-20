@@ -1,11 +1,11 @@
 # M1-LC-02A：Collector 版本配置应用链任务单
 
-> 状态：LC02A-0 Approved / Frozen；OPEN03 本地收敛任务单 Approved / Frozen；LC02A-1～4 整包仍 Blocked
-> 版本：0.4.9
+> 状态：Implemented / Verified-Local（LC02A-0～4）；运行期资格保持 OPEN
+> 版本：0.5.0
 > 日期：2026-08-13
 > 架构负责人：GPT-5.6 Sol
 > 实现执行者：本任务 Frozen 后，按 02A-0→02A-4 顺序交由 GPT-5.6 Luna（max reasoning）
-> 当前实现授权：OPEN03-08A（含 S1）已由 Sol 验收；OPEN03-08 v2 已恢复授权 Luna Max；OPEN03-01/02/03/04/05/06/07 已由 Sol 验收
+> 当前实现授权：LC02A-0～4 已由 Sol 验收，本任务无后续实现授权；M1-LC-02 已解锁进入 Frozen 执行
 
 ## 1. 为什么必须先做本任务
 
@@ -331,19 +331,19 @@ mvn -f DEVICE/pom.xml -pl iot-device/iot-device-biz,iot-node/iot-node-biz,iot-si
 - 复跑证据（2026-08-15）：在工作区可写临时目录执行 `NODE/tests` 为 `3 passed, 1 skipped`；两个 Java 定向 Maven reactor 均 `BUILD SUCCESS`，分别为 3/3 与 2/2。Maven 使用受控网络补齐依赖，未修改业务代码。
 - 凭据治理：`NODE/agent.env` 不在 Git index 且被 ignore；初始化 SQL 转储中的旧节点令牌已移除；当前旧令牌工作树匹配数为 0。外部轮换与旧值失效已完成，cached/worktree secret scan 均通过；部署后/现场验证仍保持 `OPEN`。
 - 轮换续作：正式 `reset-agent-token?id=1` 对平台节点返回业务拒绝，因此按授权采用受控 DB fallback；数据库、本地受保护文件与 bootstrap 返回值一致，一次性 Agent register/heartbeat 均 `code=0`。`.git/index.lock` 已清理，清理后的 SQL 已进入待提交索引，索引 secret scan 通过。
-- 本地完成状态：LC02A-0 代码与定向测试证据可供复核；LC02A-1～4 继续 Blocked，不能据此宣称现场、跨主机 NTP 或 7 天稳定性已验证。
+- 本地完成状态：LC02A-0～4 已通过 OPEN03-01～08A/S1 的顺序实现与 Sol 验收，状态为 `Implemented / Verified-Local`；不能据此宣称现场、跨主机 NTP 或 7 天稳定性已验证。
 - 人工执行约束（2026-08-16）：当前仅进行本地开发与合同测试；Linux PTY 端到端、资源压测、Windows 发布资格及其他部署/现场验证暂不执行，保持 `OPEN`，待决策所有者明确要求并提供相应环境后再执行。
 - 暂存状态：`.git/index.lock` 已清理；SQL 转储清理已进入待提交索引，cached/worktree secret scan 已复核通过。
 
-- [ ] ADR-017/018 Accepted，TD-001 相关接口/状态机评审关闭，本任务 Frozen；
-- [ ] LC02A-0～4 依次完成且每包独立测试通过；
-- [ ] ConfigSnapshot 1.1 产品身份来自服务端产品事实，1.0 历史 bytes/hash 不变；
-- [ ] Agent 原子状态、HMAC、防重放、版本幂等和 crash 恢复证据齐全；
-- [ ] collector Profile 只读本地版本快照，失败保留上一 active；
-- [ ] 本地组合 E2E 完成 PUBLISHED→APPLIED 与失败保留旧 active 两条链；
-- [ ] diff 证明未修改遥测 outbox/Topic/Inbox/ACK/Store；
-- [ ] 现场与稳定性限制在交付说明中保持 OPEN；
-- [ ] 完成后 M1-LC-02 才可从前置阻塞转入 Frozen 评审。
+- [x] ADR-017/018 Accepted，TD-001 相关本地接口/状态机门禁关闭，本任务 Frozen；
+- [x] LC02A-0～4 依次完成且每包独立测试通过；
+- [x] ConfigSnapshot 1.1 产品身份来自服务端产品事实，1.0 历史 bytes/hash 不变；
+- [x] Agent 原子状态、HMAC、防重放、版本幂等和 crash 恢复证据齐全；
+- [x] collector Profile 只读本地版本快照，失败保留上一 active；
+- [x] 本地组合 E2E 完成 PUBLISHED→APPLIED 与失败保留旧 active 两条链；
+- [x] OPEN03 diff 与跨 TD 合同证明未提前修改遥测 Topic/ACK/Inbox 业务语义；Store 批量合同冲突已通过 OPEN03-08A 正式迁移并验收；
+- [x] 现场与稳定性限制在交付说明中保持 OPEN；
+- [x] M1-LC-02 已从前置阻塞转入 Frozen 执行。
 
 ## 11. 当前 OPEN
 
@@ -351,7 +351,7 @@ mvn -f DEVICE/pom.xml -pl iot-device/iot-device-biz,iot-node/iot-node-biz,iot-si
 |---|---|---|
 | LC02A-OPEN-01 | ADR-017 决策所有者接受 | CLOSED（2026-08-14） |
 | LC02A-OPEN-02 | ADR-018 接受并冻结服务 HMAC、节点 HMAC、密钥 Provider 与轮换合同 | CLOSED-FOR-LC02A-0（2026-08-14；Provider 生产选型仍阻塞激活） |
-| LC02A-OPEN-03 | TD-001 配置 API、状态机、安全参数从 In Review 转为本任务 Frozen 基线 | OPEN / NOT_CONVERGED（Sol 复核，2026-08-16） |
+| LC02A-OPEN-03 | TD-001 配置 API、状态机、安全参数从 In Review 转为本任务 Frozen 基线 | CLOSED-LOCAL（OPEN03-01～08A/S1，Sol 验收 2026-08-20） |
 | LC02A-DECISION-04 | Linux 路径 `/var/lib/easyaiot/collector/{workload}/config`、固定组/GID、2770/0660、精确 bind mount | RESOLVED-DESIGN（安装实现待 Frozen） |
 | LC02A-OPEN-05 | Windows collector 保持 capability 关闭，直至 COM/服务账号/ACL 现场资格另行验证 | OPEN-RUNTIME（不阻塞 Linux 本地实现） |
 | LC02A-OPEN-06 | 已暴露 Agent token 完成外部轮换、旧值失效、Agent 验证与 secret scan | CLOSED-FOR-LC02A-0（DB/local/bootstrap/register/heartbeat 与 cached/worktree scan 已通过；部署后/现场验证仍 OPEN） |
@@ -385,6 +385,14 @@ OPEN03-06 已完成 collector 本地 Provider、原子配置应用、唯一 RTU 
 
 OPEN03-07 已完成 iot-node typed release 派发、节点权威查询、固定 HMAC PUT/GET、observed 对账、稳定错误分类和有界指数退避。Sol 否决反射适配、无 Spring 装配的普通 job 及读取完整响应后才做大小检查；修正后默认开关关闭，开启时形成 typed Feign/Mapper/signer/service/scheduled job Bean 图，响应在完整缓冲前限制为 `1 MiB + 1 byte`。正式 Maven 冻结矩阵 `45/45 PASS`、Skipped=0，独立 compile 与 `git diff --check` 通过。门禁 2 只剩 OPEN03-08 组合 E2E；其 v2 已冻结并授权 Luna Max，运行期资格仍保持 OPEN。
 
-LC02A-0 已满足 Luna Max 无歧义实现条件；LC02A-1～4 仍等待 OPEN-03 与逐包复核。DECISION-04 已完成设计收敛，OPEN-05 是部署后运行期资格，不阻塞 Linux 本地实现。
+LC02A-0～4 已满足并完成 Luna Max 无歧义顺序实现与 Sol 逐包复核。DECISION-04 已完成设计收敛，OPEN-05 是部署后运行期资格，不阻塞 M1-LC-02 的本地实现。
+
+### Sol 最终复核与 LC-02 解锁（2026-08-20）
+
+2026-08-16 的 `NOT_CONVERGED` 结论作为历史审查记录保留，但已被 OPEN03-01～08A/S1 的后续实现和本节结论取代。ConfigSnapshot 1.1、WorkloadSpec、release/observed CAS、NODE 专用安全边界与原子状态、collector 本地 Provider、iot-node 派发对账以及组合 E2E 均已完成；TD-001 门禁 1、2、3、6 为 `CLOSED-LOCAL`。
+
+最终证据包括组合成功/失败链、iot-sink `36/36`、iot-node `32/32`、iot-device `8/8`（真实 PostgreSQL `2/2`）、common-security `4/4`、NODE `58/58`，全部 0 failure/error/skipped；2026-08-20 当前 HEAD 再跑 iot-sink、iot-node、NODE 合计 `126/126`。当日 Docker daemon 未运行，未重复执行真实 PG；相关实现自 2026-08-19 的真实 PG 证据后无变化。临时测试目录和生成物已清理。
+
+据此 LC02A 状态转为 `Implemented / Verified-Local`，LC02A-OPEN-03 关闭，M1-LC-02 的前置阻塞解除。Linux PTY/真实串口、owner/GID/directory-fsync、资源与 7 天稳定性、Windows 发布资格、跨主机 NTP 和现场验证仍为 `OPEN-RUNTIME`，不随本地解锁关闭。
 
 > 2026-08-14 历史暂停记录（已由 2026-08-15 执行记录取代）：当时环境未提供 GPT-5.6 Luna，LC02A-0 尚未开始；控制面未启动，外部轮换暂缓。现已完成 LC02A-0 本地实现、定向测试、受控轮换与索引清理。恢复入口见 [M1 SDD 进度与续作入口](./M1-SDD进度与续作入口.md)。

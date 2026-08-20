@@ -4,6 +4,7 @@ import com.basiclab.iot.sink.telemetry.envelope.DataPriority;
 import com.basiclab.iot.sink.telemetry.envelope.EnvelopeCanonicalCodec;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryQuality;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,7 +60,7 @@ class SqliteOutboxDurabilityTest {
 
     @Test
     void committedDataPersistAfterReopen(@TempDir Path dir2) throws Exception {
-        outbox.appendBatch(List.of(env("msg-1"), env("msg-2")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1"), env("msg-2")), Duration.ofSeconds(5));
         outbox.shutdown();
         outbox = null;
 
@@ -91,7 +92,7 @@ class SqliteOutboxDurabilityTest {
 
     @Test
     void integrityCheckOk() throws Exception {
-        outbox.appendBatch(List.of(env("msg-1")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1")), Duration.ofSeconds(5));
         outbox.shutdown();
         outbox = null;
         Path db = dir.resolve("outbox.db");
@@ -102,5 +103,9 @@ class SqliteOutboxDurabilityTest {
                 assertEquals("ok", rs.getString(1), "integrity_check = ok");
             }
         }
+    }
+
+    private TelemetryOutboxBatch batch(TelemetryEnvelope... envelopes) {
+        return new TelemetryOutboxBatch("power-meter", List.of(envelopes));
     }
 }

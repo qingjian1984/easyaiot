@@ -1,11 +1,10 @@
 package com.basiclab.iot.sink.outbox.sqlite;
 
-import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.outbox.AckCommand;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -16,7 +15,7 @@ public sealed interface OutboxCommand permits OutboxCommand.AppendBatch, OutboxC
         OutboxCommand.CleanupAcked, OutboxCommand.Checkpoint {
 
     record AppendBatch(
-            List<TelemetryEnvelope> envelopes,
+            TelemetryOutboxBatch batch,
             CompletableFuture<AppendBatchResult> future
     ) implements OutboxCommand {
     }

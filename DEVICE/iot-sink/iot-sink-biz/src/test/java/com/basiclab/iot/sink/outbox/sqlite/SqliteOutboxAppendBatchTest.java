@@ -5,6 +5,7 @@ import com.basiclab.iot.sink.telemetry.envelope.EnvelopeCanonicalCodec;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryQuality;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,8 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -55,7 +58,7 @@ class SqliteOutboxAppendBatchTest {
 
     @Test
     void newEnvelopeStored() {
-        AppendBatchResult r = outbox.appendBatch(List.of(env("msg-1", "220.5")), Duration.ofSeconds(5));
+        AppendBatchResult r = outbox.appendBatch(batch(env("msg-1", "220.5")), Duration.ofSeconds(5));
         assertEquals(1, r.storedMessageIds().size());
         assertTrue(r.storedMessageIds().contains("msg-1"));
         assertEquals(0, r.duplicateMessageIds().size());
@@ -63,8 +66,8 @@ class SqliteOutboxAppendBatchTest {
 
     @Test
     void duplicateSameHashSkipped() {
-        outbox.appendBatch(List.of(env("msg-1", "220.5")), Duration.ofSeconds(5));
-        AppendBatchResult r = outbox.appendBatch(List.of(env("msg-1", "220.5")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1", "220.5")), Duration.ofSeconds(5));
+        AppendBatchResult r = outbox.appendBatch(batch(env("msg-1", "220.5")), Duration.ofSeconds(5));
         assertEquals(0, r.storedMessageIds().size());
         assertEquals(1, r.duplicateMessageIds().size());
         assertTrue(r.duplicateMessageIds().contains("msg-1"));
@@ -72,15 +75,17 @@ class SqliteOutboxAppendBatchTest {
 
     @Test
     void collisionDifferentHashRollsBack() {
-        outbox.appendBatch(List.of(env("msg-1", "220.5")), Duration.ofSeconds(5));
-        AppendBatchResult r = outbox.appendBatch(List.of(env("msg-1", "221.0")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1", "220.5")), Duration.ofSeconds(5));
+        AppendBatchResult r = outbox.appendBatch(batch(env("msg-1", "221.0")), Duration.ofSeconds(5));
+        assertInstanceOf(AppendBatchResult.Collision.class, r);
         assertEquals(0, r.storedMessageIds().size());
         assertEquals(0, r.duplicateMessageIds().size());
+        assertEquals(List.of("msg-1"), r.collisionMessageIds());
     }
 
     @Test
     void batchMultipleEnvelopesAllStored() {
-        AppendBatchResult r = outbox.appendBatch(List.of(
+        AppendBatchResult r = outbox.appendBatch(batch(
                 env("msg-1", "220.5"),
                 env("msg-2", "221.0"),
                 env("msg-3", "222.0")
@@ -89,9 +94,12 @@ class SqliteOutboxAppendBatchTest {
     }
 
     @Test
-    void emptyBatchReturnsEmpty() {
-        AppendBatchResult r = outbox.appendBatch(List.of(), Duration.ofSeconds(5));
-        assertEquals(0, r.storedMessageIds().size());
-        assertEquals(0, r.duplicateMessageIds().size());
+    void emptyBatchIsRejectedAtContractBoundary() {
+        assertThrows(IllegalArgumentException.class,
+                () -> outbox.appendBatch(new TelemetryOutboxBatch("power-meter", List.of()), Duration.ofSeconds(5)));
+    }
+
+    private TelemetryOutboxBatch batch(TelemetryEnvelope... envelopes) {
+        return new TelemetryOutboxBatch("power-meter", List.of(envelopes));
     }
 }

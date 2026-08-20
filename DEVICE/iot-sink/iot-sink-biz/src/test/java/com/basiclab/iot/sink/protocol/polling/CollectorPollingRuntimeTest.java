@@ -5,6 +5,7 @@ import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.outbox.AckCommand;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
 import com.basiclab.iot.sink.protocol.modbus.IotModbusRtuPollingProtocol;
 import org.junit.jupiter.api.Test;
@@ -86,10 +87,11 @@ class CollectorPollingRuntimeTest {
         private List<TelemetryEnvelope> envelopes = List.of();
 
         @Override
-        public AppendBatchResult appendBatch(List<TelemetryEnvelope> envelopes, Duration enqueueTimeout) {
+        public AppendBatchResult appendBatch(TelemetryOutboxBatch batch, Duration enqueueTimeout) {
             batches++;
-            this.envelopes = List.copyOf(envelopes);
-            return new AppendBatchResult.Success(envelopes.stream().map(TelemetryEnvelope::messageId).toList(), List.of());
+            this.envelopes = List.copyOf(batch.envelopes());
+            return new AppendBatchResult.Success(batch.envelopes().stream()
+                    .map(TelemetryEnvelope::messageId).toList(), List.of());
         }
 
         @Override

@@ -1,7 +1,7 @@
 # TD-001：collector Profile 与 NODE 部署契约
 
 > TD ID：POWER-TD-001  
-> 版本：1.0.28
+> 版本：1.0.29
 > 状态：In Review  
 > 日期：2026-08-04  
 > 上游需求：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)  
@@ -696,4 +696,10 @@ Sol 已将最后一个本地包冻结为共享 ConfigSnapshot 1.1 golden fixture
 
 OPEN03-08A 及凭据日志安全收尾 S1 已由 Sol 验收。真实 PostgreSQL+本地 TDengine 完整冻结矩阵 `34/34 PASS`、Skipped=0，PostgreSQL 测试租户残留 0；S1 日志合同 `2/2 PASS`，真实 TDengine 相关 `7/7 PASS`，凭据/header/wire 输出扫描 0 命中。OPEN03-08 v2 恢复 Luna Max 实现授权；门禁 1、2、3、6 在组合 E2E 验收前仍保持当前状态，运行期门禁继续 OPEN。
 
-评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则，1.0.5 新增 §6.2 事件驱动快照再生语义，1.0.6 登记 T-18 批次 1 落地，1.0.7 登记 V003 持久化资产，1.0.8 登记 ConfigSnapshot 机器合同，1.0.9～1.0.15 完成 V006/V007、对象查询和第四端口闭环，1.0.16 完成首次候选创建原子事务，1.0.17 识别并隔离 ADR-015 首发死循环，1.0.18 完成人工首发与真实 PG 端到端合同，1.0.19 冻结启动组合和灰度顺序。当前 OPEN 还包括 §19.2 所列本地实现/联合冻结缺口，以及实际启用窗口、资源数值、超时数值和 Windows 发布资格。TD 状态保持 In Review。
+### 19.2.12 OPEN03-08 最终验收与本地门禁结论（2026-08-20）
+
+OPEN03-08 组合成功/失败链、跨 TD 接口隔离、SQLite durability、路径隔离和四 facet 健康聚合已由 Sol 验收。完整证据为 iot-sink `36/36`、iot-node `32/32`、iot-device `8/8`（真实 PostgreSQL `2/2`）、common-security `4/4`、NODE `58/58`，全部 0 failure/error/skipped；当前 HEAD 再跑 iot-sink、iot-node、NODE 合计 `126/126`。2026-08-20 Docker daemon 未运行，当前 JDBC 重跑中的 2 个集成用例明确为环境不可用；相关代码自 2026-08-19 真实 PG 通过后未变化，故沿用该次真实证据，不把本次环境错误冒充通过。
+
+门禁 1、2、3、6 现统一为 `CLOSED-LOCAL`。门禁 4、5 以及 Linux PTY/owner/GID/directory-fsync、真实串口、资源与 7 天稳定性、Windows 发布资格和现场验证继续 `OPEN-RUNTIME`。因此本 TD 仍为 `In Review`，不得解释为生产资格完成；但 LC02A 的本地版本配置应用链前置已满足，可转 `Implemented / Verified-Local` 并进入 M1-LC-02 冻结执行。
+
+评审报告 T01-01～20 的设计语义已在 1.0.1 处理，1.0.2 与 TD-002 对齐 `TelemetryOutboxPort`，1.0.3 与 TD-003 对齐快照中的 `canonicalizationVersion/siteCode/dataPriority`，1.0.4 将示例 `propertyCode` 对齐 SPEC-001/TD-005 的 ASCII 小写连字符规则，1.0.5 新增 §6.2 事件驱动快照再生语义，1.0.6 登记 T-18 批次 1 落地，1.0.7 登记 V003 持久化资产，1.0.8 登记 ConfigSnapshot 机器合同，1.0.9～1.0.15 完成 V006/V007、对象查询和第四端口闭环，1.0.16 完成首次候选创建原子事务，1.0.17 识别并隔离 ADR-015 首发死循环，1.0.18 完成人工首发与真实 PG 端到端合同，1.0.19 冻结启动组合和灰度顺序，1.0.20～1.0.29 完成 OPEN03 本地实现与联合验收。当前 OPEN 只保留实际启用窗口、Linux/串口/文件系统运行资格、资源与稳定性数值、Windows 发布资格和现场证据；TD 状态保持 In Review。

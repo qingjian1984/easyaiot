@@ -9,6 +9,7 @@ import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimedEnvelope;
 import com.basiclab.iot.sink.telemetry.outbox.OutboxUnavailableException;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -27,18 +28,20 @@ import java.util.List;
 final class SqliteOutboxWriter extends Thread {
 
     private static final String INSERT_SQL = "INSERT INTO telemetry_outbox"
-            + "(message_id, request_id, tenant_id, site_code, device_identification,"
+            + "(message_id, request_id, tenant_id, site_code, product_identification, device_identification,"
             + " property_code, sequence_no, collected_at_ms, data_priority, priority_rank,"
             + " envelope, content_sha256, envelope_size, status, delivery_class,"
             + " created_at_ms, updated_at_ms, config_version)"
-            + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
-    private static final String SELECT_HASH_SQL = "SELECT content_sha256 FROM telemetry_outbox WHERE message_id = ?";
+    private static final String SELECT_EXISTING_SQL =
+            "SELECT content_sha256, product_identification FROM telemetry_outbox WHERE message_id = ?";
 
     private static final String CLAIM_SELECT_SQL = "SELECT id, message_id, envelope, content_sha256,"
             + " tenant_id, site_code, device_identification, property_code"
             + " FROM telemetry_outbox"
             + " WHERE status = 'PENDING'"
+            + " AND product_identification IS NOT NULL"
             + " AND (next_retry_at_ms IS NULL OR next_retry_at_ms <= ?)"
             + " ORDER BY priority_rank ASC, delivery_class ASC, created_at_ms ASC, id ASC"
             + " LIMIT ?";
@@ -87,7 +90,7 @@ final class SqliteOutboxWriter extends Thread {
                 try {
                     OutboxCommand cmd = queue.take();
                     if (cmd instanceof OutboxCommand.AppendBatch ab) {
-                        ab.future().complete(executeAppendBatch(ab.envelopes()));
+                        ab.future().complete(executeAppendBatch(ab.batch()));
                     } else if (cmd instanceof OutboxCommand.Claim c) {
                         c.future().complete(executeClaim(c.maxCount(), c.leaseMs()));
                     } else if (cmd instanceof OutboxCommand.ApplyAck aa) {
@@ -124,10 +127,8 @@ final class SqliteOutboxWriter extends Thread {
 
     // ==================== appendBatch (P1-T1) ====================
 
-    private AppendBatchResult executeAppendBatch(List<TelemetryEnvelope> envelopes) {
-        if (envelopes.isEmpty()) {
-            return new AppendBatchResult.Success(List.of(), List.of());
-        }
+    private AppendBatchResult executeAppendBatch(TelemetryOutboxBatch batch) {
+        List<TelemetryEnvelope> envelopes = batch.envelopes();
         List<String> stored = new ArrayList<>();
         List<String> duplicates = new ArrayList<>();
         try {
@@ -135,16 +136,17 @@ final class SqliteOutboxWriter extends Thread {
                 EnvelopeCanonicalCodec.CanonicalEnvelope canonical = codec.canonicalize(env);
                 byte[] bytes = canonical.canonicalBytes();
                 long now = System.currentTimeMillis();
-                String existingHash = queryExistingHash(env.messageId());
-                if (existingHash != null) {
-                    if (existingHash.equals(canonical.contentSha256())) {
+                ExistingEnvelope existing = queryExisting(env.messageId());
+                if (existing != null) {
+                    if (existing.contentSha256().equals(canonical.contentSha256())
+                            && batch.productIdentification().equals(existing.productIdentification())) {
                         duplicates.add(env.messageId());
                         continue;
                     }
                     connection.rollback();
-                    return new AppendBatchResult.Success(List.of(), List.of());
+                    return new AppendBatchResult.Collision(List.of(env.messageId()));
                 }
-                insertEnvelope(env, bytes, canonical.contentSha256(), now);
+                insertEnvelope(batch.productIdentification(), env, bytes, canonical.contentSha256(), now);
                 stored.add(env.messageId());
             }
             connection.commit();
@@ -158,35 +160,37 @@ final class SqliteOutboxWriter extends Thread {
         }
     }
 
-    private String queryExistingHash(String messageId) throws SQLException {
-        try (PreparedStatement q = connection.prepareStatement(SELECT_HASH_SQL)) {
+    private ExistingEnvelope queryExisting(String messageId) throws SQLException {
+        try (PreparedStatement q = connection.prepareStatement(SELECT_EXISTING_SQL)) {
             q.setString(1, messageId);
             try (ResultSet rs = q.executeQuery()) {
-                return rs.next() ? rs.getString(1) : null;
+                return rs.next() ? new ExistingEnvelope(rs.getString(1), rs.getString(2)) : null;
             }
         }
     }
 
-    private void insertEnvelope(TelemetryEnvelope env, byte[] bytes, String sha256, long now) throws SQLException {
+    private void insertEnvelope(String productIdentification, TelemetryEnvelope env, byte[] bytes,
+                                String sha256, long now) throws SQLException {
         try (PreparedStatement p = connection.prepareStatement(INSERT_SQL)) {
             p.setString(1, env.messageId());
             p.setString(2, env.requestId());
             p.setString(3, env.tenantId());
             p.setString(4, env.siteCode());
-            p.setString(5, env.deviceIdentification());
-            p.setString(6, env.propertyCode());
-            p.setLong(7, env.sequence());
-            p.setLong(8, now);
-            p.setString(9, env.dataPriority().name());
-            p.setInt(10, env.dataPriority().rank());
-            p.setBytes(11, bytes);
-            p.setString(12, sha256);
-            p.setInt(13, bytes.length);
-            p.setString(14, "PENDING");
-            p.setString(15, "REALTIME");
-            p.setLong(16, now);
+            p.setString(5, productIdentification);
+            p.setString(6, env.deviceIdentification());
+            p.setString(7, env.propertyCode());
+            p.setLong(8, env.sequence());
+            p.setLong(9, now);
+            p.setString(10, env.dataPriority().name());
+            p.setInt(11, env.dataPriority().rank());
+            p.setBytes(12, bytes);
+            p.setString(13, sha256);
+            p.setInt(14, bytes.length);
+            p.setString(15, "PENDING");
+            p.setString(16, "REALTIME");
             p.setLong(17, now);
-            p.setLong(18, env.configVersion());
+            p.setLong(18, now);
+            p.setLong(19, env.configVersion());
             p.executeUpdate();
         }
     }
@@ -420,5 +424,8 @@ final class SqliteOutboxWriter extends Thread {
             } catch (SQLException ignore) {
             }
         }
+    }
+
+    private record ExistingEnvelope(String contentSha256, String productIdentification) {
     }
 }

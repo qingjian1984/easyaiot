@@ -2,6 +2,7 @@ package com.basiclab.iot.sink.config;
 
 import com.basiclab.iot.sink.protocol.polling.CollectorTelemetryWriter;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Profile;
@@ -27,10 +28,10 @@ class CollectorTelemetryConfigurationTest {
         TelemetryOutboxPort outbox = new TelemetryOutboxPort() {
             @Override
             public AppendBatchResult appendBatch(
-                    java.util.List<com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope> envelopes,
+                    TelemetryOutboxBatch batch,
                     java.time.Duration timeout) {
                 return new AppendBatchResult.Success(
-                        envelopes.stream().map(e -> e.messageId()).toList(), List.of());
+                        batch.envelopes().stream().map(e -> e.messageId()).toList(), List.of());
             }
             @Override
             public com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult claimBatch(int maxCount, java.time.Duration lease) {

@@ -7,6 +7,7 @@ import com.basiclab.iot.sink.telemetry.envelope.TelemetryQuality;
 import com.basiclab.iot.sink.telemetry.outbox.AckCommand;
 import com.basiclab.iot.sink.telemetry.outbox.AckResultCode;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,7 +75,7 @@ class OutboxStateMachineTest {
 
     @Test
     void acceptedDuribleTransitionsToAcked() throws Exception {
-        outbox.appendBatch(List.of(env("msg-1")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1")), Duration.ofSeconds(5));
         outbox.claimBatch(100, Duration.ofMinutes(5));
         outbox.applyAck(new AckCommand("msg-1", AckResultCode.ACCEPTED_DURABLE, "OK", System.currentTimeMillis()));
         Thread.sleep(200);
@@ -83,7 +84,7 @@ class OutboxStateMachineTest {
 
     @Test
     void duplicateTransitionsToAcked() throws Exception {
-        outbox.appendBatch(List.of(env("msg-1")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1")), Duration.ofSeconds(5));
         outbox.claimBatch(100, Duration.ofMinutes(5));
         outbox.applyAck(new AckCommand("msg-1", AckResultCode.DUPLICATE, "DUP", System.currentTimeMillis()));
         Thread.sleep(200);
@@ -92,7 +93,7 @@ class OutboxStateMachineTest {
 
     @Test
     void rejectedRetryableBackToPending() throws Exception {
-        outbox.appendBatch(List.of(env("msg-1")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1")), Duration.ofSeconds(5));
         outbox.claimBatch(100, Duration.ofMinutes(5));
         outbox.applyAck(new AckCommand("msg-1", AckResultCode.REJECTED_RETRYABLE, "BUSY", System.currentTimeMillis()));
         Thread.sleep(200);
@@ -101,7 +102,7 @@ class OutboxStateMachineTest {
 
     @Test
     void rejectedFinalToDeadLetterWithGap() throws Exception {
-        outbox.appendBatch(List.of(env("msg-1")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1")), Duration.ofSeconds(5));
         outbox.claimBatch(100, Duration.ofMinutes(5));
         outbox.applyAck(new AckCommand("msg-1", AckResultCode.REJECTED_FINAL, "REJECTED", System.currentTimeMillis()));
         Thread.sleep(200);
@@ -111,7 +112,7 @@ class OutboxStateMachineTest {
 
     @Test
     void unknownAckIncrementsCount() throws Exception {
-        outbox.appendBatch(List.of(env("msg-1")), Duration.ofSeconds(5));
+        outbox.appendBatch(batch(env("msg-1")), Duration.ofSeconds(5));
         outbox.claimBatch(100, Duration.ofMinutes(5));
         for (int i = 0; i < 12; i++) {
             outbox.applyAck(new AckCommand("msg-1", AckResultCode.ACCEPTED_DURABLE,
@@ -122,5 +123,9 @@ class OutboxStateMachineTest {
         // 12 次 ACCEPTED_DURABLE 应直接 ACKED（合法 code）。测试 unknown 需要实际修改 Writer 逻辑。
         // 此测试验证合法 ACCEPTED → ACKED（幂等）
         assertEquals("ACKED", statusOf("msg-1"));
+    }
+
+    private TelemetryOutboxBatch batch(TelemetryEnvelope... envelopes) {
+        return new TelemetryOutboxBatch("power-meter", List.of(envelopes));
     }
 }
