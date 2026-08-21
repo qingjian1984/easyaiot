@@ -4,6 +4,7 @@ import com.basiclab.iot.common.core.context.TenantContextHolder;
 import com.basiclab.iot.common.domain.CommonResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,10 +22,15 @@ import java.util.List;
  * PRD §4.5 遥测查询/导出 API（TD-003 §16）。tenantId 一律取登录态（fail-closed），
  * 客户端传入的租户字段一律忽略；配额超限返回稳定码 TELEMETRY_QUERY_QUOTA_EXCEEDED。
  *
- * <p>由 {@link TelemetryQueryAutoConfiguration} 条件装配（easyaiot.telemetry.query.enabled，
- * 默认关闭）；类上不加 @RestController 注解以避免组件扫描绕过开关。</p>
+ * <p>由组件扫描注册（center 配置扫描 com.basiclab.iot），类级
+ * {@code @ConditionalOnProperty} 与 {@link TelemetryQueryAutoConfiguration} 同开关
+ * （easyaiot.telemetry.query.enabled，默认关闭）——@RestController 必须在类上
+ * 才会被 MVC 注册映射，因此用注解条件而非 @Bean 装配。</p>
  */
 @Tag(name = "遥测查询")
+@RestController
+@ConditionalOnProperty(name = "easyaiot.telemetry.query.enabled", havingValue = "true",
+        matchIfMissing = false)
 @RequestMapping("/telemetry")
 public class TelemetryQueryController {
 

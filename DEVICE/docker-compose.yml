@@ -411,6 +411,8 @@ services:
       # NFS 共享媒体（容器内固定挂载点 /mnt/easyaiot-media，与 volume 目标路径一致）
       - BASICLAB_MEDIA_MOUNT_ROOT=/mnt/easyaiot-media
       - ALERT_IMAGES_BASE_DIR=/mnt/easyaiot-media/alert_images
+      # PRD §4.5 遥测查询/导出（V010 已落库，standard/full 启用；mini fail-closed 不启用）
+      - EASYAIOT_TELEMETRY_QUERY_ENABLED=${EASYAIOT_TELEMETRY_QUERY_ENABLED:-false}
       # SkyWalking配置（如需要，请取消注释并配置）
       # - JAVA_TOOL_OPTIONS=-javaagent:/data/skywalking/skywalking-agent/skywalking-agent.jar
       # - SW_AGENT_NAME=iot-sink
