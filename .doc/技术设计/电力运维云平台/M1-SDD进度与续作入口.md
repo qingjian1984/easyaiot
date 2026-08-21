@@ -1,7 +1,7 @@
 # M1 SDD 进度与续作入口
 
 > 检查点日期：2026-08-22
-> Git 分支：`cfdqiot`（OPEN03/TQ/V010 既有提交已推送 origin；LC02-01A / R1 / 04A 代码测试及 04B 冻结文档已纳入本地检查点提交；04B 实现、测试与验收记录尚未提交）
+> Git 分支：`cfdqiot`（LC02-04C～LC02-06 代码、测试与 Sol 验收记录已纳入本地检查点 `fb75dbad`；该检查点尚未推送 origin）
 > 当前阶段：OPEN03 门禁 1/2/3/6 已由 Sol 关闭为 CLOSED-LOCAL；LC02A-0～4 Verified-Local；M1-LC-02 已 Approved / Frozen；LC02-01A / R1 / 04A / 04B / 04C-1 / 04C-2 / 05 / 06 已 COMPLETE / SOL-ACCEPTED；当前实现授权归零
 > 说明：本文件用于下次会话恢复上下文；状态以各正式文档为准
 
