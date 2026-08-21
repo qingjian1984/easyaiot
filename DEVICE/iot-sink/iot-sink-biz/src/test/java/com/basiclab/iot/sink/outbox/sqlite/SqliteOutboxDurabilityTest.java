@@ -105,6 +105,35 @@ class SqliteOutboxDurabilityTest {
         }
     }
 
+    @Test
+    void startupOwnsLockBeforeMigrationAndReleasesItAfterWriterExit(@TempDir Path directory)
+            throws Exception {
+        Path db = directory.resolve("startup-only.db");
+        SqliteTelemetryOutbox started = new SqliteTelemetryOutbox(
+                db, new EnvelopeCanonicalCodec(), 8);
+        try {
+            try (OutboxFileLock ignored = new OutboxFileLock(
+                    directory.resolve("collector-outbox.lock"))) {
+                throw new AssertionError("running outbox must own collector lock");
+            }
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().startsWith("OUTBOX_ALREADY_OWNED"));
+        } finally {
+            started.shutdown();
+        }
+
+        try (OutboxFileLock reopened = new OutboxFileLock(
+                directory.resolve("collector-outbox.lock"))) {
+            // shutdown waits for writer termination before releasing the lock
+        }
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + db.toAbsolutePath());
+             Statement s = c.createStatement();
+             ResultSet rs = s.executeQuery("PRAGMA user_version")) {
+            assertTrue(rs.next());
+            assertEquals(SqliteOutboxMigration.USER_VERSION, rs.getInt(1));
+        }
+    }
+
     private TelemetryOutboxBatch batch(TelemetryEnvelope... envelopes) {
         return new TelemetryOutboxBatch("power-meter", List.of(envelopes));
     }

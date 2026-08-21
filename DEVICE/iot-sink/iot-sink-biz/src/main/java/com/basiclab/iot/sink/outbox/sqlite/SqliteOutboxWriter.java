@@ -10,6 +10,7 @@ import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimedEnvelope;
 import com.basiclab.iot.sink.telemetry.outbox.OutboxUnavailableException;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryRoute;
 
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -20,6 +21,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeSet;
 
 /**
  * TD-002 §8 单 writer 线程。所有写 SQL 串行化在此线程。
@@ -38,13 +40,19 @@ final class SqliteOutboxWriter extends Thread {
             "SELECT content_sha256, product_identification FROM telemetry_outbox WHERE message_id = ?";
 
     private static final String CLAIM_SELECT_SQL = "SELECT id, message_id, envelope, content_sha256,"
-            + " tenant_id, site_code, device_identification, property_code"
+            + " tenant_id, site_code, product_identification, device_identification, property_code"
             + " FROM telemetry_outbox"
             + " WHERE status = 'PENDING'"
             + " AND product_identification IS NOT NULL"
             + " AND (next_retry_at_ms IS NULL OR next_retry_at_ms <= ?)"
             + " ORDER BY priority_rank ASC, delivery_class ASC, created_at_ms ASC, id ASC"
             + " LIMIT ?";
+
+    private static final String UNFINISHED_ROUTES_SELECT_SQL =
+            "SELECT product_identification, device_identification"
+                    + " FROM telemetry_outbox"
+                    + " WHERE status IN ('PENDING', 'IN_FLIGHT')"
+                    + " AND product_identification IS NOT NULL";
 
     private static final String CLAIM_UPDATE_SQL = "UPDATE telemetry_outbox"
             + " SET status = 'IN_FLIGHT', attempts = attempts + 1,"
@@ -92,7 +100,9 @@ final class SqliteOutboxWriter extends Thread {
                     if (cmd instanceof OutboxCommand.AppendBatch ab) {
                         ab.future().complete(executeAppendBatch(ab.batch()));
                     } else if (cmd instanceof OutboxCommand.Claim c) {
-                        c.future().complete(executeClaim(c.maxCount(), c.leaseMs()));
+                        completeClaim(c);
+                    } else if (cmd instanceof OutboxCommand.ListUnfinishedRoutes l) {
+                        completeUnfinishedRoutes(l);
                     } else if (cmd instanceof OutboxCommand.ApplyAck aa) {
                         executeApplyAck(aa.ack());
                     } else if (cmd instanceof OutboxCommand.ReclaimExpiredLeases r) {
@@ -117,6 +127,22 @@ final class SqliteOutboxWriter extends Thread {
                 } catch (SQLException ignore) {
                 }
             }
+        }
+    }
+
+    private void completeClaim(OutboxCommand.Claim command) {
+        try {
+            command.future().complete(executeClaim(command.maxCount(), command.leaseMs()));
+        } catch (RuntimeException e) {
+            command.future().completeExceptionally(e);
+        }
+    }
+
+    private void completeUnfinishedRoutes(OutboxCommand.ListUnfinishedRoutes command) {
+        try {
+            command.future().complete(executeListUnfinishedRoutes());
+        } catch (RuntimeException e) {
+            command.future().completeExceptionally(e);
         }
     }
 
@@ -209,11 +235,11 @@ final class SqliteOutboxWriter extends Thread {
                 try (ResultSet rs = sel.executeQuery()) {
                     while (rs.next()) {
                         long id = rs.getLong(1);
-                        String topic = buildTopic(rs.getString(6), rs.getString(8));
+                        new TelemetryRoute(rs.getString(7), rs.getString(8));
                         claimed.add(new ClaimedEnvelope(
                                 id, rs.getString(2), rs.getBytes(3), rs.getString(4),
                                 rs.getString(5), rs.getString(6), rs.getString(7),
-                                rs.getString(8), topic));
+                                rs.getString(8), rs.getString(9)));
                         ids.add(id);
                     }
                 }
@@ -234,17 +260,40 @@ final class SqliteOutboxWriter extends Thread {
             }
             connection.commit();
             return new ClaimBatchResult.Claimed(claimed);
+        } catch (IllegalArgumentException e) {
+            rollbackQuietly();
+            throw new OutboxUnavailableException("ROUTE_IDENTITY_INVALID: invalid unfinished route", e);
         } catch (SQLException e) {
-            try {
-                connection.rollback();
-            } catch (SQLException ignore) {
-            }
+            rollbackQuietly();
             throw new OutboxUnavailableException("claim failed", e);
         }
     }
 
-    private static String buildTopic(String siteCode, String propertyCode) {
-        return "/telemetry/" + siteCode + "/" + propertyCode;
+    /** Read-only route snapshot; execution remains on the single writer connection. */
+    private List<TelemetryRoute> executeListUnfinishedRoutes() {
+        TreeSet<TelemetryRoute> routes = new TreeSet<>();
+        try (PreparedStatement select = connection.prepareStatement(UNFINISHED_ROUTES_SELECT_SQL);
+             ResultSet rs = select.executeQuery()) {
+            while (rs.next()) {
+                routes.add(new TelemetryRoute(rs.getString(1), rs.getString(2)));
+            }
+            List<TelemetryRoute> result = List.copyOf(routes);
+            connection.commit();
+            return result;
+        } catch (IllegalArgumentException e) {
+            rollbackQuietly();
+            throw new OutboxUnavailableException("ROUTE_IDENTITY_INVALID: invalid unfinished route", e);
+        } catch (SQLException e) {
+            rollbackQuietly();
+            throw new OutboxUnavailableException("list unfinished routes failed", e);
+        }
+    }
+
+    private void rollbackQuietly() {
+        try {
+            connection.rollback();
+        } catch (SQLException ignore) {
+        }
     }
 
     // ==================== applyAck (P1-T4 §10 状态机) ====================

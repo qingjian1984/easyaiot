@@ -18,6 +18,8 @@ easyaiot:
     inbox:
       enabled: true
     mqtt:
-      enabled: true
+      # LC02-06/LC02-09/LC02-10 评审前保持中心订阅关闭；显式启用时
+      # 必须同时提供精确 Topic filter 与 ADR-018 外部 key。
+      enabled: ${EASYAIOT_TELEMETRY_MQTT_ENABLED:false}
     query:
       enabled: ${EASYAIOT_TELEMETRY_QUERY_ENABLED:false}

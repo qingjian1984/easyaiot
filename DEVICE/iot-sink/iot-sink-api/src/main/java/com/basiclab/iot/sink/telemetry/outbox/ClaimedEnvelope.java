@@ -10,16 +10,22 @@ public record ClaimedEnvelope(
         String contentSha256,
         String tenantId,
         String siteCode,
+        String productIdentification,
         String deviceIdentification,
-        String propertyCode,
-        String topic
+        String propertyCode
 ) {
     public ClaimedEnvelope {
+        new TelemetryRoute(productIdentification, deviceIdentification);
         canonicalBytes = canonicalBytes.clone();
     }
 
     @Override
     public byte[] canonicalBytes() {
         return canonicalBytes.clone();
+    }
+
+    /** Canonical product/device route topic; envelope bytes and hash are unchanged. */
+    public String topic() {
+        return new TelemetryRoute(productIdentification, deviceIdentification).upstreamTopic();
     }
 }

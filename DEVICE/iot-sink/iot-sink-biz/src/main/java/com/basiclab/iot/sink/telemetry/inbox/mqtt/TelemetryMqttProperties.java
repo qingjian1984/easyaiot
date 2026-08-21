@@ -1,5 +1,6 @@
 package com.basiclab.iot.sink.telemetry.inbox.mqtt;
 
+import com.basiclab.iot.sink.telemetry.inbox.route.TelemetryUpstreamTopicParser;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -16,9 +17,11 @@ public class TelemetryMqttProperties {
     private String host = "localhost";
     private int port = 1883;
     private String clientId = "center-inbox";
-    private String topicFilter = "/telemetry/#";
+    private String topicFilter = TelemetryUpstreamTopicParser.sharedSubscriptionFilter();
     private String username = "";
     private String password = "";
+    /** ADR-018 key id; the key material is resolved outside the repository. */
+    private String authorityKeyId = "";
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -34,4 +37,17 @@ public class TelemetryMqttProperties {
     public void setUsername(String username) { this.username = username; }
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+    public String getAuthorityKeyId() { return authorityKeyId; }
+    public void setAuthorityKeyId(String authorityKeyId) { this.authorityKeyId = authorityKeyId; }
+
+    /** Fail closed before a real center subscription can be created. */
+    public void validateForEnabledSubscriber() {
+        String expected = TelemetryUpstreamTopicParser.sharedSubscriptionFilter();
+        if (!expected.equals(topicFilter)) {
+            throw new IllegalStateException("TELEMETRY_MQTT_TOPIC_FILTER_INVALID");
+        }
+        if (authorityKeyId == null || authorityKeyId.isBlank()) {
+            throw new IllegalStateException("SERVICE_AUTH_KEY_UNKNOWN");
+        }
+    }
 }

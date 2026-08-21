@@ -3,6 +3,7 @@ package com.basiclab.iot.sink.telemetry.outbox;
 import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * TD-001 §9.2 Poller 解耦端口 + TD-002 §9 outbox 接口契约。
@@ -31,6 +32,12 @@ public interface TelemetryOutboxPort {
      * @return claim 结果（Claimed/Empty）
      */
     ClaimBatchResult claimBatch(int maxCount, Duration lease);
+
+    /**
+     * Read the deterministic union input for the collector's exact route
+     * subscription set.  Only PENDING/IN_FLIGHT rows are included.
+     */
+    List<TelemetryRoute> listUnfinishedRoutes();
 
     /**
      * 应用 ACK（TD-002 §10 状态机：ACKED/PENDING+退避/DEAD_LETTER+gap）。

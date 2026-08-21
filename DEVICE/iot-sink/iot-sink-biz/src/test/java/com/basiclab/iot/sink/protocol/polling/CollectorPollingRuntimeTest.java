@@ -7,6 +7,7 @@ import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryRoute;
 import com.basiclab.iot.sink.protocol.modbus.IotModbusRtuPollingProtocol;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -97,6 +98,11 @@ class CollectorPollingRuntimeTest {
         @Override
         public ClaimBatchResult claimBatch(int maxCount, Duration lease) {
             return new ClaimBatchResult.Empty();
+        }
+
+        @Override
+        public List<TelemetryRoute> listUnfinishedRoutes() {
+            return List.of();
         }
 
         @Override

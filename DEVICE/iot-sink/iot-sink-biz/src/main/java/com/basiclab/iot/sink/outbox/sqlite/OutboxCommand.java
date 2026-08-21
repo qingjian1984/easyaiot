@@ -3,8 +3,10 @@ package com.basiclab.iot.sink.outbox.sqlite;
 import com.basiclab.iot.sink.telemetry.outbox.AckCommand;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryRoute;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -12,7 +14,8 @@ import java.util.concurrent.CompletableFuture;
  */
 public sealed interface OutboxCommand permits OutboxCommand.AppendBatch, OutboxCommand.Claim,
         OutboxCommand.ApplyAck, OutboxCommand.ReclaimExpiredLeases,
-        OutboxCommand.CleanupAcked, OutboxCommand.Checkpoint {
+        OutboxCommand.CleanupAcked, OutboxCommand.Checkpoint,
+        OutboxCommand.ListUnfinishedRoutes {
 
     record AppendBatch(
             TelemetryOutboxBatch batch,
@@ -24,6 +27,11 @@ public sealed interface OutboxCommand permits OutboxCommand.AppendBatch, OutboxC
             int maxCount,
             long leaseMs,
             CompletableFuture<ClaimBatchResult> future
+    ) implements OutboxCommand {
+    }
+
+    record ListUnfinishedRoutes(
+            CompletableFuture<List<TelemetryRoute>> future
     ) implements OutboxCommand {
     }
 

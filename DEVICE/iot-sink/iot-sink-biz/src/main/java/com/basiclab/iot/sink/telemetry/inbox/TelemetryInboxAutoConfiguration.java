@@ -5,6 +5,11 @@ import com.basiclab.iot.sink.telemetry.inbox.jdbc.TelemetryProjectionOrchestrato
 import com.basiclab.iot.sink.telemetry.inbox.mqtt.CenterMqttAckPublisher;
 import com.basiclab.iot.sink.telemetry.inbox.mqtt.CenterMqttInboxSubscriber;
 import com.basiclab.iot.sink.telemetry.inbox.mqtt.TelemetryMqttProperties;
+import com.basiclab.iot.sink.telemetry.inbox.route.CenterTelemetryIngressHandler;
+import com.basiclab.iot.sink.telemetry.inbox.route.TelemetryDeviceAuthorityClient;
+import com.basiclab.iot.sink.telemetry.inbox.route.TelemetryDeviceAuthorityClientAdapter;
+import com.basiclab.iot.sink.telemetry.inbox.route.TelemetryDeviceAuthorityPort;
+import com.basiclab.iot.sink.telemetry.inbox.route.TelemetryUpstreamTopicParser;
 import com.basiclab.iot.sink.telemetry.store.TelemetryStorePort;
 import com.basiclab.iot.sink.telemetry.store.jdbc.JdbcTelemetryStore;
 import io.vertx.mqtt.MqttClient;
@@ -36,6 +41,28 @@ public class TelemetryInboxAutoConfiguration {
         return new JdbcTelemetryStore(dataSource);
     }
 
+    @Bean
+    @ConditionalOnProperty(name = "easyaiot.telemetry.mqtt.enabled", havingValue = "true")
+    public TelemetryUpstreamTopicParser telemetryUpstreamTopicParser() {
+        return new TelemetryUpstreamTopicParser();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "easyaiot.telemetry.mqtt.enabled", havingValue = "true")
+    public TelemetryDeviceAuthorityPort telemetryDeviceAuthorityPort(
+            TelemetryDeviceAuthorityClient client) {
+        return new TelemetryDeviceAuthorityClientAdapter(client);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "easyaiot.telemetry.mqtt.enabled", havingValue = "true")
+    public CenterTelemetryIngressHandler centerTelemetryIngressHandler(
+            TelemetryUpstreamTopicParser parser,
+            TelemetryDeviceAuthorityPort authority,
+            TelemetryInboxPort inbox) {
+        return new CenterTelemetryIngressHandler(parser, authority, inbox);
+    }
+
     @Bean(destroyMethod = "stop")
     @ConditionalOnProperty(name = "easyaiot.telemetry.projection.enabled", havingValue = "true", matchIfMissing = true)
     public TelemetryProjectionOrchestrator projectionOrchestrator(DataSource dataSource,
@@ -48,10 +75,11 @@ public class TelemetryInboxAutoConfiguration {
     @Bean(destroyMethod = "close")
     @ConditionalOnProperty(name = "easyaiot.telemetry.mqtt.enabled", havingValue = "true")
     public CenterMqttInboxSubscriber centerMqttInboxSubscriber(
-            TelemetryInboxPort inbox,
+            CenterTelemetryIngressHandler handler,
             TelemetryMqttProperties mqttProps) {
+        mqttProps.validateForEnabledSubscriber();
         CenterMqttInboxSubscriber subscriber = new CenterMqttInboxSubscriber(
-                inbox,
+                handler,
                 mqttProps.getHost(),
                 mqttProps.getPort(),
                 mqttProps.getClientId(),

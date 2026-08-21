@@ -2,6 +2,7 @@ package com.basiclab.iot.device.dal.pgsql.device;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.basiclab.iot.common.core.aop.TenantIgnore;
+import com.basiclab.iot.device.service.device.authority.TelemetryDeviceAuthorityCandidate;
 import com.basiclab.iot.device.domain.device.vo.Device;
 import com.basiclab.iot.device.dal.dataobject.DmDevicePackagePo;
 import com.basiclab.iot.device.domain.device.vo.ConnectStatusStatisticsVo;
@@ -188,6 +189,16 @@ public interface DeviceMapper extends BaseMapper<Device> {
 
     Device selectByProductIdentificationAndDeviceIdentification(@Param("productIdentification") String productIdentification,
                                                                 @Param("deviceIdentification") String deviceIdentification);
+
+    /**
+     * ADR-018 center authority lookup.  The query is deliberately tenant
+     * agnostic and bounded to two rows so duplicate registrations are exposed
+     * as AMBIGUOUS instead of silently selecting a first row.
+     */
+    @TenantIgnore
+    List<TelemetryDeviceAuthorityCandidate> selectTelemetryDeviceAuthorityCandidates(
+            @Param("productIdentification") String productIdentification,
+            @Param("deviceIdentification") String deviceIdentification);
 
     List<Device> findAllByProductIdentification(@Param("productIdentification") String productIdentification);
 

@@ -17,7 +17,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
 import java.nio.file.Path;
-import java.sql.SQLException;
 
 /**
  * TD-002 collector Profile outbox + dispatch 装配。
@@ -30,9 +29,8 @@ import java.sql.SQLException;
 public class SqliteOutboxAutoConfiguration {
 
     @Bean(destroyMethod = "shutdown")
-    public SqliteTelemetryOutbox sqliteTelemetryOutbox(SqliteOutboxConfig config) throws SQLException {
+    public SqliteTelemetryOutbox sqliteTelemetryOutbox(SqliteOutboxConfig config) {
         Path db = Path.of(config.getVolumePath()).resolve("outbox.db");
-        SqliteOutboxMigration.migrate(db);
         return new SqliteTelemetryOutbox(db, new EnvelopeCanonicalCodec(), config.getQueueCapacity());
     }
 

@@ -1559,6 +1559,18 @@
         where product_identification=#{productIdentification} and device_identification=#{deviceIdentification} limit 1
     </select>
 
+    <!-- LC02-06 authority: exact, tenant-agnostic and bounded duplicate detection. -->
+    <select id="selectTelemetryDeviceAuthorityCandidates"
+            resultType="com.basiclab.iot.device.service.device.authority.TelemetryDeviceAuthorityCandidate">
+        SELECT tenant_id, product_identification, device_identification
+        FROM device
+        WHERE product_identification = #{productIdentification}
+          AND device_identification = #{deviceIdentification}
+          AND deleted = 0
+        ORDER BY id ASC
+        LIMIT 2
+    </select>
+
     <select id="selectDeviceByDeviceIdentificationList" resultMap="BaseResultMap">
         select
             <include refid="Base_Column_List"/>

@@ -38,6 +38,10 @@ class CollectorTelemetryConfigurationTest {
                 return new com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult.Empty();
             }
             @Override
+            public List<com.basiclab.iot.sink.telemetry.outbox.TelemetryRoute> listUnfinishedRoutes() {
+                return List.of();
+            }
+            @Override
             public void applyAck(com.basiclab.iot.sink.telemetry.outbox.AckCommand ack) {
             }
         };

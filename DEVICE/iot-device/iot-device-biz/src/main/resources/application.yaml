@@ -225,6 +225,8 @@ easyaiot:
           path: /internal-api/device/collector-config/releases/{releaseId}
         - method: POST
           path: /internal-api/device/collector-config/releases/{releaseId}/observed
+        - method: GET
+          path: /internal-api/device/telemetry-authority/resolve
   power-model:
     # ADR-015 首发投影闭环完成专项评审前禁止开放写入口。
     template-api-enabled: ${EASYAIOT_POWER_MODEL_TEMPLATE_API_ENABLED:false}

@@ -60,6 +60,7 @@ public final class OutboxCommandQueue {
     private static boolean isControl(OutboxCommand cmd) {
         return cmd instanceof OutboxCommand.Claim
                 || cmd instanceof OutboxCommand.ApplyAck
-                || cmd instanceof OutboxCommand.ReclaimExpiredLeases;
+                || cmd instanceof OutboxCommand.ReclaimExpiredLeases
+                || cmd instanceof OutboxCommand.ListUnfinishedRoutes;
     }
 }

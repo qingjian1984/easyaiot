@@ -9,6 +9,7 @@ import com.basiclab.iot.sink.telemetry.envelope.TelemetryEnvelope;
 import com.basiclab.iot.sink.telemetry.outbox.AppendBatchResult;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxBatch;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryRoute;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -79,6 +80,11 @@ class CollectorTelemetryWriterTest {
         @Override
         public com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult claimBatch(int maxCount, Duration lease) {
             return new com.basiclab.iot.sink.telemetry.outbox.ClaimBatchResult.Empty();
+        }
+
+        @Override
+        public List<TelemetryRoute> listUnfinishedRoutes() {
+            return List.of();
         }
 
         @Override
