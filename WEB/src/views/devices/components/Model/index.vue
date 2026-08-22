@@ -92,6 +92,7 @@ import { BasicTable, TableAction, useTable } from '@/components/Table';
 import { BasicForm, useForm } from '@/components/Form';
 import { getBasicColumns, getFormConfig } from './tableData';
 import { getDeviceThresholds, getDevicethingModels } from '@/api/device/devices';
+import { postTelemetryLatest } from '@/api/telemetry';
 import Detail from './components/Detail.vue';
 import ThresholdModal from './components/ThresholdModal.vue';
 import AlarmStrategyModal from '../AlarmStrategyModal.vue';
@@ -149,6 +150,37 @@ async function handleSearchSubmit() {
 async function fetchThingModels(params) {
   const res = await getDevicethingModels(params);
   propertyTotal.value = res?.total ?? 0;
+  // 新遥测链路增强（PRD §4.5 /telemetry/latest）：有新链路实时值/质量码的属性
+  // 覆盖旧值并补 quality；无数据的属性保持旧 runtimeStatus 值兜底（属性全集不丢）。
+  // 设备标识从路由或参数解析失败时静默跳过（仅退回旧行为）。
+  try {
+    const deviceIdentification = params?.deviceIdentification
+      || (res?.data?.length && res.data[0]?.deviceIdentification)
+      || null;
+    if (deviceIdentification && Array.isArray(res?.data) && res.data.length) {
+      const series = res.data
+        .map((item) => item?.propertyCode)
+        .filter(Boolean)
+        .slice(0, 10) // API 配额 series ≤10；超出部分保持旧值（详情弹窗走 raw 查询不受限）
+        .map((propertyCode) => ({ deviceIdentification, propertyCode }));
+      if (series.length) {
+        const latest = await postTelemetryLatest({ series });
+        const byCode = new Map((latest || []).map((row) => [row.propertyCode, row]));
+        res.data = res.data.map((item) => {
+          const fresh = item?.propertyCode ? byCode.get(item.propertyCode) : null;
+          if (!fresh) return item;
+          return {
+            ...item,
+            dataValue: fresh.value ?? item.dataValue,
+            ts: fresh.collectedAtMs ?? item.ts,
+            quality: fresh.quality,
+          };
+        });
+      }
+    }
+  } catch {
+    // 新链路不可用（开关未启用/无数据）时静默退回旧值
+  }
   return res;
 }
 

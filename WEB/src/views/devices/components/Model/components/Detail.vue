@@ -163,7 +163,8 @@ import { Empty, Progress, RangePicker, Segmented, Tag } from 'ant-design-vue';
 import { BasicModal, useModalInner } from '@/components/Modal';
 import { BasicTable, useTable } from '@/components/Table';
 import { useECharts } from '@/hooks/web/useECharts';
-import { getDevicethingmodelsHistory, predictPropertyTrend } from '@/api/device/devices';
+import { predictPropertyTrend } from '@/api/device/devices';
+import { postTelemetryRaw } from '@/api/telemetry';
 import { detailColumns } from '../tableData';
 import { useRoute } from 'vue-router';
 import { buildPredictionAnalysis } from './predictionAnalysis';
@@ -694,7 +695,17 @@ const [register, { closeModal, getOpen }] = useModalInner(({ data }) => {
   const valueTitle = state.industrialPoint
     ? `解析值${state.unit ? `（${state.unit}）` : ''}`
     : `${state.propertyName}${state.unit ? `（${state.unit}）` : ''}`;
-  const columns: any[] = [...detailColumns(), { title: valueTitle, dataIndex: 'dataValue' }];
+  const columns: any[] = [
+    ...detailColumns(),
+    { title: valueTitle, dataIndex: 'dataValue' },
+    // PRD §4.4 质量码列（新遥测链路字段；旧行/未知码显示原文，未知不猜语义）
+    {
+      title: '质量',
+      dataIndex: 'quality',
+      width: 90,
+      customRender: ({ record }) => record.quality || 'GOOD',
+    },
+  ];
   if (state.industrialPoint) {
     columns.push(
       {
@@ -730,10 +741,36 @@ watch(getOpen, (open) => {
   }
 });
 
+/**
+ * 历史数据源：PRD §4.5 新遥测查询 API（/telemetry/raw，读 telemetry_sample 新链路）。
+ * 适配 useTable 契约（{data,total}），并把新行映射回既有渲染字段
+ * （ts ← collectedAtMs，dataValue ← value），附带质量码（PRD §4.4）。
+ */
+async function fetchTelemetryHistory(params: Record<string, any>) {
+  const page = await postTelemetryRaw({
+    series: [
+      {
+        deviceIdentification: params.deviceIdentification,
+        propertyCode: params.identifier,
+      },
+    ],
+    fromMs: params.startTime,
+    toMs: params.endTime,
+    pageNo: params.page ?? 1,
+    pageSize: 1000,
+  });
+  const rows = (page?.rows || []).map((row) => ({
+    ...row,
+    ts: row.collectedAtMs,
+    dataValue: row.value,
+  }));
+  return { data: rows, total: page?.totalRows ?? rows.length };
+}
+
 const [registerTable, { setColumns, reload, redoHeight }] = useTable({
   canResize: false,
   scroll: { y: 520 },
-  api: getDevicethingmodelsHistory,
+  api: fetchTelemetryHistory,
   bordered: false,
   showIndexColumn: false,
   useSearchForm: false,

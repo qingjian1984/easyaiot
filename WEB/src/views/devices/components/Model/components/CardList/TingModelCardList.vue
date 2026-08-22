@@ -34,6 +34,12 @@
                 <div class="time">
                   <Icon icon="ant-design:clock-circle-outlined" class="time-icon" />
                   <span>{{ hasValidTs(item.ts) ? formatTime(item.ts) : '--' }}</span>
+                  <!-- PRD §4.4 质量码：新遥测链路有数据时展示；非 GOOD 标橙提示 -->
+                  <span
+                    v-if="item.quality && item.quality !== 'GOOD'"
+                    class="quality-flag"
+                    :title="`质量：${item.quality}`"
+                  >· {{ item.quality }}</span>
                 </div>
                 <div class="footer-actions" @click.stop>
                   <button type="button" class="history-btn" @click="handleThreshold(item)">
@@ -419,6 +425,11 @@ async function handleThreshold(record: object) {
           flex-shrink: 0;
           font-size: 12px;
           color: #bfbfbf;
+        }
+
+        .quality-flag {
+          flex-shrink: 0;
+          color: #fa8c16; /* 非正常质量码提示色 */
         }
 
         span {
