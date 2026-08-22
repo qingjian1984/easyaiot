@@ -16633,7 +16633,7 @@ COPY public.infra_file (id, config_id, name, path, url, type, size, creator, cre
 
 COPY public.infra_file_config (id, name, storage, remark, master, config, creator, create_time, updater, update_time, deleted) FROM stdin;
 4	数据库	1	我是数据库	f	{"@class":"cn.iocoder.yudao.module.infra.framework.file.core.client.db.DBFileClientConfig","domain":"http://127.0.0.1:48080"}	1	2022-03-15 23:56:24	1	2024-02-28 22:54:07	0
-22	七牛存储器	20		t	{"@class":"cn.iocoder.yudao.module.infra.framework.file.core.client.s3.S3FileClientConfig","endpoint":"s3.cn-south-1.qiniucs.com","domain":"http://test.yudao.iocoder.cn","bucket":"ruoyi-vue-pro","accessKey":"3TvrJ70gl2Gt6IBe7_IZT1F6i_k0iMuRtyEv4EyS","accessSecret":"wd0tbVBYlp0S-ihA8Qg2hPLncoP83wyrIq24OZuY"}	1	2024-01-13 22:11:12	1	2024-04-03 19:38:34	0
+22	本地 MinIO	20		t	{"@class":"cn.iocoder.yudao.module.infra.framework.file.core.client.s3.S3FileClientConfig","endpoint":"http://minio-server:9000","domain":"http://localhost:9000","bucket":"easyaiot","accessKey":"minioadmin","accessSecret":"basiclab@iot975248395"}	1	2024-01-13 22:11:12	1	2024-04-03 19:38:34	0
 \.
 
 
@@ -21168,7 +21168,7 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 2604	供应商查询	erp:supplier:query	3	1	2603				\N	0	t	t	t		2024-02-06 08:21:55		2024-02-06 08:21:55	1
 2612	其它出库单创建	erp:stock-out:create	3	2	2610				\N	0	t	t	t		2024-02-05 16:08:56		2024-02-07 06:43:42	1
 2758	代码生成		1	0	0	/d	ant-design:bulb-twotone	\N	\N	0	t	t	t	1	2024-07-09 10:53:56.385	1	2024-07-09 10:53:56.385	1
-2761	设备管理（隐藏）		1	99	0	/device	ant-design:laptop-outlined	\N	\N	1	f	t	f	1	2024-07-10 17:55:24.188	1	2024-07-19 12:56:07.33	0
+2761	设备管理（隐藏）		1	99	0	/device	ant-design:laptop-outlined	\N	\N	0	f	t	f	1	2024-07-10 17:55:24.188	1	2024-07-19 12:56:07.33	0
 2764	设备创建	device:device:create	3	5	2762					0	t	t	t	1	2024-07-10 23:41:50.299	1	2024-07-10 23:41:50.299	0
 2763	设备查询	device:device:query	3	0	2762					0	t	t	t	1	2024-07-10 23:40:58.748	1	2024-07-10 23:40:58.748	0
 2765	设备更新	device:device:update	3	10	2762					0	t	t	t	1	2024-07-10 23:42:15.57	1	2024-07-10 23:42:15.57	0
@@ -21315,7 +21315,7 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 2900	传输协议		2	20	2939	protocol	ant-design:gold-twotone	device/protocol/index	Protocol	0	f	t	f		2024-07-11 05:26:50.993119	1	2026-07-16 14:40:45.698722	0
 2894	产品分类		2	5	2939	product-type	ant-design:calculator-twotone	device/product_type/index	ProductType	0	f	t	f		2024-07-11 05:26:35.478039	1	2026-07-16 14:41:23.110351	0
 2937	设备详情	device:detail:list	2	1	0	detail/:id/:productIdentification/:deviceIdentification/:deviceType	ant-design:bulb-twotone	devices/components/Drawer/index	DeviceDetail	0	t	t	t	1	2024-07-19 11:11:12.369	1	2024-07-19 16:30:17.176	1
-2939	产品管理（隐藏）		1	99	0	producthidden	ant-design:account-book-twotone	\N	\N	1	t	t	t	1	2024-07-22 13:22:32.521	1	2024-07-22 13:25:28.256	0
+2939	产品管理（隐藏）		1	99	0	/product-hidden	ant-design:account-book-twotone	\N	\N	0	t	t	t	1	2024-07-22 13:22:32.521	1	2024-07-22 13:25:28.256	0
 2846	物模型服务命令		2	3	2934	product-commands	ant-design:block-outlined	device/product_commands/index	ProductCommands	0	t	t	t		2024-07-11 05:24:31.78072	1	2024-07-11 06:22:12.27	1
 2934	物模型管理		1	3	0	/thing-model	ant-design:reddit-outlined	\N	\N	0	t	t	t	1	2024-07-11 05:47:58.869	1	2024-07-11 05:56:13.593	1
 2936	链式规则	rule:device:query	2	0	2933	/rule-chain	ant-design:borderless-table-outlined			0	t	t	t	1	2024-07-11 06:14:01.725	1	2024-07-11 06:24:05.034	1
@@ -21395,6 +21395,7 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 3206	推送规则维护	transform:contract:update	3	5	3201				\N	0	t	t	t	1	2026-07-28 16:09:55.955643	1	2026-07-28 16:09:55.955643	0
 3207	推送记录再推	transform:outbox:replay	3	6	3201				\N	0	t	t	t	1	2026-07-28 16:09:55.955643	1	2026-07-28 16:09:55.955643	0
 3208	失败记录再推	transform:dlq:replay	3	7	3201				\N	0	t	t	t	1	2026-07-28 16:09:55.955643	1	2026-07-28 16:09:55.955643	0
+3910	遥测历史		2	9	0	telemetry	ant-design:line-chart-outlined	telemetry/history/index	TelemetryHistory	0	t	t	t	1	2026-08-21 13:30:00	1	2026-08-21 13:30:00	0
 \.
 
 
@@ -28629,6 +28630,7 @@ COPY public.system_role_menu (id, role_id, menu_id, creator, create_time, update
 6000	1	3206	1	2026-07-28 16:09:55.955643	1	2026-07-28 16:09:55.955643	0	1
 6001	1	3207	1	2026-07-28 16:09:55.955643	1	2026-07-28 16:09:55.955643	0	1
 6002	1	3208	1	2026-07-28 16:09:55.955643	1	2026-07-28 16:09:55.955643	0	1
+6155	1	3910	1	2026-08-21 13:35:00	1	2026-08-21 13:35:00	0	1
 \.
 
 
@@ -28787,7 +28789,7 @@ COPY public.system_users (id, username, password, nickname, remark, dept_id, pos
 131	hh	$2a$04$jyH9h6.gaw8mpOjPfHIpx.8as2Rzfcmdlj5rlJFwgCw4rsv/MTb2K	呵呵	\N	100	[]	777@qq.com	15601882312	1		0		\N	1	2024-04-27 08:45:56	1	2024-04-27 08:45:56	1	1	0	0
 100	yudao	$2a$10$11U48RhyJ5pSBYWSn12AD./ld671.ycSzJHbyrtpeoMeYiw31eo8a	王总	不要吓我	104	[1]	yudao@iocoder.cn	15601691300	1		1	127.0.0.1	2022-07-09 23:03:33		2021-01-07 09:07:17	1	2025-08-14 09:39:37.486	0	1	0	0
 118	goudan	$2a$04$A7vqK6hfgoPeOGDgZoC1BOnVwTpDyBtQnlsOWBIqM8Wj9A6NTr0Tq	狗蛋	\N	103	[1]		15601691239	1		0	0:0:0:0:0:0:0:1	2024-07-24 11:23:40.932	1	2022-07-09 17:44:43	1	2025-08-14 11:34:37.076	0	1	0	0
-1	admin	$2a$10$mRMIYLDtRHlf6.9ipiqH1.Z.bh/R9dO9d5iHiGYPigi6r5KOoR2Wm	IoT	管理员	103	[1]	aoteman@126.com	18818260277	1	http://test.yudao.iocoder.cn/113dcbab48d22fc988151b98be2b8b4f262effdb5305c171cf1fe9a71801377a.png	0	172.18.0.23	2026-08-03 10:15:02.650386	admin	2021-01-05 17:03:47	\N	2026-08-03 10:15:02.651936	0	1	0	0
+1	admin	$2a$10$mRMIYLDtRHlf6.9ipiqH1.Z.bh/R9dO9d5iHiGYPigi6r5KOoR2Wm	IoT	管理员	103	[1]	aoteman@126.com	18818260277	1		0	172.18.0.23	2026-08-03 10:15:02.650386	admin	2021-01-05 17:03:47	\N	2026-08-03 10:15:02.651936	0	1	0	0
 \.
 
 
