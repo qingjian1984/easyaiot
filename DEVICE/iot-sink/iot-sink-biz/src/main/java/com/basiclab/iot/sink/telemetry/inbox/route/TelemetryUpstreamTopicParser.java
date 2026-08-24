@@ -12,12 +12,14 @@ import java.util.Objects;
  */
 public final class TelemetryUpstreamTopicParser {
 
+    public static final String CENTER_SHARED_GROUP = "easyaiot-center-inbox-v1";
     private static final String PRODUCT_PLACEHOLDER = "${productIdentification}";
     private static final String DEVICE_PLACEHOLDER = "${deviceIdentification}";
 
     private final String[] templateLevels;
     private final int productLevel;
     private final int deviceLevel;
+    private final String baseSubscriptionFilter;
     private final String sharedSubscriptionFilter;
 
     public TelemetryUpstreamTopicParser() {
@@ -28,11 +30,22 @@ public final class TelemetryUpstreamTopicParser {
         if (productLevel < 0 || deviceLevel < 0 || productLevel == deviceLevel) {
             throw new IllegalStateException("canonical property topic template is incomplete");
         }
-        this.sharedSubscriptionFilter = deriveSharedSubscriptionFilter();
+        this.baseSubscriptionFilter = deriveBaseSubscriptionFilter();
+        this.sharedSubscriptionFilter = "$share/" + CENTER_SHARED_GROUP + "/" + baseSubscriptionFilter;
     }
 
+    /** The canonical wildcard filter without a shared-subscription group. */
+    public static String baseSubscriptionFilter() {
+        return new TelemetryUpstreamTopicParser().baseSubscriptionFilter;
+    }
+
+    /** The only center subscription filter permitted by LC02-09. */
     public static String sharedSubscriptionFilter() {
         return new TelemetryUpstreamTopicParser().sharedSubscriptionFilter;
+    }
+
+    public String baseSubscriptionFilterValue() {
+        return baseSubscriptionFilter;
     }
 
     public String sharedSubscriptionFilterValue() {
@@ -76,7 +89,7 @@ public final class TelemetryUpstreamTopicParser {
         }
     }
 
-    private String deriveSharedSubscriptionFilter() {
+    private String deriveBaseSubscriptionFilter() {
         StringBuilder result = new StringBuilder();
         for (int index = 0; index < templateLevels.length; index++) {
             if (index > 0) {

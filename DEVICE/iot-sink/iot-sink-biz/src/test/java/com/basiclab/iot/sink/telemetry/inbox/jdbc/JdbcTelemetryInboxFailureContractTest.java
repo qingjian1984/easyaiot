@@ -20,7 +20,7 @@ class JdbcTelemetryInboxFailureContractTest {
     void databaseFailurePropagatesWithoutSuccessResult() {
         JdbcTelemetryInbox inbox = new JdbcTelemetryInbox(new FailingDataSource());
         InboxEnvelope envelope = new InboxEnvelope(
-                "failure-message", "failure-request", "999888777", "site-test",
+                "failure-message", "failure-request", "999888777", "product-test", "site-test",
                 "device-test", "property-test", "{}".getBytes(StandardCharsets.UTF_8),
                 "hash", 1L, 1L, "test", 1L);
 

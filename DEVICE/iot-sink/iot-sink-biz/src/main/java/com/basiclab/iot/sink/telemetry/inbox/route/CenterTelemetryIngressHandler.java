@@ -38,11 +38,12 @@ public final class CenterTelemetryIngressHandler {
         if (decoded instanceof TelemetryEnvelopeDecoder.Invalid) {
             return reject(TelemetryIngressRejectionCode.TELEMETRY_ENVELOPE_INVALID);
         }
-        InboxEnvelope envelope = ((TelemetryEnvelopeDecoder.Decoded) decoded).envelope();
-        if (!route.deviceIdentification().equals(envelope.deviceIdentification())) {
+        TelemetryEnvelopeDecoder.Decoded decodedEnvelope =
+                (TelemetryEnvelopeDecoder.Decoded) decoded;
+        if (!route.deviceIdentification().equals(decodedEnvelope.deviceIdentification())) {
             return reject(TelemetryIngressRejectionCode.TELEMETRY_TOPIC_DEVICE_ENVELOPE_MISMATCH);
         }
-        if (!isCanonicalPositiveTenant(envelope.tenantId())) {
+        if (!isCanonicalPositiveTenant(decodedEnvelope.tenantId())) {
             return reject(TelemetryIngressRejectionCode.TELEMETRY_ENVELOPE_TENANT_INVALID);
         }
 
@@ -62,10 +63,14 @@ public final class CenterTelemetryIngressHandler {
                 || !isCanonicalPositiveTenant(resolved.tenantId())) {
             return reject(TelemetryIngressRejectionCode.TELEMETRY_DEVICE_AUTHORITY_UNAVAILABLE);
         }
-        if (!resolved.tenantId().equals(envelope.tenantId())) {
+        if (!resolved.tenantId().equals(decodedEnvelope.tenantId())) {
             return reject(TelemetryIngressRejectionCode.TELEMETRY_DEVICE_REGISTRATION_TENANT_MISMATCH);
         }
 
+        // Only the already-authorized Topic route may supply the product identity.  The
+        // decoder deliberately remains route-free so an untrusted payload field cannot
+        // reach the Inbox or affect the canonical payload hash.
+        InboxEnvelope envelope = decodedEnvelope.toInboxEnvelope(route.productIdentification());
         // Inbox exceptions are intentionally allowed to propagate as receive
         // failures; they are not security rejections and cannot be ACKed here.
         return new CenterTelemetryIngressResult.Accepted(

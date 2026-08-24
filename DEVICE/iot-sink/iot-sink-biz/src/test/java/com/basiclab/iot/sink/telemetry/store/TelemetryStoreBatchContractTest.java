@@ -39,7 +39,7 @@ class TelemetryStoreBatchContractTest {
     @Test
     void inboxFactoryCopiesAllProjectionFields() {
         InboxEnvelope inbox = new InboxEnvelope(
-                "m-1", "r-1", "100", "site", "device", "property",
+                "m-1", "r-1", "100", "product", "site", "device", "property",
                 new byte[]{7}, "a".repeat(64), 123L, 4L, "modbus", 2L);
         TelemetrySample sample = TelemetrySample.fromInboxEnvelope(inbox);
         assertEquals(inbox.messageId(), sample.messageId());
@@ -94,7 +94,7 @@ class TelemetryStoreBatchContractTest {
     }
 
     private static InboxEnvelope inbox(String messageId) {
-        return new InboxEnvelope(messageId, "r-" + messageId, "100", "site", "device", "property",
+        return new InboxEnvelope(messageId, "r-" + messageId, "100", "product", "site", "device", "property",
                 new byte[]{1}, "a".repeat(64), 123L, 1L, "modbus", 1L);
     }
 

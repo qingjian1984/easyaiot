@@ -69,4 +69,36 @@ WHERE n.nspname = 'public'
       'power_device_asset',
       'power_device_assignment'
   )
-  AND (d.description IS NULL OR btrim(d.description) = '' OR d.description !~ '[一-龥]');
+  AND (d.description IS NULL OR btrim(d.description) = '' OR d.description !~ '[一-龥]')
+
+UNION ALL
+
+-- LC02-07 V009：schema-qualified 目标列必须存在且含中文语义注释。
+-- 使用 LEFT JOIN 使目标表/列缺失时也稳定返回一行。
+SELECT 'iot_sink.telemetry_inbox' AS table_name,
+       'product_identification' AS column_name,
+       CASE
+           WHEN c.oid IS NULL THEN '<MISSING_TABLE>'
+           WHEN a.attnum IS NULL THEN '<MISSING_COLUMN>'
+           ELSE COALESCE(d.description, '<MISSING>')
+       END AS comment_text
+FROM (SELECT 1 AS expected) e
+LEFT JOIN pg_namespace n
+       ON n.nspname = 'iot_sink'
+LEFT JOIN pg_class c
+       ON c.relnamespace = n.oid
+      AND c.relname = 'telemetry_inbox'
+      AND c.relkind = 'r'
+LEFT JOIN pg_attribute a
+       ON a.attrelid = c.oid
+      AND a.attname = 'product_identification'
+      AND a.attnum > 0
+      AND NOT a.attisdropped
+LEFT JOIN pg_description d
+       ON d.objoid = c.oid
+      AND d.objsubid = a.attnum
+WHERE c.oid IS NULL
+   OR a.attnum IS NULL
+   OR d.description IS NULL
+   OR btrim(d.description) = ''
+   OR d.description !~ '[一-龥]';

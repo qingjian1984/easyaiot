@@ -17,7 +17,11 @@ class TelemetryUpstreamTopicParserContractTest {
     @Test
     void derivesOneExactSharedFilterAndRoundTripsCanonicalRoute() {
         TelemetryRoute route = new TelemetryRoute("product-1", "device-1");
-        assertEquals("/iot/+/+/property/upstream/report", parser.sharedSubscriptionFilterValue());
+        assertEquals("/iot/+/+/property/upstream/report", parser.baseSubscriptionFilterValue());
+        assertEquals(parser.baseSubscriptionFilterValue(),
+                TelemetryUpstreamTopicParser.baseSubscriptionFilter());
+        assertEquals("$share/easyaiot-center-inbox-v1//iot/+/+/property/upstream/report",
+                parser.sharedSubscriptionFilterValue());
         assertEquals(parser.sharedSubscriptionFilterValue(),
                 TelemetryUpstreamTopicParser.sharedSubscriptionFilter());
 
@@ -113,6 +117,16 @@ class TelemetryUpstreamTopicParserContractTest {
                             parser.parse(topic), "topic=" + topic);
             assertEquals(TelemetryIngressDisposition.FINAL,
                     rejected.rejection().disposition());
+        }
+    }
+
+    @Test
+    void neverParsesFiltersAsPublishedTopics() {
+        for (String topic : List.of(
+                TelemetryUpstreamTopicParser.baseSubscriptionFilter(),
+                TelemetryUpstreamTopicParser.sharedSubscriptionFilter(),
+                "$share/other//iot/+/+/property/upstream/report")) {
+            assertInstanceOf(TelemetryUpstreamTopicParser.Rejected.class, parser.parse(topic));
         }
     }
 }

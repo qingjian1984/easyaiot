@@ -8,9 +8,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,9 +42,25 @@ class CenterTelemetryIngressHandlerTest {
         assertEquals(1, inbox.calls);
         assertEquals(1, inbox.received.size());
         assertEquals("920006001", inbox.received.get(0).tenantId());
+        assertEquals("product-1", inbox.received.get(0).productIdentification());
         assertEquals("device-1", inbox.received.get(0).deviceIdentification());
         assertEquals(1, authority.calls);
         assertEquals(ROUTE, authority.lastRoute);
+    }
+
+    @Test
+    void onlyAuthorizedTopicProductReachesInboxAndPayloadProductIsIgnored() {
+        byte[] payload = payload("920006001", "device-1", "forged-product");
+
+        CenterTelemetryIngressResult.Accepted accepted =
+                assertInstanceOf(CenterTelemetryIngressResult.Accepted.class,
+                        handler.handle(ROUTE.upstreamTopic(), payload));
+
+        assertNotNull(accepted.inboxResult());
+        InboxEnvelope received = inbox.received.get(0);
+        assertEquals(ROUTE.productIdentification(), received.productIdentification());
+        assertArrayEquals(payload, received.canonicalBytes());
+        assertEquals(sha256(payload), received.contentSha256());
     }
 
     @Test
@@ -146,13 +164,35 @@ class CenterTelemetryIngressHandlerTest {
     }
 
     private static byte[] payload(String tenantId, String deviceIdentification) {
+        return payload(tenantId, deviceIdentification, null);
+    }
+
+    private static byte[] payload(String tenantId, String deviceIdentification,
+                                  String payloadProductIdentification) {
         String json = "{\"messageId\":\"m-1\",\"requestId\":\"r-1\","
                 + "\"tenantId\":\"" + tenantId + "\",\"siteCode\":\"site-1\","
                 + "\"deviceIdentification\":\"" + deviceIdentification + "\","
-                + "\"propertyCode\":\"voltage-a\",\"value\":\"220\","
+                + "\"propertyCode\":\"voltage-a\",\"value\":\"220\""
+                + (payloadProductIdentification == null ? "" :
+                ",\"productIdentification\":\"" + payloadProductIdentification + "\"")
+                + ","
                 + "\"collectedAt\":\"2026-08-21T00:00:00Z\","
                 + "\"sequence\":1,\"source\":\"collector\",\"configVersion\":1}";
         return json.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static String sha256(byte[] input) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(input);
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte value : hash) {
+                hex.append(Character.forDigit((value >>> 4) & 0xF, 16));
+                hex.append(Character.forDigit(value & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (Exception exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     private static void assertRejected(TelemetryIngressRejectionCode expected,

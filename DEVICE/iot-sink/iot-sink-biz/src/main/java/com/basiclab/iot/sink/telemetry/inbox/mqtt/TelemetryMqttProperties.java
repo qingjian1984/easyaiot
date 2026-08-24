@@ -42,12 +42,31 @@ public class TelemetryMqttProperties {
 
     /** Fail closed before a real center subscription can be created. */
     public void validateForEnabledSubscriber() {
-        String expected = TelemetryUpstreamTopicParser.sharedSubscriptionFilter();
-        if (!expected.equals(topicFilter)) {
+        if (!TelemetryUpstreamTopicParser.sharedSubscriptionFilter().equals(topicFilter)) {
             throw new IllegalStateException("TELEMETRY_MQTT_TOPIC_FILTER_INVALID");
+        }
+        if (!validIdentity(clientId)) {
+            throw new IllegalStateException("TELEMETRY_MQTT_CLIENT_ID_INVALID");
+        }
+        if (!validIdentity(username) || password == null || password.isBlank()) {
+            throw new IllegalStateException("TELEMETRY_MQTT_CREDENTIALS_MISSING");
         }
         if (authorityKeyId == null || authorityKeyId.isBlank()) {
             throw new IllegalStateException("SERVICE_AUTH_KEY_UNKNOWN");
         }
+    }
+
+    private static boolean validIdentity(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (character == '/' || character == '+' || character == '#'
+                    || character == '\u0000' || Character.isISOControl(character)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

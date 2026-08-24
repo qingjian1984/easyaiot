@@ -1,10 +1,10 @@
 # ADR-017：遥测可靠链路 Topic 与产品路由身份收口
 
 > 状态：Accepted
-> 版本：1.0.0
-> 日期：2026-08-14
+> 版本：1.1.1
+> 日期：2026-08-24
 > 决策所有者：EasyAIoT 架构组
-> 实现授权：仅授权冻结并执行前置 M1-LC-02A；LC-02 仍须等待 LC-02A Verified-Local 后单独冻结
+> 实现状态：架构决策已接受；`LC02-09-R1` 已完成并经 Sol 接受为 Verified-Local，生产 broker 激活与后续包仍须独立冻结和授权
 
 ## 1. 决策背景
 
@@ -109,11 +109,27 @@ SQLite Outbox 中 PENDING/IN_FLIGHT 的产品/设备路由
 
 M1-LC-01 的结果合同保持不变。LC-02A 不得夹带 outbox/Topic 变更，LC-02 不得夹带 ACK，LC-03 不得绕过拒绝审计发送碰撞 FINAL ACK。
 
+### 2.6 center 共享订阅的责任边界
+
+决策所有者于 2026-08-24 接受 EMQX 5.8.7 的真实能力边界：共享订阅进入 authorization 阶段前，`$share/{group}/` 被剥离，file authorizer 只能看到 real topic filter。因此 center 的安全与消费拓扑责任固定拆分如下：
+
+| 责任 | 强制执行者 | 合同 |
+|---|---|---|
+| center 身份认证 | EMQX | 独占非 superuser 服务主体；匿名、未知主体、错误凭据拒绝 |
+| center 数据范围 | EMQX | 只允许 QoS 1 订阅精确 real filter `/iot/+/+/property/upstream/report`；禁止发布和其他 real topic/filter |
+| 固定共享组 | `iot-sink` Java | enabled 时只允许 `$share/easyaiot-center-inbox-v1//iot/+/+/property/upstream/report`，在创建网络客户端前逐字节 fail-closed |
+| Topic 内身份与租户 | `iot-sink` Java + `iot-device` 权威注册 | Topic product/device、Envelope device/tenant 与权威注册事实全部一致后才允许进入 Inbox |
+
+固定共享组是受控 center 客户端的消费拓扑合同，不作为 EMQX 5.8.7 file authorizer 的数据授权维度。不得声称 broker 能区分固定共享组、普通订阅和其他共享组；真实 broker 合同必须显式证明三者在相同 real filter 下具有相同授权输入，而 Java 合同必须独立证明普通 filter、其他组、`$queue`、broad/legacy filter 均在联网前失败。
+
+该责任重划分不把共享凭据持有者视为可信租户客户端。生产运行期必须使用 center 独占凭据并完成凭据文件消费与轮换、TLS/网络隔离、连接和异常订阅可观测性；凭据泄露者可绕过 Java 使用普通或其他共享组取得 center 原本可读数据的额外副本，属于必须处置的运行期安全事件。若后续威胁模型要求“凭据泄露后仍由 broker 强制固定组”，必须另立 ADR 引入能读取原始 SUBSCRIBE filter 的 hook/plugin/exhook，不得把该能力伪装成 file ACL。
+
 ## 3. 安全与多租户约束
 
 - MQTT ACL 必须限制设备主体只能发布自身精确上行 Topic、订阅自身精确 ACK Topic；不得用全局 `#` 作为生产授权范围；
 - 当前 Paho 消息回调不携带可信原始发布主体，因此安全证据分层：broker 集成测试证明“主体→精确 Topic”ACL；center 应用证明“Topic 产品/设备→租户设备注册事实→Envelope tenant/device”一致；不得伪造应用层无法取得的主体字段；
-- center 的共享订阅过滤器只用于服务端消费扩展，不替代 broker ACL、主体认证或设备注册事实查询；
+- center 的共享订阅过滤器只用于服务端消费扩展，由 Java 在联网前固定并 fail-closed；它不替代 broker 对 center 身份、real Topic、QoS 和动作方向的 ACL，也不替代设备注册事实查询；
+- EMQX 5.8.7 file authorizer 不承担共享组名授权；验收不得把普通/其他共享组的 broker 拒绝伪造成安全证据，也不得因此放宽 center 对其他 real Topic、发布动作或 QoS 0/2 的默认拒绝；
 - Topic 产品/设备、权威注册事实和载荷租户/设备任一不一致不得写业务 Inbox；
 - 日志、指标与审计不得记录 MQTT 密码、令牌或完整敏感载荷。
 
@@ -142,8 +158,17 @@ M1-LC-01 的结果合同保持不变。LC-02A 不得夹带 outbox/Topic 变更�
 - [x] 安全责任分层已冻结：broker ACL 证明主体边界，center 校验 Topic/注册事实/载荷，覆盖跨租户负向用例；
 - [x] M1-LC-02 0.3.0 已补齐接口、迁移、文件白名单、测试矩阵和验收命令候选，并明确 LC-02A 前置依赖。
 - [x] 代码事实确认 NODE Agent `/workload/collector/config`、iot-node 配置派发和 collector 本地 `PollingConfigProvider` 尚未实现；已从 LC-02 拆为独立 M1-LC-02A 前置任务。
-- [ ] ADR-018 Accepted，M1-LC-02A 完成内部服务/NODE 认证、配置接口和状态机评审并转为 Frozen；其实现与本地故障恢复证据完成后，LC-02 才可开始。
+- [x] ADR-018 Accepted，M1-LC-02A 已完成内部服务/NODE 认证、配置接口、状态机评审与本地故障恢复证据并达到 Verified-Local。
 - [x] 决策所有者于 2026-08-14 接受本 ADR；M1-LC-02A 可按已冻结子任务顺序推进。
-- [ ] M1-LC-02A 完成 Verified-Local 后，将 M1-LC-02 从 Review-Ready 改为 Frozen。
+- [x] 决策所有者于 2026-08-24 接受 center 责任重划分：broker 约束身份、real Topic、QoS 和动作方向，Java 固定共享组并在联网前 fail-closed，见 §2.6。
+- [x] M1-LC-02A 完成 Verified-Local 后，M1-LC-02 已从 Review-Ready 转为 Approved / Frozen。
 
-架构决策已接受；M1-LC-02 仍被 M1-LC-02A 前置实现与验证门禁阻塞。
+架构决策已接受；M1-LC-02A 已完成 Verified-Local，M1-LC-02 已进入分包实现。当前只冻结 `LC02-09-R1` 责任重划分后的最小修订，正式 broker 激活、`LC02-09-RUNTIME-01` 与 `LC02-10` 仍须独立门禁。
+
+## 7. 版本记录
+
+| 版本 | 日期 | 说明 |
+|---|---|---|
+| 1.0.0 | 2026-08-14 | 接受 canonical Topic、产品路由元数据、expand→backfill→enforce 与安全分层 |
+| 1.1.0 | 2026-08-24 | 基于 EMQX 5.8.7 真实合同，接受 broker 约束 center 身份/real Topic、Java 固定共享组的责任重划分 |
+| 1.1.1 | 2026-08-24 | 回填 LC02-09-R1 真实 EMQX 12/12 与 Java 11/11 的 Verified-Local 接受状态，不扩大生产授权 |

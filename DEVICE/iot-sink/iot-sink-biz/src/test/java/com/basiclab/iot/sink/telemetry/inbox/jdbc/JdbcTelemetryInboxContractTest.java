@@ -21,25 +21,28 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * TD-003 §10/§13 PG Inbox + TelemetryStore 合同测试（真实 iot-device20）。
+ * TD-003 §10/§13 PG Inbox + TelemetryStore 合同测试（显式隔离 PostgreSQL）。
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class JdbcTelemetryInboxContractTest {
 
-    private static final String PG_URL = System.getenv().getOrDefault("TD008_PG_URL",
-            "jdbc:postgresql://localhost:5432/iot-device20");
-    private static final String PG_USER = System.getenv().getOrDefault("TD008_PG_USERNAME", "postgres");
-    private static final String PG_PASSWORD = System.getenv().getOrDefault("TD008_PG_PASSWORD",
-            System.getenv().getOrDefault("TD005_PG_PASSWORD", ""));
+    private static final String PG_URL = firstDefined("LC02_08_PG_URL", "TD008_PG_URL");
+    private static final String PG_USER = firstDefined("LC02_08_PG_USERNAME", "TD008_PG_USERNAME");
+    private static final String PG_PASSWORD = firstDefined("LC02_08_PG_PASSWORD", "TD008_PG_PASSWORD");
     private static final long TENANT = 999_888_777L;
     private static final long CLEANUP_TEST_TENANT = 999_888_778L;
 
     private PooledDataSource dataSource;
     private JdbcTelemetryInbox inbox;
     private JdbcTelemetryStore store;
+    private String runPrefix;
 
     @BeforeAll
     void setup() {
+        Assumptions.assumeTrue(PG_URL != null && !PG_URL.isBlank()
+                        && PG_USER != null && !PG_USER.isBlank()
+                        && PG_PASSWORD != null,
+                "NOT_RUN_LOCAL_ENV: isolated PostgreSQL variables are not set");
         dataSource = new PooledDataSource("org.postgresql.Driver", PG_URL, PG_USER, PG_PASSWORD);
         try (java.sql.Connection ignored = dataSource.getConnection()) {
             // Local PostgreSQL is optional for this contract suite.
@@ -51,33 +54,34 @@ class JdbcTelemetryInboxContractTest {
         }
         inbox = new JdbcTelemetryInbox(dataSource);
         store = new JdbcTelemetryStore(dataSource);
-        // 清理上次测试残留
-        new JdbcTemplate(dataSource).update(
-                "DELETE FROM iot_sink.telemetry_inbox WHERE tenant_id IN (?, ?)", TENANT, CLEANUP_TEST_TENANT);
-        new JdbcTemplate(dataSource).update(
-                "DELETE FROM iot_sink.telemetry_sample WHERE tenant_id IN (?, ?)", TENANT, CLEANUP_TEST_TENANT);
+        runPrefix = "lc01-regression-" + Long.toUnsignedString(System.nanoTime(), 36);
     }
 
     @AfterAll
     void cleanup() {
         if (dataSource != null) {
+            String pattern = runPrefix + "-%";
             new JdbcTemplate(dataSource).update(
-                    "DELETE FROM iot_sink.telemetry_inbox WHERE tenant_id IN (?, ?)", TENANT, CLEANUP_TEST_TENANT);
+                    "DELETE FROM iot_sink.telemetry_inbox WHERE tenant_id IN (?, ?)"
+                            + " AND message_id LIKE ?", TENANT, CLEANUP_TEST_TENANT, pattern);
             new JdbcTemplate(dataSource).update(
-                    "DELETE FROM iot_sink.telemetry_sample WHERE tenant_id IN (?, ?)", TENANT, CLEANUP_TEST_TENANT);
+                    "DELETE FROM iot_sink.telemetry_sample WHERE tenant_id IN (?, ?)"
+                            + " AND message_id LIKE ?", TENANT, CLEANUP_TEST_TENANT, pattern);
             dataSource.forceCloseAll();
         }
     }
 
     private InboxEnvelope env(String msgId, String value) {
-        String json = "{\"schemaVersion\":\"1.0\",\"messageId\":\"" + msgId + "\","
+        String effectiveMessageId = msgId.startsWith(runPrefix + "-")
+                ? msgId : runPrefix + "-" + msgId;
+        String json = "{\"schemaVersion\":\"1.0\",\"messageId\":\"" + effectiveMessageId + "\","
                 + "\"tenantId\":\"" + TENANT + "\",\"siteCode\":\"site-test\","
                 + "\"deviceIdentification\":\"dev-test\",\"propertyCode\":\"voltage-a\","
                 + "\"value\":\"" + value + "\",\"collectedAt\":\"2026-08-13T00:00:00Z\","
                 + "\"source\":\"modbus-rtu\"}";
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         String sha256 = sha256(bytes);
-        return new InboxEnvelope(msgId, "req-" + msgId, String.valueOf(TENANT), "site-test",
+        return new InboxEnvelope(effectiveMessageId, "req-" + effectiveMessageId, String.valueOf(TENANT), "product-test", "site-test",
                 "dev-test", "voltage-a", bytes, sha256,
                 System.currentTimeMillis(), 1, "modbus-rtu", 1);
     }
@@ -116,7 +120,7 @@ class JdbcTelemetryInboxContractTest {
     void sameHashDifferentRequestIdIsCollision() {
         InboxEnvelope first = env("pg-inbox-collision-request", "224.0");
         InboxEnvelope second = new InboxEnvelope(first.messageId(), "different-request", first.tenantId(),
-                first.siteCode(), first.deviceIdentification(), first.propertyCode(), first.canonicalBytes(),
+                first.productIdentification(), first.siteCode(), first.deviceIdentification(), first.propertyCode(), first.canonicalBytes(),
                 first.contentSha256(), first.collectedAtMs(), first.sequence(), first.source(), first.configVersion());
         inbox.receiveEnvelopes(List.of(first));
         assertEquals(InboxReceiveResult.Status.MESSAGE_ID_COLLISION,
@@ -128,13 +132,13 @@ class JdbcTelemetryInboxContractTest {
         InboxEnvelope first = env("pg-inbox-collision-identity", "225.0");
         inbox.receiveEnvelopes(List.of(first));
         InboxEnvelope differentSite = new InboxEnvelope(first.messageId(), first.requestId(), first.tenantId(),
-                "other-site", first.deviceIdentification(), first.propertyCode(), first.canonicalBytes(),
+                first.productIdentification(), "other-site", first.deviceIdentification(), first.propertyCode(), first.canonicalBytes(),
                 first.contentSha256(), first.collectedAtMs(), first.sequence(), first.source(), first.configVersion());
         InboxEnvelope differentDevice = new InboxEnvelope(first.messageId(), first.requestId(), first.tenantId(),
-                first.siteCode(), "other-device", first.propertyCode(), first.canonicalBytes(),
+                first.productIdentification(), first.siteCode(), "other-device", first.propertyCode(), first.canonicalBytes(),
                 first.contentSha256(), first.collectedAtMs(), first.sequence(), first.source(), first.configVersion());
         InboxEnvelope differentProperty = new InboxEnvelope(first.messageId(), first.requestId(), first.tenantId(),
-                first.siteCode(), first.deviceIdentification(), "other-property", first.canonicalBytes(),
+                first.productIdentification(), first.siteCode(), first.deviceIdentification(), "other-property", first.canonicalBytes(),
                 first.contentSha256(), first.collectedAtMs(), first.sequence(), first.source(), first.configVersion());
         assertEquals(InboxReceiveResult.Status.MESSAGE_ID_COLLISION,
                 item(inbox.receiveEnvelopes(List.of(differentSite)), 0).status());
@@ -182,8 +186,8 @@ class JdbcTelemetryInboxContractTest {
     void sameMessageIdCanBeUsedByDifferentTenants() {
         String messageId = "pg-inbox-cross-tenant";
         InboxEnvelope first = env(messageId, "229.0");
-        InboxEnvelope otherTenant = new InboxEnvelope(messageId, "req-" + messageId, String.valueOf(CLEANUP_TEST_TENANT),
-                first.siteCode(), first.deviceIdentification(), first.propertyCode(), first.canonicalBytes(),
+        InboxEnvelope otherTenant = new InboxEnvelope(first.messageId(), first.requestId(), String.valueOf(CLEANUP_TEST_TENANT),
+                first.productIdentification(), first.siteCode(), first.deviceIdentification(), first.propertyCode(), first.canonicalBytes(),
                 first.contentSha256(), first.collectedAtMs(), first.sequence(), first.source(), first.configVersion());
         assertEquals(InboxReceiveResult.Status.ACCEPTED_DURABLE,
                 item(inbox.receiveEnvelopes(List.of(first)), 0).status());
@@ -257,5 +261,14 @@ class JdbcTelemetryInboxContractTest {
         } catch (Exception e) {
             return "error";
         }
+    }
+
+    private static String firstDefined(String firstName, String secondName) {
+        String first = System.getenv(firstName);
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        String second = System.getenv(secondName);
+        return second == null || second.isBlank() ? null : second;
     }
 }

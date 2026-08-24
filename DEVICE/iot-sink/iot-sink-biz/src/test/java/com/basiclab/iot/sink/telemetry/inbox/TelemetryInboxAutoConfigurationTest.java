@@ -2,7 +2,6 @@ package com.basiclab.iot.sink.telemetry.inbox;
 
 import com.basiclab.iot.common.security.internal.InternalServiceAuthFeignInterceptor;
 import com.basiclab.iot.common.security.internal.InternalServiceAuthException;
-import com.basiclab.iot.common.security.internal.InternalServiceKeyProvider;
 import com.basiclab.iot.common.constant.ServiceNameConstants;
 import com.basiclab.iot.sink.telemetry.inbox.mqtt.CenterMqttInboxSubscriber;
 import com.basiclab.iot.sink.telemetry.inbox.mqtt.TelemetryMqttProperties;
@@ -16,12 +15,14 @@ import feign.Retryer;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.StandardEnvironment;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.Optional;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,12 +53,18 @@ class TelemetryInboxAutoConfigurationTest {
     @Test
     void mqttPropertiesFailClosedForOldOrBroadFiltersAndMissingAuthorityKey() {
         TelemetryMqttProperties properties = new TelemetryMqttProperties();
+        properties.setClientId("center-inbox-1");
+        properties.setUsername("lc02-center-inbox");
+        properties.setPassword("fixture-only");
         properties.setAuthorityKeyId("key-1");
         properties.validateForEnabledSubscriber();
-        assertEquals("/iot/+/+/property/upstream/report", properties.getTopicFilter());
+        assertEquals("$share/easyaiot-center-inbox-v1//iot/+/+/property/upstream/report",
+                properties.getTopicFilter());
 
         for (String invalid : new String[]{"/telemetry/#", "/iot/#",
-                "/iot/+/+/property/+/report", "#", "/iot/+/+/property/upstream/report/"}) {
+                "/iot/+/+/property/+/report", "#", "/iot/+/+/property/upstream/report",
+                "$share/other//iot/+/+/property/upstream/report",
+                "$share/easyaiot-center-inbox-v1//iot/+/+/property/upstream/report/"}) {
             properties.setTopicFilter(invalid);
             assertThrows(IllegalStateException.class, properties::validateForEnabledSubscriber);
         }
@@ -65,6 +72,33 @@ class TelemetryInboxAutoConfigurationTest {
         properties.setTopicFilter(TelemetryUpstreamTopicParser.sharedSubscriptionFilter());
         properties.setAuthorityKeyId("");
         assertThrows(IllegalStateException.class, properties::validateForEnabledSubscriber);
+    }
+
+    @Test
+    void mqttPropertiesRejectMissingOrUnsafeBrokerIdentityBeforeNetworking() {
+        TelemetryMqttProperties properties = validMqttProperties();
+        for (String invalid : new String[]{null, "", " ", "center/one", "center+", "center#",
+                "center\u0000", "center\n"}) {
+            properties.setClientId(invalid);
+            IllegalStateException failure = assertThrows(IllegalStateException.class,
+                    properties::validateForEnabledSubscriber);
+            assertEquals("TELEMETRY_MQTT_CLIENT_ID_INVALID", failure.getMessage());
+        }
+
+        properties = validMqttProperties();
+        for (String invalid : new String[]{null, "", " ", "center/one", "center+", "center#",
+                "center\u0000", "center\r"}) {
+            properties.setUsername(invalid);
+            IllegalStateException failure = assertThrows(IllegalStateException.class,
+                    properties::validateForEnabledSubscriber);
+            assertEquals("TELEMETRY_MQTT_CREDENTIALS_MISSING", failure.getMessage());
+        }
+
+        properties = validMqttProperties();
+        properties.setPassword(" ");
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                properties::validateForEnabledSubscriber);
+        assertEquals("TELEMETRY_MQTT_CREDENTIALS_MISSING", failure.getMessage());
     }
 
     @Test
@@ -81,10 +115,13 @@ class TelemetryInboxAutoConfigurationTest {
                 new TelemetryDeviceAuthorityFeignConfiguration();
         TelemetryMqttProperties properties = new TelemetryMqttProperties();
         properties.setAuthorityKeyId("key-1");
-        InternalServiceKeyProvider keys =
-                (serviceId, keyId) -> Optional.of(new byte[32]);
+        StandardEnvironment environment = new StandardEnvironment();
+        environment.getPropertySources().addFirst(new MapPropertySource("test", Map.of(
+                "easyaiot.security.internal.key-references.iot-sink:key-1",
+                "test.authority.key",
+                "test.authority.key", "k".repeat(32))));
         RequestInterceptor interceptor =
-                configuration.telemetryDeviceAuthoritySigner(keys, properties);
+                configuration.telemetryDeviceAuthoritySigner(environment, properties);
         assertInstanceOf(InternalServiceAuthFeignInterceptor.class, interceptor);
 
         Request.Options options = configuration.telemetryDeviceAuthorityRequestOptions();
@@ -93,9 +130,8 @@ class TelemetryInboxAutoConfigurationTest {
         assertSameRetryerNeverRetries(configuration.telemetryDeviceAuthorityRetryer());
 
         properties.setAuthorityKeyId("missing");
-        InternalServiceKeyProvider noKey = (serviceId, keyId) -> Optional.empty();
         assertThrows(InternalServiceAuthException.class,
-                () -> configuration.telemetryDeviceAuthoritySigner(noKey, properties));
+                () -> configuration.telemetryDeviceAuthoritySigner(environment, properties));
     }
 
     @Test
@@ -103,8 +139,18 @@ class TelemetryInboxAutoConfigurationTest {
         String standard = resourceText("application-standard.yaml");
         String application = resourceText("application.yaml");
         assertTrue(standard.contains("EASYAIOT_TELEMETRY_MQTT_ENABLED:false"));
-        assertTrue(application.contains("/iot/+/+/property/upstream/report"));
+        assertTrue(application.contains(
+                "$share/easyaiot-center-inbox-v1//iot/+/+/property/upstream/report"));
         assertTrue(!application.contains("/telemetry/#"));
+    }
+
+    private static TelemetryMqttProperties validMqttProperties() {
+        TelemetryMqttProperties properties = new TelemetryMqttProperties();
+        properties.setClientId("center-inbox-1");
+        properties.setUsername("lc02-center-inbox");
+        properties.setPassword("fixture-only");
+        properties.setAuthorityKeyId("key-1");
+        return properties;
     }
 
     private static void assertSameRetryerNeverRetries(Retryer retryer) {

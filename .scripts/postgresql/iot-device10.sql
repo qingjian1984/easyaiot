@@ -7210,6 +7210,138 @@ CREATE TRIGGER update_iot_app_updated_time BEFORE UPDATE ON public.app FOR EACH 
 
 
 --
+--
+-- LC02-07 首装基线：TD-003 V008 + V010 + V009 最终结构与受控迁移历史
+--
+
+-- Name: schema_migration_history_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.schema_migration_history_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+-- Name: schema_migration_history; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.schema_migration_history (
+    id bigint NOT NULL DEFAULT nextval('public.schema_migration_history_id_seq'::regclass),
+    migration_id character varying(128) NOT NULL,
+    script_sha256 character(64) NOT NULL,
+    status character varying(16) NOT NULL,
+    started_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at timestamp with time zone,
+    executed_by character varying(64) NOT NULL,
+    evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+    CONSTRAINT schema_migration_history_pkey PRIMARY KEY (id),
+    CONSTRAINT schema_migration_history_status_check CHECK (status IN ('SUCCEEDED','FAILED','SKIPPED')),
+    CONSTRAINT schema_migration_history_migration_id_key UNIQUE (migration_id)
+);
+
+ALTER SEQUENCE public.schema_migration_history_id_seq OWNED BY public.schema_migration_history.id;
+CREATE INDEX idx_schema_migration_history_status_started ON public.schema_migration_history USING btree (status, started_at DESC);
+
+COMMENT ON TABLE public.schema_migration_history IS '受控迁移执行器历史表（迁移 ID + SHA-256 执行事实）';
+COMMENT ON COLUMN public.schema_migration_history.id IS '主键';
+COMMENT ON COLUMN public.schema_migration_history.migration_id IS '迁移 ID（同一迁移全局唯一）';
+COMMENT ON COLUMN public.schema_migration_history.script_sha256 IS '迁移脚本 SHA-256（同 ID 异 hash 必须阻断）';
+COMMENT ON COLUMN public.schema_migration_history.status IS '执行状态（SUCCEEDED/FAILED；SKIPPED 仅为返回语义不落库）';
+COMMENT ON COLUMN public.schema_migration_history.started_at IS '执行开始时间';
+COMMENT ON COLUMN public.schema_migration_history.finished_at IS '执行结束时间';
+COMMENT ON COLUMN public.schema_migration_history.executed_by IS '执行人/执行身份';
+COMMENT ON COLUMN public.schema_migration_history.evidence IS '执行证据（审批单、目标库版本、备份文件、输出摘要）';
+
+-- Name: iot_sink; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA iot_sink;
+CREATE SEQUENCE iot_sink.telemetry_inbox_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+-- Name: telemetry_inbox; Type: TABLE; Schema: iot_sink; Owner: -
+--
+
+CREATE TABLE iot_sink.telemetry_inbox (
+    id bigint NOT NULL DEFAULT nextval('iot_sink.telemetry_inbox_id_seq'::regclass),
+    message_id character varying(64) NOT NULL,
+    message_id_wire character varying(64),
+    request_id character varying(64) NOT NULL,
+    tenant_id bigint NOT NULL,
+    site_code character varying(128) NOT NULL,
+    device_identification character varying(128) NOT NULL,
+    property_code character varying(128) NOT NULL,
+    payload bytea NOT NULL,
+    content_sha256 character(64) NOT NULL,
+    collected_at_ms bigint NOT NULL,
+    sequence_no bigint NOT NULL DEFAULT 0,
+    source character varying(64) NOT NULL DEFAULT 'unknown'::character varying,
+    config_version bigint NOT NULL DEFAULT 0,
+    projection_state character varying(32) NOT NULL DEFAULT 'RECEIVED'::character varying,
+    projection_attempts integer NOT NULL DEFAULT 0,
+    projection_lease_until bigint,
+    next_projection_at_ms bigint,
+    projected_at_ms bigint,
+    last_projection_error character varying(512),
+    received_at_ms bigint NOT NULL,
+    updated_at_ms bigint NOT NULL,
+    created_at timestamp without time zone NOT NULL DEFAULT now(),
+    product_identification character varying(128),
+    CONSTRAINT telemetry_inbox_pkey PRIMARY KEY (id),
+    CONSTRAINT uq_inbox_tenant_message UNIQUE (tenant_id, message_id),
+    CONSTRAINT ck_inbox_state CHECK (projection_state IN
+        ('RECEIVED','PROJECTING','COMPLETED','PROJECTION_DEAD_LETTER'))
+);
+
+ALTER SEQUENCE iot_sink.telemetry_inbox_id_seq OWNED BY iot_sink.telemetry_inbox.id;
+COMMENT ON TABLE iot_sink.telemetry_inbox IS 'TD-003 §10 中心遥测 Inbox：两层幂等接收 + 投影状态机';
+COMMENT ON COLUMN iot_sink.telemetry_inbox.message_id IS 'UUID v4 幂等键（不用于排序）';
+COMMENT ON COLUMN iot_sink.telemetry_inbox.payload IS 'canonical UTF-8 JSON 原字节（落库/查询/重试复用同一份）';
+COMMENT ON COLUMN iot_sink.telemetry_inbox.projection_state IS 'RECEIVED→PROJECTING→COMPLETED/PROJECTION_DEAD_LETTER';
+COMMENT ON COLUMN iot_sink.telemetry_inbox.product_identification IS '经 MQTT Topic、认证主体与载荷设备身份校验后持久化的产品路由标识；禁止由站点或属性推断';
+CREATE INDEX idx_inbox_projection ON iot_sink.telemetry_inbox USING btree (projection_state, received_at_ms);
+CREATE INDEX idx_inbox_lease ON iot_sink.telemetry_inbox USING btree (projection_state, projection_lease_until);
+
+-- Name: telemetry_sample; Type: TABLE; Schema: iot_sink; Owner: -
+--
+
+CREATE TABLE iot_sink.telemetry_sample (
+    tenant_id bigint NOT NULL,
+    message_id character varying(64) NOT NULL,
+    content_sha256 character(64) NOT NULL,
+    site_code character varying(128) NOT NULL,
+    device_identification character varying(128) NOT NULL,
+    property_code character varying(128) NOT NULL,
+    value_numeric numeric(20,6) NOT NULL,
+    collected_at_ms bigint NOT NULL,
+    sequence_no bigint NOT NULL DEFAULT 0,
+    source character varying(64) NOT NULL DEFAULT 'unknown'::character varying,
+    config_version bigint NOT NULL DEFAULT 0,
+    quality character varying(32) NOT NULL DEFAULT 'GOOD'::character varying,
+    received_at_ms bigint NOT NULL,
+    CONSTRAINT uq_sample_identity UNIQUE (tenant_id, message_id, content_sha256),
+    CONSTRAINT ck_sample_quality CHECK (((quality)::text <> ''::text))
+);
+
+COMMENT ON TABLE iot_sink.telemetry_sample IS 'TD-003 §13 standard TelemetryStore：PostgreSQL 月分区时序数据';
+COMMENT ON COLUMN iot_sink.telemetry_sample.value_numeric IS '十进制数值 NUMERIC（不经 Double，精度不丢）';
+COMMENT ON COLUMN iot_sink.telemetry_sample.quality IS 'TD-003 §6 质量码：GOOD/UNCERTAIN/BAD 等；V010 前历史行统一 GOOD';
+COMMENT ON COLUMN iot_sink.telemetry_sample.received_at_ms IS '中心入库时刻 UTC 毫秒；V010 前历史行以迁移时刻兜底';
+CREATE INDEX idx_sample_query ON iot_sink.telemetry_sample USING btree (tenant_id, device_identification, property_code, collected_at_ms DESC);
+
+INSERT INTO public.schema_migration_history
+    (migration_id, script_sha256, status, started_at, finished_at, executed_by, evidence)
+VALUES
+    ('V008', '693c0473386048567886b382c8c984ab98a267b7e7ce8659307b0d7395048469', 'SUCCEEDED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'full-install-baseline', '{"baseline":"LC02-07 首装基线"}'::jsonb),
+    ('V010', '08d809a4453e1e0efd16f29522f0682e3b9a10b20df4f04be4a93f7d200d6662', 'SUCCEEDED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'full-install-baseline', '{"baseline":"LC02-07 首装基线"}'::jsonb),
+    ('V009', '48416787b7fc886cc3274be53f3a38c60f9a9dd93ca205e3f0311d54a8eafbde', 'SUCCEEDED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'full-install-baseline', '{"baseline":"LC02-07 首装基线"}'::jsonb);
+
 -- PostgreSQL database dump complete
 --
 

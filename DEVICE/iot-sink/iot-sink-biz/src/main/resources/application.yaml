@@ -314,7 +314,7 @@ easyaiot:
       host: ${EASYAIOT_TELEMETRY_MQTT_HOST:localhost}
       port: ${EASYAIOT_TELEMETRY_MQTT_PORT:1883}
       client-id: ${EASYAIOT_TELEMETRY_MQTT_CLIENT_ID:center-inbox}
-      topic-filter: ${EASYAIOT_TELEMETRY_MQTT_TOPIC:/iot/+/+/property/upstream/report}
+      topic-filter: ${EASYAIOT_TELEMETRY_MQTT_TOPIC:$share/easyaiot-center-inbox-v1//iot/+/+/property/upstream/report}
       username: ${EASYAIOT_TELEMETRY_MQTT_USERNAME:}
       password: ${EASYAIOT_TELEMETRY_MQTT_PASSWORD:}
       authority-key-id: ${EASYAIOT_TELEMETRY_AUTHORITY_KEY_ID:}

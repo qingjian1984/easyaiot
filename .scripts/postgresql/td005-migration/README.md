@@ -1,9 +1,9 @@
 # TD-005 受控迁移执行器（候选 / Spike）
 
-> 状态：Review Candidate
-> 日期：2026-08-06
-> 决策：ADR-013 1.1.0（Proposed）
-> 使用限制：仅用于临时/评审库和 MIG 合同验证；ADR-013 转 Accepted 前不得对生产/共享库执行
+> 状态：Review Candidate（LC02-07 V009 资产已实现，待 Sol 复核）
+> 日期：2026-08-24
+> 决策：ADR-013 1.5.7（Accepted）
+> 使用限制：目标实例每次 apply/uninstall 仍须独立审批；LC02-07 当前只允许隔离临时库验证
 
 ## 组成
 
@@ -11,8 +11,9 @@
 |---|---|
 | `td005_migration.sh` | 候选执行器：dry-run / apply / uninstall / check-comments |
 | `steps/M15__product_tenant_unique_concurrently.sql` | M1.5 独立非事务步骤：`product (tenant_id, product_identification)` 唯一索引 |
-| `check_ddl_comments.sql` | MIG-009：V001 涉及表/字段中文 `COMMENT` 完整性检查 |
+| `check_ddl_comments.sql` | MIG-009：迁移涉及表/字段中文 `COMMENT` 完整性检查（含 LC02-07 V009 目标列） |
 | `V001` / `U001` | 引用 `.doc/技术设计/电力运维云平台/assets/td005-migration/` 评审资产 |
+| `V009` / `U009` | LC02-07 产品路由身份 nullable 扩展与独立收缩候选；U009 不接入 uninstall |
 
 ## 使用
 
@@ -33,10 +34,10 @@ PG_PASSWORD=<password> PG_DB=<target> APPROVAL=<approval-id> \
 
 ## 行为
 
-- `apply` 先持有 advisory lock，按 M15（非事务 CONCURRENTLY）→ V001（单事务）顺序执行，并把 `migration_id + script_sha256 + status + evidence` 写入 `schema_migration_history`。
+- `apply` 先持有 advisory lock，按 M15（非事务 CONCURRENTLY）→ V001～V008 → V010 → V009 顺序执行，并把 `migration_id + script_sha256 + status + evidence` 写入 `schema_migration_history`；V009 执行前强制核验 V008/V010 的成功状态与精确 hash。
 - 同 migration ID 同 hash 已 SUCCEEDED 时跳过；同 ID 异 hash 返回 `HASH_MISMATCH` 并退出码 2。
 - `uninstall` 执行 U001，非空表时由 U001 断言拒绝。
-- `check-comments` 校验 V001 涉及的 7 张表、126 个字段中文注释完整性。
+- `check-comments` 校验既有迁移对象以及 `iot_sink.telemetry_inbox.product_identification` 的中文注释；目标表/列缺失也会返回门禁错误。
 
 ## MIG 合同状态
 

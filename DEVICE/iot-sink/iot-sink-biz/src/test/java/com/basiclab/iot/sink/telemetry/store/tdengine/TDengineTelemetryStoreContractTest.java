@@ -54,7 +54,7 @@ class TDengineTelemetryStoreContractTest {
                 + "\"value\":\"" + value + "\",\"collectedAt\":\"2026-08-13T00:00:00Z\","
                 + "\"source\":\"modbus-rtu\"}";
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-        return new InboxEnvelope(msgId, "req-" + msgId, "999888777", "site-td",
+        return new InboxEnvelope(msgId, "req-" + msgId, "999888777", "product-td", "site-td",
                 "dev-td", "voltage-a", bytes, sha256(bytes), ts, 1, "modbus-rtu", 1);
     }
 

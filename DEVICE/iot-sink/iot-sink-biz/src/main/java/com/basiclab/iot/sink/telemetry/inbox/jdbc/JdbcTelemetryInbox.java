@@ -29,15 +29,27 @@ public final class JdbcTelemetryInbox implements TelemetryInboxPort {
     private static final Logger log = LoggerFactory.getLogger(JdbcTelemetryInbox.class);
 
     private static final String INSERT_SQL = "INSERT INTO iot_sink.telemetry_inbox"
-            + "(message_id, message_id_wire, request_id, tenant_id, site_code,"
+            + "(message_id, message_id_wire, request_id, tenant_id, product_identification, site_code,"
             + " device_identification, property_code, payload, content_sha256,"
             + " collected_at_ms, sequence_no, source, config_version,"
             + " projection_state, received_at_ms, updated_at_ms)"
-            + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'RECEIVED', ?, ?)"
+            + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'RECEIVED', ?, ?)"
             + " ON CONFLICT (tenant_id, message_id) DO NOTHING";
 
+    private static final String BACKFILL_PRODUCT_SQL = "UPDATE iot_sink.telemetry_inbox"
+            + " SET product_identification = ?"
+            + " WHERE tenant_id = ? AND message_id = ?"
+            + " AND product_identification IS NULL"
+            + " AND content_sha256 IS NOT DISTINCT FROM ?"
+            + " AND request_id IS NOT DISTINCT FROM ?"
+            + " AND message_id_wire IS NOT DISTINCT FROM ?"
+            + " AND site_code IS NOT DISTINCT FROM ?"
+            + " AND device_identification IS NOT DISTINCT FROM ?"
+            + " AND property_code IS NOT DISTINCT FROM ?"
+            + " RETURNING received_at_ms";
+
     private static final String SELECT_EXISTING_SQL = "SELECT content_sha256, request_id, message_id_wire,"
-            + " site_code, device_identification, property_code, received_at_ms"
+            + " site_code, device_identification, property_code, product_identification, received_at_ms"
             + " FROM iot_sink.telemetry_inbox WHERE tenant_id = ? AND message_id = ?";
 
     private final JdbcTemplate jdbc;
@@ -73,6 +85,7 @@ public final class JdbcTelemetryInbox implements TelemetryInboxPort {
                 env.messageId(),
                 env.requestId(),
                 Long.parseLong(env.tenantId()),
+                env.productIdentification(),
                 env.siteCode(),
                 env.deviceIdentification(),
                 env.propertyCode(),
@@ -87,7 +100,25 @@ public final class JdbcTelemetryInbox implements TelemetryInboxPort {
 
         if (rows > 0) {
             return new InboxReceiveResult.Item(inputIndex, env.messageId(), env.requestId(),
-                    InboxReceiveResult.Status.ACCEPTED_DURABLE, now);
+                InboxReceiveResult.Status.ACCEPTED_DURABLE, now);
+        }
+
+        List<Long> backfilled = jdbc.query(BACKFILL_PRODUCT_SQL,
+                ps -> {
+                    ps.setString(1, env.productIdentification());
+                    ps.setLong(2, Long.parseLong(env.tenantId()));
+                    ps.setString(3, env.messageId());
+                    ps.setString(4, env.contentSha256());
+                    ps.setString(5, env.requestId());
+                    ps.setString(6, env.messageId());
+                    ps.setString(7, env.siteCode());
+                    ps.setString(8, env.deviceIdentification());
+                    ps.setString(9, env.propertyCode());
+                },
+                (rs, rowNum) -> rs.getLong("received_at_ms"));
+        if (!backfilled.isEmpty()) {
+            return new InboxReceiveResult.Item(inputIndex, env.messageId(), env.requestId(),
+                    InboxReceiveResult.Status.DUPLICATE, backfilled.get(0));
         }
 
         ExistingInbox existing = queryExisting(env.tenantId(), env.messageId());
@@ -116,6 +147,7 @@ public final class JdbcTelemetryInbox implements TelemetryInboxPort {
             rs.getString("site_code"),
             rs.getString("device_identification"),
             rs.getString("property_code"),
+            rs.getString("product_identification"),
             rs.getLong("received_at_ms"));
 
     private record ExistingInbox(
@@ -125,10 +157,12 @@ public final class JdbcTelemetryInbox implements TelemetryInboxPort {
             String siteCode,
             String deviceIdentification,
             String propertyCode,
+            String productIdentification,
             long receivedAtMs) {
 
         boolean matches(InboxEnvelope env) {
-            return java.util.Objects.equals(contentSha256, env.contentSha256())
+            return java.util.Objects.equals(productIdentification, env.productIdentification())
+                    && java.util.Objects.equals(contentSha256, env.contentSha256())
                     && java.util.Objects.equals(requestId, env.requestId())
                     && java.util.Objects.equals(messageIdWire, env.messageId())
                     && java.util.Objects.equals(siteCode, env.siteCode())

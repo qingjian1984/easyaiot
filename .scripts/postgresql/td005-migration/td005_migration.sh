@@ -7,7 +7,7 @@
 #
 # 用法：
 #   ./td005_migration.sh dry-run [--db <database>]
-#   ./td005_migration.sh apply [--db <database>] [--step M05|M15|M16|V001|V002|V003|V004|V005|V006|V007|V008|V010] [--approval <id>] [--yes]
+#   ./td005_migration.sh apply [--db <database>] [--step M05|M15|M16|V001|V002|V003|V004|V005|V006|V007|V008|V010|V009] [--approval <id>] [--yes]
 #   ./td005_migration.sh uninstall [--db <database>] [--approval <id>] [--yes]
 #   ./td005_migration.sh check-comments [--db <database>]
 #
@@ -29,12 +29,12 @@
 #   RETRY_MAX / RETRY_BASE_DELAY / RETRY_MAX_DELAY
 #                        可重试错误（锁忙/连接/超时）的重试次数与退避（默认 3/1s/4s）
 #   SKIP_PRECHECK       1 时跳过运行时画像 precheck
-#   M05_SQL / M15_SQL / M16_SQL / V001_SQL / V002_SQL / V003_SQL / V004_SQL / V005_SQL / V006_SQL / V007_SQL / V008_SQL / V010_SQL / U001_SQL  步骤 SQL 路径覆盖
+#   M05_SQL / M15_SQL / M16_SQL / V001_SQL / V002_SQL / V003_SQL / V004_SQL / V005_SQL / V006_SQL / V007_SQL / V008_SQL / V010_SQL / V009_SQL / U001_SQL  步骤 SQL 路径覆盖
 #
 # 执行模型（ADR-013 1.4.2，DBA/架构专项处置 H-01～H-04）：
 #   1. 单 psql 会话内先完成全部校验（hash、INVALID index、索引签名），
 #      任何校验失败零业务 DDL 变化（仅 history 引导表幂等建立）；
-#   2. 校验全部通过后才按依赖顺序执行 M05 → M15 → M16 → V001 → V002 → V003 → V004 → V005 → V006 → V007 → V008 → V010；
+#   2. 校验全部通过后才按依赖顺序执行 M05 → M15 → M16 → V001 → V002 → V003 → V004 → V005 → V006 → V007 → V008 → V010 → V009；
 #   3. 锁等待与语句超时通过 lock_timeout/statement_timeout 强制有界；
 #   4. 失败按错误码分类，仅可重试错误按有界退避重跑（步骤幂等跳过）；
 #   5. 成功/失败均落 schema_migration_history（FAILED 含脱敏错误摘要）。
@@ -90,11 +90,12 @@ V006_SQL="${V006_SQL:-${ASSET_DIR}/V006__power_object_assignment_core.sql}"
 V007_SQL="${V007_SQL:-${ASSET_DIR}/V007__collector_release_derivation_identity.sql}"
 V008_SQL="${V008_SQL:-${ASSET_DIR}/V008__iot_sink_telemetry_inbox.sql}"
 V010_SQL="${V010_SQL:-${ASSET_DIR}/V010__telemetry_quality.sql}"
+V009_SQL="${V009_SQL:-${ASSET_DIR}/V009__telemetry_inbox_product_identity.sql}"
 U001_SQL="${U001_SQL:-${ASSET_DIR}/U001__power_model_version_binding_audit_outbox.sql}"
 CHECK_SQL="${SCRIPT_DIR}/check_ddl_comments.sql"
 PREPROFILE_SQL="${SCRIPT_DIR}/precheck_runtime_profile.sql"
 
-APPLY_STEPS=(M05 M15 M16 V001 V002 V003 V004 V005 V006 V007 V008 V010)
+APPLY_STEPS=(M05 M15 M16 V001 V002 V003 V004 V005 V006 V007 V008 V010 V009)
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -125,6 +126,7 @@ step_sql_path() {
         V007) echo "${V007_SQL}" ;;
         V008) echo "${V008_SQL}" ;;
         V010) echo "${V010_SQL}" ;;
+        V009) echo "${V009_SQL}" ;;
         U001) echo "${U001_SQL}" ;;
         *) fail "unknown step: $1" ;;
     esac
@@ -333,6 +335,33 @@ SQL
                 cat "$(step_sql_path "${step}")"
                 echo "COMMIT;"
                 ;;
+            V009)
+                cat <<SQL
+SELECT NOT (
+    EXISTS (
+        SELECT 1
+          FROM public.schema_migration_history
+         WHERE migration_id = 'V008'
+           AND status = 'SUCCEEDED'
+           AND script_sha256 = :'v008_sha'
+    )
+    AND EXISTS (
+        SELECT 1
+          FROM public.schema_migration_history
+         WHERE migration_id = 'V010'
+           AND status = 'SUCCEEDED'
+           AND script_sha256 = :'v010_sha'
+    )
+) AS v009_dependency_missing \gset
+\if :v009_dependency_missing
+\echo DEPENDENCY_NOT_SATISFIED V009
+SELECT 1/0 AS v009_dependency_missing;
+\endif
+BEGIN;
+SQL
+                cat "${V009_SQL}"
+                echo "COMMIT;"
+                ;;
         esac
         cat <<SQL
 INSERT INTO public.schema_migration_history
@@ -413,6 +442,8 @@ SQL
 classify_error() {
     local logfile="$1"
     if grep -q "HASH_MISMATCH" "${logfile}"; then echo "HASH_MISMATCH"; return; fi
+    if grep -q "DEPENDENCY_NOT_SATISFIED V009" "${logfile}"; then echo "DEPENDENCY_NOT_SATISFIED"; return; fi
+    if grep -q "V009_PREEXISTING_COLUMN_WITHOUT_HISTORY" "${logfile}"; then echo "V009_PREEXISTING_COLUMN_WITHOUT_HISTORY"; return; fi
     if grep -q "INVALID_INDEX_DETECTED" "${logfile}"; then echo "INVALID_INDEX_DETECTED"; return; fi
     if grep -q "INDEX_SIGNATURE_MISMATCH" "${logfile}"; then echo "INDEX_SIGNATURE_MISMATCH"; return; fi
     if grep -q "VALIDATION_PASS" "${logfile}" && ! grep -q "STEP_START" "${logfile}"; then echo "VALIDATION_ABORT"; return; fi
@@ -526,7 +557,7 @@ run_with_retry() {
         rc=$?
         err_code="$(classify_error "${LAST_RUN_LOG}")"
         case "${err_code}" in
-            HASH_MISMATCH|INVALID_INDEX_DETECTED|INDEX_SIGNATURE_MISMATCH|VALIDATION_ABORT)
+            HASH_MISMATCH|DEPENDENCY_NOT_SATISFIED|V009_PREEXISTING_COLUMN_WITHOUT_HISTORY|INVALID_INDEX_DETECTED|INDEX_SIGNATURE_MISMATCH|VALIDATION_ABORT)
                 rm -f "${LAST_RUN_LOG}"
                 fail_validation "${err_code}: 校验失败，零业务变更"
                 ;;
@@ -552,7 +583,7 @@ case "${MODE}" in
         for step in "${APPLY_STEPS[@]}" U001; do
             log "${step} sha256=$(sha256_file "$(step_sql_path "${step}")")"
         done
-        log "steps: M05 (txn) -> M15 (concurrent) -> M16 (attach) -> V001 (txn) -> V002 (txn) -> V003 (txn) -> V004 (txn) -> V005 (txn) -> V006 (txn) -> V007 (txn) -> V008 (txn) -> V010 (txn); U001 uninstall only"
+        log "steps: M05 (txn) -> M15 (concurrent) -> M16 (attach) -> V001 (txn) -> V002 (txn) -> V003 (txn) -> V004 (txn) -> V005 (txn) -> V006 (txn) -> V007 (txn) -> V008 (txn) -> V010 (txn) -> V009 (txn); U001 uninstall only"
         log "timeouts: connect=${CONNECT_TIMEOUT}s lock_wait=${LOCK_WAIT} statement=${STATEMENT_TIMEOUT} m15=${M15_STATEMENT_TIMEOUT}"
         exit 0
         ;;

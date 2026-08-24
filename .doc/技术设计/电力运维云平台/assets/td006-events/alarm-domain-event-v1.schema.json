@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/events/device.alarm.domain/v1",
+  "title": "AlarmDomainEvent v1 design candidate",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventVersion",
+    "eventType",
+    "tenantId",
+    "occurredAt",
+    "recordedAt",
+    "source",
+    "correlationId",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "eventType": {
+      "enum": [
+        "device.alarm.created.v1",
+        "device.alarm.occurrence-recorded.v1",
+        "device.alarm.recovered.v1",
+        "device.alarm.status-changed.v1",
+        "device.alarm.escalated.v1",
+        "device.alarm.suppression-decided.v1"
+      ]
+    },
+    "tenantId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "iot-device"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "traceId": {
+      "type": ["string", "null"],
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": ["alarmId", "status", "version"],
+      "properties": {
+        "alarmId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "siteId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "deviceId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "status": {
+          "enum": ["ACTIVE", "ACKNOWLEDGED", "PROCESSING", "RECOVERED", "CLOSED", "IGNORED", "FALSE_ALARM"]
+        },
+        "fromStatus": {
+          "type": ["string", "null"],
+          "maxLength": 32
+        },
+        "severity": {
+          "enum": ["INFO", "NORMAL", "IMPORTANT", "EMERGENCY"]
+        },
+        "occurrenceCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromLevel": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toLevel": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reasonCode": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "decision": {
+          "enum": ["SUPPRESSED", "NOT_SUPPRESSED", "REEVALUATED"]
+        },
+        "maintenanceContextId": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "policyId": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "policyVersion": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "decidedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "eventType": {
+            "const": "device.alarm.suppression-decided.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "required": ["alarmId", "status", "version", "decision", "decidedAt"]
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}
