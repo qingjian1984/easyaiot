@@ -20,6 +20,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -104,7 +105,7 @@ class CollectorCrossTdContractTest {
     }
 
     @Test
-    void queueTimeoutIsBackpressureAndUnavailableDatabaseIsStable(@TempDir Path directory) throws Exception {
+    void queueTimeoutIsBackpressureAndUnavailableDatabaseFailsAtStartup(@TempDir Path directory) throws Exception {
         OutboxCommandQueue queue = new OutboxCommandQueue(2);
         TelemetryOutboxBatch commandPayload = batch(envelope("queue-1", "220.5"));
         queue.offer(new OutboxCommand.AppendBatch(commandPayload, new CompletableFuture<>()), Duration.ZERO);
@@ -112,17 +113,20 @@ class CollectorCrossTdContractTest {
                 () -> queue.offer(new OutboxCommand.AppendBatch(commandPayload, new CompletableFuture<>()),
                         Duration.ZERO));
 
-        Path missingParentDb = directory.resolve("missing").resolve("outbox.db");
-        SqliteTelemetryOutbox unavailable = new SqliteTelemetryOutbox(
-                missingParentDb, new EnvelopeCanonicalCodec(), 8);
-        try {
-            OutboxUnavailableException error = assertThrows(OutboxUnavailableException.class,
-                    () -> unavailable.appendBatch(batch(envelope("cross-4", "220.5")),
-                            Duration.ofSeconds(1)));
-            assertInstanceOf(OutboxUnavailableException.class, error);
-        } finally {
-            unavailable.shutdown();
-        }
+        Path missingParent = directory.resolve("missing");
+        Path missingParentDb = missingParent.resolve("outbox.db");
+        Path missingParentLock = missingParent.resolve("collector-outbox.lock");
+        OutboxUnavailableException error = assertThrows(OutboxUnavailableException.class,
+                () -> new SqliteTelemetryOutbox(
+                        missingParentDb, new EnvelopeCanonicalCodec(), 8));
+        assertTrue(error.getMessage().startsWith(
+                "ROUTE_BACKFILL_APPLY_FAILED: outbox startup failed"));
+        NoSuchFileException cause = assertInstanceOf(NoSuchFileException.class, error.getCause());
+        assertEquals(missingParentLock.toAbsolutePath().normalize(),
+                Path.of(cause.getFile()).toAbsolutePath().normalize());
+        assertFalse(Files.exists(missingParent));
+        assertFalse(Files.exists(missingParentDb));
+        assertFalse(Files.exists(missingParentLock));
     }
 
     @Test
