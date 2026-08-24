@@ -2,16 +2,16 @@ package com.basiclab.iot.device.service.collector;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.stereotype.Component;
 
 /**
  * 默认的 AGENT_ACCEPTED/乱序回报结构化记录器。
  *
  * <p>遵循 ADR-018：日志不写签名、完整 nonce、Token、密钥、hash、canonical 或错误详情。</p>
+ *
+ * <p>由 {@code CollectorConfigReleaseWiringConfiguration} 显式 @Bean 装配
+ * （组件扫描 + @ConditionalOnMissingBean 在 verifier 启用的装配顺序下不可靠，
+ * 见该配置类注释）；类上不再放 Spring 注解。</p>
  */
-@Component
-@ConditionalOnMissingBean(CollectorConfigReleaseObservedFactRecorder.class)
 public class StructuredCollectorConfigReleaseObservedFactRecorder
         implements CollectorConfigReleaseObservedFactRecorder {
 

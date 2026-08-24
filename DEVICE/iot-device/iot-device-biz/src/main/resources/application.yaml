@@ -218,6 +218,9 @@ easyaiot:
   security:
     internal:
       enabled: ${EASYAIOT_INTERNAL_SERVICE_AUTH_ENABLED:false}
+      # 调用方密钥引用（verifier 侧同源）：key=serviceId:keyId，value=持有明文的环境变量名。
+      key-references:
+        "iot-sink:authority-v1": EASYAIOT_INTERNAL_AUTH_KEY_IOT_SINK_AUTHORITY_V1
       routes:
         - method: GET
           path: /internal-api/device/collector-config/releases/pending

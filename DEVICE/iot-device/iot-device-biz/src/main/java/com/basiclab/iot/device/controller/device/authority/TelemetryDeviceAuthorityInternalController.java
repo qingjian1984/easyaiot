@@ -8,7 +8,7 @@ import com.basiclab.iot.device.domain.device.authority.TelemetryDeviceAuthorityR
 import com.basiclab.iot.device.service.device.authority.TelemetryDeviceAuthorityInternalAuth;
 import com.basiclab.iot.device.service.device.authority.TelemetryDeviceAuthorityInternalException;
 import com.basiclab.iot.device.service.device.authority.TelemetryDeviceAuthorityService;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -23,7 +23,7 @@ import javax.servlet.http.HttpServletRequest;
 /** ADR-018 protected center authority endpoint. */
 @Validated
 @RestController
-@ConditionalOnBean(InternalServiceAuthVerifier.class)
+@ConditionalOnProperty(name = "easyaiot.security.internal.enabled", havingValue = "true")
 @RequestMapping(TelemetryDeviceAuthorityInternalApi.BASE_PATH)
 public class TelemetryDeviceAuthorityInternalController {
 

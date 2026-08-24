@@ -303,6 +303,12 @@ logging:
 # 中心只允许订阅 enum 派生的精确共享过滤器；显式改写会 fail-closed。
 # MQTT 凭证与 ADR-018 key 只通过部署环境/配置中心 secret 引用注入。
 easyaiot:
+  # ADR-018 内部服务密钥引用（LC02-06 authority 调用方）：key 为 serviceId:keyId，
+  # value 为持有明文密钥的环境变量名；密钥本体只经部署 secret 注入，禁止提交。
+  security:
+    internal:
+      key-references:
+        "iot-sink:authority-v1": EASYAIOT_INTERNAL_AUTH_KEY_IOT_SINK_AUTHORITY_V1
   telemetry:
     mqtt:
       host: ${EASYAIOT_TELEMETRY_MQTT_HOST:localhost}

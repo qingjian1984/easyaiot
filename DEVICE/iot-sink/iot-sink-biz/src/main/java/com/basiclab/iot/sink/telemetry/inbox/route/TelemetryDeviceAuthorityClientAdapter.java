@@ -46,6 +46,13 @@ public final class TelemetryDeviceAuthorityClientAdapter
             }
             return new Resolution.Unavailable();
         } catch (RuntimeException exception) {
+            // 不写签名/密钥/hash，只记异常类型定位装配类故障（ADR-018 日志红线）
+            org.slf4j.LoggerFactory.getLogger(getClass()).warn(
+                    "telemetry_authority_client_failed type={} body={}",
+                    exception.getClass().getName(),
+                    exception instanceof feign.FeignException fe
+                            ? String.valueOf(fe.contentUTF8()).replaceAll("[A-Za-z0-9+/=]{40,}", "<redacted>")
+                            : "-");
             return new Resolution.Unavailable();
         }
     }

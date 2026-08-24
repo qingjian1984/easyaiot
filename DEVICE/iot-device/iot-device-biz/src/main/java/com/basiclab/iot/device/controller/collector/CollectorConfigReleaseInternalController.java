@@ -13,7 +13,7 @@ import com.basiclab.iot.device.service.collector.CollectorConfigReleaseInternalE
 import com.basiclab.iot.device.service.collector.CollectorConfigReleaseInternalService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -34,7 +34,7 @@ import java.util.List;
 /** ADR-018 保护的 collector release provider 内部端点。 */
 @Validated
 @RestController
-@ConditionalOnBean(InternalServiceAuthVerifier.class)
+@ConditionalOnProperty(name = "easyaiot.security.internal.enabled", havingValue = "true")
 @RequestMapping(CollectorConfigReleaseInternalApi.BASE_PATH)
 public class CollectorConfigReleaseInternalController {
 
