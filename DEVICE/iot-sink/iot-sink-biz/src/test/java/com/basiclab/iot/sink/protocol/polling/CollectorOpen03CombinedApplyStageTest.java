@@ -12,7 +12,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -115,7 +117,16 @@ class CollectorOpen03CombinedApplyStageTest {
     private static void runStandaloneApplyContract(Path directory) throws Exception {
         byte[] canonical = CollectorConfigTestFixtures.canonical(WORKLOAD_ID, 1L, "voltage-a");
         Files.createDirectories(directory);
-        Files.write(directory.resolve("desired.json"), canonical);
+        if (Files.getFileAttributeView(directory, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS) != null) {
+            Files.setAttribute(directory, "unix:mode", LocalFilePollingConfigProvider.LINUX_CONFIG_DIRECTORY_MODE,
+                    LinkOption.NOFOLLOW_LINKS);
+        }
+        Path desired = directory.resolve("desired.json");
+        Files.write(desired, canonical);
+        if (Files.getFileAttributeView(desired, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS) != null) {
+            Files.setAttribute(desired, "unix:mode", LocalFilePollingConfigProvider.LINUX_CONFIG_FILE_MODE,
+                    LinkOption.NOFOLLOW_LINKS);
+        }
         LocalFilePollingConfigProvider provider = new LocalFilePollingConfigProvider(
                 directory, WORKLOAD_ID);
         AtomicReference<CollectorConfigSnapshot> graph = new AtomicReference<>();

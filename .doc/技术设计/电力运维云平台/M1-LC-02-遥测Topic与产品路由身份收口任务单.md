@@ -1,11 +1,11 @@
 # M1-LC-02：遥测 Topic 与产品路由身份收口任务单
 
-> 状态：Approved / Frozen（`LC02-01A` / `LC02-01A-R1` / `LC02-04A` / `LC02-04B` / `LC02-04C-1` / `LC02-04C-2` / `LC02-05` / `LC02-06` / `LC02-07` / `LC02-08` / `LC02-09-R1` COMPLETE / SOL-ACCEPTED；`LC02-10` STOPPED / NOT ACCEPTED；`LC02-10-R1` IMPLEMENTED / DIRECT-TEST-PASSED / FULL-ACCEPTANCE-NOT-RUN）
-> 版本：1.7.2
-> 日期：2026-08-24
+> 状态：Approved / Frozen（`LC02-01A` / `LC02-01A-R1` / `LC02-04A` / `LC02-04B` / `LC02-04C-1` / `LC02-04C-2` / `LC02-05` / `LC02-06` / `LC02-07` / `LC02-08` / `LC02-09-R1` COMPLETE / SOL-ACCEPTED；`LC02-10-R4` IMPLEMENTED / JAVA-PASSED / PG-FAILED / NOT ACCEPTED；`LC02-10` / `LC02-10-R1` / `LC02-10-R2` / `LC02-10-R3` STOPPED / FULL-RETEST-FAILED / NOT ACCEPTED）
+> 版本：1.10.1
+> 日期：2026-08-25
 > 架构负责人：GPT-5.6 Sol
-> 实现执行者：GPT-5.6 Luna（max reasoning，LC02-08 核心实现与 LC02-09 首批生产增量）/ GPT-5.6 Sol（R1/R2、LC02-09 原白名单接管、真实容器编排、独立验收与经 owner 授权接管 §24.5）
-> 当前交付状态：`LC02-09-R1` 已完成并经 Sol 独立复核为 COMPLETE / SOL-ACCEPTED（Verified-Local）；`LC02-10` §24.5 因 sink 定向回归 3 个 Errors 按门禁停工；owner 明确授权 Sol 接管后，`LC02-10-R1` §25.2 已实现且 Linux 直接测试 5/5 通过，但因两组 PG 凭据未注入，§25.3～§25.4 完整验收尚未运行，详见 §25.8。正式 V009 落库与 MQTT 生产凭据/ACL 激活仍 OPEN / NOT APPROVED
+> 实现执行者：GPT-5.6 Luna（max reasoning，LC02-08 核心实现、LC02-09 首批生产增量、LC02-10-R2 单 literal 与 LC02-10-R4 standalone POSIX fixture 修订）/ GPT-5.6 Sol（R1/R2、LC02-09 原白名单接管、真实容器编排、独立验收及经 owner 授权接管 §24.5、§26.3～§26.5、§27.3～§27.6，并复核 R4 完整模块 skip 归类）
+> 当前交付状态：`LC02-09-R1` 已完成并经 Sol 独立复核为 COMPLETE / SOL-ACCEPTED（Verified-Local）。经 owner 授权，Luna Max 已按 §28.2 完成唯一 standalone POSIX fixture 修订；Linux 直接 1/1、联合 16/16、脱敏 1/1、34-reactor 编译、device 39/39、sink 155/155 与完整 `iot-sink-biz -am` 均通过。完整模块唯一 skip 的 XML testcase 明确属于 §24.4 允许后继真实重跑的 `EmqxTelemetryAclIntegrationTest`，不是 Center 测试 skip。第二轮五个 `bash -n` 通过后，V009 PostgreSQL 合同脚本退出码 1，具体失败阶段未保留，按 §28.5 停工；Inbox PostgreSQL、Java fail-closed 与真实 EMQX未运行。全部保护摘要前后相等且零残留，详见 §28.6。R4 状态为 IMPLEMENTED / JAVA-PASSED / PG-FAILED / NOT ACCEPTED；正式 V009 落库与 MQTT 生产凭据/ACL 激活仍 OPEN / NOT APPROVED
 
 ## 1. 任务结论
 
@@ -2296,3 +2296,423 @@ R1 不创建、不读取、不轮换凭据。开始任何验收前，调用进�
 交付复核：`CollectorCrossTdContractTest.java` 新 SHA-256 为 `4CE831266BF37FE220FF006C0B05F2A5A83ED9B444CD19C06763FBCEFFA484C8`；`SqliteTelemetryOutbox.java`、`OutboxFileLock.java`、`SqliteOutboxMigration.java`、`SqliteOutboxRouteBackfillApplierTest.java` 分别仍为 §25.5 的 `6F3AE4AA...F9682`、`B3FC80A5...E4D3`、`FD918322...BA90`、`2E6FD477...9441`；测试文件 scoped `git diff --check` 通过。没有 commit。
 
 由于当前进程的 `LC02_V009_PG_PASSWORD` 和 `LC02_08_PG_PASSWORD` 仍均未注入，依 §25.4 没有启动 §25.3 四阶段完整 Java 验收、V009 79/79、Inbox 49/49、Java fail-closed 11/11 或真实 EMQX 12/12。本结果只证明 §25.2 实现与直接测试通过，状态为 **IMPLEMENTED / DIRECT-TEST-PASSED / FULL-ACCEPTANCE-NOT-RUN**，不得据此关闭 `LC02-10` 或 M1-LC-02。下一步须先在调用进程显式提供两组密码变量，再由决策所有者独立授权执行 §25.3～§25.4 完整验收。
+
+### 25.9 完整重验触发依赖 reactor 停工（2026-08-25）
+
+决策所有者继续授权执行 §25.3～§25.4，并明确允许本回合从 `DEVICE/.env` 读取两组 PostgreSQL 密码作为凭据来源例外。Sol 只检查两项非空存在性且全程未回显值、长度或完整 JDBC URL；由于本轮在 PostgreSQL 阶段前已经停工，两组密码没有传入 PostgreSQL、Maven 或 EMQX 子进程。该来源偏离 §25.4 原冻结要求，不能作为后续回合的默认授权，重新验收前必须由 Sol 决定恢复原调用进程注入方式或另冻凭据来源修订。
+
+完整前检使用 Docker Server 29.7.2、Linux/amd64；Maven、EMQX、PostgreSQL 三张本地镜像摘要均与 §25.3 精确值一致。开始时迁移 13、Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4 五组聚合摘要及 R1 九个关键单文件摘要全部一致。按冻结顺序实际结果为：
+
+1. Linux Docker 联合 `test-compile`：34/34 reactor `BUILD SUCCESS`，退出码 0；禁网下仅出现 BouncyCastle metadata 不可达 warning，依赖由既有本地缓存满足；
+2. device 七类：实际 **39/39**，Failures=0、Errors=0、Skipped=0，33/33 reactor `BUILD SUCCESS`；
+3. sink 二十九类：实际 **155/155**，Failures=0、Errors=0、Skipped=0，28/28 reactor `BUILD SUCCESS`；`SqliteOutboxRouteBackfillApplierTest` 31/31，两个符号链接 fixture 在 Linux 中真实创建链接并进入生产拒绝断言；
+4. 完整模块冻结命令在 `iot-common-web` reactor 执行 `DesensitizeTest.test` 时失败：Tests=1、Failures=1、Errors=0、Skipped=0，断言期望脱敏结果 `芋***`、实际为 `B*********`。该失败发生在 `iot-sink-biz` 前，故 `iot-sink-biz` 及其后续结果均未形成，本命令 `BUILD FAILURE`；
+5. 依 §25.4“任何阶段失败立即停止”，没有继续 bash 静态预检、V009 PostgreSQL 79/79、Inbox PostgreSQL 49/49、Java fail-closed 11/11 或真实 EMQX 12/12，也没有修改或重启现有 PostgreSQL/EMQX 服务。
+
+停工后五组聚合保护摘要仍分别为迁移 13 `2ab39079fb84d8ba42b056cbbdc25685fc0461f82eda762565f620eada662adb`、Inbox/Outbox 25 `B2B72C3D6F0F691F8DDCEF21BAD2E73BFC1B87F17335854B61DF0D981F154F2C`、Store 9 `B9AC52AA98EA2424B22AA129DD5E81CA59CD855BAB6A46EB5F57DDF6F990F604`、ACK/投影 5 `6E2A808692FD12B0415E5037C6AF624F7538AD1650E83597281031446CE30C9B`、EMQX 4 `EA6DCFD71843C19C9882FD59C788532CD639AC7872610AD8FA370C2A393809BC`。固定 `lc02-10-r1-*` 容器、`lc02_v009_close*` / `lc02_08_close*` 数据库残留均为 0。执行期间出现任务范围外的并行文档改动，均未清理、覆盖或归属本轮。
+
+结论：`LC02-10-R1` 转为 **STOPPED / FULL-RETEST-FAILED / NOT ACCEPTED**，`LC02-10` 与 M1-LC-02 继续保持 **STOPPED / NOT ACCEPTED** 和 Approved / Frozen。本包不得修复 `DesensitizeTest`。下一步必须由 Sol 只读分析该测试的确定性合同、为何 `-am` 完整命令把依赖 reactor 测试纳入门禁，以及凭据来源例外，再决定是否冻结 `LC02-10-R2`；未经新的独立授权不得继续 §25.4 或修改测试。
+
+## 26. `LC02-10-R2` 确定性旧断言对齐、凭据来源例外与完整重验冻结单（2026-08-25）
+
+### 26.1 双基线、失败事实与架构结论
+
+本节同时依据《EasyAIoT 项目开发宪法》v1.6.0、《平台功能计划》v1.5.0、§24～§25 的冻结合同及 §25.9 真实 Linux 失败证据。R2 是零业务功能、零生产实现、零接口/Schema/Topic/部署变化的关闭包，只处置一个确定性测试旧断言并重新执行完整验收；不改变 `standard/full` 产品范围，不批准 `mini`、正式 V009、生产 broker/ACL/TLS、运行期压测、现场或发布资格。
+
+Sol 只读核验确认：`DesensitizeTest` 当前输入固定为 `BasicLab源码`，Java `String.length()` 为 10；`@ChineseNameDesensitize` 固定 `prefixKeep=1`、`suffixKeep=0`、`replacer="*"`，生产 `AbstractSliderDesensitizationHandler` 因此确定返回首字符 `B` 加 9 个 `*`，即 `B*********`。测试仍断言与当前输入无关的 `芋***`，是确定性旧 fixture 漂移，不是生产脱敏实现缺陷。R2 禁止修改生产处理器、注解默认值、输入字符串或其他断言来迁就旧期望。
+
+§25.3 完整模块命令带 `-am`，且 `-Dtest=*Test,...` 会作用于所选 reactor，因此依赖模块 `iot-common-web` 的 `DesensitizeTest` 属于该次完整验收门禁。R2 明确保留这一事实：不得去掉 `-am`、不得加 `-DskipTests`、不得只在 `iot-sink-biz` 恢复执行、不得排除 `DesensitizeTest`，也不得复用 §25.9 已通过的三个 Java 阶段。修正后必须从头重跑；若依赖 reactor 暴露下一个 failure/error/非法 skip，仍立即停工，不得把它归类为“LC02 范围外”后继续。
+
+### 26.2 唯一实现增量、白名单与保护摘要
+
+获得后续独立实现授权后，唯一测试增量是：
+
+1. 在 `DEVICE/iot-common/iot-common-web/src/test/java/com/basiclab/iot/mybatis/desensitize/core/DesensitizeTest.java` 第一个昵称断言中，仅把期望字符串 `芋***` 机械改为 `B*********`；
+2. `setNickname("BasicLab源码")`、其余 13 个断言、类/方法/注解/import 和测试数量必须原样保持；不得重命名、拆分、disable、加 assumption、动态计算期望值或修改字符编码；
+3. 当前测试文件 SHA-256 为 `403B2D6B95909474BCB31AB2449E7BF750B3E3EB957FA357EFE863CAD858EBEF`；实现后必须报告新摘要，scoped diff 必须只包含上述一个字符串 literal；
+4. 三个生产保护文件必须分别保持：`ChineseNameDesensitization.java` `0DD501489F0AF4E6E2F7CC9531A85D964312B93F9486545730C0779FF7DA5CB6`、`AbstractSliderDesensitizationHandler.java` `43A4E9EEC2BDF2E45D65F9AC2908706D351A60F80CCF6A4E3C303B41F6DD81E3`、`ChineseNameDesensitize.java` `8331EDFAD23952962CD5A3CCAA4194653309CD2BCA2BA9605F64BD9CAFBA58B0`；
+5. §25.5 的五个 R1 文件、§24.3 五组聚合、V009 及 R1 三个 EMQX 单文件摘要继续全部冻结不变。
+
+唯一可写文件为上述 `DesensitizeTest.java`、本任务单和 `M1-SDD进度与续作入口.md`。不得修改任何生产源码、其他测试、POM、脚本、SQL、配置、`.env`、Compose、Docker 资产或其他文档；不得新增 helper/script/file，不得 commit，不得清理或归属用户并行改动。
+
+### 26.3 `DEVICE/.env` 本地凭据来源书面例外
+
+决策所有者已经书面授权本地 R2 从 `DEVICE/.env` 读取 `LC02_V009_PG_PASSWORD` 和 `LC02_08_PG_PASSWORD`。本节据此替代 §25.4 的“调用进程预注入”要求，但只对本地隔离验收有效，并冻结以下安全边界：
+
+1. `DEVICE/.env` 必须继续被 `DEVICE/.gitignore` 命中且不在 `git ls-files`；文件不得修改、复制、提交、挂入交付物或作为生产凭据来源；
+2. 只允许按精确键名读取上述两项；每项必须恰好出现一次且值非空。只允许报告 `2/2 present`，不得输出值、长度、hash、部分字符、完整 JDBC URL、文件内容或环境变量清单；
+3. 四个 Linux Maven 容器和单类直接测试必须在仓库 bind mount 之上，再以仓库外临时空文件只读覆盖 `/workspace/DEVICE/.env`，确保 Maven/JVM 无法读取宿主凭据文件；空遮罩文件必须在 `finally` 删除；
+4. 只有四个 Java 阶段、bash 静态语法预检全部通过后，才重新读取两项并写入当前 PowerShell 进程环境；V009 与 Inbox 脚本各自只继承其所需的临时 `PG_PASSWORD`，脚本结束立即清除通用 PG/JDBC 临时变量；两段 PG 完成或任一异常后，两个源环境变量也必须在 `finally` 清除；
+5. 禁止从 `postgres-server`、Compose、历史命令、日志或对话复制替代值，禁止把真实值写入本任务单、SDD、命令行 literal、临时脚本或报告；
+6. 由于凭据值曾在对话中出现，它只能用于本地隔离验收，正式环境或任何共享环境使用前必须外部轮换并确认旧值失效。本包不执行轮换，也不批准生产复用。
+
+冻结凭据前检函数如下；执行者不得把返回值写到管道或输出：
+
+```powershell
+$lc02EnvFile = (Resolve-Path 'DEVICE/.env').Path
+git check-ignore --quiet -- 'DEVICE/.env'
+if ($LASTEXITCODE -ne 0) { throw 'LC02_R2_ENV_NOT_IGNORED' }
+git ls-files --error-unmatch -- 'DEVICE/.env' *> $null
+if ($LASTEXITCODE -eq 0) { throw 'LC02_R2_ENV_IS_TRACKED' }
+
+function Read-Lc02R2Secret([string]$Name) {
+  $pattern = '^' + [regex]::Escape($Name) + '='
+  $matches = @(Get-Content -LiteralPath $lc02EnvFile | Where-Object { $_ -match $pattern })
+  if ($matches.Count -ne 1) { throw "LC02_R2_SECRET_CARDINALITY: $Name" }
+  $secret = $matches[0].Substring($matches[0].IndexOf('=') + 1).Trim()
+  if (($secret.StartsWith('"') -and $secret.EndsWith('"')) -or
+      ($secret.StartsWith("'") -and $secret.EndsWith("'"))) {
+    $secret = $secret.Substring(1, $secret.Length - 2)
+  }
+  if ([string]::IsNullOrWhiteSpace($secret)) { throw "LC02_R2_SECRET_EMPTY: $Name" }
+  return $secret
+}
+
+foreach ($name in @('LC02_V009_PG_PASSWORD', 'LC02_08_PG_PASSWORD')) {
+  $secret = Read-Lc02R2Secret $name
+  Remove-Variable secret -ErrorAction SilentlyContinue
+}
+Write-Host 'LC02_R2_CREDENTIALS=2/2_PRESENT_REDACTED'
+```
+
+### 26.4 Linux 单类资格、完整验收命令与顺序
+
+R2 继续使用 §25.3 的 Docker/Linux/镜像摘要、禁网、本地 Maven repository、`/tmp` tmpfs、固定容器名和零残留要求。开始前创建仓库外临时空遮罩文件：
+
+```powershell
+$repoPath = (Resolve-Path '.').Path
+$m2Path = (Resolve-Path (Join-Path $env:USERPROFILE '.m2/repository')).Path
+$lc02EnvMask = New-TemporaryFile
+```
+
+所有 Maven `docker run` 命令必须在 §25.3 的两个既有 bind mount 后机械增加以下只读覆盖，结束在 `finally` 删除 `$lc02EnvMask`：
+
+```powershell
+--mount "type=bind,source=$($lc02EnvMask.FullName),target=/workspace/DEVICE/.env,readonly"
+```
+
+实现后的第一条直接资格命令固定为：
+
+```powershell
+docker run --rm --name lc02-10-r2-desensitize --network none `
+  --mount "type=bind,source=$repoPath,target=/workspace" `
+  --mount "type=bind,source=$m2Path,target=/root/.m2/repository" `
+  --mount "type=bind,source=$($lc02EnvMask.FullName),target=/workspace/DEVICE/.env,readonly" `
+  --tmpfs /tmp:exec,size=1g -w /workspace `
+  maven:3.9.16-amazoncorretto-17-alpine `
+  mvn -f DEVICE/pom.xml test -pl iot-common/iot-common-web -am `
+  '-Dtest=DesensitizeTest' '-Dsurefire.failIfNoSpecifiedTests=false' `
+  '-Dmaven.test.skip=false'
+if ($LASTEXITCODE -ne 0) { throw 'LC02_R2_DESENSITIZE_DIRECT_FAILED' }
+```
+
+单类必须实际 **1/1**、Failures=0、Errors=0、Skipped=0。随后完整验收必须从零按以下单一顺序执行，任一阶段非零立即停止：
+
+1. 重新执行 §25.3 四个 Linux Java 命令，容器名前缀改为 `lc02-10-r2-`，并全部增加 `.env` 空文件覆盖；必须分别得到 34-reactor `test-compile`、device 39/39、sink 155/155 和完整模块 `BUILD SUCCESS`；
+2. 完整模块命令仍精确使用 `-pl iot-sink/iot-sink-biz -am` 与 `-Dtest=*Test,!TDengineTelemetryStoreContractTest,!TDengineIdempotencySpikeTest,!JdbcTelemetryQueryAdapterContractTest,!TDengineTelemetryQueryAdapterContractTest`。必须逐 reactor 报告 Tests/Failures/Errors/Skipped；四个排除类保持明确列出，其他依赖或 LC02 测试不得排除、未发现或非法 skip；
+3. 四条 §24.5 `bash -n` 静态语法预检；
+4. 静态预检通过后，以 `Read-Lc02R2Secret` 分别导入两个源进程变量，再原样执行 §24.5 的 V009 隔离 PostgreSQL **79/79**（前缀 `lc02_v009_close`）与 Inbox 隔离 PostgreSQL **49/49**（前缀 `lc02_08_close`）；Failures/Errors/Skipped 和数据库/备份/夹具残留均为 0；
+5. 清除两个源密码和全部临时 PG/JDBC 环境变量后，原样执行 §24.5 Java fail-closed **11/11** 与真实 EMQX **12/12**；
+6. 原样执行 §24.5 两个禁止扫描、scoped `git diff --check`、五组聚合及全部单文件保护摘要复算、测试单文件精确 diff、容器/网络/数据库/临时目录/遮罩文件/凭据环境残留检查。
+
+凭据导入与无条件清理必须使用以下边界，不得省略 `finally`：
+
+```powershell
+try {
+  $env:LC02_V009_PG_PASSWORD = Read-Lc02R2Secret 'LC02_V009_PG_PASSWORD'
+  $env:LC02_08_PG_PASSWORD = Read-Lc02R2Secret 'LC02_08_PG_PASSWORD'
+  # 此处仅执行 §24.5 两段 PostgreSQL 隔离脚本。
+} finally {
+  foreach ($name in @(
+    'LC02_V009_PG_PASSWORD', 'LC02_08_PG_PASSWORD', 'PG_PASSWORD',
+    'LC02_08_PG_URL', 'LC02_08_PG_USERNAME', 'LC02_08_PG_PASSWORD',
+    'LC02_V009_PG_ENABLED', 'LC02_08_PG_ENABLED', 'LC02_V009_DB_PREFIX',
+    'LC02_08_DB_PREFIX', 'LC02_08_JDBC_HOST', 'LC02_08_JDBC_PORT'
+  )) {
+    Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+  }
+}
+```
+
+### 26.5 停工条件、完成定义与授权状态
+
+以下任一情形立即停工：旧测试无法通过单 literal 修正；需要改输入/生产实现/其他断言；`DEVICE/.env` 未忽略、已跟踪、键重复/缺失/空白或遮罩失败；任何 secret 被输出；镜像/摘要/Docker 平台漂移；直接测试不是 1/1；完整命令需要去掉 `-am`、排除新测试或继续失败；任一 Java/PG/EMQX failure/error/非法 skip；保护摘要漂移；临时资源或环境变量不能清理；出现白名单外新增 diff；并行工作区无法隔离。实现者不得顺手修复下一个缺陷、不得改命令降级、不得继续后继阶段收集抵消证据。
+
+只有单测试 diff 经 Sol 审查、直接 1/1 通过、§26.4 从头完整通过、五组与所有单文件摘要一致、两个禁止扫描和 scoped diff 通过、除单测试与两份文档外零新增 diff、所有临时资源和凭据变量残留为 0，Sol 才可把 `LC02-10-R2`、`LC02-10-R1` 与 `LC02-10` 标记 COMPLETE / SOL-ACCEPTED，并把 M1-LC-02 转为 Implemented / Verified-Local。正式 V009、生产 broker/ACL/TLS、Linux PTY/跨进程锁、资源/稳定性压测、Windows 发布资格和现场验证仍继续 OPEN，不因本地接受而关闭。
+
+本节当前状态为 **FROZEN / NOT-YET-AUTHORIZED**。本轮只授权 GPT-5.6 Sol 形成 R2 冻结合同，没有修改 `DesensitizeTest`，没有运行 Maven/Docker/PG/EMQX，也没有批准 commit。下一步必须由决策所有者独立授权“GPT-5.6 Luna Max 执行 LC02-10-R2 §26.2～§26.5 实现与测试”；若 Luna Max 不可用，不得静默替换，须明确报告后再由 owner 决定是否授权 Sol 接管。
+
+### 26.6 Luna 单 literal 落盘、Sol 接管授权与保护摘要前检停工（2026-08-25）
+
+决策所有者先独立授权 GPT-5.6 Luna Max 执行 §26.2～§26.5。Luna 在白名单内只把 `DesensitizeTest` 的昵称期望 `芋***` 改为 `B*********`，输入、其他断言、生产实现和测试数量未变；新 SHA-256 为 `852A24BB6009A500A425FDA25E2307CBABDE9C523551E93C9D7A77014BF8E2C7`，scoped diff 仅一删一增。Luna 两个执行回合均未启动 Docker 或返回测试退出码，Sol 明确报告运行限制后停止代理，没有把“运行中”冒充通过。决策所有者随后于 **13:30** 明确授权“GPT-5.6 Sol 接管 LC02-10-R2 §26.3～§26.5 完整验收与证据收口”。
+
+Sol 接管后重新读取《EasyAIoT 项目开发宪法》v1.6.0 与《平台功能计划》v1.5.0，并在启动任何测试前完成冻结前检。通过项为：Docker Server `linux/29.7.2`；本地 Maven、EMQX、PostgreSQL 三张镜像摘要分别精确保持 §25.3 的 `53215f45...1772a`、`556aea6d...15e7d`、`3a82e1f5...744a`；固定 `lc02-10-r2-*` 容器残留 0；`DEVICE/.env` 继续 ignored / untracked，两项精确键均唯一非空，凭据基数前检只报告 `2/2_PRESENT_REDACTED`；Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4 聚合分别仍为 `B2B72C3...54F2C`、`B9AC52AA...F604`、`6E2A8086...30C9B`、`EA6DCFD...09BC`；R1 五个单文件、三个生产脱敏文件、V009、ACL、真实测试和隔离脚本单文件摘要全部一致。没有读取、回显、复制或向子进程注入凭据值。
+
+迁移 13 文件保护前检未通过。按 §21.5 明示的 V008/V009/U009/V010、V009 窗口申请单、runner、COMMENT gate、env、README、LC02-07 脚本、`iot-device10.sql`、precheck 与 `init-databases.sh` 路径集合，以及“路径升序 + TAB + 小写文件 SHA-256 + LF，末尾 LF”算法，当前聚合为 `fd59868a2d2075a0b8ba835d77a9802482d43bec1e6411d749e3d2d305fc76a3`，不等于冻结值 `2ab39079fb84d8ba42b056cbbdc25685fc0461f82eda762565f620eada662adb`。Git 事实确认当前 HEAD `78939834`（2026-08-25 12:04，`feat(prd-02): gate V011 review-only runner`）已在本 R2 白名单外修改以下四个受保护文件：
+
+1. `.scripts/postgresql/td005-migration/td005_migration.sh`；
+2. `.scripts/postgresql/td005-migration/check_ddl_comments.sql`；
+3. `.scripts/postgresql/td005-migration/env.example`；
+4. `.scripts/postgresql/td005-migration/README.md`。
+
+该事实精确命中 §26.5 的“保护摘要漂移 / 白名单外并行变化”停工条件。Sol 因此没有创建 `.env` 遮罩文件，没有启动 `lc02-10-r2-desensitize` 或任何后续 Maven 容器，没有运行四段 Java、bash、V009 PostgreSQL 79/79、Inbox PostgreSQL 49/49、Java fail-closed 11/11 或真实 EMQX 12/12，也没有修改、重启或连接 PostgreSQL/EMQX；测试证据必须如实记为 **NOT RUN**。前检产生的仓库外临时快照目录已在 `finally` 清理，固定 R2 容器残留仍为 0；`.env` 未修改，无凭据环境变量注入或残留；没有 commit。最终工作树核对还出现 `WEB/package.json`、`WEB/scripts/` 与 `iot-device` 告警域资源/实现/测试等范围外并行改动，Sol 未触碰、清理或归属这些文件。
+
+安全更正：在停工后的零残留诊断中，Sol 的只读命令误输出了 `DEVICE/.env` 的**整体文件 SHA-256**。命令没有输出密码值、值长度、部分字符、完整 JDBC URL 或环境变量内容，且没有把密码注入任何测试子进程；但整体文件摘要仍属于由秘密文件派生的 hash，违反 §26.3 第 2 项的零 hash 输出规则，因此同时独立命中 §26.5 的“任何 secret 被输出”停工条件。本文不复述该摘要。对话中已出现过的本地凭据仍必须外部轮换并确认旧值失效，R3 不得把该值批准为共享或生产凭据。
+
+当前状态转为 **STOPPED / PROTECTED-MANIFEST-DRIFT / NOT ACCEPTED**。该状态不是测试失败，也不能用 §25.9 的历史成功结果替代。下一步必须先由 Sol 在新的 `LC02-10-R3` 中只读审查 V011 四文件变化与 LC02-07/V009 保护边界，决定将迁移保护拆为不变量单文件/语义摘要还是接受新的完整聚合基线；在 R3 冻结并获得独立授权前，不得继续 §26.4、修改测试或回退 V011 提交。
+
+## 27. `LC02-10-R3` V011 / LC02-07 分层保护边界与完整重验冻结单（2026-08-25）
+
+### 27.1 冻结依据、事实审查与架构决策
+
+本节同时依据《EasyAIoT 项目开发宪法》v1.6.0（SHA-256 `76BF30903A5A62C957A75B57E24080AA7132DE6992D56C262EEAFBE7BE553C4D`）、《平台功能计划》v1.5.0（SHA-256 `F0E5734C8FADA6D0E4DAB98F7D12F58940077F9C60AA8DA42AC8EF45C6F69869`）、§26.6 停工证据、HEAD `78939834` 的 V011 review-only 提交和 [P02-M2-02A 本地静态验收记录](./P02-M2-02A-本地静态验收记录.md) 冻结。R3 仍是零业务功能、零生产实现、零接口/Schema/Topic/部署变化的本地关闭包，不授权 V011 临时/目标/共享/生产数据库执行，也不授权正式 V009、生产 broker、资源压测或现场资格。
+
+Sol 逐行审查确认：`78939834` 只在共享 runner、COMMENT gate、env 示例和 README 中追加 V011/U011 显式 review-only 支路；V011/U011 不进入默认 dry-run、默认 `APPLY_STEPS` 或默认 uninstall。默认 `APPLY_STEPS` 仍精确为 `M05 M15 M16 V001 V002 V003 V004 V005 V006 V007 V008 V010 V009`，V009 仍要求 V008/V010 的 `SUCCEEDED + exact hash`，仍在单事务中执行 `V009_SQL` 并记录稳定 history/hash。V008/V009/U009/V010、V009 窗口申请单、LC02-07 真实合同、precheck、init、首装 dump 在该提交中均为零 diff；P02-M2-02A 已以 58 项静态/假命令断言证明 V011 只可显式 review-only，真实数据库调用和真实 DDL 均为 0。
+
+§21.5 / §24.3 的旧迁移 13 文件聚合 `2ab39079...2adb` 同时包含 LC02 专属资产和可被后续迁移合法扩展的共享 runner/COMMENT/env/README，因此不能区分“V009 不变量漂移”和“已接受的新迁移追加”。R3 决定：旧聚合只保留为 R1/R2 历史快照，不再作为 R3 及其后继执行的当前阻断摘要；替代门禁为专属资产固定摘要、共享文件单回合一致性和可执行语义合同三层组合。该调整不接受当前全部共享文件内容为 LC02 产品事实，也不放松 V009 hash、依赖顺序、nullable expand、中文 COMMENT、首装 seed/schema、一致性、回滚拒绝或真实 PostgreSQL 79/79。
+
+### 27.2 三层保护集合与摘要算法
+
+所有固定聚合继续使用 §24.3 的 `Get-Lc02ManifestHash` 算法：“仓库相对路径正序 + 一个空格 + 文件 SHA-256 大写 hex，以 LF 连接并保留末尾 LF，再对 UTF-8 bytes 做 SHA-256”。
+
+**A. LC02/V009 专属不可变集（6 文件）**
+
+```text
+.doc/技术设计/电力运维云平台/assets/td005-migration/V008__iot_sink_telemetry_inbox.sql
+.doc/技术设计/电力运维云平台/assets/td005-migration/V009__telemetry_inbox_product_identity.sql
+.doc/技术设计/电力运维云平台/assets/td005-migration/U009__telemetry_inbox_product_identity.sql
+.doc/技术设计/电力运维云平台/assets/td005-migration/V010__telemetry_quality.sql
+.doc/技术设计/电力运维云平台/assets/td005-migration/V009落库窗口申请单-20260824.md
+.scripts/postgresql/td005-migration/tests/lc02_v009_contract.sh
+```
+
+固定聚合为 `3FD4294B822C6811E93C4A47C10CAF485656CF5971E57D7C7E1E10EAE38B45AA`。六个单文件 SHA-256 依次为 `693C0473386048567886B382C8C984AB98A267B7E7CE8659307B0D7395048469`、`48416787B7FC886CC3274BE53F3A38C60F9A9DD93CA205E3F0311D54A8EAFBDE`、`5D3E83C95FBC95CF7F097E2C385431C9356E2838270480F9A7FFED3121CFF273`、`08D809A4453E1E0EFD16F29522F0682E3B9A10B20DF4F04BE4A93F7D200D6662`、`AA2A07816B405CDCD6F24E1A06D450BBE85B8162D8D3289A2B35ABD84E5455DB`、`66D9E9F52DDB11AD943012FFC1C4BFB36135E496616F648A56E86A4840C8162F`；交付必须报告完整实际值，不得只比对缩写。
+
+**B. V011 review-only 专属不可变集（3 文件）**
+
+```text
+.doc/技术设计/电力运维云平台/assets/td006-migration/V011__alarm_core_candidate.sql
+.doc/技术设计/电力运维云平台/assets/td006-migration/U011__alarm_core_candidate.sql
+.scripts/postgresql/td005-migration/tests/p02_v011_contract.sh
+```
+
+固定聚合为 `30EC12B49685BE7FDF7BD471651358F9A25094FCAA90734E85DD874BAC3954D0`；单文件分别为 `C121B1B26334D7B89BF526CB28273B2E931896ABA71B9072362A9E3EDE377269`、`3C2DAEA944696A36B89A65818F9D5A2DED454BF0C1115569E527F85DE77D74EA`、`80AA9D4A9797ACD7125DDEA1C15A80C86FE03AAE2FDAE9B1FD546865E47D28A1`。本集合只保护已静态接受的候选资产和假命令合同，不授权执行 V011/U011 DDL。
+
+**C. 运行防护固定集（2 文件）**
+
+`precheck_runtime_profile.sql` 与 `.scripts/docker/init-databases.sh` 固定聚合为 `8D9AE0CF686CBCD735F5D8B20E0308A5A33A5B8DE3BA5AD5349CDF7A4E81D865`，单文件仍分别为 `AC382AF6D06F342B34A21285A61FF6E244F556871E407B155747E3C215AA8CDD` 与 `ABFA13D48AFFBB7E7174D3D9E1738733A39D451868343C35AA30C2E7A3E87EDD`；不可变 LC02-07 合同脚本也必须继续内置并前后复核这两个精确值。
+
+**D. 共享可演进集（5 文件）**
+
+```text
+.scripts/postgresql/td005-migration/td005_migration.sh
+.scripts/postgresql/td005-migration/check_ddl_comments.sql
+.scripts/postgresql/td005-migration/env.example
+.scripts/postgresql/td005-migration/README.md
+.scripts/postgresql/iot-device10.sql
+```
+
+这五个文件不再绑定 R2 前的历史整文件摘要。执行回合开始时必须用 `Get-Lc02ManifestHash` 记录一个 `sharedStart`，结束时复算 `sharedEnd` 并逐字节相等；其作用仅是阻断验收期间的并行漂移，不把未来合法追加自动视为 LC02 破坏。每次开工仍必须通过 §27.3 语义门禁；任一共享文件在回合内变化、V009/V011 语义合同失败或需要修改共享文件，立即停工。
+
+Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4 仍精确保持 §24.3 聚合；§25.5 R1 文件、§26.2 三个生产脱敏文件与当前 `DesensitizeTest` SHA-256 `852A24BB6009A500A425FDA25E2307CBABDE9C523551E93C9D7A77014BF8E2C7` 继续冻结。R3 不改变这些边界。
+
+### 27.3 共享 runner 的唯一语义前检
+
+R3 执行者必须在创建 Maven 容器或导入 PostgreSQL 凭据前，使用 Windows Git Bash 执行以下只读门禁；不得使用 WSL、真实 PostgreSQL 或 Docker 替代 P02 的假命令合同：
+
+```powershell
+$gitBash = 'C:\Program Files\Git\bin\bash.exe'
+if (-not (Test-Path -LiteralPath $gitBash -PathType Leaf)) {
+  throw 'LC02_R3_GIT_BASH_MISSING'
+}
+
+foreach ($script in @(
+  '.scripts/postgresql/td005-migration/td005_migration.sh',
+  '.scripts/postgresql/td005-migration/tests/lc02_v009_contract.sh',
+  '.scripts/postgresql/td005-migration/tests/lc02_08_inbox_product_contract.sh',
+  '.scripts/emqx/lc02-09/lc02_09_emqx_acl_contract.sh',
+  '.scripts/postgresql/td005-migration/tests/p02_v011_contract.sh'
+)) {
+  & $gitBash -n $script
+  if ($LASTEXITCODE -ne 0) { throw "LC02_R3_BASH_SYNTAX_FAILED: $script" }
+}
+
+$runner = Get-Content -Raw -LiteralPath '.scripts/postgresql/td005-migration/td005_migration.sh'
+$expectedApply = 'APPLY_STEPS=(M05 M15 M16 V001 V002 V003 V004 V005 V006 V007 V008 V010 V009)'
+if (([regex]::Matches($runner, [regex]::Escape($expectedApply))).Count -ne 1) {
+  throw 'LC02_R3_DEFAULT_APPLY_STEPS_DRIFT'
+}
+$applyLine = (Select-String -LiteralPath '.scripts/postgresql/td005-migration/td005_migration.sh' `
+  -Pattern '^APPLY_STEPS=').Line
+if ($applyLine -match 'V011|U011') { throw 'LC02_R3_V011_ENTERED_DEFAULT_PLAN' }
+foreach ($literal in @(
+  'V008_SQL="${V008_SQL:-${ASSET_DIR}/V008__iot_sink_telemetry_inbox.sql}"',
+  'V010_SQL="${V010_SQL:-${ASSET_DIR}/V010__telemetry_quality.sql}"',
+  'V009_SQL="${V009_SQL:-${ASSET_DIR}/V009__telemetry_inbox_product_identity.sql}"',
+  'DEPENDENCY_NOT_SATISFIED V009',
+  'cat "${V009_SQL}"'
+)) {
+  if (([regex]::Matches($runner, [regex]::Escape($literal))).Count -lt 1) {
+    throw "LC02_R3_V009_RUNNER_SEMANTIC_MISSING: $literal"
+  }
+}
+
+$dryRun = & $gitBash -lc `
+  'export PATH=/usr/bin:/bin:$PATH; .scripts/postgresql/td005-migration/td005_migration.sh dry-run --db iot-device20' 2>&1
+if ($LASTEXITCODE -ne 0 -or ($dryRun -join "`n") -notmatch 'V008 \(txn\) -> V010 \(txn\) -> V009 \(txn\)') {
+  throw 'LC02_R3_V009_DRY_RUN_ORDER_FAILED'
+}
+if (($dryRun -join "`n") -match 'V011|U011') { throw 'LC02_R3_V011_VISIBLE_IN_DEFAULT_DRY_RUN' }
+
+$p02 = & $gitBash -lc `
+  'export PATH=/usr/bin:/bin:$PATH; .scripts/postgresql/td005-migration/tests/p02_v011_contract.sh' 2>&1
+if ($LASTEXITCODE -ne 0 -or ($p02 -join "`n") -notmatch 'PASS_COUNT=58; real_database_calls=0; real_ddl=0') {
+  throw 'LC02_R3_V011_STATIC_CONTRACT_FAILED'
+}
+```
+
+此外必须只读确认 `check_ddl_comments.sql` 中 `iot_sink.telemetry_inbox.product_identification` 的 LC02-07 中文 COMMENT gate 仍恰好存在，`env.example` 仍包含 `# V009_SQL=`，README 仍声明 `V008 → V010 → V009` 和 V009/U009 边界；首装 dump 的最终结构、三条 seed/hash 与 runner 迁移库一致性不靠文本 hash 代替，必须由真实 V009 79/79 合同证明。
+
+### 27.4 凭据、文件白名单与安全补偿
+
+R3 完整执行继续沿用 §26.3 的本地 `.env` 书面例外、Maven 容器空文件只读覆盖和 PostgreSQL 阶段限定导入，但增加以下强制补偿：
+
+1. 不得对 `DEVICE/.env` 或任何秘密值调用 `Get-FileHash`、摘要、编码、长度、substring、掩码预览或通用环境变量枚举；不得把 `.env` 放入任何 manifest、diff、归档、日志或报告；
+2. 只允许精确检查两键各一且非空，并只输出 `2/2_PRESENT_REDACTED`；读取函数、导入时机和 `finally` 精确清理仍采用 §26.3～§26.4，不得输出函数返回值；
+3. Maven 容器继续在仓库 bind 之后用仓库外临时空文件只读覆盖 `/workspace/DEVICE/.env`；遮罩存在性只报告布尔结果，不报告宿主秘密文件或遮罩文件 hash；
+4. 已在对话中出现的凭据值及秘密文件派生摘要均视为已暴露材料，只允许本地隔离验收；共享/正式/生产使用前必须外部轮换并确认旧值失效；
+5. 实际执行的新写入白名单仅为本任务单和 `M1-SDD进度与续作入口.md` 的验收证据。现有 `DesensitizeTest` 单 literal diff作为受保护输入保留，不得再次修改；生产、其他测试、POM、脚本、SQL、V011 资产、配置和其他文档全部只读；不得 commit；
+6. 当前 WEB、告警域、`DEVICE/.claude/` 及任何后续范围外工作树变化均归并行工作所有者，R3 不得清理、格式化、暂存、提交或归属。只有它们不覆盖本节固定/共享保护路径时才可隔离继续。
+
+### 27.5 完整重验唯一顺序
+
+获得后续独立执行授权后，必须从零按单一顺序执行，任一非零或非法 skip 立即停止：
+
+1. 复核双基线版本/摘要、Docker Linux 29.7.2、三张 §25.3 精确镜像、R2 固定容器零残留、`DesensitizeTest` 单 literal diff/摘要、A/B/C 三组固定聚合、§24/§25/§26 其他保护摘要；记录共享 5 文件 `sharedStart`，完成 §27.3 全部语义前检和 V011 静态 **58/58**；
+2. 创建仓库外空遮罩文件，按 §26.4 原命令执行 `DesensitizeTest` Linux 直接 **1/1**；
+3. 从头执行 §25.3 四段 Linux Java，容器名前缀继续使用 `lc02-10-r3-`，每段都增加 `.env` 空覆盖：34-reactor `test-compile`、device **39/39**、sink **155/155**、带 `-am` 的完整模块；完整模块仍只排除四个已冻结外部资格类，必须逐 reactor 报告 Tests/Failures/Errors/Skipped；
+4. 再执行 §27.3 五个 `bash -n`；然后才按 §26.3 精确读取两组本地凭据，在 `try/finally` 中原样执行 V009 PostgreSQL **79/79**（前缀 `lc02_v009_close`）与 Inbox PostgreSQL **49/49**（前缀 `lc02_08_close`），零 skip、零临时库/备份/夹具残留；V009 脚本必须同时证明 full dump seed/hash/schema、V008→V010→V009 顺序、COMMENT、hash drift、U009 拒绝与 precheck/init 固定值；
+5. 无条件清除两组源变量和全部 PG/JDBC 临时变量后，原样执行 Java fail-closed **11/11** 与真实 EMQX **12/12**；P02 V011 真实 PostgreSQL 合同仍 **NOT AUTHORIZED / NOT RUN**；
+6. 执行 §24.5 两个禁止扫描、scoped `git diff --check`、A/B/C 固定聚合、Inbox/Outbox 25、Store 9、ACK 5、EMQX 4、R1/脱敏单文件摘要和单 literal 精确 diff；复算 `sharedEnd` 并要求与 `sharedStart` 完全一致；检查固定容器/网络/PG 前缀/临时目录/遮罩/精确凭据变量零残留。不得计算或输出 `.env` 或秘密值摘要。
+
+§25.9 历史的前三段 Java 成功和 §26 的未运行状态均不得复用为 R3 当前通过；所有阶段必须在同一授权回合从头形成证据。
+
+### 27.6 停工条件、完成定义与授权状态
+
+以下任一情形立即停工：A/B/C 固定聚合或既有 §24～§26 保护漂移；共享语义门禁失败；V011/U011 出现在默认计划/dry-run；P02 静态不是 58/58 或产生真实数据库/DDL 调用；`sharedStart != sharedEnd`；需要修改任何脚本/SQL/测试/生产文件；`.env` 被跟踪、键异常、遮罩失败或输出任何值/长度/部分/hash；任一 Java/PG/EMQX failure/error/非法 skip；完整命令需要去掉 `-am` 或新增排除；临时资源不能清理；范围外并行改动覆盖保护路径。不得顺手修复、回退 V011、重写历史摘要、使用旧测试报告或执行 V011/U011 真实 DDL。
+
+只有 §27.3～§27.5 全部通过、A/B/C 与既有保护摘要一致、共享文件单回合零漂移、测试单 literal 经 Sol 复核、所有临时资源与精确凭据变量残留为 0，Sol 才可把 `LC02-10-R3`、`LC02-10-R2`、`LC02-10-R1` 与 `LC02-10` 标记 COMPLETE / SOL-ACCEPTED，并把 M1-LC-02 转为 Implemented / Verified-Local。该结论仍不批准正式 V009、V011 任何真实数据库合同/落库、生产 broker/ACL/TLS、Linux PTY/锁互操作、资源/稳定性压测、Windows 发布资格或现场验证。
+
+本节当前状态为 **FROZEN / NOT-YET-AUTHORIZED**。本轮 owner 只授权 GPT-5.6 Sol 重新收敛并冻结 R3 保护边界；没有运行 bash/Maven/Docker/PostgreSQL/EMQX，没有修改测试/生产/脚本/SQL/配置，没有读取 `.env`，没有 commit。下一步须决策所有者独立授权 GPT-5.6 Luna Max 执行 `LC02-10-R3 §27.3～§27.6`；若 Luna Max 不可用，不得静默替换，须明确报告后再由 owner 决定是否授权 Sol 接管。
+
+### 27.7 Sol 接管完整重验在 OPEN03 组合测试停工（2026-08-25）
+
+决策所有者先独立授权 GPT-5.6 Luna Max 执行 §27.3～§27.6；连续两个 Luna Max 回合均没有工具回报、没有 `lc02-10-r3-*` 容器或其他可观察执行进展，Sol 明确中断，未静默替换。决策所有者随后书面授权“GPT-5.6 Sol 接管 LC02-10-R3 §27.3～§27.6 完整验收与证据收口”，本节据此形成当前回合证据。
+
+开工前重读双基线并复算：宪法 v1.6.0 与平台计划 v1.5.0 摘要均等于 §27.1；Docker Server 为 Linux 29.7.2，Maven、EMQX、PostgreSQL 三张本地镜像 ID 均等于 §25.3；`.env` 为 ignored / untracked，两键唯一非空，只输出 `2/2_PRESENT_REDACTED`，未计算或输出秘密文件、秘密值的 hash、长度、部分字符、编码、预览或环境清单。A/B/C、Inbox/Outbox 25、Store 9、ACK 5、EMQX 4、R1 文件、三个生产脱敏文件及 `DesensitizeTest` 摘要全部一致；`sharedStart=C0D28DB92BCEBE67BEAD498B84F9DA9C9A2F1E4E9E3FF468EAE4AB9ECCC50DD0`。
+
+§27.3 实际结果：五个脚本 `bash -n` 全部通过；默认 `APPLY_STEPS` 精确为 `M05 M15 M16 V001 V002 V003 V004 V005 V006 V007 V008 V010 V009`，默认 dry-run 精确包含 `V008 (txn) -> V010 (txn) -> V009 (txn)` 且不含 V011/U011；P02 V011 假命令合同为 **58/58**，`real_database_calls=0`、`real_ddl=0`；COMMENT gate、`# V009_SQL=` 与 README 顺序/回滚边界均通过。第一次补充 COMMENT 检查错误地要求不存在的三段式组合 literal，随后只读定位确认当前 gate 由表名、列名及中文说明分别组成，并以五个精确语义片段各一次重新通过；该检查器误判没有修改文件，也不是仓库语义漂移。
+
+Linux Docker Java 从零按冻结顺序实际执行：
+
+1. `DesensitizeTest` 直接 **1/1**，Failures=0、Errors=0、Skipped=0，10/10 reactor `BUILD SUCCESS`；
+2. 联合 `test-compile` **34/34 reactor BUILD SUCCESS**；
+3. device 七类 **39/39**，Failures=0、Errors=0、Skipped=0，33/33 reactor `BUILD SUCCESS`；
+4. sink 二十九类 **155/155**，Failures=0、Errors=0、Skipped=0，28/28 reactor `BUILD SUCCESS`；`SqliteOutboxRouteBackfillApplierTest` **31/31** 在 Linux 中实际执行，没有 symlink skip/assumption；
+5. 完整 `iot-sink-biz -am` 继续只排除冻结的四个外部资格类；依赖 reactor 的 `DesensitizeTest` 再次 **1/1** 通过，但进入 `iot-sink-biz` 后 `CollectorOpen03CombinedApplyStageTest.applyConfiguredStage(Path)` 实际 Tests=1、Failures=0、Errors=1、Skipped=0，错误为 `CollectorConfigStateException: COLLECTOR_CONFIG_PERMISSION_INVALID`，调用点为该测试第 122 行 `provider.reconcile(graph::set)`。测试文件为 tracked-clean，SHA-256 `04D814041BF47748C4D782D55CBF08E9B34D33662F69CFE00D00A80C1DD153BA`。Sol 立即中断完整命令，因此该命令没有形成最终 reactor/总测试汇总，不能标记通过。
+
+依 §27.6，失败后没有继续第二轮 `bash -n`、V009 PostgreSQL 79/79、Inbox PostgreSQL 49/49、Java fail-closed 11/11 或真实 EMQX 12/12；V011/U011 真实数据库/DDL 继续 **NOT AUTHORIZED / NOT RUN**。两组 PostgreSQL 凭据没有导入环境或传给任何子进程。中断后空遮罩文件、`lc02-10-r3-*` 容器、`lc02_v009_close*` / `lc02_08_close*` 网络与数据库、精确 PG/JDBC 环境变量残留均为 0。
+
+STOP 后的第一次收尾快照中，A/B/C、Inbox/Outbox 25、Store 9、ACK 5、EMQX 4 与全部 R1/脱敏关键单文件摘要均一致；`sharedEnd=C0D28DB92BCEBE67BEAD498B84F9DA9C9A2F1E4E9E3FF468EAE4AB9ECCC50DD0`，与 `sharedStart` 相等；scoped `git diff --check` 通过。初次证据回填后的最终工作树复核又发现并行改动覆盖保护集 B：`V011__alarm_core_candidate.sql` 与 `p02_v011_contract.sh` 变为 modified，观察时两个单文件 SHA-256 分别为 `20CF0219FFF757F0397D7DE858885394234FCA822AD7EE426E1B8E67550B6A7F`、`327E0E94176B7FF8B65DB2CA31DCA2DDD529AB873035AD21CCC375379EFD5174`，B 聚合变为 `1AB2C4FA56BE22037EE735616EF6E0E3A8898355E81E7E8B40AAF14D7E47520E`；未改的 U011 仍为冻结摘要。该变化发生在第一次收尾摘要快照之后，本轮没有修改、清理或归属这些并行文件；依 §27.6，它构成除 Java Error 外的第二个独立 STOP 条件，当前不能再声称保护集 B 仍一致。除本任务单和 M1 SDD 证据外，Sol 没有修改生产、测试、脚本、SQL、配置或范围外并行工作，也没有 commit。
+
+结论：`LC02-10-R3`、`LC02-10-R2`、`LC02-10-R1`、`LC02-10` 与 M1-LC-02 均保持 **STOPPED / FULL-RETEST-FAILED / NOT ACCEPTED**，不得解锁。下一步须由 Sol 只读分析 `CollectorOpen03CombinedApplyStageTest` 的 standalone fixture 权限与生产 fail-closed 合同，再决定是否冻结新的有界修订包；未经新的独立授权不得修改测试/生产实现或继续 PostgreSQL/EMQX 后继门禁。正式 V009、生产 broker/ACL/TLS、Linux PTY/锁互操作、资源/稳定性压测、Windows 发布资格与现场验证继续 OPEN。
+
+## 28. `LC02-10-R4` standalone POSIX fixture 修订与 P02 隔离门禁冻结单（2026-08-25）
+
+### 28.1 双基线、根因结论与保护边界决策
+
+本节同时依据《EasyAIoT 项目开发宪法》v1.6.0（SHA-256 `76BF30903A5A62C957A75B57E24080AA7132DE6992D56C262EEAFBE7BE553C4D`）、《平台功能计划》v1.5.0（SHA-256 `F0E5734C8FADA6D0E4DAB98F7D12F58940077F9C60AA8DA42AC8EF45C6F69869`）和 §27.7 的两个 STOP 事实冻结。R4 是一个测试 fixture 机械修订加完整重验包，不新增功能，不改变产品范围、Schema、Topic、接口、生产权限、部署或安全合同。
+
+Sol 只读复核得到唯一根因：生产 `LocalFilePollingConfigProvider` 对既有配置目录和文件精确 fail-closed 校验 `02770/0660`；其当前 SHA-256 为 `F56180592AF8F3022998205FDA70F8316C0167B6FCE9A07CEBFF82C4D30DB0C8`。`LocalFilePollingConfigProviderTest` 与 `CollectorPollingRuntimeTest` 已在 POSIX 文件系统上按生产常量准备目录/文件权限；只有 `CollectorOpen03CombinedApplyStageTest.runStandaloneApplyContract(...)` 创建 `@TempDir` 子目录和 `desired.json` 后直接调用 `reconcile`，没有准备权限。Linux 默认 mode 因而被生产实现正确拒绝。这是 standalone 测试 fixture 漂移，不是生产缺陷；不得放宽、绕过或修改 Provider 的精确权限合同。
+
+§27 的固定保护集 B 把 LC02 验收绑定到正在演进的 M2/P02 V011 候选 DDL 和静态测试整文件摘要，已被本轮并行增加 `alarm_record.last_action_sequence` 及配套断言合法触发。R4 不接受、批准或验证这些告警域变化，也不把其当前内容提升为 LC02 产品事实。LC02 只保护以下隔离不变量：V011/U011 不得进入默认 `APPLY_STEPS`、默认 dry-run 或默认 uninstall；执行 P02 静态假命令合同时必须退出 0、报告正数 `PASS_COUNT`、`real_database_calls=0`、`real_ddl=0`。V011、U011 与 P02 脚本仅在同一 R4 执行回合开始/结束各取 manifest 并要求相等，以阻断验收期间并行漂移；不再要求等于 §27.2 B 的历史固定摘要，也不授权真实 V011/U011 数据库或 DDL。
+
+§27.2 A 的 6 个 LC02/V009 专属文件固定聚合 `3FD4294B822C6811E93C4A47C10CAF485656CF5971E57D7C7E1E10EAE38B45AA`、C 的 2 个运行防护文件固定聚合 `8D9AE0CF686CBCD735F5D8B20E0308A5A33A5B8DE3BA5AD5349CDF7A4E81D865`，以及 Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4、R1/脱敏、`DesensitizeTest` 和 §27.2 D 的共享 5 文件单回合保护全部继续有效。R4 不重写 R3 历史证据。
+
+### 28.2 唯一实现白名单与精确机械改动
+
+获得独立实现授权后，唯一可修改的实现/测试文件是：
+
+```text
+DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/protocol/polling/CollectorOpen03CombinedApplyStageTest.java
+```
+
+执行者只可在该文件增加 `LinkOption`、`PosixFileAttributeView` 所需 import，并只在 `runStandaloneApplyContract(Path directory)` 内完成以下机械改动：
+
+1. `Files.createDirectories(directory)` 后，以 `Files.getFileAttributeView(directory, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS) != null` 判断 POSIX 能力；存在时用 `Files.setAttribute(..., "unix:mode", LocalFilePollingConfigProvider.LINUX_CONFIG_DIRECTORY_MODE, LinkOption.NOFOLLOW_LINKS)` 设置目录 mode；
+2. 将 `desired.json` 保存为局部 `Path desired`，保持 canonical bytes 原样写入；写入后用同一 POSIX 能力判断把它设置为 `LocalFilePollingConfigProvider.LINUX_CONFIG_FILE_MODE`；
+3. 保持 Provider 构造、`reconcile`、APPLIED/version/hash/graph/active bytes 断言不变。除为复用 `desired` 局部变量所需的等价引用外，不得改其他语义。
+
+禁止修改该类的 repository-wide staged E2E 分支、增加 assumption/skip、按 OS 禁用测试、硬编码另一套 mode、增加 helper/新文件或移动测试；禁止修改生产 Provider、其他测试、POM、脚本、SQL、配置和范围外文件。POSIX capability guard 仅保证 Windows/非 POSIX 文件系统仍可运行 standalone 合同，不得在 Linux POSIX 上跳过权限准备或生产校验。
+
+完成机械改动后，先在 §25.3 的精确 Linux Maven 17 镜像、禁网、仓库 `.env` 空文件只读覆盖条件下依次执行：
+
+1. `CollectorOpen03CombinedApplyStageTest` 直接 **1/1**，Failures=0、Errors=0、Skipped=0；
+2. `CollectorOpen03CombinedApplyStageTest,LocalFilePollingConfigProviderTest,CollectorPollingRuntimeTest` 联合 **16/16**，Failures=0、Errors=0、Skipped=0。
+
+上述任一不满足立即停止，不得进入完整验收。执行者必须报告测试文件修改前后完整 SHA-256、精确 diff、命令、退出码和 Surefire Tests/Failures/Errors/Skipped；不得只报告 `BUILD SUCCESS`。
+
+### 28.3 P02/V011 隔离门禁与单回合 manifest
+
+完整验收开工时对以下 3 个并行 P02 输入按 §24.3 算法记录 `p02Start`，收工复算 `p02End`，要求完全相等：
+
+```text
+.doc/技术设计/电力运维云平台/assets/td006-migration/V011__alarm_core_candidate.sql
+.doc/技术设计/电力运维云平台/assets/td006-migration/U011__alarm_core_candidate.sql
+.scripts/postgresql/td005-migration/tests/p02_v011_contract.sh
+```
+
+仍须执行 §27.3 的五个 `bash -n`、默认 `APPLY_STEPS` 精确顺序、默认 dry-run 顺序与 V011/U011 不可见检查。P02 命令的通过条件改为：退出码为 0，输出匹配 `PASS_COUNT=[1-9][0-9]*; real_database_calls=0; real_ddl=0`；不得把 PASS_COUNT 固定为 58 或当前观察值，也不得从其通过推导 V011 DDL 已被 LC02 接受。任一 P02 输入在单回合内变化、进入默认链、产生真实数据库/DDL 调用或无法证明隔离，立即停工并交由 P02 所有者处理；R4 不得修改、回退或提交它们。
+
+### 28.4 从零完整验收顺序
+
+§28.2 的 1/1 与 16/16 通过后，必须从零重新执行 §27.3～§27.5 的完整顺序，不能从 R3 失败点续跑、复用 §27.7 结果或缩减 `-am`：
+
+1. 复核双基线、Docker Linux 29.7.2、三张冻结镜像、A/C 固定聚合和所有既有 LC02 保护摘要；记录共享 5 文件 `sharedStart` 与 P02 3 文件 `p02Start`，通过 §28.3 语义前检；
+2. `DesensitizeTest` Linux 直接 **1/1**；34-reactor `test-compile`；device 七类 **39/39**；sink 二十九类 **155/155**，包括 Linux symlink fixture 实际执行；
+3. 完整 `iot-sink-biz -am` 仅排除既有四个外部资格类，逐 reactor 报告汇总，不得增加排除或去掉 `-am`；
+4. 再跑五个 `bash -n`，随后按 §26.3 的秘密零输出规则与 `try/finally` 依次执行 V009 PostgreSQL **79/79**、Inbox PostgreSQL **49/49**；V011/U011 真实数据库/DDL继续 NOT AUTHORIZED / NOT RUN；
+5. 无条件清除 PG/JDBC 变量后执行 Java fail-closed **11/11** 与真实 EMQX **12/12**；
+6. 完成禁止扫描、scoped `git diff --check`、A/C 与全部既有 LC02 摘要复核，要求 `sharedStart == sharedEnd`、`p02Start == p02End`，并确认容器、网络、数据库前缀、临时目录、遮罩和精确凭据变量残留为 0。不得计算或输出 `.env` 或秘密值的 hash、长度、片段、编码或预览。
+
+R4 的新增测试文件 SHA-256 应在 §28.2 改动完成后建立为本回合受保护输入，并在完整验收结束复核相等。实际写入白名单除该测试文件外，仍只包括本任务单与 `M1-SDD进度与续作入口.md` 的证据回填；不得 commit，除非决策所有者另行明确授权。
+
+### 28.5 停工条件、完成定义与授权状态
+
+以下任一情形立即停工：实现 diff 超出 §28.2；生产 Provider 或 staged E2E 分支发生变化；Linux 1/1 或 16/16 不满足；A/C 或任一既有 LC02 保护摘要漂移；共享或 P02 manifest 单回合不相等；V011/U011 进入默认链；P02 产生真实数据库/DDL；需要新增排除、skip、放宽 mode 或修改脚本/SQL；任一 Java/PG/EMQX failure/error/非法 skip；秘密规则或清理规则失败；范围外并行改动覆盖保护路径。不得顺手修复或扩大白名单。
+
+只有 §28.2～§28.4 全部通过、测试 diff 经 Sol 复核、所有保护与零残留成立，Sol 才可把 `LC02-10-R4`、`LC02-10-R3`、`LC02-10-R2`、`LC02-10-R1`、`LC02-10` 标记 COMPLETE / SOL-ACCEPTED，并把 M1-LC-02 转为 Implemented / Verified-Local。该结论仍不批准正式 V009/V011 落库、生产 broker/ACL/TLS 激活、Linux PTY/锁互操作、资源/稳定性压测、Windows 发布资格或现场验证。
+
+本节当前状态为 **FROZEN / NOT-YET-AUTHORIZED**。本轮 Sol 只完成根因、边界和验收命令冻结；没有修改测试或生产实现，没有运行 R4 Java/PostgreSQL/EMQX 验收，没有读取 `.env`，没有执行 V011/U011 DDL，也没有 commit。下一步须决策所有者独立授权 GPT-5.6 Luna Max 执行 `LC02-10-R4 §28.2～§28.5`；若 Luna Max 不可用，不得静默替换，须明确报告后再由 owner 决定是否授权 Sol 接管。
+
+### 28.6 Luna Max 执行、Sol skip 复核与 V009 PostgreSQL 停工（2026-08-25）
+
+决策所有者已明确授权 GPT-5.6 Luna Max 执行 §28.2～§28.5。首个 Luna Max 回合完成唯一白名单修改后长时间没有测试退出码或报告，Sol 中断并启动同模型 max reasoning 精简重试；未静默替换模型。精简回合确认 diff 严格限于两个 import 与 standalone 目录/`desired.json` POSIX mode 准备：修改前 SHA-256 `04D814041BF47748C4D782D55CBF08E9B34D33662F69CFE00D00A80C1DD153BA`，修改后 `A5CA16342A74CD36E954AE03433F411AAE656C0AA2F92111A9058B1BCECB7D46`。生产 Provider、staged E2E 分支、其他测试、POM、脚本、SQL 和配置均未改。
+
+§28.2 Linux Docker 直接门禁全部通过：`CollectorOpen03CombinedApplyStageTest` **1/1**；该类、`CollectorPollingRuntimeTest` 与 `LocalFilePollingConfigProviderTest` 联合 **16/16**（1+2+13）；两次均退出 0，Failures=0、Errors=0、Skipped=0，冻结 Maven 17 镜像、禁网、空 `.env` 只读遮罩生效，容器残留 0。
+
+§28.3 开工语义门禁通过：A/C 与全部既有 LC02 保护摘要一致；`sharedStart=C0D28DB92BCEBE67BEAD498B84F9DA9C9A2F1E4E9E3FF468EAE4AB9ECCC50DD0`，`p02Start=1AB2C4FA56BE22037EE735616EF6E0E3A8898355E81E7E8B40AAF14D7E47520E`；五个 `bash -n`、默认 apply/dry-run/uninstall 的 V011/U011 隔离全部通过；P02 静态 **60 项**，`real_database_calls=0`、`real_ddl=0`，不构成 V011 DDL 接受或执行。
+
+§28.4 Linux Java 从零结果：
+
+1. `DesensitizeTest` **1/1**，Failures=0、Errors=0、Skipped=0；
+2. 受影响 `test-compile` **34/34 reactor**；
+3. device 七类 **39/39**，Failures=0、Errors=0、Skipped=0；
+4. sink 二十九类 **155/155**，Failures=0、Errors=0、Skipped=0；Linux symlink fixture 实际 **31/31**，无 assumption/skip；
+5. 完整 `iot-sink-biz -am` 严格保留 `-am` 和原四个外部资格类排除，退出码 0、`BUILD SUCCESS`，Tests=284、Failures=0、Errors=0、Skipped=1。Surefire TXT 把汇总文件命名为 `CenterTelemetryIngressHandlerTest`，但该源码精确只有 7 个 `@Test`，XML 的第 8 个、唯一 skipped testcase 的 `classname` 明确为 `EmqxTelemetryAclIntegrationTest`，原因是未设置 `LC02_09_EMQX_ENABLED`。Sol 依 §24.4 复核为允许随后真实 12/12 重跑的环境 skip，不是 Center 类非法 skip；未修改命令、排除、测试或报告来改变结论。
+
+恢复后第二轮五个 `bash -n` 全部退出 0。Luna 随后按 §26.3 从本地 ignored/untracked `.env` 精确读取两键，仅报告 `2/2_PRESENT_REDACTED`；V009 隔离 PostgreSQL 合同脚本退出码 **1**。脚本输出只在内存捕获且未保存，为遵守失败即停没有复现，故当前具体失败阶段为 `failure_detail_not_captured`。该证据不足以诊断为凭据、Docker、SQL、fixture 或代码缺陷，也不能把 R3 的历史 79/79 当作本轮通过。
+
+V009 失败后立即执行 `finally` 清除两个源密码、`PG_PASSWORD` 与全部 PG/JDBC 临时变量；Inbox PostgreSQL **49/49**、Java fail-closed **11/11**、真实 EMQX **12/12** 均 **NOT RUN**，V011/U011 真实数据库/DDL仍 **NOT AUTHORIZED / NOT RUN**。最终 `sharedEnd == sharedStart`、`p02End == p02Start`，A/C、Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4、R1/脱敏及 R4 测试摘要均未漂移；scoped `git diff --check` 退出 0；R4 容器/网络、两类数据库前缀、遮罩与精确环境变量残留均为 0。未输出秘密值、长度、hash、片段、编码、预览、JDBC URL 或环境清单；未 commit。
+
+结论：R4 唯一测试修订已实现且 Java 门禁通过，但完整关闭在 V009 PostgreSQL 失败，`LC02-10-R4` 转为 **IMPLEMENTED / JAVA-PASSED / PG-FAILED / NOT ACCEPTED**；R3/R2/R1/LC02-10 与 M1-LC-02 继续 STOPPED / NOT ACCEPTED。下一步必须先由 Sol 冻结新的有界 PostgreSQL 诊断重验包，规定失败阶段、退出码和脱敏日志的安全留证方式，再决定是环境处置还是实现任务；未经新冻结和独立授权不得直接重跑 V009、执行后继门禁或修改 SQL/脚本/生产代码。
