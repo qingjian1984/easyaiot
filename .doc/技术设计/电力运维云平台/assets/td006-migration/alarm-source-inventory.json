@@ -1,0 +1,322 @@
+{
+  "inventoryVersion": "1.0.0",
+  "evidenceDate": "2026-08-25",
+  "scope": "repository-static",
+  "baselines": {
+    "platformPlan": "1.5.0",
+    "developmentConstitution": "1.6.0",
+    "prd": "PRD-02 1.2.2",
+    "technicalDesign": "TD-006"
+  },
+  "productionFacts": "OPEN_EXTERNAL",
+  "stages": {
+    "C0": "APPROVED_LOCAL_STATIC_ONLY",
+    "C1": "CLOSED",
+    "C2": "CLOSED",
+    "C3": "CLOSED",
+    "C4": "CLOSED",
+    "productionTransport": "CLOSED",
+    "productionCapability": "CLOSED"
+  },
+  "sources": [
+    {
+      "sourceType": "THRESHOLD",
+      "readiness": "NOT_READY",
+      "producerStatus": "FOUND_IN_REPOSITORY",
+      "sourceOwner": "iot-sink telemetry listeners and iot-device threshold service",
+      "adapterOwner": "iot-device alarm domain",
+      "evidence": [
+        {
+          "role": "producer-entry",
+          "path": "DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/messagebus/subscriber/listener/PropertyUpstreamReportListener.java",
+          "anchors": [
+            { "text": "evaluateThreshold(event.getMessage());", "count": 1 },
+            { "text": "remoteDeviceService.evaluatePropertyThreshold(param);", "count": 1 }
+          ]
+        },
+        {
+          "role": "sub-device-producer-entry",
+          "path": "DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/messagebus/subscriber/listener/SubPropertyUpstreamReportListener.java",
+          "anchors": [
+            { "text": "evaluateThreshold(event.getMessage());", "count": 1 },
+            { "text": "remoteDeviceService.evaluatePropertyThreshold(param);", "count": 1 }
+          ]
+        },
+        {
+          "role": "legacy-write-and-notification",
+          "path": "DEVICE/iot-device/iot-device-biz/src/main/java/com/basiclab/iot/device/service/device/impl/DeviceThresholdAlarmServiceImpl.java",
+          "anchors": [
+            { "text": ".tenantId(0L)", "count": 1 },
+            { "text": ".createTime(LocalDateTime.now())", "count": 1 },
+            { "text": "alarmMapper.insert(alarm);", "count": 1 },
+            { "text": "kafkaTemplate.send(alertSendTopic", "count": 1 }
+          ]
+        },
+        {
+          "role": "identity-contract-gap",
+          "path": "DEVICE/iot-device/iot-device-api/src/main/java/com/basiclab/iot/device/domain/device/vo/PropertyThresholdEvaluateParam.java",
+          "anchors": [
+            { "text": "private String deviceIdentification;", "count": 1 },
+            { "text": "private Map<String, Object> properties;", "count": 1 }
+          ]
+        },
+        {
+          "role": "legacy-store-query",
+          "path": "DEVICE/iot-device/iot-device-biz/src/main/resources/mapper/device/DeviceThresholdAlarmMapper.xml",
+          "anchors": [
+            { "text": "FROM device_threshold_alarm", "count": 4 },
+            { "text": "AND alarm_status = 'OPEN'", "count": 3 }
+          ]
+        }
+      ],
+      "identity": {
+        "messageId": "BLOCKED_NOT_PROPAGATED",
+        "sourceId": "OPEN_DECISION",
+        "cycleIdentity": "BLOCKED_LATEST_OPEN_GUESS",
+        "tenant": "BLOCKED_ZERO_FALLBACK",
+        "site": "BLOCKED_MISSING",
+        "device": "PARTIAL_DEVICE_IDENTIFICATION_ONLY",
+        "eventTime": "BLOCKED_SERVER_NOW_FALLBACK",
+        "quality": "BLOCKED_MISSING"
+      },
+      "blockers": [
+        "M1_IDENTITY_ROUTE_NOT_FROZEN",
+        "TENANT_SITE_DEVICE_AUTHORITY_OPEN",
+        "THRESHOLD_CYCLE_RULE_OPEN",
+        "OLD_NEW_ATOMICITY_OR_COMPENSATION_OPEN"
+      ]
+    },
+    {
+      "sourceType": "DEVICE_EVENT",
+      "readiness": "NOT_READY",
+      "producerStatus": "FOUND_IN_REPOSITORY",
+      "sourceOwner": "iot-device device event subscriber",
+      "adapterOwner": "iot-device alarm domain",
+      "evidence": [
+        {
+          "role": "consumer-entry",
+          "path": "DEVICE/iot-device/iot-device-biz/src/main/java/com/basiclab/iot/device/messagebus/DeviceEventSubscriber.java",
+          "anchors": [
+            { "text": "return \"iot-device-event-subscriber\";", "count": 1 },
+            { "text": "handler.handle(message);", "count": 1 },
+            { "text": "log.error(\"[onMessage][处理设备事件上报消息失败", "count": 1 }
+          ]
+        },
+        {
+          "role": "legacy-write-and-fallback",
+          "path": "DEVICE/iot-device/iot-device-biz/src/main/java/com/basiclab/iot/device/messagebus/DeviceEventHandler.java",
+          "anchors": [
+            { "text": ".tenantId(message.getTenantId() != null ? message.getTenantId() : 0L)", "count": 1 },
+            { "text": ".createTime(message.getReportTime() != null ? message.getReportTime() : LocalDateTime.now())", "count": 1 },
+            { "text": "deviceEventService.save(deviceEvent);", "count": 1 }
+          ]
+        }
+      ],
+      "identity": {
+        "messageId": "BLOCKED_LOG_ONLY",
+        "sourceId": "OPEN_THING_EVENT_IDENTITY",
+        "cycleIdentity": "BLOCKED_MISSING",
+        "tenant": "BLOCKED_ZERO_FALLBACK",
+        "site": "BLOCKED_MISSING",
+        "device": "PARTIAL_TOPIC_OR_LOOKUP",
+        "eventTime": "BLOCKED_SERVER_NOW_FALLBACK",
+        "quality": "BLOCKED_MISSING"
+      },
+      "blockers": [
+        "EVENT_TO_ALARM_MAPPING_OPEN",
+        "RAISED_RECOVERED_SEMANTICS_OPEN",
+        "TRANSPORT_FAILURE_PROPAGATION_OPEN"
+      ]
+    },
+    {
+      "sourceType": "VIDEO",
+      "readiness": "NOT_READY",
+      "producerStatus": "FOUND_IN_REPOSITORY",
+      "sourceOwner": "VIDEO algorithm services",
+      "adapterOwner": "iot-device alarm domain via one reviewed transport adapter",
+      "evidence": [
+        {
+          "role": "mqtt-producer",
+          "path": "VIDEO/app/utils/algo_mqtt_bus.py",
+          "anchors": [
+            { "text": "'msgId': str(uuid.uuid4())", "count": 1 },
+            { "text": "tenant = os.getenv('MQTT_ALGO_TENANT') or 'default'", "count": 1 },
+            { "text": "topic = 'mqtt/iot-snapshot-alert' if snapshot else 'mqtt/iot-alert-notification'", "count": 1 }
+          ]
+        },
+        {
+          "role": "legacy-store",
+          "path": "VIDEO/models.py",
+          "anchors": [
+            { "text": "class Alert(db.Model):", "count": 1 },
+            { "text": "correlation_id = db.Column(db.String(36), nullable=True, index=True, comment='关联事件ID（同一帧算法告警/人脸/车牌）')", "count": 1 }
+          ]
+        },
+        {
+          "role": "sink-consumer-and-notification",
+          "path": "DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/protocol/emqx/router/IotAlgoBusMqttHandler.java",
+          "anchors": [
+            { "text": "alertService.processAlert(msg);", "count": 1 },
+            { "text": "kafkaTemplate.send(notificationSendTopic", "count": 1 },
+            { "text": "DynamicDataSourceContextHolder.push(\"video\")", "count": 1 }
+          ]
+        }
+      ],
+      "identity": {
+        "messageId": "BLOCKED_RANDOM_PER_PUBLISH",
+        "sourceId": "OPEN_TASK_DEVICE_DETECTION_INSTANCE",
+        "cycleIdentity": "BLOCKED_OPTIONAL_CORRELATION",
+        "tenant": "BLOCKED_DEFAULT_FALLBACK",
+        "site": "BLOCKED_MISSING",
+        "device": "PARTIAL_UNVERIFIED",
+        "eventTime": "PARTIAL_SOURCE_STRING",
+        "quality": "BLOCKED_MISSING"
+      },
+      "blockers": [
+        "SINGLE_WRITER_OPEN",
+        "STABLE_IDENTITY_OPEN",
+        "PHYSICAL_TRANSPORT_REVIEW_OPEN",
+        "NOTIFICATION_OWNER_OPEN"
+      ]
+    },
+    {
+      "sourceType": "AI",
+      "readiness": "OPEN_DECISION",
+      "producerStatus": "NOT_FOUND_IN_REPOSITORY",
+      "sourceOwner": "OPEN_PRODUCT_ARCHITECTURE_DECISION",
+      "adapterOwner": "OPEN_DO_NOT_DUPLICATE_VIDEO_RUNTIME",
+      "evidence": [],
+      "identity": {
+        "messageId": "BLOCKED_NO_PRODUCER_CONTRACT",
+        "sourceId": "OPEN_DECISION",
+        "cycleIdentity": "OPEN_DECISION",
+        "tenant": "OPEN_DECISION",
+        "site": "OPEN_DECISION",
+        "device": "OPEN_DECISION",
+        "eventTime": "OPEN_DECISION",
+        "quality": "OPEN_DECISION"
+      },
+      "blockers": [
+        "AI_INDEPENDENT_SOURCE_DECISION_OPEN",
+        "DUPLICATION_WITH_VIDEO_RUNTIME_OPEN"
+      ]
+    },
+    {
+      "sourceType": "RUNTIME",
+      "readiness": "NOT_READY",
+      "producerStatus": "FOUND_IN_REPOSITORY",
+      "sourceOwner": "RUNTIME local execution engine",
+      "adapterOwner": "iot-device alarm domain via one reviewed transport adapter",
+      "evidence": [
+        {
+          "role": "mqtt-producer",
+          "path": "RUNTIME/src/AlgoMqttBus.cpp",
+          "anchors": [
+            { "text": "envelope[\"msgId\"] = makeUuid();", "count": 1 },
+            { "text": "tenant = env && *env ? env : \"default\";", "count": 1 },
+            { "text": "snapshot ? \"mqtt/iot-snapshot-alert\" : \"mqtt/iot-alert-notification\"", "count": 1 }
+          ]
+        },
+        {
+          "role": "producer-call-and-drop-path",
+          "path": "RUNTIME/src/Detech.cpp",
+          "anchors": [
+            { "text": "AlgoMqttBus::publishAlert(_config, jsonStr, snapshot)", "count": 1 },
+            { "text": "alert dropped (HTTP hook removed)", "count": 1 },
+            { "text": "MQTT alert publish failed", "count": 1 }
+          ]
+        }
+      ],
+      "identity": {
+        "messageId": "BLOCKED_RANDOM_PER_PUBLISH",
+        "sourceId": "OPEN_WORKLOAD_TASK_EVENT_INSTANCE",
+        "cycleIdentity": "BLOCKED_OPTIONAL_CORRELATION",
+        "tenant": "BLOCKED_DEFAULT_FALLBACK",
+        "site": "BLOCKED_MISSING",
+        "device": "PARTIAL_UNVERIFIED",
+        "eventTime": "PARTIAL_SOURCE_STRING",
+        "quality": "BLOCKED_MISSING"
+      },
+      "blockers": [
+        "STABLE_IDENTITY_OPEN",
+        "DROP_RECOVERY_OPEN",
+        "VIDEO_RUNTIME_DEDUP_OWNERSHIP_OPEN",
+        "PHYSICAL_TRANSPORT_REVIEW_OPEN"
+      ]
+    }
+  ],
+  "legacyEntries": [
+    {
+      "id": "DEVICE_ALARM_LOG_SUCCESS",
+      "kind": "write-bypass",
+      "path": "DEVICE/iot-device/iot-device-biz/src/main/java/com/basiclab/iot/device/controller/device/DeviceController.java",
+      "anchors": [
+        { "text": "@PostMapping(\"/alarm\")", "count": 1 },
+        { "text": "return R.ok(\"边缘网关告警成功\");", "count": 1 }
+      ]
+    },
+    {
+      "id": "THRESHOLD_WEB_OPEN_READ",
+      "kind": "legacy-read",
+      "path": "WEB/src/api/device/devices.ts",
+      "anchors": [
+        { "text": "'/threshold/alarms/open'", "count": 1 }
+      ]
+    },
+    {
+      "id": "VIDEO_WEB_READ_AND_DELETE",
+      "kind": "legacy-read-action",
+      "path": "WEB/src/api/device/calculate.ts",
+      "anchors": [
+        { "text": "Alarm = '/video/alert'", "count": 1 },
+        { "text": "`${Api.Alarm}/delete/${id}`", "count": 1 },
+        { "text": "Api.Alarm + '/clear/all'", "count": 1 }
+      ]
+    },
+    {
+      "id": "VIDEO_APP_READ_AND_DELETE",
+      "kind": "legacy-read-action",
+      "path": "APP/src/api/video/alert/index.ts",
+      "anchors": [
+        { "text": "'/video/alert/page'", "count": 1 },
+        { "text": "`/video/alert/delete/${id}`", "count": 1 },
+        { "text": "'/video/alert/clear/all'", "count": 1 }
+      ]
+    },
+    {
+      "id": "VIDEO_LEGACY_KAFKA_DIRECT_PERSIST",
+      "kind": "legacy-writer-fallback",
+      "path": "VIDEO/app/services/alert_hook_service.py",
+      "anchors": [
+        { "text": "process_alert_hook 已废弃：事件应走 MQTT 算法总线", "count": 1 },
+        { "text": "Kafka 投递失败，尝试告警直连落库", "count": 1 }
+      ]
+    },
+    {
+      "id": "VIDEO_ALERT_HTTP_API",
+      "kind": "legacy-read-action",
+      "path": "VIDEO/app/blueprints/alert.py",
+      "anchors": [
+        { "text": "@alert_bp.route('/page')", "count": 1 },
+        { "text": "@alert_bp.route('/clear/all', methods=['DELETE'])", "count": 1 }
+      ]
+    },
+    {
+      "id": "ALGORITHM_NOTIFICATION_FORWARD",
+      "kind": "notification-side-effect",
+      "path": "DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/protocol/emqx/router/IotAlgoBusMqttHandler.java",
+      "anchors": [
+        { "text": "String topic = \"iot-alert-notification-send\";", "count": 1 },
+        { "text": "maybeForwardNotification(msg, alertId);", "count": 1 }
+      ]
+    }
+  ],
+  "externalOpen": [
+    "LEGACY_ROW_COUNTS_AND_TENANT_SITE_DISTRIBUTION",
+    "SOURCE_RATES_RETRY_OUT_OF_ORDER_AND_BACKLOG",
+    "PHYSICAL_TOPIC_GROUP_PARTITION_ACK_RETRY_DLQ",
+    "WEB_APP_FEIGN_THIRD_PARTY_CALL_VOLUMES_AND_OWNERS",
+    "BACKFILL_BATCH_THROTTLE_DIFFERENCE_OBSERVATION_ROLLBACK",
+    "STANDARD_FULL_TARGET_SCALE_AND_REPEATABLE_BENCHMARK"
+  ]
+}
