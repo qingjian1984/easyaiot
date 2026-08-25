@@ -1,14 +1,17 @@
 # PRD-02 SDD 进度与续作入口
 
-> 版本：0.13.0
+> 版本：0.13.1
 > 日期：2026-08-25
 > 状态：Design In Review / Implementation Gated
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 需求包：[PRD-02 监控告警与安全控制](../../需求包/电力运维云平台/PRD-02-监控告警与安全控制/README.md)
+> 最近归档：`b7d0554ee docs(prd-02): close C1P G1 design contracts`
 
 ## 1. 当前结论
 
 PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验收结论。2026-08-25 已完成 [P02-M2-02 专项冻结评审](./P02-M2-02-专项冻结评审记录.md)、02A review-only runner 静态验收、02B 本地无 transport 验收、02C 来源迁移冻结、[02C0 本地静态验收](./P02-M2-02C0-本地验收记录.md)、[P02-M2-02R1 整改专项冻结](./P02-M2-02R1-Inbox与动作序号整改专项冻结评审记录.md)、[R1A 本地无数据库验收](./P02-M2-02R1A-本地验收记录.md)、[C1 前置门禁核对](./P02-M2-02C1P-C1来源接入前置门禁核对记录.md)、[C1P 架构决策交付评审](./P02-M2-02C1P-架构决策交付与门禁评审记录.md)和 [C1P-G1 本地合同验收](./P02-M2-02C1P-G1-本地合同验收记录.md)。[ADR-019 0.2.0](../../架构决策/电力运维云平台/ADR-019-告警来源身份周期与补偿接入.md) 保持 Proposed；rule/version/cycle、历史 route 和 source Outbox 三个仓库内设计包已关闭，DEVICE_EVENT 产品 allowlist、legacy severity/activation、projection event 必需字段及设备协议原始 identity/time 仍等待责任人输入。真实数据库调用、真实 DDL 和生产 transport 仍为 0，C1 adapter、物理 transport、双写、backfill、对账、切读、capability 和生产容量继续关闭。
+
+C1P-G1 的 10 个设计、Schema 与验收文件已归档于提交 `b7d0554ee`。其后的 `32fbc62c7` 是 M1-LC-02 独立测试进度，不改变本文件记录的 PRD-02 门禁、授权边界或下一步；当前没有新增 C1 实现授权。
 
 ## 2. 文档链
 
