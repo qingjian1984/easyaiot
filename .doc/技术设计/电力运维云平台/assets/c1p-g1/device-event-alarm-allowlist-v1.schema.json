@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/contracts/device-event-alarm-allowlist/v1",
+  "title": "EasyAIoT DEVICE_EVENT alarm allowlist v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "canonicalizationVersion",
+    "documentStatus",
+    "revision",
+    "mappings",
+    "approval"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "canonicalizationVersion": { "const": "jcs-rfc8785-v1" },
+    "documentStatus": { "enum": ["DRAFT", "APPROVED", "RETIRED"] },
+    "revision": { "type": "integer", "minimum": 1 },
+    "mappings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/mapping" },
+      "uniqueItems": true,
+      "maxItems": 10000
+    },
+    "approval": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/approval" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "documentStatus": { "enum": ["APPROVED", "RETIRED"] } },
+        "required": ["documentStatus"]
+      },
+      "then": {
+        "properties": {
+          "mappings": { "minItems": 1 },
+          "approval": { "$ref": "#/$defs/approval" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approvedBy", "approvedAt", "decisionRef", "contentSha256"],
+      "properties": {
+        "approvedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "approvedAt": { "type": "string", "format": "date-time" },
+        "decisionRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "contentSha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scopeType", "productIdentification", "modelIdentifier"],
+      "properties": {
+        "scopeType": { "enum": ["PRODUCT", "PRODUCT_MODEL"] },
+        "productIdentification": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "modelIdentifier": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "scopeType": { "const": "PRODUCT" } },
+            "required": ["scopeType"]
+          },
+          "then": { "properties": { "modelIdentifier": { "type": "null" } } }
+        },
+        {
+          "if": {
+            "properties": { "scopeType": { "const": "PRODUCT_MODEL" } },
+            "required": ["scopeType"]
+          },
+          "then": { "properties": { "modelIdentifier": { "type": "string" } } }
+        }
+      ]
+    },
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jsonPointer", "operator", "expectedValue"],
+      "properties": {
+        "jsonPointer": {
+          "type": "string",
+          "pattern": "^(?:|/(?:[^~/]|~0|~1)*(?:/(?:[^~/]|~0|~1)*)*)$",
+          "maxLength": 256
+        },
+        "operator": { "enum": ["EXISTS", "EQUALS"] },
+        "expectedValue": { "type": ["string", "number", "integer", "boolean", "null"] }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "operator": { "const": "EXISTS" } },
+            "required": ["operator"]
+          },
+          "then": { "properties": { "expectedValue": { "type": "null" } } }
+        }
+      ]
+    },
+    "matcher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventIdentifier", "payloadPredicates"],
+      "properties": {
+        "eventIdentifier": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "payloadPredicates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/predicate" },
+          "maxItems": 16
+        }
+      }
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mappingId",
+        "mappingVersion",
+        "contractMajor",
+        "lifecycle",
+        "scope",
+        "alarmTypeKey",
+        "raisedMatcher",
+        "recoveredMatcher",
+        "severity",
+        "correlationJsonPointer",
+        "occurredAtJsonPointer",
+        "oneShotPolicy",
+        "upgradePolicy",
+        "effectiveFrom"
+      ],
+      "properties": {
+        "mappingId": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+        },
+        "mappingVersion": { "type": "integer", "minimum": 1 },
+        "contractMajor": { "const": 1 },
+        "lifecycle": { "const": "PAIRED" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "alarmTypeKey": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+        },
+        "raisedMatcher": { "$ref": "#/$defs/matcher" },
+        "recoveredMatcher": { "$ref": "#/$defs/matcher" },
+        "severity": { "enum": ["INFO", "NORMAL", "IMPORTANT", "EMERGENCY"] },
+        "correlationJsonPointer": {
+          "type": "string",
+          "pattern": "^/(?:[^~/]|~0|~1)+(?:/(?:[^~/]|~0|~1)+)*$",
+          "maxLength": 256
+        },
+        "occurredAtJsonPointer": {
+          "type": "string",
+          "pattern": "^/(?:[^~/]|~0|~1)+(?:/(?:[^~/]|~0|~1)+)*$",
+          "maxLength": 256
+        },
+        "oneShotPolicy": { "const": "REJECT" },
+        "upgradePolicy": { "const": "PIN_ORIGINAL_VERSION_UNTIL_RECOVERED" },
+        "effectiveFrom": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
