@@ -218,6 +218,7 @@ CREATE TABLE public.alarm_record (
     severity VARCHAR(16) NOT NULL CHECK (severity IN ('INFO','NORMAL','IMPORTANT','EMERGENCY')),
     status VARCHAR(32) NOT NULL CHECK (status IN ('ACTIVE','ACKNOWLEDGED','PROCESSING','RECOVERED','CLOSED','IGNORED','FALSE_ALARM')),
     row_version BIGINT NOT NULL DEFAULT 0,
+    last_action_sequence BIGINT NOT NULL DEFAULT 0 CHECK (last_action_sequence >= 0),
     occurrence_count BIGINT NOT NULL DEFAULT 1 CHECK (occurrence_count >= 1),
     escalation_level INTEGER NOT NULL DEFAULT 0 CHECK (escalation_level >= 0),
     last_escalated_at TIMESTAMPTZ,
@@ -289,6 +290,7 @@ COMMENT ON COLUMN public.alarm_record.rule_version IS '规则版本字符串，�
 COMMENT ON COLUMN public.alarm_record.severity IS '四级告警等级：INFO/NORMAL/IMPORTANT/EMERGENCY';
 COMMENT ON COLUMN public.alarm_record.status IS '告警主状态；升级、维护和通知不写入该枚举';
 COMMENT ON COLUMN public.alarm_record.row_version IS '乐观锁版本，每次业务更新递增';
+COMMENT ON COLUMN public.alarm_record.last_action_sequence IS '该告警已提交动作的最后序号；仅由原子分配器递增，不与 row_version 共用';
 COMMENT ON COLUMN public.alarm_record.occurrence_count IS '同一活动周期累计发生次数';
 COMMENT ON COLUMN public.alarm_record.escalation_level IS '正交升级级别，0 表示未升级';
 COMMENT ON COLUMN public.alarm_record.last_escalated_at IS '最近一次告警升级时间，UTC；升级为正交事实，不改变主状态';

@@ -1,8 +1,8 @@
 # P02-M2-02R1：Inbox 与动作序号整改专项冻结评审记录
 
-> 版本：1.0.0
+> 版本：1.1.0
 > 日期：2026-08-25
-> 状态：Conditional Freeze / Documentation Closed / R1A Local Task Approved
+> 状态：Conditional Freeze / R1A Verified-Local / External Gates Open
 > 评审模型：GPT-5.6 Sol
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 上游：[新功能方案评审处置记录](../../开发规范/PRD-02-P02M2-02新功能方案评审处置记录.md)、[P02-M2-02 专项冻结评审](./P02-M2-02-专项冻结评审记录.md)、[TD-006 0.1.3](./TD-006-统一告警与规则引擎.md)
@@ -11,7 +11,7 @@
 
 N-01、N-03 的文档缺口已关闭：告警 Inbox 有意保持 `RECEIVED/PROCESSED/QUARANTINED` 三态，数据库事务失败全部回滚且不得 ACK；有界重试、退避、毒消息 DLQ 和 ACK 属于未来物理 transport adapter；`QUARANTINED` 是同一 `messageId` 不可覆盖的终态，人工重驱必须使用新 `messageId` 并审计关联原记录。
 
-N-02 的架构方案已冻结，但代码缺口尚未关闭。直接 `MAX(sequence_no)+1` 被拒绝，因为当前 `JdbcAlarmSourcePersistence.FIND_ALARM` 没有 `FOR UPDATE`，该算法存在并发竞争；现有 `rowVersion + 2` 同样被拒绝，因为状态版本与动作数量不是同一事实。允许执行 [P02-M2-02R1A 独立动作序号与并发合同任务](./P02-M2-02R1A-独立动作序号与并发合同任务单.md)，状态仅为本地、无数据库执行。
+N-02 的架构方案与本地代码缺口已经关闭。直接 `MAX(sequence_no)+1` 被拒绝，因为当前 `JdbcAlarmSourcePersistence.FIND_ALARM` 没有 `FOR UPDATE`，该算法存在并发竞争；现有 `rowVersion + 2` 同样被拒绝，因为状态版本与动作数量不是同一事实。[P02-M2-02R1A 本地验收](./P02-M2-02R1A-本地验收记录.md)已证明候选 DDL、端口、事务、fake 并发和回滚合同一致，但没有验证真实 PostgreSQL 行锁或执行迁移。
 
 本评审不解锁 C1，也不授权临时 PostgreSQL、来源 adapter、物理 transport、backfill、双写、对账、切读、API 或 capability。
 
@@ -53,19 +53,19 @@ N-02 的架构方案已冻结，但代码缺口尚未关闭。直接 `MAX(sequen
 |---|---|---|
 | N-01 Inbox 三态与重试责任 | `CLOSED-DOCUMENTATION` | TD-006 0.1.3 §5.1、本记录 §2 |
 | N-03 TD 同步与修订记录 | `CLOSED-DOCUMENTATION` | TD-006 0.1.3 §13 |
-| N-02 架构方案 | `FROZEN-FOR-R1A` | TD-006 0.1.3 §5.3、本记录 §3 |
-| N-02 DDL/Java/测试实现 | `OPEN` | 完成 R1A 本地实现与 Sol 复核 |
+| N-02 架构方案 | `FROZEN` | TD-006 0.1.4 §5.3、本记录 §3 |
+| N-02 DDL/Java/测试实现 | `CLOSED-LOCAL` | [R1A 本地验收](./P02-M2-02R1A-本地验收记录.md)：60 项静态、20 项定向、74 项回归 |
 | N-02 真实 PostgreSQL 并发 | `OPEN / SEPARATE APPROVAL` | 隔离临时库获准后执行，不得连接目标/共享库 |
 | C1 来源 adapter | `CLOSED` | C0 之外的 identity/route/authority/cycle/原子性门禁仍 OPEN |
 | C2 transport 与重试参数 | `CLOSED` | 物理 Topic、consumer group、预算、DLQ、ACK 专项评审 |
 | C3/C4 迁移切换 | `CLOSED` | 生产画像、backfill、对账、观察窗口和责任人仍 OPEN |
 
-## 6. R1 完成定义
+## 6. R1/R1A 完成定义
 
 - TD-006 升至 0.1.3，明确三态、终态、重驱、事务回滚、ACK 和 transport 责任；
 - 独立动作序号的字段、SQL、事务顺序、并发与回滚反例完整冻结；
-- R1A 允许边界、执行模型、验收和禁止项可直接交给 Luna max；
+- R1A 在冻结边界内由 Luna max 完成，Sol 独立复核 60 项静态、20 项定向、74 项回归及 Reactor 构建；
 - 所有文档相对链接、版本引用和门禁状态一致；
-- 本轮没有 Java/SQL 资产修改、数据库连接、外部系统或运行行为变化。
+- R1 文档轮次没有运行行为变化；R1A 只修改候选 DDL 与本地 Java/测试资产，没有数据库连接、DDL 执行、外部系统或运行装配变化。
 
-R1 完成只关闭文档决策，不代表 N-02 已实现，也不改变 TD-006 整体 `In Review` 状态。
+R1/R1A 完成关闭 N-01/N-03 文档决策与 N-02 本地代码缺口，但不改变 TD-006 整体 `In Review` 状态，也不解锁真实数据库与后续迁移切片。

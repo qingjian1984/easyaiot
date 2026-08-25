@@ -43,6 +43,23 @@ class JdbcAlarmPersistenceSqlContractTest {
     }
 
     @Test
+    void actionSequenceAllocationIsTenantSiteScopedAtomicReturningWithoutVersionCoupling()
+            throws Exception {
+        String allocate = sql(JdbcAlarmSourcePersistence.class, "ALLOCATE_NEXT_ACTION_SEQUENCE");
+        assertTrue(allocate.contains("UPDATE public.alarm_record SET last_action_sequence=last_action_sequence+1"));
+        assertTrue(allocate.contains("tenant_id=:tenantId"));
+        assertTrue(allocate.contains("site_id=:siteId"));
+        assertTrue(allocate.contains("id=:id"));
+        assertTrue(allocate.contains("RETURNING last_action_sequence"));
+        assertFalse(allocate.contains("row_version"));
+        assertFalse(allocate.toUpperCase().contains("MAX("));
+
+        String all = allSql(JdbcAlarmSourcePersistence.class);
+        assertFalse(all.contains("MAX(sequence_no)"));
+        assertFalse(all.contains("rowVersion() +"));
+    }
+
+    @Test
     void outboxClaimUsesSkipLockedLeaseRecoveryAndOwnerCas() throws Exception {
         String claim = sql(JdbcAlarmOutboxRepository.class, "CLAIM_DUE");
         assertTrue(claim.contains("FOR UPDATE SKIP LOCKED"));

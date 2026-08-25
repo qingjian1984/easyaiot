@@ -77,11 +77,11 @@ public final class JdbcAlarmSourcePersistence implements AlarmSourcePersistenceP
                     + " (id,tenant_id,site_id,source_type,source_id,cycle_key,cycle_identity,"
                     + " cycle_identity_hash,source_object_id,device_identification,property_code,"
                     + " rule_id,rule_version_id,rule_version,severity,status,row_version,"
-                    + " occurrence_count,escalation_level,first_occurred_at,last_occurred_at,"
+                    + " last_action_sequence,occurrence_count,escalation_level,first_occurred_at,last_occurred_at,"
                     + " source_timezone,source_offset,created_by,updated_by,created_at,updated_at)"
                     + " VALUES (:id,:tenantId,:siteId,:sourceType,:sourceId,:cycleKey,:cycleIdentity,"
                     + " :cycleIdentityHash,:sourceObjectId,:deviceIdentification,:propertyCode,"
-                    + " :ruleId,:ruleVersionId,:ruleVersion,:severity,'ACTIVE',0,1,0,"
+                    + " :ruleId,:ruleVersionId,:ruleVersion,:severity,'ACTIVE',0,0,1,0,"
                     + " :firstOccurredAt,:lastOccurredAt,:sourceTimezone,:sourceOffset,"
                     + " :actorId,:actorId,:createdAt,:createdAt)"
                     + " ON CONFLICT (tenant_id,cycle_identity_hash) DO NOTHING";
@@ -100,6 +100,10 @@ public final class JdbcAlarmSourcePersistence implements AlarmSourcePersistenceP
                     + " WHERE tenant_id=:tenantId AND site_id=:siteId AND id=:id"
                     + " AND row_version=:expectedVersion"
                     + " AND status IN ('ACTIVE','ACKNOWLEDGED','PROCESSING','IGNORED')";
+    private static final String ALLOCATE_NEXT_ACTION_SEQUENCE =
+            "UPDATE public.alarm_record SET last_action_sequence=last_action_sequence+1"
+                    + " WHERE tenant_id=:tenantId AND site_id=:siteId AND id=:id"
+                    + " RETURNING last_action_sequence";
     private static final String INSERT_ACTION =
             "INSERT INTO public.alarm_action_log"
                     + " (id,tenant_id,alarm_id,sequence_no,action_type,from_status,to_status,"
@@ -213,6 +217,25 @@ public final class JdbcAlarmSourcePersistence implements AlarmSourcePersistenceP
                                       Instant recordedAt, String actorId) {
         return jdbc.update(RECORD_RECOVERED, casParams(tenantId, siteId, alarmId,
                 expectedVersion, actorId, recordedAt).addValue("recoveredAt", ts(recoveredAt))) == 1;
+    }
+
+    @Override
+    public long allocateNextActionSequence(long tenantId, long siteId, long alarmId) {
+        List<Long> rows = jdbc.query(ALLOCATE_NEXT_ACTION_SEQUENCE,
+                new MapSqlParameterSource().addValue("tenantId", tenantId)
+                        .addValue("siteId", siteId).addValue("id", alarmId),
+                (rs, rowNum) -> rs.getLong("last_action_sequence"));
+        if (rows.isEmpty()) {
+            throw new IllegalStateException("ALARM_ACTION_SEQUENCE_TARGET_NOT_FOUND");
+        }
+        if (rows.size() != 1) {
+            throw new IllegalStateException("ALARM_PERSISTENCE_NOT_UNIQUE");
+        }
+        long sequence = rows.get(0);
+        if (sequence < 1) {
+            throw new IllegalStateException("ALARM_ACTION_SEQUENCE_INVALID");
+        }
+        return sequence;
     }
 
     @Override

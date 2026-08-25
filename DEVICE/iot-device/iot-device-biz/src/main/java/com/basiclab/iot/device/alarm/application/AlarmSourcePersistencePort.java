@@ -45,6 +45,13 @@ public interface AlarmSourcePersistencePort {
                                long expectedVersion, Instant recoveredAt,
                                Instant recordedAt, String actorId);
 
+    /**
+     * 在当前告警事务内原子分配下一个动作序号。实现必须按租户、站点和告警主键定位，
+     * 不得从 row_version 或 action_log 的 MAX(sequence_no) 推导。
+     * 目标不存在或数据范围不匹配时必须 fail-closed。
+     */
+    long allocateNextActionSequence(long tenantId, long siteId, long alarmId);
+
     void appendAction(ActionEntry action);
 
     void enqueue(OutboxEntry event);

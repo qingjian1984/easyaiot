@@ -22,10 +22,15 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,6 +43,7 @@ class AlarmSourceTransactionServiceTest {
 
     private static final String H1 = "sha256:" + "1".repeat(64);
     private static final String H2 = "sha256:" + "2".repeat(64);
+    private static final String H3 = "sha256:" + "3".repeat(64);
     private static final Instant NOW = Instant.parse("2026-08-25T04:00:00Z");
 
     @Test
@@ -59,6 +65,7 @@ class AlarmSourceTransactionServiceTest {
         assertEquals(1, f.store.alarms.size());
         assertEquals(1, f.store.mappings.size());
         assertEquals(1, f.store.actions.size());
+        assertEquals(1L, f.store.actions.get(0).sequenceNo());
         assertEquals(1, f.store.outbox.size());
         assertEquals("device.alarm.created.v1", f.store.outbox.get(0).eventType());
     }
@@ -67,15 +74,22 @@ class AlarmSourceTransactionServiceTest {
     void anyFailureRollsBackAllFacts() {
         Fixture f = fixture();
         f.store.failOnEnqueue = true;
+        AlarmSourceCommand command = command("00000000-0000-0000-0000-000000000001",
+                AlarmSourceCommand.Action.RAISED, H1);
 
-        assertThrows(IllegalStateException.class, () -> f.proxy.process(command(
-                "00000000-0000-0000-0000-000000000001", AlarmSourceCommand.Action.RAISED, H1)));
+        assertThrows(IllegalStateException.class, () -> f.proxy.process(command));
 
         assertTrue(f.store.inbox.isEmpty());
         assertTrue(f.store.alarms.isEmpty());
         assertTrue(f.store.mappings.isEmpty());
         assertTrue(f.store.actions.isEmpty());
         assertTrue(f.store.outbox.isEmpty());
+        assertTrue(f.store.actionSequences.isEmpty(), "failed transaction must roll back counter");
+
+        f.store.failOnEnqueue = false;
+        f.proxy.process(command);
+        assertEquals(1L, f.store.actions.get(0).sequenceNo(),
+                "next committed action reuses the rolled-back number");
     }
 
     @Test
@@ -88,8 +102,10 @@ class AlarmSourceTransactionServiceTest {
 
         assertEquals(AlarmSourceResult.Outcome.DUPLICATE, replay.outcome());
         assertEquals(1, f.store.actions.size());
+        assertEquals(1L, f.store.actions.get(0).sequenceNo());
         assertEquals(1, f.store.outbox.size());
         assertEquals(1, f.store.alarms.values().iterator().next().occurrenceCount());
+        assertEquals(1, f.store.allocationCalls);
     }
 
     @Test
@@ -120,7 +136,46 @@ class AlarmSourceTransactionServiceTest {
         assertEquals(2, alarm.occurrenceCount());
         assertEquals(1, alarm.rowVersion());
         assertEquals(2, f.store.actions.size());
+        assertEquals(1L, f.store.actions.get(0).sequenceNo());
+        assertEquals(2L, f.store.actions.get(1).sequenceNo());
         assertEquals("device.alarm.occurrence-recorded.v1", f.store.outbox.get(1).eventType());
+    }
+
+    @Test
+    void independentAlarmSequencesEachStartAtOne() {
+        Fixture f = fixture();
+        f.proxy.process(command("00000000-0000-0000-0000-000000000001",
+                AlarmSourceCommand.Action.RAISED, H1));
+        f.proxy.process(command("00000000-0000-0000-0000-000000000002",
+                AlarmSourceCommand.Action.RAISED, H3, "source-2", "cycle-2",
+                "10|20|DEVICE_EVENT|source-2|cycle-2", H2));
+
+        assertEquals(2, f.store.alarms.size());
+        assertEquals(2, f.store.actions.size());
+        assertEquals(1L, f.store.actions.get(0).sequenceNo());
+        assertEquals(1L, f.store.actions.get(1).sequenceNo());
+    }
+
+    @Test
+    void deterministicConcurrentAllocatorSerializesOneAlarmAndSeparatesOthers() throws Exception {
+        ConcurrentFakeAllocator allocator = new ConcurrentFakeAllocator();
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        try {
+            List<Future<Long>> futures = new ArrayList<>();
+            SequenceKey sameAlarm = new SequenceKey(10, 20, 100L);
+            for (int i = 0; i < 8; i++) {
+                futures.add(executor.submit(() -> allocator.allocate(sameAlarm)));
+            }
+            Set<Long> allocated = new HashSet<>();
+            for (Future<Long> future : futures) {
+                allocated.add(future.get());
+            }
+            assertEquals(Set.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L), allocated);
+            assertEquals(1L, allocator.allocate(new SequenceKey(10, 20, 101L)));
+            assertEquals(1L, allocator.allocate(new SequenceKey(10, 21, 100L)));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -154,6 +209,7 @@ class AlarmSourceTransactionServiceTest {
         assertEquals(InboxStatus.QUARANTINED, f.store.inbox.get(messageId).status());
         assertEquals(before.rowVersion(), f.store.alarms.get(before.id()).rowVersion());
         assertEquals(1, f.store.actions.size());
+        assertEquals(1, f.store.allocationCalls, "quarantine must not allocate a sequence");
         assertEquals(1, f.store.outbox.size());
     }
 
@@ -175,6 +231,9 @@ class AlarmSourceTransactionServiceTest {
         assertEquals(AlarmStatus.RECOVERED, alarm.status());
         assertEquals(1, alarm.rowVersion());
         assertEquals(2, f.store.actions.size());
+        assertEquals(1L, f.store.actions.get(0).sequenceNo());
+        assertEquals(2L, f.store.actions.get(1).sequenceNo());
+        assertEquals(2, f.store.allocationCalls);
         assertEquals(2, f.store.outbox.size());
     }
 
@@ -214,6 +273,7 @@ class AlarmSourceTransactionServiceTest {
         assertEquals("ALARM_SOURCE_CYCLE_CONFLICT", conflict.errorCode());
         assertEquals(AlarmStatus.RECOVERED, f.store.alarms.values().iterator().next().status());
         assertEquals(2, f.store.actions.size());
+        assertEquals(2, f.store.allocationCalls);
         assertEquals(2, f.store.outbox.size());
     }
 
@@ -230,6 +290,7 @@ class AlarmSourceTransactionServiceTest {
 
         assertFalse(f.store.inbox.containsKey("00000000-0000-0000-0000-000000000002"));
         assertEquals(1, f.store.actions.size());
+        assertEquals(1, f.store.allocationCalls, "CAS failure must not allocate a sequence");
         assertEquals(1, f.store.outbox.size());
     }
 
@@ -276,9 +337,16 @@ class AlarmSourceTransactionServiceTest {
     private static AlarmSourceCommand command(String messageId, AlarmSourceCommand.Action action,
                                               String envelopeHash, String sourceId,
                                               String cycleKey, String cycleIdentity) {
+        return command(messageId, action, envelopeHash, sourceId, cycleKey, cycleIdentity, H1);
+    }
+
+    private static AlarmSourceCommand command(String messageId, AlarmSourceCommand.Action action,
+                                              String envelopeHash, String sourceId,
+                                              String cycleKey, String cycleIdentity,
+                                              String cycleIdentityHash) {
         return new AlarmSourceCommand(messageId, 10, 20, "DEVICE_EVENT", action,
                 sourceId, cycleKey, cycleIdentity,
-                H1, "object-1", "device-1", null, null, null, null,
+                cycleIdentityHash, "object-1", "device-1", null, null, null, null,
                 AlarmSeverity.NORMAL, NOW, NOW.plusSeconds(1), H2, envelopeHash,
                 "{\"safe\":true}", "Asia/Shanghai", "+08:00",
                 "corr-1", "trace-1", "source-service");
@@ -286,6 +354,18 @@ class AlarmSourceTransactionServiceTest {
 
     private record Fixture(FakeStore store, AlarmSourceTransactionService target,
                            AlarmSourceTransactionService proxy) { }
+
+    private record SequenceKey(long tenantId, long siteId, long alarmId) { }
+
+    private static final class ConcurrentFakeAllocator {
+        private final Map<SequenceKey, Long> values = new LinkedHashMap<>();
+
+        private synchronized long allocate(SequenceKey key) {
+            long next = values.getOrDefault(key, 0L) + 1;
+            values.put(key, next);
+            return next;
+        }
+    }
 
     private static final class SequenceIds implements AlarmIdGenerator {
         private final AtomicLong values = new AtomicLong(100);
@@ -306,12 +386,14 @@ class AlarmSourceTransactionServiceTest {
         private Map<String, InboxEntry> inbox = new LinkedHashMap<>();
         private Map<String, SourceMapping> mappings = new LinkedHashMap<>();
         private Map<Long, AlarmSnapshot> alarms = new LinkedHashMap<>();
+        private Map<SequenceKey, Long> actionSequences = new LinkedHashMap<>();
         private List<ActionEntry> actions = new ArrayList<>();
         private List<OutboxEntry> outbox = new ArrayList<>();
         private boolean snapshotRegistered;
         private boolean failOnEnqueue;
         private boolean failCas;
         private boolean simulateCycleRace;
+        private int allocationCalls;
 
         @Override public InboxEntry findInbox(String messageId) { return inbox.get(messageId); }
         @Override public boolean insertInboxReceived(long id, AlarmSourceCommand c) {
@@ -385,6 +467,18 @@ class AlarmSourceTransactionServiceTest {
                     a.occurrenceCount(), recoveredAt));
             return true;
         }
+        @Override public synchronized long allocateNextActionSequence(long tenantId, long siteId,
+                                                                       long alarmId) {
+            if (findAlarm(tenantId, siteId, alarmId) == null) {
+                throw new IllegalStateException("ALARM_ACTION_SEQUENCE_TARGET_NOT_FOUND");
+            }
+            beforeMutation();
+            allocationCalls++;
+            SequenceKey key = new SequenceKey(tenantId, siteId, alarmId);
+            long next = actionSequences.getOrDefault(key, 0L) + 1;
+            actionSequences.put(key, next);
+            return next;
+        }
         @Override public void appendAction(ActionEntry action) { beforeMutation(); actions.add(action); }
         @Override public void enqueue(OutboxEntry event) {
             beforeMutation(); outbox.add(event);
@@ -398,12 +492,14 @@ class AlarmSourceTransactionServiceTest {
             Map<String, InboxEntry> oldInbox = new LinkedHashMap<>(inbox);
             Map<String, SourceMapping> oldMappings = new LinkedHashMap<>(mappings);
             Map<Long, AlarmSnapshot> oldAlarms = new LinkedHashMap<>(alarms);
+            Map<SequenceKey, Long> oldActionSequences = new LinkedHashMap<>(actionSequences);
             List<ActionEntry> oldActions = new ArrayList<>(actions);
             List<OutboxEntry> oldOutbox = new ArrayList<>(outbox);
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCompletion(int status) {
                     if (status != TransactionSynchronization.STATUS_COMMITTED) {
                         inbox = oldInbox; mappings = oldMappings; alarms = oldAlarms;
+                        actionSequences = oldActionSequences;
                         actions = oldActions; outbox = oldOutbox;
                     }
                     snapshotRegistered = false;

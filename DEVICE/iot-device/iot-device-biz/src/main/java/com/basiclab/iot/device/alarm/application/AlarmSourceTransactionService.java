@@ -128,7 +128,9 @@ public class AlarmSourceTransactionService {
         }
 
         if (created) {
-            persistence.appendAction(action(ids.nextLongId(), alarm, command, 1,
+            long sequence = persistence.allocateNextActionSequence(
+                    command.tenantId(), command.siteId(), alarm.id());
+            persistence.appendAction(action(ids.nextLongId(), alarm, command, sequence,
                     "SOURCE_RAISED", null, alarm.status()));
             persistence.enqueue(events.created(alarm, command));
             persistence.markInboxProcessed(command.messageId(), command.recordedAt());
@@ -145,8 +147,10 @@ public class AlarmSourceTransactionService {
                 alarm.rowVersion(), command.occurredAt(), command.recordedAt(), command.actorId())) {
             throw new IllegalStateException("ALARM_RECORD_CAS_CONFLICT");
         }
+        long sequence = persistence.allocateNextActionSequence(
+                command.tenantId(), command.siteId(), alarm.id());
         persistence.appendAction(action(ids.nextLongId(), alarm, command,
-                alarm.rowVersion() + 2, "SOURCE_RAISED", alarm.status(), alarm.status()));
+                sequence, "SOURCE_RAISED", alarm.status(), alarm.status()));
         persistence.enqueue(events.occurrence(alarm, command));
         persistence.markInboxProcessed(command.messageId(), command.recordedAt());
         return AlarmSourceResult.processed(alarm.id());
@@ -174,8 +178,10 @@ public class AlarmSourceTransactionService {
                 alarm.rowVersion(), command.occurredAt(), command.recordedAt(), command.actorId())) {
             throw new IllegalStateException("ALARM_RECORD_CAS_CONFLICT");
         }
+        long sequence = persistence.allocateNextActionSequence(
+                command.tenantId(), command.siteId(), alarm.id());
         persistence.appendAction(action(ids.nextLongId(), alarm, command,
-                alarm.rowVersion() + 2, "SOURCE_RECOVERED", alarm.status(),
+                sequence, "SOURCE_RECOVERED", alarm.status(),
                 transition.targetStatus()));
         persistence.enqueue(events.recovered(alarm, command));
         persistence.markInboxProcessed(command.messageId(), command.recordedAt());

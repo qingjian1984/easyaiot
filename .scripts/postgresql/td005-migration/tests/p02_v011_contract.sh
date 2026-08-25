@@ -217,7 +217,10 @@ assert_contains "${LAST_OUTPUT}" "NON_EMPTY_TABLE_REJECTED" "U011 non-empty stab
 assert_contains "${LAST_OUTPUT}" "FAILED record skipped" "U011 failure attempts ADR-013 FAILED history"
 
 assert_eq 9 "$(grep -Ec '^CREATE TABLE public\.alarm_' "${V011}")" "V011 table count"
-assert_eq 149 "$(grep -Ec '^COMMENT ON COLUMN public\.alarm_' "${V011}")" "V011 column comment count"
+assert_eq 150 "$(grep -Ec '^COMMENT ON COLUMN public\.alarm_' "${V011}")" "V011 column comment count"
+V011_TEXT="$(cat "${V011}")"
+assert_contains "${V011_TEXT}" "last_action_sequence BIGINT NOT NULL DEFAULT 0 CHECK (last_action_sequence >= 0)" "alarm action counter DDL"
+assert_contains "${V011_TEXT}" "COMMENT ON COLUMN public.alarm_record.last_action_sequence" "alarm action counter Chinese comment"
 assert_eq 0 "$(grep -Ec '^(BEGIN|COMMIT);$' "${V011}" || true)" "V011 has no top-level transaction"
 for table in alarm_rule alarm_rule_version alarm_maintenance_context alarm_record alarm_source_mapping alarm_action_log alarm_false_alarm_review alarm_source_inbox alarm_outbox; do
     grep -Fq "'${table}'" "${COMMENTS}" || fail "comment gate missing ${table}"
