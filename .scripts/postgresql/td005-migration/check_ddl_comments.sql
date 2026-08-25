@@ -2,8 +2,8 @@
 --
 -- 返回行数为 0 才通过；返回行列出缺失或非中文注释的表/字段。
 -- 表级注释按 objsubid=0，字段级注释按 objsubid=attnum。
--- 清单包含 V001～V006 全部新表、runner 引导的 history 表，
--- 以及 power_idempotency_record；未建表对象自动跳过。
+-- 清单包含既有 TD-005 新表、runner 引导的 history 表、
+-- power_idempotency_record 以及 P02-M2-02A V011 九表；未建表对象自动跳过。
 
 SELECT c.relname AS table_name, '<TABLE>' AS column_name,
        COALESCE(d.description, '<MISSING>') AS comment_text
@@ -30,7 +30,16 @@ WHERE n.nspname = 'public'
       'power_space_node',
       'power_circuit',
       'power_device_asset',
-      'power_device_assignment'
+      'power_device_assignment',
+      'alarm_rule',
+      'alarm_rule_version',
+      'alarm_maintenance_context',
+      'alarm_record',
+      'alarm_source_mapping',
+      'alarm_action_log',
+      'alarm_false_alarm_review',
+      'alarm_source_inbox',
+      'alarm_outbox'
   )
   AND (d.description IS NULL OR btrim(d.description) = '' OR d.description !~ '[一-龥]')
 
@@ -67,7 +76,16 @@ WHERE n.nspname = 'public'
       'power_space_node',
       'power_circuit',
       'power_device_asset',
-      'power_device_assignment'
+      'power_device_assignment',
+      'alarm_rule',
+      'alarm_rule_version',
+      'alarm_maintenance_context',
+      'alarm_record',
+      'alarm_source_mapping',
+      'alarm_action_log',
+      'alarm_false_alarm_review',
+      'alarm_source_inbox',
+      'alarm_outbox'
   )
   AND (d.description IS NULL OR btrim(d.description) = '' OR d.description !~ '[一-龥]')
 

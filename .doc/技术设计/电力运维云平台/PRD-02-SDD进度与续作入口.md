@@ -1,6 +1,6 @@
 # PRD-02 SDD 进度与续作入口
 
-> 版本：0.4.0
+> 版本：0.5.0
 > 日期：2026-08-25
 > 状态：Design In Review / Implementation Gated
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
@@ -8,7 +8,7 @@
 
 ## 1. 当前结论
 
-PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验收结论。2026-08-25 已完成 [P02-M2-02 专项冻结评审](./P02-M2-02-专项冻结评审记录.md)：V011/U011 与事件 Schema 完成静态整改，并局部冻结 02A/02B 本地任务边界；P02-M2-02 整体仍未冻结，生产 DDL、来源接入、物理 transport、双写切读、capability 和生产容量继续关闭。
+PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验收结论。2026-08-25 已完成 [P02-M2-02 专项冻结评审](./P02-M2-02-专项冻结评审记录.md)，并完成 [P02-M2-02A review-only runner 静态验收](./P02-M2-02A-本地静态验收记录.md)：58 项纯假命令合同通过，真实数据库调用和真实 DDL 均为 0。02A 临时 PostgreSQL 合同尚未授权和执行；P02-M2-02 整体仍未冻结，生产 DDL、来源接入、物理 transport、双写切读、capability 和生产容量继续关闭。
 
 ## 2. 文档链
 
@@ -54,7 +54,7 @@ PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验
 |---|---|---|
 | [P02-M2-01](./P02-M2-01-告警领域合同与状态机任务单.md) | 告警领域合同、状态机与纯单元测试 | **Implemented / Verified-Local**；[33 个测试及编译证据](./P02-M2-01-本地验收记录.md)通过，未启用功能 |
 | [P02-M2-02](./P02-M2-02-专项冻结评审记录.md) | 告警 DDL、Inbox/Outbox、来源适配和迁移对账 | Conditional Freeze / Local Tasks Only；生产迁移、来源适配和切换仍关闭 |
-| [P02-M2-02A](./P02-M2-02A-告警迁移资产与临时库合同任务单.md) | V011/U011 review-only runner 与临时库合同 | Approved / Frozen for Local Review-Only Implementation；当前禁止执行 DDL |
+| [P02-M2-02A](./P02-M2-02A-告警迁移资产与临时库合同任务单.md) | V011/U011 review-only runner 与临时库合同 | **Implemented / Static-Verified**；[58 项验收](./P02-M2-02A-本地静态验收记录.md)通过，临时库合同 NOT RUN，生产执行禁止 |
 | [P02-M2-02B](./P02-M2-02B-告警持久化与可靠事件任务单.md) | 正式 Schema、持久化端口、同事务编排与 Relay fake | Approved / Frozen for Local No-Transport Implementation |
 | P02-M2-03 | 值班、站内信/APP、升级调度 | SPEC-006/TD-007 冻结；外部渠道可继续关闭 |
 | P02-M2-04 | 时间线、遥测窗口与基础证据索引 | SPEC-008/TD-009 基础证据范围冻结 |
@@ -65,8 +65,8 @@ PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验
 
 ## 7. 下一步
 
-1. 先执行 P02-M2-02A 的 review-only runner **静态接线与反例**；默认 apply 链不得包含 V011，本轮仍不执行 DDL。
-2. 可并行执行 P02-M2-02B 的正式 Schema、纯 Inbox/Outbox 裁决、持久化端口和 fake transport 测试；不得装配生产 listener/producer/scheduler。
-3. 02A 静态实现经 Sol 复核后，才决定是否另行授权在新建隔离临时 PostgreSQL 执行 V011 合同；目标/共享库始终不在该授权内。
+1. 下一仓库内步骤执行 P02-M2-02B 的正式 Schema、纯 Inbox/Outbox 裁决、持久化端口和 fake transport 测试；不得装配生产 listener/producer/scheduler。
+2. P02-M2-02A 临时 PostgreSQL 合同保持 `NOT RUN`；只有决策所有者另行明确授权新建、唯一前缀、用后销毁的隔离实例后才可执行，目标/共享库始终不在授权内。
+3. 临时库授权前不得读取 `.env` 凭据、调用 Docker、连接既有 PostgreSQL 或执行 V011/U011。
 4. 持续收集生产告警表、Topic、调用量、容量和双写窗口；未获得责任人输入前不声明生产容量、不开发来源切换。
 5. TD-008、外部通知和完整事故冻结继续关闭。

@@ -8,7 +8,9 @@
 # 用法：
 #   ./td005_migration.sh dry-run [--db <database>]
 #   ./td005_migration.sh apply [--db <database>] [--step M05|M15|M16|V001|V002|V003|V004|V005|V006|V007|V008|V010|V009] [--approval <id>] [--yes]
+#   ./td005_migration.sh apply --step V011 [--db <td006_review_...>] [--approval <id>] [--yes]
 #   ./td005_migration.sh uninstall [--db <database>] [--approval <id>] [--yes]
+#   ./td005_migration.sh uninstall --step U011 [--db <td006_review_...>] [--approval <id>] [--yes]
 #   ./td005_migration.sh check-comments [--db <database>]
 #
 # 环境变量：
@@ -30,6 +32,11 @@
 #                        可重试错误（锁忙/连接/超时）的重试次数与退避（默认 3/1s/4s）
 #   SKIP_PRECHECK       1 时跳过运行时画像 precheck
 #   M05_SQL / M15_SQL / M16_SQL / V001_SQL / V002_SQL / V003_SQL / V004_SQL / V005_SQL / V006_SQL / V007_SQL / V008_SQL / V010_SQL / V009_SQL / U001_SQL  步骤 SQL 路径覆盖
+#   TD006_REVIEW_ONLY   必须为 1 才能进入 V011/U011 临时库评审路径（默认 0）
+#   TD006_TEMP_DB       临时评审库名；必须与 PG_DB 相同且匹配 td006_review_<lowercase>
+#   TD006_TEMP_SYSTEM_IDENTIFIER  临时库 pg_control_system().system_identifier 期望值
+#   TD006_DENY_DATABASES  额外拒绝库名（空格或逗号分隔；内置拒绝 iot-device20/postgres/template0/template1）
+#   V011_SQL / U011_SQL  TD-006 评审步骤 SQL 路径覆盖
 #
 # 执行模型（ADR-013 1.4.2，DBA/架构专项处置 H-01～H-04）：
 #   1. 单 psql 会话内先完成全部校验（hash、INVALID index、索引签名），
@@ -75,6 +82,10 @@ REQUIRE_IDEMPOTENCY="${REQUIRE_IDEMPOTENCY:-0}"
 SKIP_PRECHECK="${SKIP_PRECHECK:-0}"
 STEP_ONLY="${STEP_ONLY:-}"
 YES="${YES:-0}"
+TD006_REVIEW_ONLY="${TD006_REVIEW_ONLY:-0}"
+TD006_TEMP_DB="${TD006_TEMP_DB:-}"
+TD006_TEMP_SYSTEM_IDENTIFIER="${TD006_TEMP_SYSTEM_IDENTIFIER:-}"
+TD006_DENY_DATABASES="${TD006_DENY_DATABASES:-}"
 export PGCONNECT_TIMEOUT="${CONNECT_TIMEOUT}"
 
 ASSET_DIR="${REPO_ROOT}/.doc/技术设计/电力运维云平台/assets/td005-migration"
@@ -92,6 +103,9 @@ V008_SQL="${V008_SQL:-${ASSET_DIR}/V008__iot_sink_telemetry_inbox.sql}"
 V010_SQL="${V010_SQL:-${ASSET_DIR}/V010__telemetry_quality.sql}"
 V009_SQL="${V009_SQL:-${ASSET_DIR}/V009__telemetry_inbox_product_identity.sql}"
 U001_SQL="${U001_SQL:-${ASSET_DIR}/U001__power_model_version_binding_audit_outbox.sql}"
+TD006_ASSET_DIR="${REPO_ROOT}/.doc/技术设计/电力运维云平台/assets/td006-migration"
+V011_SQL="${V011_SQL:-${TD006_ASSET_DIR}/V011__alarm_core_candidate.sql}"
+U011_SQL="${U011_SQL:-${TD006_ASSET_DIR}/U011__alarm_core_candidate.sql}"
 CHECK_SQL="${SCRIPT_DIR}/check_ddl_comments.sql"
 PREPROFILE_SQL="${SCRIPT_DIR}/precheck_runtime_profile.sql"
 
@@ -128,6 +142,8 @@ step_sql_path() {
         V010) echo "${V010_SQL}" ;;
         V009) echo "${V009_SQL}" ;;
         U001) echo "${U001_SQL}" ;;
+        V011) echo "${V011_SQL}" ;;
+        U011) echo "${U011_SQL}" ;;
         *) fail "unknown step: $1" ;;
     esac
 }
@@ -169,6 +185,89 @@ require_backup_dir() {
     if [ -z "${BACKUP_DIR:-}" ]; then
         fail_validation "BACKUP_MISSING: ${MODE} 必须设置 BACKUP_DIR（ADR-013：apply 前备份为 MUST）"
     fi
+}
+
+TD006_REVIEW_APPLY=0
+TD006_REVIEW_UNINSTALL=0
+
+# V011/U011 are deliberately outside the TD-005 default plan.  They can only
+# be reached through their explicit review-only mode/step pair.
+validate_step_mode() {
+    case "${TD006_REVIEW_ONLY}" in
+        0|1) ;;
+        *) fail_validation "TD006_REVIEW_ONLY_INVALID: 只能为 0 或 1" ;;
+    esac
+
+    if [ "${MODE}" = "apply" ] && [ "${STEP_ONLY}" = "V011" ]; then
+        TD006_REVIEW_APPLY=1
+    fi
+    if [ "${MODE}" = "uninstall" ] && [ "${STEP_ONLY}" = "U011" ]; then
+        TD006_REVIEW_UNINSTALL=1
+    fi
+
+    case "${STEP_ONLY}" in
+        V011)
+            [ "${MODE}" = "apply" ] || fail_validation "TD006_REVIEW_STEP_MODE_FORBIDDEN: V011 仅允许 apply --step V011"
+            [ "${TD006_REVIEW_ONLY}" = "1" ] || fail_validation "TD006_REVIEW_ONLY_REQUIRED: V011 必须显式启用 review-only"
+            ;;
+        U011)
+            [ "${MODE}" = "uninstall" ] || fail_validation "TD006_REVIEW_STEP_MODE_FORBIDDEN: U011 仅允许 uninstall --step U011"
+            [ "${TD006_REVIEW_ONLY}" = "1" ] || fail_validation "TD006_REVIEW_ONLY_REQUIRED: U011 必须显式启用 review-only"
+            ;;
+    esac
+
+    if [ "${TD006_REVIEW_ONLY}" = "1" ] && [ "${TD006_REVIEW_APPLY}" -ne 1 ] && [ "${TD006_REVIEW_UNINSTALL}" -ne 1 ]; then
+        fail_validation "TD006_REVIEW_STEP_REQUIRED: review-only 仅接受 apply --step V011 或 uninstall --step U011"
+    fi
+    if [ "${STEP_ONLY}" = "V011" ] || [ "${STEP_ONLY}" = "U011" ]; then
+        [ "${SKIP_PRECHECK}" = "1" ] && fail_validation "TD006_REVIEW_SKIP_PRECHECK_FORBIDDEN: review-only 不得使用 --skip-precheck"
+    fi
+}
+
+td006_database_denied() {
+    local denied normalized="${TD006_DENY_DATABASES//,/ }"
+    local -a additional_denied=()
+    read -r -a additional_denied <<< "${normalized}"
+    for denied in iot-device20 postgres template0 template1 "${additional_denied[@]}"; do
+        [ -n "${denied}" ] && [ "${PG_DB}" = "${denied}" ] && return 0
+    done
+    return 1
+}
+
+require_td006_review() {
+    [ "${TD006_REVIEW_ONLY}" = "1" ] || fail_validation "TD006_REVIEW_ONLY_REQUIRED: V011/U011 必须显式启用 review-only"
+    require_approval
+    require_backup_dir
+    [[ "${APPROVAL}" =~ ^[A-Za-z0-9._:-]{1,128}$ ]] || fail_validation "TD006_APPROVAL_INVALID: 审批标识只能包含字母、数字、点、下划线、冒号和连字符"
+    [ -n "${TD006_TEMP_DB}" ] || fail_validation "TD006_TEMP_DB_MISSING: 必须设置 TD006_TEMP_DB"
+    [ "${PG_DB}" = "${TD006_TEMP_DB}" ] || fail_validation "TD006_TEMP_DB_MISMATCH: PG_DB 必须与 TD006_TEMP_DB 精确一致"
+    td006_database_denied && fail_validation "TD006_DATABASE_DENIED: 目标库在拒绝清单中"
+    [[ "${TD006_TEMP_DB}" =~ ^td006_review_[a-z0-9_]+$ ]] || fail_validation "TD006_TEMP_DB_INVALID: 必须匹配 ^td006_review_[a-z0-9_]+$"
+    [ -n "${TD006_TEMP_SYSTEM_IDENTIFIER}" ] || fail_validation "TD006_TEMP_SYSTEM_IDENTIFIER_MISSING: 必须设置临时库 system_identifier"
+    [[ "${TD006_TEMP_SYSTEM_IDENTIFIER}" =~ ^[0-9]{1,20}$ ]] || fail_validation "TD006_TEMP_SYSTEM_IDENTIFIER_INVALID: system_identifier 必须为十进制数字"
+    [ "${SKIP_PRECHECK}" = "1" ] && fail_validation "TD006_REVIEW_SKIP_PRECHECK_FORBIDDEN: review-only 不得跳过 precheck"
+}
+
+# This is intentionally a read-only identity query.  Configuration strings are
+# not sufficient: both values must be observed from the connected PostgreSQL
+# session before pg_dump or any business DDL is allowed.
+td006_verify_identity() {
+    local identity_output rc actual_db actual_system
+    identity_output="$($(psql_base) -X -q -tA -c "BEGIN READ ONLY; SELECT current_database() || '|' || (pg_control_system()).system_identifier::text; COMMIT;" 2>&1)"
+    rc=$?
+    [ ${rc} -eq 0 ] || fail_validation "TD006_IDENTITY_QUERY_FAILED: 无法读取 current_database()/system_identifier"
+    identity_output="${identity_output%%$'\n'*}"
+    actual_db="${identity_output%%|*}"
+    actual_system="${identity_output#*|}"
+    [ "${actual_db}" = "${TD006_TEMP_DB}" ] || fail_validation "TD006_TEMP_DB_IDENTITY_MISMATCH: current_database() 与 TD006_TEMP_DB 不一致"
+    [ "${actual_system}" = "${TD006_TEMP_SYSTEM_IDENTIFIER}" ] || fail_validation "TD006_TEMP_SYSTEM_IDENTITY_MISMATCH: system_identifier 与 TD006_TEMP_SYSTEM_IDENTIFIER 不一致"
+    log "TD006 identity PASS: database=${actual_db}"
+}
+
+td006_review_preflight() {
+    require_td006_review
+    td006_verify_identity
+    backup_before_apply
 }
 
 run_precheck() {
@@ -231,6 +330,261 @@ COMMENT ON COLUMN public.schema_migration_history.started_at IS '执行开始时
 COMMENT ON COLUMN public.schema_migration_history.finished_at IS '执行结束时间';
 COMMENT ON COLUMN public.schema_migration_history.executed_by IS '执行人/执行身份';
 COMMENT ON COLUMN public.schema_migration_history.evidence IS '执行证据（审批单、目标库版本、备份文件、输出摘要）';
+SQL
+}
+
+# TD-006 schema signature covers the managed table columns/defaults, every
+# constraint/index on those tables, the three immutability triggers, and their
+# trigger functions.  The first successful V011 stores this catalog-derived
+# signature in history; replay compares the live catalog to that immutable
+# evidence, so same-name definition drift is rejected before any DDL.
+emit_td006_schema_signature() {
+    cat <<'SQL'
+WITH managed_tables(table_name) AS (
+    VALUES
+        ('alarm_rule'),
+        ('alarm_rule_version'),
+        ('alarm_maintenance_context'),
+        ('alarm_record'),
+        ('alarm_source_mapping'),
+        ('alarm_action_log'),
+        ('alarm_false_alarm_review'),
+        ('alarm_source_inbox'),
+        ('alarm_outbox')
+), schema_parts(part) AS (
+    SELECT 'column|' || c.relname || '|' || a.attnum::text || '|' || a.attname || '|' ||
+           pg_catalog.format_type(a.atttypid, a.atttypmod) || '|' || a.attnotnull::text || '|' ||
+           COALESCE(pg_get_expr(ad.adbin, ad.adrelid), '')
+      FROM managed_tables mt
+      JOIN pg_namespace n ON n.nspname = 'public'
+      JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = mt.table_name AND c.relkind = 'r'
+      JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+      LEFT JOIN pg_attrdef ad ON ad.adrelid = c.oid AND ad.adnum = a.attnum
+    UNION ALL
+    SELECT 'constraint|' || c.relname || '|' || con.conname || '|' ||
+           pg_get_constraintdef(con.oid, true)
+      FROM managed_tables mt
+      JOIN pg_namespace n ON n.nspname = 'public'
+      JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = mt.table_name AND c.relkind = 'r'
+      JOIN pg_constraint con ON con.conrelid = c.oid
+    UNION ALL
+    SELECT 'index|' || c.relname || '|' || i.relname || '|' || pg_get_indexdef(i.oid)
+      FROM managed_tables mt
+      JOIN pg_namespace n ON n.nspname = 'public'
+      JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = mt.table_name AND c.relkind = 'r'
+      JOIN pg_index ix ON ix.indrelid = c.oid
+      JOIN pg_class i ON i.oid = ix.indexrelid
+    UNION ALL
+    SELECT 'trigger|' || c.relname || '|' || t.tgname || '|' || pg_get_triggerdef(t.oid, true)
+      FROM managed_tables mt
+      JOIN pg_namespace n ON n.nspname = 'public'
+      JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = mt.table_name AND c.relkind = 'r'
+      JOIN pg_trigger t ON t.tgrelid = c.oid AND NOT t.tgisinternal
+    UNION ALL
+    SELECT 'function|' || p.proname || '|' || pg_get_functiondef(p.oid)
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND p.proname IN (
+           'fn_alarm_rule_version_guard',
+           'fn_alarm_source_mapping_append_only',
+           'fn_alarm_action_log_append_only'
+       )
+)
+SELECT encode(
+           sha256(convert_to(COALESCE(string_agg(part, E'\n' ORDER BY part), ''), 'UTF8')),
+           'hex'
+       ) AS td006_schema_signature
+  FROM schema_parts \gset
+SQL
+}
+
+emit_td006_managed_object_flag() {
+    local variable_name="$1"
+    cat <<SQL
+SELECT (
+    EXISTS (
+        SELECT 1
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relname IN (
+               'alarm_rule', 'alarm_rule_version', 'alarm_maintenance_context',
+               'alarm_record', 'alarm_source_mapping', 'alarm_action_log',
+               'alarm_false_alarm_review', 'alarm_source_inbox', 'alarm_outbox',
+               'idx_alarm_rule_site_status', 'idx_alarm_rule_version_lifecycle',
+               'uq_alarm_rule_version_published', 'idx_alarm_maintenance_context_active',
+               'idx_alarm_record_page', 'idx_alarm_record_device_active',
+               'idx_alarm_record_ignore_expiry', 'idx_alarm_source_mapping_alarm',
+               'idx_alarm_action_log_timeline', 'uq_alarm_false_alarm_review_pending',
+               'idx_alarm_source_inbox_claim', 'idx_alarm_outbox_claim',
+               'idx_alarm_outbox_publishing_expired', 'idx_alarm_outbox_alarm'
+           )
+    ) OR EXISTS (
+        SELECT 1
+          FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname IN (
+               'fn_alarm_rule_version_guard',
+               'fn_alarm_source_mapping_append_only',
+               'fn_alarm_action_log_append_only'
+           )
+    )
+) AS ${variable_name} \gset
+SQL
+}
+
+emit_td006_history_flags() {
+    local step="$1" sha_variable="$2" prefix
+    prefix="$(echo "${step}" | tr 'A-Z' 'a-z')"
+    cat <<SQL
+SELECT to_regclass('public.schema_migration_history') IS NOT NULL AS td006_history_exists \gset
+\if :td006_history_exists
+SELECT EXISTS (
+    SELECT 1 FROM public.schema_migration_history
+     WHERE migration_id = '${step}' AND script_sha256 <> :'${sha_variable}'
+) AS ${prefix}_hash_mismatch,
+EXISTS (
+    SELECT 1 FROM public.schema_migration_history
+     WHERE migration_id = '${step}' AND status = 'SUCCEEDED' AND script_sha256 = :'${sha_variable}'
+) AS ${prefix}_succeeded_match \gset
+\else
+\set ${prefix}_hash_mismatch false
+\set ${prefix}_succeeded_match false
+\endif
+\if :${prefix}_hash_mismatch
+\echo HASH_MISMATCH ${step}
+SELECT 1/0 AS migration_hash_mismatch;
+\endif
+SQL
+}
+
+emit_td006_live_signature_guard() {
+    emit_td006_schema_signature
+    cat <<'SQL'
+SELECT COALESCE(evidence->>'schema_signature', '') AS td006_stored_signature
+  FROM public.schema_migration_history
+ WHERE migration_id = 'V011' AND status = 'SUCCEEDED' \gset
+SELECT :'td006_schema_signature' <> :'td006_stored_signature'
+       OR :'td006_stored_signature' = '' AS td006_signature_mismatch \gset
+\if :td006_signature_mismatch
+\echo SCHEMA_SIGNATURE_MISMATCH V011
+SELECT 1/0 AS td006_schema_signature_mismatch;
+\endif
+SQL
+}
+
+emit_td006_v011_driver() {
+    cat <<SQL
+\set ON_ERROR_STOP on
+SET lock_timeout = :'lock_wait';
+SET statement_timeout = :'statement_timeout';
+SELECT pg_advisory_lock(:'lock_key'::bigint);
+SQL
+    emit_td006_history_flags V011 v011_sha
+    cat <<'SQL'
+\if :v011_succeeded_match
+SQL
+    emit_td006_live_signature_guard
+    cat <<'SQL'
+\echo STEP_SKIPPED V011
+\else
+SQL
+    emit_td006_managed_object_flag td006_preexisting_object
+    cat <<'SQL'
+\if :td006_preexisting_object
+\echo TD006_PREEXISTING_OBJECT V011
+SELECT 1/0 AS td006_preexisting_object;
+\endif
+\echo STEP_START V011
+SELECT clock_timestamp() AS v011_started \gset
+BEGIN;
+SQL
+    cat "${V011_SQL}"
+    emit_td006_schema_signature
+    history_bootstrap
+    cat <<'SQL'
+INSERT INTO public.schema_migration_history
+    (migration_id, script_sha256, status, started_at, finished_at, executed_by, evidence)
+VALUES
+    ('V011', :'v011_sha', 'SUCCEEDED', :'v011_started'::timestamptz, clock_timestamp(), :'executor',
+     jsonb_build_object(
+         'approval', :'approval',
+         'target', :'db',
+         'backup', :'backup_file',
+         'schema_signature', :'td006_schema_signature',
+         'review_only', true
+     ))
+ON CONFLICT (migration_id) DO UPDATE SET
+    script_sha256 = EXCLUDED.script_sha256,
+    status = EXCLUDED.status,
+    started_at = EXCLUDED.started_at,
+    finished_at = EXCLUDED.finished_at,
+    executed_by = EXCLUDED.executed_by,
+    evidence = EXCLUDED.evidence;
+COMMIT;
+\echo STEP_DONE V011
+\endif
+SELECT pg_advisory_unlock(:'lock_key'::bigint);
+SQL
+}
+
+emit_td006_u011_driver() {
+    cat <<SQL
+\set ON_ERROR_STOP on
+SET lock_timeout = :'lock_wait';
+SET statement_timeout = :'statement_timeout';
+SELECT pg_advisory_lock(:'lock_key'::bigint);
+SQL
+    emit_td006_history_flags U011 u011_sha
+    cat <<'SQL'
+\if :u011_succeeded_match
+SQL
+    emit_td006_managed_object_flag td006_residual_object
+    cat <<'SQL'
+\if :td006_residual_object
+\echo SCHEMA_SIGNATURE_MISMATCH U011
+SELECT 1/0 AS td006_u011_residual_object;
+\endif
+\echo STEP_SKIPPED U011
+\else
+\if :td006_history_exists
+SELECT EXISTS (
+    SELECT 1 FROM public.schema_migration_history
+     WHERE migration_id = 'V011' AND status = 'SUCCEEDED'
+) AS v011_history_ready \gset
+\else
+\set v011_history_ready false
+\endif
+\if :v011_history_ready
+SQL
+    emit_td006_live_signature_guard
+    cat <<'SQL'
+\else
+\echo TD006_V011_HISTORY_REQUIRED U011
+SELECT 1/0 AS td006_v011_history_required;
+\endif
+\echo STEP_START U011
+SELECT clock_timestamp() AS u011_started \gset
+SQL
+    cat "${U011_SQL}"
+    cat <<'SQL'
+INSERT INTO public.schema_migration_history
+    (migration_id, script_sha256, status, started_at, finished_at, executed_by, evidence)
+VALUES
+    ('U011', :'u011_sha', 'SUCCEEDED', :'u011_started'::timestamptz, clock_timestamp(), :'executor',
+     jsonb_build_object('approval', :'approval', 'target', :'db', 'backup', :'backup_file', 'review_only', true))
+ON CONFLICT (migration_id) DO UPDATE SET
+    script_sha256 = EXCLUDED.script_sha256,
+    status = EXCLUDED.status,
+    started_at = EXCLUDED.started_at,
+    finished_at = EXCLUDED.finished_at,
+    executed_by = EXCLUDED.executed_by,
+    evidence = EXCLUDED.evidence;
+\echo STEP_DONE U011
+\endif
+SELECT pg_advisory_unlock(:'lock_key'::bigint);
 SQL
 }
 
@@ -442,6 +796,10 @@ SQL
 classify_error() {
     local logfile="$1"
     if grep -q "HASH_MISMATCH" "${logfile}"; then echo "HASH_MISMATCH"; return; fi
+    if grep -q "TD006_PREEXISTING_OBJECT" "${logfile}"; then echo "TD006_PREEXISTING_OBJECT"; return; fi
+    if grep -q "SCHEMA_SIGNATURE_MISMATCH" "${logfile}"; then echo "SCHEMA_SIGNATURE_MISMATCH"; return; fi
+    if grep -q "TD006_V011_HISTORY_REQUIRED" "${logfile}"; then echo "TD006_V011_HISTORY_REQUIRED"; return; fi
+    if grep -q "U011 refused:" "${logfile}"; then echo "NON_EMPTY_TABLE_REJECTED"; return; fi
     if grep -q "DEPENDENCY_NOT_SATISFIED V009" "${logfile}"; then echo "DEPENDENCY_NOT_SATISFIED"; return; fi
     if grep -q "V009_PREEXISTING_COLUMN_WITHOUT_HISTORY" "${logfile}"; then echo "V009_PREEXISTING_COLUMN_WITHOUT_HISTORY"; return; fi
     if grep -q "INVALID_INDEX_DETECTED" "${logfile}"; then echo "INVALID_INDEX_DETECTED"; return; fi
@@ -546,6 +904,48 @@ run_uninstall_once() {
     return $rc
 }
 
+run_td006_v011_once() {
+    local tmp_sql log_file
+    tmp_sql="$(mktemp)"
+    log_file="$(mktemp)"
+    emit_td006_v011_driver > "${tmp_sql}"
+    $(psql_base) \
+        -v lock_key="${LOCK_KEY}" \
+        -v lock_wait="${LOCK_WAIT}" \
+        -v statement_timeout="${STATEMENT_TIMEOUT}" \
+        -v v011_sha="$(sha256_file "${V011_SQL}")" \
+        -v executor="${PG_USER:-runner}" \
+        -v approval="${APPROVAL}" \
+        -v db="${PG_DB}" \
+        -v backup_file="${BACKUP_FILE}" < "${tmp_sql}" > "${log_file}" 2>&1
+    local rc=$?
+    cat "${log_file}"
+    rm -f "${tmp_sql}"
+    LAST_RUN_LOG="${log_file}"
+    return $rc
+}
+
+run_td006_u011_once() {
+    local tmp_sql log_file
+    tmp_sql="$(mktemp)"
+    log_file="$(mktemp)"
+    emit_td006_u011_driver > "${tmp_sql}"
+    $(psql_base) \
+        -v lock_key="${LOCK_KEY}" \
+        -v lock_wait="${LOCK_WAIT}" \
+        -v statement_timeout="${STATEMENT_TIMEOUT}" \
+        -v u011_sha="$(sha256_file "${U011_SQL}")" \
+        -v executor="${PG_USER:-runner}" \
+        -v approval="${APPROVAL}" \
+        -v db="${PG_DB}" \
+        -v backup_file="${BACKUP_FILE}" < "${tmp_sql}" > "${log_file}" 2>&1
+    local rc=$?
+    cat "${log_file}"
+    rm -f "${tmp_sql}"
+    LAST_RUN_LOG="${log_file}"
+    return $rc
+}
+
 run_with_retry() {
     local run_fn="$1" attempt=1 delay rc err_code run_started
     while :; do
@@ -557,7 +957,7 @@ run_with_retry() {
         rc=$?
         err_code="$(classify_error "${LAST_RUN_LOG}")"
         case "${err_code}" in
-            HASH_MISMATCH|DEPENDENCY_NOT_SATISFIED|V009_PREEXISTING_COLUMN_WITHOUT_HISTORY|INVALID_INDEX_DETECTED|INDEX_SIGNATURE_MISMATCH|VALIDATION_ABORT)
+            HASH_MISMATCH|TD006_PREEXISTING_OBJECT|SCHEMA_SIGNATURE_MISMATCH|TD006_V011_HISTORY_REQUIRED|DEPENDENCY_NOT_SATISFIED|V009_PREEXISTING_COLUMN_WITHOUT_HISTORY|INVALID_INDEX_DETECTED|INDEX_SIGNATURE_MISMATCH|VALIDATION_ABORT)
                 rm -f "${LAST_RUN_LOG}"
                 fail_validation "${err_code}: 校验失败，零业务变更"
                 ;;
@@ -577,6 +977,8 @@ run_with_retry() {
     done
 }
 
+validate_step_mode
+
 case "${MODE}" in
     dry-run)
         log "dry-run target=${PG_DB}"
@@ -588,19 +990,29 @@ case "${MODE}" in
         exit 0
         ;;
     apply)
-        require_approval
-        require_backup_dir
-        run_precheck
-        backup_before_apply
-        run_with_retry run_apply_once
+        if [ "${TD006_REVIEW_APPLY}" -eq 1 ]; then
+            td006_review_preflight
+            run_with_retry run_td006_v011_once
+        else
+            require_approval
+            require_backup_dir
+            run_precheck
+            backup_before_apply
+            run_with_retry run_apply_once
+        fi
         log "apply SUCCEEDED target=${PG_DB}"
         ;;
     uninstall)
-        require_approval
-        require_backup_dir
-        run_precheck
-        backup_before_apply
-        run_with_retry run_uninstall_once
+        if [ "${TD006_REVIEW_UNINSTALL}" -eq 1 ]; then
+            td006_review_preflight
+            run_with_retry run_td006_u011_once
+        else
+            require_approval
+            require_backup_dir
+            run_precheck
+            backup_before_apply
+            run_with_retry run_uninstall_once
+        fi
         log "uninstall SUCCEEDED target=${PG_DB}"
         ;;
     check-comments)

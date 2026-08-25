@@ -1,6 +1,6 @@
 # EasyAIoT 电力运维云平台 Technical Design 索引
 
-> 索引版本：1.13.0
+> 索引版本：1.14.0
 > 日期：2026-08-25
 > 上游基线：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[PRD-02 1.2.2](../../产品需求/电力运维云平台/PRD-02-监控告警与安全控制.md)、[M1 Spec 集合基线 1.4.0](../../规格/电力运维云平台/M1-SPEC评审冻结记录.md)、[PRD-02 M2-M3 Spec 专项评审](../../规格/电力运维云平台/M2-M3-SPEC评审记录.md)、[PRD-02 SDD 评审处置](../../开发规范/PRD-02-SDD方案设计评审处置记录.md)、[ADR 决策集](../../架构决策/电力运维云平台/README.md)
 > 续作入口：[M1 SDD 进度与续作入口](./M1-SDD进度与续作入口.md)、[PRD-02 SDD 进度与续作入口](./PRD-02-SDD进度与续作入口.md)
@@ -36,7 +36,7 @@
 |---|---|---|---|
 | [P02-M2-01](./P02-M2-01-告警领域合同与状态机任务单.md) | 告警枚举、事件 Envelope 和纯状态机 | [Implemented / Verified-Local](./P02-M2-01-本地验收记录.md) | 33 个定向测试与 Reactor 编译通过；数据库、Kafka、API、旧链迁移和 capability 仍关闭 |
 | [P02-M2-02 评审](./P02-M2-02-专项冻结评审记录.md) | 告警 DDL、Schema、Inbox/Outbox 与迁移边界 | Conditional Freeze / Local Tasks Only | 整体未冻结；只解锁 02A/02B 本地任务 |
-| [P02-M2-02A](./P02-M2-02A-告警迁移资产与临时库合同任务单.md) | V011/U011 review-only runner 与临时库合同 | Approved / Frozen for Local Review-Only Implementation | 先做静态接线；任何 DDL 执行须另行解锁 |
+| [P02-M2-02A](./P02-M2-02A-告警迁移资产与临时库合同任务单.md) | V011/U011 review-only runner 与临时库合同 | [Implemented / Static-Verified](./P02-M2-02A-本地静态验收记录.md) | 58 项假命令合同通过；临时库合同 NOT RUN，任何真实 DDL 须另行授权 |
 | [P02-M2-02B](./P02-M2-02B-告警持久化与可靠事件任务单.md) | 正式 Schema、持久化、同事务编排和 Relay fake | Approved / Frozen for Local No-Transport Implementation | 禁止生产 transport、旧来源、API 与 capability |
 
 ## M1 本地收口任务包
