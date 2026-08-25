@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/events/device.alarm.suppression-decided/v1",
+  "title": "device.alarm.suppression-decided.v1",
+  "description": "告警域已作出的通知抑制决策；通知域不得自行评估告警。",
+  "type": "object",
+  "required": ["eventId", "eventVersion", "eventType", "tenantId", "occurredAt", "recordedAt", "source", "correlationId", "payload"],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "eventType": {
+      "const": "device.alarm.suppression-decided.v1"
+    },
+    "tenantId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "iot-device"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "traceId": {
+      "type": ["string", "null"],
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": ["alarmId", "status", "decision", "maintenanceContextId", "policyId", "policyVersion", "reasonCode", "decidedAt", "version"],
+      "properties": {
+        "alarmId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "status": {
+          "enum": ["ACTIVE", "ACKNOWLEDGED", "PROCESSING", "RECOVERED", "CLOSED", "IGNORED", "FALSE_ALARM"]
+        },
+        "decision": {
+          "enum": ["SUPPRESSED", "NOT_SUPPRESSED", "REEVALUATED"]
+        },
+        "maintenanceContextId": {
+          "type": ["string", "null"],
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "policyId": {
+          "type": ["string", "null"],
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "policyVersion": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "reasonCode": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "decidedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

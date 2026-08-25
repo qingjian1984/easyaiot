@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/events/device.alarm.source-event/v1",
+  "title": "AlarmSourceEvent v1 review candidate",
+  "description": "来源 Envelope 的 eventType 固定为 device.alarm.source-event.v1，source 固定为 iot-device；RAISED/RECOVERED 只能由 payload.sourceAction 表达。",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventVersion",
+    "eventType",
+    "tenantId",
+    "occurredAt",
+    "recordedAt",
+    "source",
+    "correlationId",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "eventType": {
+      "const": "device.alarm.source-event.v1"
+    },
+    "tenantId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "iot-device"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "traceId": {
+      "type": ["string", "null"],
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "sourceType",
+        "sourceAction",
+        "sourceId",
+        "cycleKey",
+        "sourceObjectId",
+        "siteId",
+        "deviceId",
+        "severity",
+        "occurredAt",
+        "payloadHash"
+      ],
+      "properties": {
+        "sourceType": {
+          "enum": ["THRESHOLD", "DEVICE_EVENT", "VIDEO", "AI", "RUNTIME"]
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "cycleKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sourceObjectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "siteId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sourceAction": {
+          "enum": ["RAISED", "RECOVERED"]
+        },
+        "propertyCode": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "ruleId": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "ruleVersion": {
+          "type": ["string", "null"],
+          "maxLength": 32
+        },
+        "severity": {
+          "enum": ["INFO", "NORMAL", "IMPORTANT", "EMERGENCY"]
+        },
+        "quality": {
+          "enum": ["GOOD", "BACKFILLED", "TIMEOUT", "COMM_ERROR", "DECODE_ERROR", "UNKNOWN"]
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "timezone": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "originalOffset": {
+          "type": ["string", "null"],
+          "pattern": "^(Z|[+-](0[0-9]|1[0-4]):[0-5][0-9])$"
+        },
+        "payloadRef": {
+          "type": ["string", "null"],
+          "maxLength": 512
+        },
+        "payloadHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "sourceType": {"const": "THRESHOLD"}
+            },
+            "required": ["sourceType"]
+          },
+          "then": {
+            "properties": {
+              "propertyCode": {},
+              "ruleId": {},
+              "ruleVersion": {},
+              "quality": {}
+            },
+            "required": ["propertyCode", "ruleId", "ruleVersion", "quality"],
+            "allOf": [
+              {
+                "properties": {
+                  "propertyCode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "ruleId": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  },
+                  "ruleVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32
+                  },
+                  "quality": {
+                    "enum": ["GOOD", "BACKFILLED", "TIMEOUT", "COMM_ERROR", "DECODE_ERROR", "UNKNOWN"]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "additionalProperties": true
+}

@@ -44,6 +44,7 @@
     "gen:icon": "esno ./build/generate/icon/index.ts",
     "verify:jcs-golden": "esno ./build/script/verifyJcsGolden.ts",
     "verify:event-contracts": "esno ./build/script/verifyEventContracts.ts",
+    "verify:alarm-event-contracts": "node ./scripts/verify-alarm-event-contracts.mjs",
     "verify:td005-auth-allowlist": "node ./build/script/verifyTd005AuthAllowlist.mjs"
   },
   "dependencies": {
