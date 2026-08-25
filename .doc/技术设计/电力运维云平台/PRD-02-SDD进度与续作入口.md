@@ -1,6 +1,6 @@
 # PRD-02 SDD 进度与续作入口
 
-> 版本：0.10.0
+> 版本：0.11.0
 > 日期：2026-08-25
 > 状态：Design In Review / Implementation Gated
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
@@ -8,7 +8,7 @@
 
 ## 1. 当前结论
 
-PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验收结论。2026-08-25 已完成 [P02-M2-02 专项冻结评审](./P02-M2-02-专项冻结评审记录.md)、02A review-only runner 静态验收、02B 本地无 transport 验收、02C 来源迁移冻结、[02C0 本地静态验收](./P02-M2-02C0-本地验收记录.md)、[P02-M2-02R1 整改专项冻结](./P02-M2-02R1-Inbox与动作序号整改专项冻结评审记录.md)和 [R1A 本地无数据库验收](./P02-M2-02R1A-本地验收记录.md)。N-01/N-03 文档缺口与 N-02 本地代码缺口均已关闭；独立动作序号通过 60 项静态、20 项定向、74 项告警回归和 Reactor 33/33 验证。真实数据库调用、真实 DDL 和生产 transport 仍为 0；C1 门禁除 C0 外全部 OPEN，来源接入、物理 transport、双写、backfill、对账、切读、capability 和生产容量继续关闭。
+PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验收结论。2026-08-25 已完成 [P02-M2-02 专项冻结评审](./P02-M2-02-专项冻结评审记录.md)、02A review-only runner 静态验收、02B 本地无 transport 验收、02C 来源迁移冻结、[02C0 本地静态验收](./P02-M2-02C0-本地验收记录.md)、[P02-M2-02R1 整改专项冻结](./P02-M2-02R1-Inbox与动作序号整改专项冻结评审记录.md)、[R1A 本地无数据库验收](./P02-M2-02R1A-本地验收记录.md)和 [C1 前置门禁核对](./P02-M2-02C1P-C1来源接入前置门禁核对记录.md)。M1 identity/route 的已提交合同基础改为关闭，但 siteId/旧链传播、阈值周期、设备事件映射和旧写/新入口原子或补偿仍 OPEN；真实数据库调用、真实 DDL 和生产 transport 仍为 0，C1 adapter、物理 transport、双写、backfill、对账、切读、capability 和生产容量继续关闭。
 
 ## 2. 文档链
 
@@ -58,6 +58,8 @@ PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验
 | [P02-M2-02B](./P02-M2-02B-告警持久化与可靠事件任务单.md) | 正式 Schema、持久化端口、同事务编排与 Relay fake | **Implemented / Verified-Local / No Production Transport**；[71 项 Java、182 项 Ajv 与编译证据](./P02-M2-02B-本地验收记录.md)通过 |
 | [P02-M2-02C](./P02-M2-02C-来源接入与迁移切换专项冻结评审记录.md) | 五类来源、旧读写/通知旁路、双写对账和切读阶段冻结 | **Conditional Freeze / Repository Inventory Complete**；C1-C4 仍关闭 |
 | [P02-M2-02C0](./P02-M2-02C0-告警来源清单与迁移防漂移门禁任务单.md) | 机器可读来源清单与无依赖静态防漂移校验 | **Implemented / Verified-Local / Inventory Guard Only**；[461 项正例、16 类反例及 C1 门禁表](./P02-M2-02C0-本地验收记录.md)通过，C1 仍关闭 |
+| [P02-M2-02C1P 核对](./P02-M2-02C1P-C1来源接入前置门禁核对记录.md) | M1 与 C1 五项前置门禁的已提交仓库事实复核 | **Verified-Repository / C1 Still Closed**；M1 合同基础关闭，其余四项 OPEN |
+| [P02-M2-02C1P 任务](./P02-M2-02C1P-来源身份周期与补偿决策任务单.md) | 来源 identity/site、阈值 cycle、设备事件映射和旧写补偿决策 | **Approved / Architecture Decision Only**；不授权 adapter 或生产代码 |
 | [P02-M2-02R1](./P02-M2-02R1-Inbox与动作序号整改专项冻结评审记录.md) | Inbox 三态/重试责任与动作序号架构整改 | **Conditional Freeze / R1A Verified-Local**；N-01/N-03 文档与 N-02 本地代码已关闭 |
 | [P02-M2-02R1A](./P02-M2-02R1A-独立动作序号与并发合同任务单.md) | `last_action_sequence` 候选 DDL、原子分配端口、来源事务和本地并发合同 | **Implemented / Verified-Local / No Database Execution**；[60+20+74 项证据](./P02-M2-02R1A-本地验收记录.md)通过 |
 | P02-M2-03 | 值班、站内信/APP、升级调度 | SPEC-006/TD-007 冻结；外部渠道可继续关闭 |
@@ -69,8 +71,8 @@ PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验
 
 ## 7. 下一步
 
-1. 下一仓库内设计步骤回到 P02-M2-02C 的 C1 前置门禁：逐项核对 M1 identity/route、tenant/site/device 权威、阈值 cycle、设备事件映射和旧写/新入口原子或补偿决策，先形成事实/任务冻结，不得直接实现 adapter。
+1. 下一仓库内设计步骤执行 [P02-M2-02C1P 来源身份、周期与补偿决策任务](./P02-M2-02C1P-来源身份周期与补偿决策任务单.md)：优先形成 Proposed ADR-019 和字段/周期/映射/失败矩阵，不得直接实现 adapter。
 2. P02-M2-02A 临时 PostgreSQL 合同保持 `NOT RUN`；只有决策所有者另行明确授权新建、唯一前缀、用后销毁的隔离实例后才可执行，目标/共享库始终不在授权内。
 3. 临时库授权前不得读取 `.env` 凭据、调用 Docker、连接既有 PostgreSQL 或执行 V011/U011；02B JDBC 真实并发/约束集成继续为 OPEN。
-4. C0 完成不解锁 C1；M1 identity/route、tenant/site/device 权威、阈值 cycle、设备事件映射和旧写/新入口原子或补偿决策关闭前，C1-C4 不得实现。
+4. C0 和 M1 合同基础完成仍不解锁 C1；tenant/site/device 完整权威、阈值 cycle、设备事件映射和旧写/新入口原子或补偿决策关闭前，C1-C4 不得实现。
 5. TD-008、外部通知和完整事故冻结继续关闭。
