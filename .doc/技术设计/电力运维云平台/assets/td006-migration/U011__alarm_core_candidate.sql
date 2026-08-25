@@ -8,18 +8,31 @@
 BEGIN;
 
 DO $$
+DECLARE
+    table_name TEXT;
+    table_non_empty BOOLEAN;
 BEGIN
-    IF EXISTS (SELECT 1 FROM public.alarm_outbox LIMIT 1)
-       OR EXISTS (SELECT 1 FROM public.alarm_source_inbox LIMIT 1)
-       OR EXISTS (SELECT 1 FROM public.alarm_false_alarm_review LIMIT 1)
-       OR EXISTS (SELECT 1 FROM public.alarm_action_log LIMIT 1)
-       OR EXISTS (SELECT 1 FROM public.alarm_source_mapping LIMIT 1)
-       OR EXISTS (SELECT 1 FROM public.alarm_record LIMIT 1)
-       OR EXISTS (SELECT 1 FROM public.alarm_maintenance_context LIMIT 1)
-       OR EXISTS (SELECT 1 FROM public.alarm_rule_version LIMIT 1)
-       OR EXISTS (SELECT 1 FROM public.alarm_rule LIMIT 1) THEN
-        RAISE EXCEPTION 'U011 refused: alarm core contains business, inbox, outbox or audit facts';
-    END IF;
+    FOREACH table_name IN ARRAY ARRAY[
+        'alarm_outbox',
+        'alarm_source_inbox',
+        'alarm_false_alarm_review',
+        'alarm_action_log',
+        'alarm_source_mapping',
+        'alarm_record',
+        'alarm_maintenance_context',
+        'alarm_rule_version',
+        'alarm_rule'
+    ] LOOP
+        IF to_regclass(format('public.%I', table_name)) IS NULL THEN
+            CONTINUE;
+        END IF;
+
+        EXECUTE format('SELECT EXISTS (SELECT 1 FROM public.%I LIMIT 1)', table_name)
+            INTO table_non_empty;
+        IF table_non_empty THEN
+            RAISE EXCEPTION 'U011 refused: % contains business, inbox, outbox or audit facts', table_name;
+        END IF;
+    END LOOP;
 END;
 $$;
 
@@ -32,5 +45,9 @@ DROP TABLE IF EXISTS public.alarm_record;
 DROP TABLE IF EXISTS public.alarm_maintenance_context;
 DROP TABLE IF EXISTS public.alarm_rule_version;
 DROP TABLE IF EXISTS public.alarm_rule;
+
+DROP FUNCTION IF EXISTS public.fn_alarm_action_log_append_only();
+DROP FUNCTION IF EXISTS public.fn_alarm_source_mapping_append_only();
+DROP FUNCTION IF EXISTS public.fn_alarm_rule_version_guard();
 
 COMMIT;

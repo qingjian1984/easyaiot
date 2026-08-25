@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/events/device.alarm.occurrence-recorded/v1",
+  "title": "device.alarm.occurrence-recorded.v1",
+  "description": "同一告警周期重复发生领域事件；不得被消费者当作新 alarmId。",
+  "type": "object",
+  "required": ["eventId", "eventVersion", "eventType", "tenantId", "occurredAt", "recordedAt", "source", "correlationId", "payload"],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "eventType": {
+      "const": "device.alarm.occurrence-recorded.v1"
+    },
+    "tenantId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "iot-device"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "traceId": {
+      "type": ["string", "null"],
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": ["alarmId", "status", "occurrenceCount", "lastOccurredAt", "sourceMessageId"],
+      "properties": {
+        "alarmId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "status": {
+          "enum": ["ACTIVE", "ACKNOWLEDGED", "PROCESSING", "RECOVERED", "CLOSED", "IGNORED", "FALSE_ALARM"]
+        },
+        "occurrenceCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lastOccurredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceMessageId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

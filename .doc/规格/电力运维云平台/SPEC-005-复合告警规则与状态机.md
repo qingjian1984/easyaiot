@@ -1,13 +1,13 @@
 # SPEC-005：复合告警规则与状态机
 
-> Spec ID：POWER-SPEC-005  
+> Spec ID：POWER-SPEC-005
 > 上游需求：POWER-PRD-002 1.2.2
-> 依赖：POWER-SPEC-001、POWER-SPEC-002、POWER-SPEC-004  
-> 版本：0.1.1
-> 状态：In Review  
-> 日期：2026-08-24  
-> 架构决策：[ADR-010 统一告警模型迁移](../../架构决策/电力运维云平台/ADR-010-统一告警模型迁移.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)、[ADR-013 受控数据库迁移](../../架构决策/电力运维云平台/ADR-013-受控数据库迁移执行器.md)、[ADR-014 Outbox/Inbox](../../架构决策/电力运维云平台/ADR-014-Outbox事件Transport与消费者Inbox.md)、[ADR-016 RUNTIME 边缘执行边界](../../架构决策/电力运维云平台/ADR-016-EDGE退役与RUNTIME边缘执行边界.md)  
-> 目标里程碑：M2  
+> 依赖：POWER-SPEC-001、POWER-SPEC-002、POWER-SPEC-004
+> 版本：0.1.2
+> 状态：In Review
+> 日期：2026-08-25
+> 架构决策：[ADR-010 统一告警模型迁移](../../架构决策/电力运维云平台/ADR-010-统一告警模型迁移.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)、[ADR-013 受控数据库迁移](../../架构决策/电力运维云平台/ADR-013-受控数据库迁移执行器.md)、[ADR-014 Outbox/Inbox](../../架构决策/电力运维云平台/ADR-014-Outbox事件Transport与消费者Inbox.md)、[ADR-016 RUNTIME 边缘执行边界](../../架构决策/电力运维云平台/ADR-016-EDGE退役与RUNTIME边缘执行边界.md)
+> 目标里程碑：M2
 > 产品基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 
 ## 1. 目标与范围
@@ -78,10 +78,12 @@ manifest 必须给出每租户/站点规则数、单规则测点数、活动告�
 ### 5.2 来源映射与 Inbox
 
 - `(tenantId, sourceType, sourceId, cycleKey)` 唯一映射到一个 `alarmId`。
-- Inbox 以 `messageId` 唯一；相同 ID 相同摘要为重复，相同 ID 不同摘要进入隔离并告警。
+- Inbox 以 `messageId` 唯一；相同 ID 相同 `envelopeHash` 为重复，相同 ID 不同 `envelopeHash` 进入隔离并告警。来源 `payload.payloadHash` 只表示来源证据摘要，不能替代 Inbox 对规范消息字节计算的 `envelopeHash`。
 - 活动周期幂等键采用 ADR-010 的 `(tenantId, sourceType, sourceObjectId/deviceId, propertyCode, ruleId, ruleVersion, cycleKey)`。
 - 新周期必须使用新 `cycleKey`；规则允许重开时，窗口和行为随规则版本保存。
 - Inbox 成功持久化后才能推进告警；失败不得提交消息位点或伪造成功。
+- Inbox 首次写入/重复裁决、来源映射或 `alarm_record` 变更、动作审计和领域 Outbox 入列必须位于同一数据库事务；事务提交前不得确认消息。
+- 消费者使用手动 offset/ack：事务成功提交后才 ack；重复、已持久化的隔离或已持久化 DLQ 终态可 ack；锁竞争、retryable 错误和 DLQ 投递失败不得 ack。retryable 采用有界退避和次数上限，Schema 非法、未知主版本和 final 错误进入 DLQ/quarantine，DLQ 处置失败必须保留原位点。
 
 ## 6. 规则模型
 
@@ -147,7 +149,7 @@ ESCALATION（正交）：NONE → LEVEL_1 → LEVEL_2 → ...
 - `device.alarm.escalated.v1`
 - `device.alarm.suppression-decided.v1`
 
-Envelope 必含 `eventId/eventVersion/tenantId/occurredAt/source/correlationId/alarmId`。Schema 放入生产者 API 模块并执行当前/上一主版本合同测试。
+Envelope 逻辑必含 `eventId/eventVersion/tenantId/occurredAt/source/correlationId/alarmId`，其中 `alarmId` 唯一位于领域事件 `payload.alarmId`，不是顶层 Envelope 字段；来源事件在映射前不携带 `alarmId`。来源 Envelope 的 `eventType` 固定为 `device.alarm.source-event.v1`、`source` 固定为 `iot-device`，`payload.sourceAction` 承载 `RAISED/RECOVERED`。正式候选必须按六个领域事件拆成独立 Schema；`alarm-domain-event-v1.schema.json` 仅用于评审联合校验，不得直接复制为生产 Schema。Schema 放入生产者 API 模块并执行当前/上一主版本合同测试。
 
 ## 10. 稳定错误语义
 
@@ -280,7 +282,7 @@ And 任何语义差异都有批准清单和回滚入口
 
 ## 15. OPEN 门禁
 
-- OPEN-005-01：独立告警 Inbox/Schema、来源映射表和 `alarm_record` DDL 尚未形成，必须在告警 TD 冻结并通过中文注释、幂等和迁移评审。
+- OPEN-005-01：独立告警 Schema 候选已形成，但生产者 API 正式资源、独立 Inbox/Outbox transport、来源映射表和 `alarm_record` DDL 尚未冻结，必须继续通过中文注释、幂等、hash、ack/retry/DLQ 和迁移评审。
 - OPEN-005-02：规则硬上限已冻结为协议保护值；standard/full 业务配额仍须由目标规模画像和压测写入 capability manifest。
 - OPEN-005-03：现有阈值、iot-sink/VIDEO alert 与统一模型的生产数据画像、双写窗口和差异清单尚未完成。
 - OPEN-005-04：ADR-010 1.1.0 的正交升级修订需要纳入专项设计评审记录；关闭前本 Spec 不得标记 Approved / Frozen。

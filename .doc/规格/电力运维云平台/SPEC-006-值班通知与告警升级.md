@@ -1,13 +1,13 @@
 # SPEC-006：值班通知与告警升级
 
-> Spec ID：POWER-SPEC-006  
-> 上游需求：POWER-PRD-002 1.2.2  
-> 依赖：POWER-SPEC-005 0.1.1  
-> 版本：0.1.1  
-> 状态：In Review  
-> 日期：2026-08-24  
-> 架构决策：[ADR-010 统一告警模型迁移](../../架构决策/电力运维云平台/ADR-010-统一告警模型迁移.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)、[ADR-014 Outbox/Inbox](../../架构决策/电力运维云平台/ADR-014-Outbox事件Transport与消费者Inbox.md)  
-> 目标里程碑：M2  
+> Spec ID：POWER-SPEC-006
+> 上游需求：POWER-PRD-002 1.2.2
+> 依赖：POWER-SPEC-005 0.1.2
+> 版本：0.1.2
+> 状态：In Review
+> 日期：2026-08-25
+> 架构决策：[ADR-010 统一告警模型迁移](../../架构决策/电力运维云平台/ADR-010-统一告警模型迁移.md)、[ADR-011 Capability Manifest](../../架构决策/电力运维云平台/ADR-011-Capability-Manifest规范.md)、[ADR-014 Outbox/Inbox](../../架构决策/电力运维云平台/ADR-014-Outbox事件Transport与消费者Inbox.md)
+> 目标里程碑：M2
 > 产品基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 
 ## 1. 目标与边界

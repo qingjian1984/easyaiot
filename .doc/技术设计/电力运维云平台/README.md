@@ -1,7 +1,7 @@
 # EasyAIoT 电力运维云平台 Technical Design 索引
 
-> 索引版本：1.12.1
-> 日期：2026-08-24
+> 索引版本：1.13.0
+> 日期：2026-08-25
 > 上游基线：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[PRD-02 1.2.2](../../产品需求/电力运维云平台/PRD-02-监控告警与安全控制.md)、[M1 Spec 集合基线 1.4.0](../../规格/电力运维云平台/M1-SPEC评审冻结记录.md)、[PRD-02 M2-M3 Spec 专项评审](../../规格/电力运维云平台/M2-M3-SPEC评审记录.md)、[PRD-02 SDD 评审处置](../../开发规范/PRD-02-SDD方案设计评审处置记录.md)、[ADR 决策集](../../架构决策/电力运维云平台/README.md)
 > 续作入口：[M1 SDD 进度与续作入口](./M1-SDD进度与续作入口.md)、[PRD-02 SDD 进度与续作入口](./PRD-02-SDD进度与续作入口.md)
 
@@ -22,11 +22,11 @@
 
 | ID | 主题 | 状态 | 实现门禁 |
 |---|---|---|---|
-| [TD-006](./TD-006-统一告警与规则引擎.md) | 统一告警主记录、规则引擎、专用 Inbox/Outbox 与存量迁移（0.1.1；评审建议已处置） | In Review / Draft | DDL、来源画像、事件合同、容量压测、双写对账和切换责任人全部关闭 |
+| [TD-006](./TD-006-统一告警与规则引擎.md) | 统一告警主记录、规则引擎、专用 Inbox/Outbox 与存量迁移（0.1.2；P02-M2-02 已完成条件冻结评审） | In Review / Conditional Freeze | runner/临时库、正式 API Schema/JDBC、来源画像、transport、容量、双写与切换责任人全部关闭 |
 | [TD-006-A](./TD-006-现有告警实现画像.md) | 旧阈值告警、Feign、Kafka 与租户/周期迁移事实 | Verified from Repository | 生产数据、Topic 和调用量画像仍需批准窗口 |
-| [TD-006-B](./TD-006-状态转换与并发矩阵.md) | 主状态、误报复核、周期和并发 CAS 规则 | Freeze Candidate | 与 DDL/领域测试一并评审 |
-| [TD-006-C](./TD-006-事件与能力合同.md) | 事件命名、Envelope、payload、capability/quota key | Freeze Candidate | 容量数值、物理 Topic 和正式 Schema 路径待冻结 |
-| [TD-007](./TD-007-通知与升级编排.md) | 值班、通知意图、渠道适配、送达结果与正交升级（0.1.1；评审建议已处置） | In Review / Draft | 渠道/验签、旧链防双发、配额压测和安全评审关闭；外部渠道此前禁用 |
+| [TD-006-B](./TD-006-状态转换与并发矩阵.md) | 主状态、误报复核、周期和并发 CAS 规则（0.1.2） | Freeze Candidate | 与 DDL/JDBC 并发合同一并验证 |
+| [TD-006-C](./TD-006-事件与能力合同.md) | 事件命名、Envelope、payload、capability/quota key（0.1.2） | In Review / Freeze Candidate | 六个设计 Schema 已拆分；正式 API 资源、CI、容量和物理 transport 待关闭 |
+| [TD-007](./TD-007-通知与升级编排.md) | 值班、通知意图、渠道适配、送达结果与正交升级（0.1.2；依赖 TD-006 0.1.2） | In Review / Draft | 渠道/验签、旧链防双发、配额压测和安全评审关闭；外部渠道此前禁用 |
 | [TD-008](./TD-008-安全遥控与操作票.md) | 风险目录、操作票、独立审批、联锁、命令回执和旁路阻断（0.2.0；状态机已对齐） | In Review / Safety Hold | 现场签字、DDL、旧入口画像、非幂等 Runbook、安全评审和故障注入关闭；capability 默认关闭 |
 | [TD-009](./TD-009-事故证据与媒体归档.md) | 时间线、证据索引、遥测冻结、NFS→MinIO 和事故报告（0.2.0；幂等/异步合同已对齐） | In Review / Draft | 媒体画像、容量/恢复、留存/WORM 批准、压测和 PRD-03 体验合同关闭 |
 
@@ -35,6 +35,9 @@
 | ID | 主题 | 状态 | 实现门禁 |
 |---|---|---|---|
 | [P02-M2-01](./P02-M2-01-告警领域合同与状态机任务单.md) | 告警枚举、事件 Envelope 和纯状态机 | [Implemented / Verified-Local](./P02-M2-01-本地验收记录.md) | 33 个定向测试与 Reactor 编译通过；数据库、Kafka、API、旧链迁移和 capability 仍关闭 |
+| [P02-M2-02 评审](./P02-M2-02-专项冻结评审记录.md) | 告警 DDL、Schema、Inbox/Outbox 与迁移边界 | Conditional Freeze / Local Tasks Only | 整体未冻结；只解锁 02A/02B 本地任务 |
+| [P02-M2-02A](./P02-M2-02A-告警迁移资产与临时库合同任务单.md) | V011/U011 review-only runner 与临时库合同 | Approved / Frozen for Local Review-Only Implementation | 先做静态接线；任何 DDL 执行须另行解锁 |
+| [P02-M2-02B](./P02-M2-02B-告警持久化与可靠事件任务单.md) | 正式 Schema、持久化、同事务编排和 Relay fake | Approved / Frozen for Local No-Transport Implementation | 禁止生产 transport、旧来源、API 与 capability |
 
 ## M1 本地收口任务包
 

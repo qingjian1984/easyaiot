@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://easyaiot.local/events/device.alarm.source-event/v1",
-  "title": "AlarmSourceEvent v1 review candidate",
-  "description": "来源 Envelope 的 eventType 固定为 device.alarm.source-event.v1，source 固定为 iot-device；RAISED/RECOVERED 只能由 payload.sourceAction 表达。",
+  "$id": "https://easyaiot.local/events/device.alarm.created/v1",
+  "title": "device.alarm.created.v1",
+  "description": "告警首次创建领域事件；alarmId 仅位于 payload。",
   "type": "object",
   "required": [
     "eventId",
@@ -25,7 +25,7 @@
       "const": "1.0"
     },
     "eventType": {
-      "const": "device.alarm.source-event.v1"
+      "const": "device.alarm.created.v1"
     },
     "tenantId": {
       "type": "string",
@@ -54,18 +54,31 @@
     "payload": {
       "type": "object",
       "required": [
+        "alarmId",
+        "status",
+        "severity",
         "sourceType",
-        "sourceAction",
         "sourceId",
         "cycleKey",
-        "sourceObjectId",
         "siteId",
         "deviceId",
-        "severity",
-        "occurredAt",
-        "payloadHash"
+        "propertyCode",
+        "ruleId",
+        "ruleVersion",
+        "firstOccurredAt",
+        "occurrenceCount"
       ],
       "properties": {
+        "alarmId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "status": {
+          "enum": ["ACTIVE", "ACKNOWLEDGED", "PROCESSING", "RECOVERED", "CLOSED", "IGNORED", "FALSE_ALARM"]
+        },
+        "severity": {
+          "enum": ["INFO", "NORMAL", "IMPORTANT", "EMERGENCY"]
+        },
         "sourceType": {
           "enum": ["THRESHOLD", "DEVICE_EVENT", "VIDEO", "AI", "RUNTIME"]
         },
@@ -79,11 +92,6 @@
           "minLength": 1,
           "maxLength": 256
         },
-        "sourceObjectId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 256
-        },
         "siteId": {
           "type": "string",
           "pattern": "^[1-9][0-9]*$"
@@ -93,47 +101,25 @@
           "minLength": 1,
           "maxLength": 256
         },
-        "sourceAction": {
-          "enum": ["RAISED", "RECOVERED"]
-        },
         "propertyCode": {
           "type": ["string", "null"],
           "maxLength": 128
         },
         "ruleId": {
           "type": ["string", "null"],
-          "maxLength": 64
+          "pattern": "^[1-9][0-9]*$"
         },
         "ruleVersion": {
           "type": ["string", "null"],
           "maxLength": 32
         },
-        "severity": {
-          "enum": ["INFO", "NORMAL", "IMPORTANT", "EMERGENCY"]
-        },
-        "quality": {
-          "enum": ["GOOD", "BACKFILLED", "TIMEOUT", "COMM_ERROR", "DECODE_ERROR", "UNKNOWN"]
-        },
-        "occurredAt": {
+        "firstOccurredAt": {
           "type": "string",
           "format": "date-time"
         },
-        "timezone": {
-          "type": ["string", "null"],
-          "minLength": 1,
-          "maxLength": 64
-        },
-        "originalOffset": {
-          "type": ["string", "null"],
-          "pattern": "^(Z|[+-](0[0-9]|1[0-4]):[0-5][0-9])$"
-        },
-        "payloadRef": {
-          "type": ["string", "null"],
-          "maxLength": 512
-        },
-        "payloadHash": {
-          "type": "string",
-          "pattern": "^sha256:[0-9a-f]{64}$"
+        "occurrenceCount": {
+          "type": "integer",
+          "minimum": 1
         }
       },
       "additionalProperties": true,
@@ -141,41 +127,29 @@
         {
           "if": {
             "properties": {
-              "sourceType": {"const": "THRESHOLD"}
+              "sourceType": {
+                "const": "THRESHOLD"
+              }
             },
             "required": ["sourceType"]
           },
           "then": {
             "properties": {
-              "propertyCode": {},
-              "ruleId": {},
-              "ruleVersion": {},
-              "quality": {}
-            },
-            "required": ["propertyCode", "ruleId", "ruleVersion", "quality"],
-            "allOf": [
-              {
-                "properties": {
-                  "propertyCode": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 128
-                  },
-                  "ruleId": {
-                    "type": "string",
-                    "pattern": "^[1-9][0-9]*$"
-                  },
-                  "ruleVersion": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 32
-                  },
-                  "quality": {
-                    "enum": ["GOOD", "BACKFILLED", "TIMEOUT", "COMM_ERROR", "DECODE_ERROR", "UNKNOWN"]
-                  }
-                }
+              "propertyCode": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "ruleId": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "ruleVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
               }
-            ]
+            }
           }
         }
       ]

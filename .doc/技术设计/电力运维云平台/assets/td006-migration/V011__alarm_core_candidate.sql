@@ -1,12 +1,10 @@
 -- ============================================================================
 -- TD-006 V011 告警核心候选 DDL（仅供评审，禁止在生产/共享库直接执行）
 -- 双基线：平台功能计划 1.5.0 / EasyAIoT 项目开发宪法 1.6.0
--- 上游：SPEC-005 0.1.1、ADR-010 1.1.0、TD-006 0.1.1
+-- 上游：SPEC-005 0.1.2、ADR-010 1.1.0、TD-006 0.1.2
 -- 业务表主键由应用统一 ID 策略赋值；所有时间为 TIMESTAMPTZ。
--- 本文件须由 ADR-013 受控 runner 单事务执行；批准前不得落库。
+-- 本文件须由 ADR-013 受控 runner 单事务执行；本文件不声明 BEGIN/COMMIT；批准前不得落库。
 -- ============================================================================
-
-BEGIN;
 
 CREATE TABLE public.alarm_rule (
     id BIGINT NOT NULL,
@@ -105,6 +103,61 @@ COMMENT ON COLUMN public.alarm_rule_version.created_by IS '版本创建人';
 COMMENT ON COLUMN public.alarm_rule_version.created_at IS '版本创建时间，UTC 时间事实';
 COMMENT ON INDEX public.uq_alarm_rule_version_published IS '同一租户同一规则同时只能有一个已发布版本；回滚先退役当前版本再事务内激活历史版本';
 
+CREATE FUNCTION public.fn_alarm_rule_version_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF OLD.lifecycle IN ('PUBLISHED', 'RETIRED') THEN
+            RAISE EXCEPTION 'alarm_rule_version published history cannot be deleted';
+        END IF;
+        RETURN OLD;
+    END IF;
+
+    IF NEW.lifecycle IS DISTINCT FROM OLD.lifecycle THEN
+        IF OLD.lifecycle = 'DRAFT' AND NEW.lifecycle NOT IN ('DRAFT', 'VALIDATED') THEN
+            RAISE EXCEPTION 'alarm_rule_version lifecycle transition forbidden: DRAFT -> %', NEW.lifecycle;
+        ELSIF OLD.lifecycle = 'VALIDATED' AND NEW.lifecycle NOT IN ('VALIDATED', 'PUBLISHED') THEN
+            RAISE EXCEPTION 'alarm_rule_version lifecycle transition forbidden: VALIDATED -> %', NEW.lifecycle;
+        ELSIF OLD.lifecycle = 'PUBLISHED' AND NEW.lifecycle NOT IN ('PUBLISHED', 'RETIRED') THEN
+            RAISE EXCEPTION 'alarm_rule_version lifecycle transition forbidden: PUBLISHED -> %', NEW.lifecycle;
+        ELSIF OLD.lifecycle = 'RETIRED' AND NEW.lifecycle NOT IN ('RETIRED', 'PUBLISHED') THEN
+            RAISE EXCEPTION 'alarm_rule_version lifecycle transition forbidden: RETIRED -> %', NEW.lifecycle;
+        END IF;
+    END IF;
+
+    IF NEW.id IS DISTINCT FROM OLD.id
+        OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+        OR NEW.rule_id IS DISTINCT FROM OLD.rule_id
+        OR NEW.version IS DISTINCT FROM OLD.version
+        OR NEW.created_by IS DISTINCT FROM OLD.created_by
+        OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+        RAISE EXCEPTION 'alarm_rule_version identity is immutable';
+    END IF;
+
+    IF OLD.lifecycle IN ('PUBLISHED', 'RETIRED') AND (
+        NEW.severity IS DISTINCT FROM OLD.severity
+        OR NEW.condition_tree IS DISTINCT FROM OLD.condition_tree
+        OR NEW.recovery_policy IS DISTINCT FROM OLD.recovery_policy
+        OR NEW.schedule_policy IS DISTINCT FROM OLD.schedule_policy
+        OR NEW.canonicalization_version IS DISTINCT FROM OLD.canonicalization_version
+        OR NEW.content_hash IS DISTINCT FROM OLD.content_hash
+        OR NEW.published_by IS DISTINCT FROM OLD.published_by
+        OR NEW.published_at IS DISTINCT FROM OLD.published_at
+    ) THEN
+        RAISE EXCEPTION 'alarm_rule_version content or identity is immutable after publication';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_alarm_rule_version_guard
+BEFORE UPDATE OR DELETE ON public.alarm_rule_version
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_alarm_rule_version_guard();
+
 CREATE TABLE public.alarm_maintenance_context (
     id BIGINT NOT NULL,
     tenant_id BIGINT NOT NULL,
@@ -167,6 +220,7 @@ CREATE TABLE public.alarm_record (
     row_version BIGINT NOT NULL DEFAULT 0,
     occurrence_count BIGINT NOT NULL DEFAULT 1 CHECK (occurrence_count >= 1),
     escalation_level INTEGER NOT NULL DEFAULT 0 CHECK (escalation_level >= 0),
+    last_escalated_at TIMESTAMPTZ,
     first_occurred_at TIMESTAMPTZ NOT NULL,
     last_occurred_at TIMESTAMPTZ NOT NULL,
     recovered_at TIMESTAMPTZ,
@@ -192,6 +246,7 @@ CREATE TABLE public.alarm_record (
         (rule_id IS NULL AND rule_version_id IS NULL AND rule_version IS NULL)
         OR (rule_id IS NOT NULL AND rule_version_id IS NOT NULL AND rule_version IS NOT NULL)
     ),
+    CONSTRAINT ck_alarm_record_cycle_identity_size CHECK (octet_length(cycle_identity) <= 4096),
     CONSTRAINT ck_alarm_record_time_order CHECK (first_occurred_at <= last_occurred_at),
     CONSTRAINT ck_alarm_record_recovery CHECK (
         status NOT IN ('RECOVERED','CLOSED') OR recovered_at IS NOT NULL
@@ -200,6 +255,9 @@ CREATE TABLE public.alarm_record (
     CONSTRAINT ck_alarm_record_ignore CHECK (
         (status = 'IGNORED' AND ignored_from_status IN ('ACTIVE','ACKNOWLEDGED') AND ignored_until IS NOT NULL AND ignore_generation >= 1)
         OR (status <> 'IGNORED' AND ignored_from_status IS NULL AND ignored_until IS NULL)
+    ),
+    CONSTRAINT ck_alarm_record_emergency_ignore CHECK (
+        severity <> 'EMERGENCY' OR status <> 'IGNORED'
     ),
     CONSTRAINT ck_alarm_record_tenant_site CHECK (tenant_id > 0 AND site_id > 0)
 );
@@ -233,6 +291,7 @@ COMMENT ON COLUMN public.alarm_record.status IS '告警主状态；升级、维�
 COMMENT ON COLUMN public.alarm_record.row_version IS '乐观锁版本，每次业务更新递增';
 COMMENT ON COLUMN public.alarm_record.occurrence_count IS '同一活动周期累计发生次数';
 COMMENT ON COLUMN public.alarm_record.escalation_level IS '正交升级级别，0 表示未升级';
+COMMENT ON COLUMN public.alarm_record.last_escalated_at IS '最近一次告警升级时间，UTC；升级为正交事实，不改变主状态';
 COMMENT ON COLUMN public.alarm_record.first_occurred_at IS '周期首次发生时间，UTC';
 COMMENT ON COLUMN public.alarm_record.last_occurred_at IS '周期最近发生时间，UTC';
 COMMENT ON COLUMN public.alarm_record.recovered_at IS '来源恢复时间；恢复不等于关闭';
@@ -279,6 +338,20 @@ COMMENT ON COLUMN public.alarm_source_mapping.cycle_key IS '来源故障周期�
 COMMENT ON COLUMN public.alarm_source_mapping.source_payload_hash IS '来源映射时正文 SHA-256，用于冲突审计';
 COMMENT ON COLUMN public.alarm_source_mapping.mapping_method IS '映射方式：原生、回填或人工复核';
 COMMENT ON COLUMN public.alarm_source_mapping.created_at IS '映射创建时间，UTC';
+
+CREATE FUNCTION public.fn_alarm_source_mapping_append_only()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'alarm_source_mapping is append-only: % is forbidden', TG_OP;
+END;
+$$;
+
+CREATE TRIGGER trg_alarm_source_mapping_append_only
+BEFORE UPDATE OR DELETE ON public.alarm_source_mapping
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_alarm_source_mapping_append_only();
 
 CREATE TABLE public.alarm_action_log (
     id BIGINT NOT NULL,
@@ -327,6 +400,20 @@ COMMENT ON COLUMN public.alarm_action_log.details IS '有界结构化动作明�
 COMMENT ON COLUMN public.alarm_action_log.occurred_at IS '动作业务发生时间，UTC';
 COMMENT ON COLUMN public.alarm_action_log.recorded_at IS '平台记录时间，UTC';
 
+CREATE FUNCTION public.fn_alarm_action_log_append_only()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'alarm_action_log is append-only: % is forbidden', TG_OP;
+END;
+$$;
+
+CREATE TRIGGER trg_alarm_action_log_append_only
+BEFORE UPDATE OR DELETE ON public.alarm_action_log
+FOR EACH ROW
+EXECUTE FUNCTION public.fn_alarm_action_log_append_only();
+
 CREATE TABLE public.alarm_false_alarm_review (
     id BIGINT NOT NULL,
     tenant_id BIGINT NOT NULL,
@@ -345,8 +432,8 @@ CREATE TABLE public.alarm_false_alarm_review (
         REFERENCES public.alarm_record (tenant_id, id),
     CONSTRAINT ck_alarm_false_alarm_review_people CHECK (reviewed_by IS NULL OR reviewed_by <> proposed_by),
     CONSTRAINT ck_alarm_false_alarm_review_result CHECK (
-        (status = 'PENDING' AND reviewed_by IS NULL AND reviewed_at IS NULL)
-        OR (status IN ('APPROVED','REJECTED') AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)
+        (status = 'PENDING' AND reviewed_by IS NULL AND reviewed_reason IS NULL AND reviewed_at IS NULL)
+        OR (status IN ('APPROVED','REJECTED') AND reviewed_by IS NOT NULL AND reviewed_reason IS NOT NULL AND reviewed_at IS NOT NULL)
     ),
     CONSTRAINT ck_alarm_false_alarm_review_tenant CHECK (tenant_id > 0)
 );
@@ -372,48 +459,62 @@ CREATE TABLE public.alarm_source_inbox (
     id BIGINT NOT NULL,
     message_id UUID NOT NULL,
     tenant_id BIGINT NOT NULL,
-    event_type VARCHAR(64) NOT NULL,
+    event_type VARCHAR(128) NOT NULL,
+    source_action VARCHAR(16) CHECK (source_action IS NULL OR source_action IN ('RAISED','RECOVERED')),
     event_version VARCHAR(16) NOT NULL,
     source VARCHAR(128) NOT NULL,
-    payload_hash VARCHAR(71) NOT NULL CHECK (payload_hash ~ '^sha256:[0-9a-f]{64}$'),
+    envelope_hash VARCHAR(71) NOT NULL CHECK (envelope_hash ~ '^sha256:[0-9a-f]{64}$'),
     payload_json JSONB NOT NULL,
-    status VARCHAR(16) NOT NULL CHECK (status IN ('RECEIVED','PROCESSING','PROCESSED','RETRY_WAIT','QUARANTINED')),
-    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-    next_attempt_at TIMESTAMPTZ,
-    lease_owner VARCHAR(128),
-    lease_until TIMESTAMPTZ,
+    status VARCHAR(16) NOT NULL DEFAULT 'RECEIVED' CHECK (status IN ('RECEIVED','PROCESSED','QUARANTINED')),
     last_error_code VARCHAR(64),
     last_error_summary VARCHAR(1000),
     received_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     processed_at TIMESTAMPTZ,
+    quarantined_at TIMESTAMPTZ,
     CONSTRAINT alarm_source_inbox_pkey PRIMARY KEY (id),
     CONSTRAINT uq_alarm_source_inbox_message UNIQUE (message_id),
     CONSTRAINT ck_alarm_source_inbox_payload_size CHECK (octet_length(payload_json::text) <= 1048576),
+    CONSTRAINT ck_alarm_source_inbox_state_time CHECK (
+        (processed_at IS NULL OR received_at <= processed_at)
+        AND (quarantined_at IS NULL OR received_at <= quarantined_at)
+        AND (
+            (status = 'RECEIVED' AND processed_at IS NULL AND quarantined_at IS NULL AND last_error_code IS NULL)
+            OR (status = 'PROCESSED' AND processed_at IS NOT NULL AND quarantined_at IS NULL AND last_error_code IS NULL)
+            OR (status = 'QUARANTINED' AND quarantined_at IS NOT NULL AND last_error_code IS NOT NULL)
+        )
+    ),
+    CONSTRAINT ck_alarm_source_inbox_current_contract CHECK (
+        status = 'QUARANTINED'
+        OR (
+            event_type = 'device.alarm.source-event.v1'
+            AND event_version = '1.0'
+            AND source = 'iot-device'
+            AND source_action IS NOT NULL
+        )
+    ),
     CONSTRAINT ck_alarm_source_inbox_tenant CHECK (tenant_id > 0)
 );
 
 CREATE INDEX idx_alarm_source_inbox_claim
-    ON public.alarm_source_inbox (status, next_attempt_at, received_at, id)
-    WHERE status IN ('RECEIVED','RETRY_WAIT');
+    ON public.alarm_source_inbox (received_at, id)
+    WHERE status = 'RECEIVED';
 
 COMMENT ON TABLE public.alarm_source_inbox IS '告警来源专用 Inbox；与 power-model Inbox 分离，确保幂等和冲突隔离';
 COMMENT ON COLUMN public.alarm_source_inbox.id IS 'Inbox 主键，由应用统一 ID 策略赋值';
-COMMENT ON COLUMN public.alarm_source_inbox.message_id IS '来源事件全局唯一 ID；同 ID 不同摘要必须隔离';
+COMMENT ON COLUMN public.alarm_source_inbox.message_id IS '来源事件全局唯一 ID；同 ID 不同 envelope_hash 必须隔离';
 COMMENT ON COLUMN public.alarm_source_inbox.tenant_id IS '经权威事实核验的租户编号';
-COMMENT ON COLUMN public.alarm_source_inbox.event_type IS '来源动作类型：RAISED/RECOVERED';
+COMMENT ON COLUMN public.alarm_source_inbox.event_type IS '收到的完整版本化来源事件名；当前有效值为 device.alarm.source-event.v1，未知主版本只允许隔离';
+COMMENT ON COLUMN public.alarm_source_inbox.source_action IS '来源动作：RAISED 或 RECOVERED；无法解析的隔离消息可为空';
 COMMENT ON COLUMN public.alarm_source_inbox.event_version IS '来源事件版本；未知主版本隔离';
-COMMENT ON COLUMN public.alarm_source_inbox.source IS '生产模块或适配器身份';
-COMMENT ON COLUMN public.alarm_source_inbox.payload_hash IS '来源正文 SHA-256，用于重复/冲突判定';
+COMMENT ON COLUMN public.alarm_source_inbox.source IS 'Envelope 生产者身份；当前有效合同固定为 iot-device，非法来源只允许隔离';
+COMMENT ON COLUMN public.alarm_source_inbox.envelope_hash IS '规范消息字节 SHA-256，用于 messageId 重复/冲突判定；不同于 payload.payloadHash 来源证据摘要';
 COMMENT ON COLUMN public.alarm_source_inbox.payload_json IS '有界来源正文；不得包含凭据或媒体大对象';
-COMMENT ON COLUMN public.alarm_source_inbox.status IS 'Inbox 处理状态';
-COMMENT ON COLUMN public.alarm_source_inbox.attempt_count IS '有限处理尝试次数';
-COMMENT ON COLUMN public.alarm_source_inbox.next_attempt_at IS '可重试错误下次领取时间';
-COMMENT ON COLUMN public.alarm_source_inbox.lease_owner IS '当前处理租约持有者';
-COMMENT ON COLUMN public.alarm_source_inbox.lease_until IS '处理租约到期时间';
-COMMENT ON COLUMN public.alarm_source_inbox.last_error_code IS '最后稳定错误码';
+COMMENT ON COLUMN public.alarm_source_inbox.status IS 'Inbox 处理状态：RECEIVED、PROCESSED 或 QUARANTINED；同 ID 异 hash 进入 QUARANTINED 且保留首个 envelope_hash';
+COMMENT ON COLUMN public.alarm_source_inbox.last_error_code IS '隔离稳定错误码；同 ID 异 hash 使用 ALARM_SOURCE_HASH_CONFLICT';
 COMMENT ON COLUMN public.alarm_source_inbox.last_error_summary IS '脱敏错误摘要，不保存完整 payload/堆栈';
 COMMENT ON COLUMN public.alarm_source_inbox.received_at IS '首次接收时间，UTC';
-COMMENT ON COLUMN public.alarm_source_inbox.processed_at IS '成功处理时间，UTC';
+COMMENT ON COLUMN public.alarm_source_inbox.processed_at IS '成功处理时间，UTC；既有成功消息后续发现同 ID 异 hash 时保留该首次处理事实';
+COMMENT ON COLUMN public.alarm_source_inbox.quarantined_at IS '进入隔离时间，UTC；仅 QUARANTINED 状态填写';
 
 CREATE TABLE public.alarm_outbox (
     id BIGINT NOT NULL,
@@ -423,17 +524,21 @@ CREATE TABLE public.alarm_outbox (
     event_type VARCHAR(128) NOT NULL,
     event_version VARCHAR(16) NOT NULL,
     partition_key VARCHAR(256) NOT NULL,
+    payload_hash VARCHAR(71) NOT NULL CHECK (payload_hash ~ '^sha256:[0-9a-f]{64}$'),
     payload_json JSONB NOT NULL,
     headers_json JSONB NOT NULL DEFAULT '{}',
-    status VARCHAR(16) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','IN_FLIGHT','PUBLISHED','RETRY_WAIT','DEAD')),
-    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-    next_attempt_at TIMESTAMPTZ,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','PUBLISHING','PUBLISHED','DEAD_LETTER')),
+    retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
+    max_retries INTEGER NOT NULL DEFAULT 5 CHECK (max_retries >= 0),
+    next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     lease_owner VARCHAR(128),
     lease_until TIMESTAMPTZ,
     last_error_code VARCHAR(64),
     last_error_summary VARCHAR(1000),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     published_at TIMESTAMPTZ,
+    dead_lettered_at TIMESTAMPTZ,
     CONSTRAINT alarm_outbox_pkey PRIMARY KEY (id),
     CONSTRAINT uq_alarm_outbox_event UNIQUE (event_id),
     CONSTRAINT fk_alarm_outbox_alarm FOREIGN KEY (tenant_id, alarm_id)
@@ -442,12 +547,27 @@ CREATE TABLE public.alarm_outbox (
         octet_length(payload_json::text) <= 1048576
         AND octet_length(headers_json::text) <= 65536
     ),
+    CONSTRAINT ck_alarm_outbox_retry_budget CHECK (retry_count <= max_retries),
+    CONSTRAINT ck_alarm_outbox_state_time CHECK (
+        created_at <= updated_at
+        AND (published_at IS NULL OR published_at >= created_at)
+        AND (dead_lettered_at IS NULL OR dead_lettered_at >= created_at)
+        AND (
+            (status = 'PENDING' AND published_at IS NULL AND dead_lettered_at IS NULL AND lease_owner IS NULL AND lease_until IS NULL)
+            OR (status = 'PUBLISHING' AND published_at IS NULL AND dead_lettered_at IS NULL AND lease_owner IS NOT NULL AND lease_until IS NOT NULL)
+            OR (status = 'PUBLISHED' AND published_at IS NOT NULL AND dead_lettered_at IS NULL AND lease_owner IS NULL AND lease_until IS NULL)
+            OR (status = 'DEAD_LETTER' AND published_at IS NULL AND dead_lettered_at IS NOT NULL AND lease_owner IS NULL AND lease_until IS NULL)
+        )
+    ),
     CONSTRAINT ck_alarm_outbox_tenant CHECK (tenant_id > 0)
 );
 
 CREATE INDEX idx_alarm_outbox_claim
-    ON public.alarm_outbox (status, next_attempt_at, created_at, id)
-    WHERE status IN ('PENDING','RETRY_WAIT');
+    ON public.alarm_outbox (next_attempt_at, created_at, id)
+    WHERE status = 'PENDING';
+CREATE INDEX idx_alarm_outbox_publishing_expired
+    ON public.alarm_outbox (lease_until, created_at, id)
+    WHERE status = 'PUBLISHING';
 CREATE INDEX idx_alarm_outbox_alarm
     ON public.alarm_outbox (tenant_id, alarm_id, created_at, id);
 
@@ -459,16 +579,18 @@ COMMENT ON COLUMN public.alarm_outbox.alarm_id IS '统一告警 ID';
 COMMENT ON COLUMN public.alarm_outbox.event_type IS '完整版本化事件名称';
 COMMENT ON COLUMN public.alarm_outbox.event_version IS '事件 Schema 版本';
 COMMENT ON COLUMN public.alarm_outbox.partition_key IS '有序发布分区键，候选为 alarmId 字符串';
+COMMENT ON COLUMN public.alarm_outbox.payload_hash IS '事件正文 SHA-256，用于发布完整性校验';
 COMMENT ON COLUMN public.alarm_outbox.payload_json IS '有界事件正文，不含通知接收人、凭据、媒体或大对象';
 COMMENT ON COLUMN public.alarm_outbox.headers_json IS '有界 transport header 投影';
-COMMENT ON COLUMN public.alarm_outbox.status IS 'Outbox 投递状态';
-COMMENT ON COLUMN public.alarm_outbox.attempt_count IS '有限投递尝试次数';
+COMMENT ON COLUMN public.alarm_outbox.status IS 'Outbox 投递状态：PENDING、PUBLISHING、PUBLISHED 或 DEAD_LETTER';
+COMMENT ON COLUMN public.alarm_outbox.retry_count IS '已消耗的发布重试次数';
+COMMENT ON COLUMN public.alarm_outbox.max_retries IS '该事件允许的最大发布重试次数';
 COMMENT ON COLUMN public.alarm_outbox.next_attempt_at IS '可重试错误下次领取时间';
 COMMENT ON COLUMN public.alarm_outbox.lease_owner IS '当前发布租约持有者';
 COMMENT ON COLUMN public.alarm_outbox.lease_until IS '发布租约到期时间';
 COMMENT ON COLUMN public.alarm_outbox.last_error_code IS '最后稳定错误码';
 COMMENT ON COLUMN public.alarm_outbox.last_error_summary IS '脱敏错误摘要';
 COMMENT ON COLUMN public.alarm_outbox.created_at IS '事件入列时间，UTC';
+COMMENT ON COLUMN public.alarm_outbox.updated_at IS '最近一次投递状态更新时间，UTC';
 COMMENT ON COLUMN public.alarm_outbox.published_at IS 'broker 确认成功时间，UTC；调用 send 不等于已发布';
-
-COMMIT;
+COMMENT ON COLUMN public.alarm_outbox.dead_lettered_at IS '进入死信状态时间，UTC';
