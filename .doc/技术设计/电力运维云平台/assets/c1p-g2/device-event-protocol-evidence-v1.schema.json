@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/contracts/device-event-protocol-evidence/v1",
+  "title": "EasyAIoT DEVICE_EVENT protocol evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "canonicalizationVersion",
+    "documentStatus",
+    "revision",
+    "protocols",
+    "approval"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "canonicalizationVersion": { "const": "jcs-rfc8785-v1" },
+    "documentStatus": { "enum": ["DRAFT", "APPROVED", "RETIRED"] },
+    "revision": { "type": "integer", "minimum": 1 },
+    "protocols": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/protocol" },
+      "uniqueItems": true,
+      "maxItems": 64
+    },
+    "approval": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/approval" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "documentStatus": { "enum": ["APPROVED", "RETIRED"] } },
+        "required": ["documentStatus"]
+      },
+      "then": {
+        "properties": {
+          "protocols": { "type": "array", "minItems": 1 },
+          "approval": { "$ref": "#/$defs/approval" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ownerRole", "approvedBy", "approvedAt", "decisionRef", "contentSha256"],
+      "properties": {
+        "ownerRole": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "approvedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "approvedAt": { "type": "string", "format": "date-time" },
+        "decisionRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "contentSha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "requestIdEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireField",
+        "deviceGenerated",
+        "retryStable",
+        "uniquenessScope",
+        "uniquenessWindowSeconds",
+        "minUtf8Bytes",
+        "maxUtf8Bytes",
+        "controlCharactersRejected"
+      ],
+      "properties": {
+        "wireField": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "deviceGenerated": { "type": "boolean" },
+        "retryStable": { "type": "boolean" },
+        "uniquenessScope": { "enum": ["TENANT_PRODUCT_DEVICE", "UNKNOWN"] },
+        "uniquenessWindowSeconds": { "type": ["integer", "null"], "minimum": 1 },
+        "minUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "maxUtf8Bytes": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "controlCharactersRejected": { "type": "boolean" }
+      }
+    },
+    "occurredAtEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireField",
+        "deviceGenerated",
+        "format",
+        "originalOffsetPreserved",
+        "millisecondPrecision",
+        "clockSource",
+        "maxFutureSkewSeconds",
+        "maxHistoryAgeSeconds"
+      ],
+      "properties": {
+        "wireField": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "deviceGenerated": { "type": "boolean" },
+        "format": { "enum": ["RFC3339_OFFSET_MILLIS", "EPOCH_MILLIS", "UNKNOWN"] },
+        "originalOffsetPreserved": { "type": "boolean" },
+        "millisecondPrecision": { "type": "boolean" },
+        "clockSource": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "maxFutureSkewSeconds": { "type": ["integer", "null"], "minimum": 0 },
+        "maxHistoryAgeSeconds": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "payloadCanonicalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "rawBytesHashPreserved", "scriptTransformAllowed"],
+      "properties": {
+        "strategy": { "enum": ["JCS_RFC8785_V1", "PROTOCOL_CANONICAL_V1", "UNKNOWN"] },
+        "rawBytesHashPreserved": { "type": "boolean" },
+        "scriptTransformAllowed": { "type": "boolean" }
+      }
+    },
+    "ackContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ackMode", "afterSourceTransactionCommit", "failurePropagatedToTransport"],
+      "properties": {
+        "ackMode": { "enum": ["TRANSPORT_ACK", "APPLICATION_ACK", "NONE"] },
+        "afterSourceTransactionCommit": { "type": "boolean" },
+        "failurePropagatedToTransport": { "type": "boolean" }
+      }
+    },
+    "fixtures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["original", "retry", "collision", "missingRequestId", "invalidOccurredAt"],
+      "properties": {
+        "original": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }] },
+        "retry": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }] },
+        "collision": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }] },
+        "missingRequestId": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }] },
+        "invalidOccurredAt": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }] }
+      }
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolId",
+        "protocolVersion",
+        "transport",
+        "codecClass",
+        "directEventTopicPattern",
+        "subjectMode",
+        "requestIdEvidence",
+        "occurredAtEvidence",
+        "payloadCanonicalization",
+        "ackContract",
+        "fixtures",
+        "decision",
+        "reasonCodes"
+      ],
+      "properties": {
+        "protocolId": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+        },
+        "protocolVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "transport": { "enum": ["MQTT", "TCP", "HTTP", "INTERNAL"] },
+        "codecClass": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "directEventTopicPattern": { "type": ["string", "null"], "minLength": 1, "maxLength": 512 },
+        "subjectMode": { "enum": ["DIRECT", "SUB_DEVICE", "NOT_APPLICABLE"] },
+        "requestIdEvidence": { "$ref": "#/$defs/requestIdEvidence" },
+        "occurredAtEvidence": { "$ref": "#/$defs/occurredAtEvidence" },
+        "payloadCanonicalization": { "$ref": "#/$defs/payloadCanonicalization" },
+        "ackContract": { "$ref": "#/$defs/ackContract" },
+        "fixtures": { "$ref": "#/$defs/fixtures" },
+        "decision": { "enum": ["ENABLED", "DISABLED", "OUT_OF_SCOPE", "UNSUPPORTED"] },
+        "reasonCodes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9](?:[A-Z0-9_]{0,126}[A-Z0-9])?$"
+          },
+          "uniqueItems": true,
+          "maxItems": 32
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "decision": { "const": "ENABLED" } },
+            "required": ["decision"]
+          },
+          "then": {
+            "properties": {
+              "directEventTopicPattern": { "type": "string" },
+              "subjectMode": { "const": "DIRECT" },
+              "requestIdEvidence": {
+                "type": "object",
+                "properties": {
+                  "wireField": { "type": "string" },
+                  "deviceGenerated": { "const": true },
+                  "retryStable": { "const": true },
+                  "uniquenessScope": { "const": "TENANT_PRODUCT_DEVICE" },
+                  "uniquenessWindowSeconds": { "type": "integer" },
+                  "controlCharactersRejected": { "const": true }
+                }
+              },
+              "occurredAtEvidence": {
+                "type": "object",
+                "properties": {
+                  "wireField": { "type": "string" },
+                  "deviceGenerated": { "const": true },
+                  "format": { "enum": ["RFC3339_OFFSET_MILLIS", "EPOCH_MILLIS"] },
+                  "originalOffsetPreserved": { "const": true },
+                  "millisecondPrecision": { "const": true },
+                  "clockSource": { "type": "string" },
+                  "maxFutureSkewSeconds": { "type": "integer" },
+                  "maxHistoryAgeSeconds": { "type": "integer" }
+                }
+              },
+              "payloadCanonicalization": {
+                "type": "object",
+                "properties": {
+                  "strategy": { "enum": ["JCS_RFC8785_V1", "PROTOCOL_CANONICAL_V1"] },
+                  "rawBytesHashPreserved": { "const": true },
+                  "scriptTransformAllowed": { "const": false }
+                }
+              },
+              "ackContract": {
+                "type": "object",
+                "properties": {
+                  "ackMode": { "enum": ["TRANSPORT_ACK", "APPLICATION_ACK"] },
+                  "afterSourceTransactionCommit": { "const": true },
+                  "failurePropagatedToTransport": { "const": true }
+                }
+              },
+              "fixtures": {
+                "type": "object",
+                "properties": {
+                  "original": { "$ref": "#/$defs/artifact" },
+                  "retry": { "$ref": "#/$defs/artifact" },
+                  "collision": { "$ref": "#/$defs/artifact" },
+                  "missingRequestId": { "$ref": "#/$defs/artifact" },
+                  "invalidOccurredAt": { "$ref": "#/$defs/artifact" }
+                }
+              },
+              "reasonCodes": { "type": "array", "maxItems": 0 }
+            }
+          },
+          "else": {
+            "properties": { "reasonCodes": { "type": "array", "minItems": 1 } }
+          }
+        }
+      ]
+    }
+  }
+}
