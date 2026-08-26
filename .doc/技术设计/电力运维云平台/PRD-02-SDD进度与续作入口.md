@@ -1,17 +1,19 @@
 # PRD-02 SDD 进度与续作入口
 
-> 版本：0.13.1
-> 日期：2026-08-25
+> 版本：0.14.0
+> 日期：2026-08-26
 > 状态：Design In Review / Implementation Gated
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 需求包：[PRD-02 监控告警与安全控制](../../需求包/电力运维云平台/PRD-02-监控告警与安全控制/README.md)
-> 最近归档：`b7d0554ee docs(prd-02): close C1P G1 design contracts`
+> 最近归档：`46c29b5bc docs(prd-02): record C1P G1 progress checkpoint`
 
 ## 1. 当前结论
 
 PRD-02 1.2.2 已完成基线修订；P02-M2-01 无副作用合同保持本地验收结论。2026-08-25 已完成 [P02-M2-02 专项冻结评审](./P02-M2-02-专项冻结评审记录.md)、02A review-only runner 静态验收、02B 本地无 transport 验收、02C 来源迁移冻结、[02C0 本地静态验收](./P02-M2-02C0-本地验收记录.md)、[P02-M2-02R1 整改专项冻结](./P02-M2-02R1-Inbox与动作序号整改专项冻结评审记录.md)、[R1A 本地无数据库验收](./P02-M2-02R1A-本地验收记录.md)、[C1 前置门禁核对](./P02-M2-02C1P-C1来源接入前置门禁核对记录.md)、[C1P 架构决策交付评审](./P02-M2-02C1P-架构决策交付与门禁评审记录.md)和 [C1P-G1 本地合同验收](./P02-M2-02C1P-G1-本地合同验收记录.md)。[ADR-019 0.2.0](../../架构决策/电力运维云平台/ADR-019-告警来源身份周期与补偿接入.md) 保持 Proposed；rule/version/cycle、历史 route 和 source Outbox 三个仓库内设计包已关闭，DEVICE_EVENT 产品 allowlist、legacy severity/activation、projection event 必需字段及设备协议原始 identity/time 仍等待责任人输入。真实数据库调用、真实 DDL 和生产 transport 仍为 0，C1 adapter、物理 transport、双写、backfill、对账、切读、capability 和生产容量继续关闭。
 
 C1P-G1 的 10 个设计、Schema 与验收文件已归档于提交 `b7d0554ee`。其后的 `32fbc62c7` 是 M1-LC-02 独立测试进度，不改变本文件记录的 PRD-02 门禁、授权边界或下一步；当前没有新增 C1 实现授权。
+
+2026-08-26 已完成最新仓库证据复核并形成 [C1P-G2 责任人输入收集与建议处置单 0.1.0](./P02-M2-02C1P-G2-责任人输入收集与建议处置单.md)。HEAD `528e93736` 不包含四类责任人签署；G2-01～04 均保持 OPEN。该输入包只把仓库事实、推荐选择、必交证据和签署顺序固化，不把推荐值视为批准，不解锁 C1A。
 
 ## 2. 文档链
 
@@ -25,6 +27,7 @@ C1P-G1 的 10 个设计、Schema 与验收文件已归档于提交 `b7d0554ee`�
 | C1P 评审 | [C1P 前置核对与决策任务单评审报告 1.0.0](../../开发规范/PRD-02-C1P前置核对与决策任务单评审报告.md)、[C1P 评审处置记录 1.0.0](../../开发规范/PRD-02-C1P评审处置记录.md) | PASS；D-01/D-02 随 ADR-019 起草关闭，D-03 已关闭；C1P 可执行，无门禁变化 |
 | C1P 决策 | [ADR-019 0.2.0 Proposed](../../架构决策/电力运维云平台/ADR-019-告警来源身份周期与补偿接入.md)、[交付与门禁评审 1.0.0](./P02-M2-02C1P-架构决策交付与门禁评审记录.md) | Proposed；D-01/D-02 文档闭环，四项实质门禁仍 OPEN，ADR README 未更新 |
 | C1P-G1 | [任务单 0.2.0](./P02-M2-02C1P-G1-来源合同缺口收敛任务单.md)、[本地合同验收 1.0.0](./P02-M2-02C1P-G1-本地合同验收记录.md) | 三个设计包关闭；allowlist Schema 通过但生产 mappings=0；等待四类责任人输入 |
+| C1P-G2 | [责任人输入收集与建议处置单 0.1.0](./P02-M2-02C1P-G2-责任人输入收集与建议处置单.md) | `PREPARED / WAITING OWNER SIGN-OFF`；四项输入均 OPEN，C1 关闭 |
 | TD | [TD-006 0.1.4](./TD-006-统一告警与规则引擎.md)、[007 0.1.2](./TD-007-通知与升级编排.md)、[008 0.2.0](./TD-008-安全遥控与操作票.md)、[009 0.2.0](./TD-009-事故证据与媒体归档.md) | In Review；TD-006 仅局部条件冻结；TD-008 Safety Hold |
 
 ## 3. 已冻结的产品/架构方向
@@ -67,6 +70,7 @@ C1P-G1 的 10 个设计、Schema 与验收文件已归档于提交 `b7d0554ee`�
 | [P02-M2-02C1P 核对](./P02-M2-02C1P-C1来源接入前置门禁核对记录.md) | M1 与 C1 五项前置门禁的已提交仓库事实复核 | **Verified-Repository / C1 Still Closed**；M1 合同基础关闭，其余四项 OPEN |
 | [P02-M2-02C1P 任务](./P02-M2-02C1P-来源身份周期与补偿决策任务单.md) | 来源 identity/site、阈值 cycle、设备事件映射和旧写补偿决策 | **Executed / ADR Proposed / Prerequisites Open**；不授权 adapter 或生产代码 |
 | [P02-M2-02C1P-G1](./P02-M2-02C1P-G1-来源合同缺口收敛任务单.md) | rule revision、产品 allowlist、历史 route/identity 和 source outbox 前置合同 | **Executed-Repository / G1-EVENT Waiting External**；实现、DDL、数据库执行关闭 |
+| [P02-M2-02C1P-G2](./P02-M2-02C1P-G2-责任人输入收集与建议处置单.md) | 四类责任人输入的仓库事实、推荐选择、签署字段和关闭顺序 | **Prepared / Waiting Owner Sign-off / C1 Closed**；不得把推荐值当作批准 |
 | [P02-M2-02R1](./P02-M2-02R1-Inbox与动作序号整改专项冻结评审记录.md) | Inbox 三态/重试责任与动作序号架构整改 | **Conditional Freeze / R1A Verified-Local**；N-01/N-03 文档与 N-02 本地代码已关闭 |
 | [P02-M2-02R1A](./P02-M2-02R1A-独立动作序号与并发合同任务单.md) | `last_action_sequence` 候选 DDL、原子分配端口、来源事务和本地并发合同 | **Implemented / Verified-Local / No Database Execution**；[60+20+74 项证据](./P02-M2-02R1A-本地验收记录.md)通过 |
 | P02-M2-03 | 值班、站内信/APP、升级调度 | SPEC-006/TD-007 冻结；外部渠道可继续关闭 |
@@ -78,7 +82,7 @@ C1P-G1 的 10 个设计、Schema 与验收文件已归档于提交 `b7d0554ee`�
 
 ## 7. 下一步
 
-1. 下一步收集 [C1P-G1 本地验收 §5](./P02-M2-02C1P-G1-本地合同验收记录.md) 四类责任人输入：legacy severity/activation、projection event workload/product/quality/offset、各协议原始 requestId/occurredAt、DEVICE_EVENT APPROVED allowlist。输入到位后形成 C1P-G2 处置记录；当前不得创建 C1A。
+1. 下一步按 [C1P-G2 输入单](./P02-M2-02C1P-G2-责任人输入收集与建议处置单.md) 顺序取得四类签署：legacy severity/activation、projection event workload/product/quality/offset、各协议原始 requestId/occurredAt、DEVICE_EVENT APPROVED allowlist。输入到位并经 Sol 校验后形成 `C1P-G2 输入处置记录 1.0.0`；当前不得创建 C1A。
 2. P02-M2-02A 临时 PostgreSQL 合同保持 `NOT RUN`；只有决策所有者另行明确授权新建、唯一前缀、用后销毁的隔离实例后才可执行，目标/共享库始终不在授权内。
 3. 临时库授权前不得读取 `.env` 凭据、调用 Docker、连接既有 PostgreSQL 或执行 V011/U011；02B JDBC 真实并发/约束集成继续为 OPEN。
 4. ADR-019 Proposed 不解锁 C1；四项 C1 门禁全部达到 `CLOSED-CONTRACT`、ADR 经决策所有者 Accepted 且同提交更新索引前，C1-C4 不得实现。
