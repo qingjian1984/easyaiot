@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/contracts/device-event-alarm-allowlist-review/v1",
+  "title": "EasyAIoT DEVICE_EVENT alarm allowlist review package v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "canonicalizationVersion",
+    "documentStatus",
+    "revision",
+    "allowlistArtifact",
+    "protocolEvidenceArtifact",
+    "mappingReviews",
+    "reviewApproval"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "canonicalizationVersion": { "const": "jcs-rfc8785-v1" },
+    "documentStatus": { "enum": ["DRAFT", "COMPLETE", "RETIRED"] },
+    "revision": { "type": "integer", "minimum": 1 },
+    "allowlistArtifact": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }]
+    },
+    "protocolEvidenceArtifact": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }]
+    },
+    "mappingReviews": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/mappingReview" },
+      "uniqueItems": true,
+      "maxItems": 10000
+    },
+    "reviewApproval": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reviewApproval" }]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "documentStatus": { "const": "DRAFT" } },
+        "required": ["documentStatus"]
+      },
+      "then": {
+        "properties": { "reviewApproval": { "type": "null" } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "documentStatus": { "enum": ["COMPLETE", "RETIRED"] } },
+        "required": ["documentStatus"]
+      },
+      "then": {
+        "properties": {
+          "allowlistArtifact": { "$ref": "#/$defs/artifact" },
+          "protocolEvidenceArtifact": { "$ref": "#/$defs/artifact" },
+          "mappingReviews": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/completeMappingReview" }
+          },
+          "reviewApproval": { "$ref": "#/$defs/reviewApproval" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "answers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alarmRationale",
+        "raisedRule",
+        "recoveredRule",
+        "correlationRationale",
+        "severityRationale",
+        "emergencyNonIgnorableConfirmed",
+        "upgradeClosurePlan"
+      ],
+      "properties": {
+        "alarmRationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "raisedRule": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "recoveredRule": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "correlationRationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "severityRationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "emergencyNonIgnorableConfirmed": { "type": "boolean" },
+        "upgradeClosurePlan": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "fixtures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raised",
+        "recovered",
+        "unmatched",
+        "correlationMismatch",
+        "predicateTypeMismatch",
+        "fieldMissing"
+      ],
+      "properties": {
+        "raised": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }]
+        },
+        "recovered": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }]
+        },
+        "unmatched": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }]
+        },
+        "correlationMismatch": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }]
+        },
+        "predicateTypeMismatch": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }]
+        },
+        "fieldMissing": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/artifact" }]
+        }
+      }
+    },
+    "completeFixtures": {
+      "type": "object",
+      "required": ["raised", "recovered", "unmatched", "correlationMismatch"],
+      "properties": {
+        "raised": { "$ref": "#/$defs/artifact" },
+        "recovered": { "$ref": "#/$defs/artifact" },
+        "unmatched": { "$ref": "#/$defs/artifact" },
+        "correlationMismatch": { "$ref": "#/$defs/artifact" }
+      }
+    },
+    "mappingReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mappingId",
+        "mappingVersion",
+        "protocolId",
+        "protocolVersion",
+        "answers",
+        "fixtures"
+      ],
+      "properties": {
+        "mappingId": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+        },
+        "mappingVersion": { "type": "integer", "minimum": 1 },
+        "protocolId": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+        },
+        "protocolVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "answers": { "$ref": "#/$defs/answers" },
+        "fixtures": { "$ref": "#/$defs/fixtures" }
+      }
+    },
+    "completeMappingReview": {
+      "allOf": [
+        { "$ref": "#/$defs/mappingReview" },
+        {
+          "type": "object",
+          "properties": {
+            "fixtures": { "$ref": "#/$defs/completeFixtures" }
+          }
+        }
+      ]
+    },
+    "reviewApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewedBy", "reviewedAt", "decisionRef", "contentSha256"],
+      "properties": {
+        "reviewedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "reviewedAt": { "type": "string", "format": "date-time" },
+        "decisionRef": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "contentSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

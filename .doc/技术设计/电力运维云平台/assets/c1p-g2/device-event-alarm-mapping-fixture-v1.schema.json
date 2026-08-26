@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/contracts/device-event-alarm-mapping-fixture/v1",
+  "title": "EasyAIoT DEVICE_EVENT alarm mapping fixture v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fixtureType",
+    "mappingId",
+    "mappingVersion",
+    "captureId",
+    "event",
+    "pairedEvent",
+    "expected"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "fixtureType": {
+      "enum": [
+        "RAISED",
+        "RECOVERED",
+        "UNMATCHED",
+        "CORRELATION_MISMATCH",
+        "PREDICATE_TYPE_MISMATCH",
+        "FIELD_MISSING"
+      ]
+    },
+    "mappingId": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+    },
+    "mappingVersion": { "type": "integer", "minimum": 1 },
+    "captureId": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+    },
+    "event": { "$ref": "#/$defs/event" },
+    "pairedEvent": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/event" }]
+    },
+    "expected": { "$ref": "#/$defs/expected" }
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventIdentifier", "payload"],
+      "properties": {
+        "eventIdentifier": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "payload": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted",
+        "matchedMappingId",
+        "sourceAction",
+        "correlationKey",
+        "pairedCorrelationKey",
+        "occurredAt",
+        "pairedOccurredAt",
+        "failureCode"
+      ],
+      "properties": {
+        "accepted": { "type": "boolean" },
+        "matchedMappingId": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sourceAction": {
+          "oneOf": [{ "type": "null" }, { "enum": ["RAISED", "RECOVERED"] }]
+        },
+        "correlationKey": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "pairedCorrelationKey": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "occurredAt": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "pairedOccurredAt": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "failureCode": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z0-9](?:[A-Z0-9_]{0,126}[A-Z0-9])?$"
+        }
+      }
+    }
+  }
+}
