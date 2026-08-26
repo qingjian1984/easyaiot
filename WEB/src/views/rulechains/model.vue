@@ -144,6 +144,11 @@
       }
 
       async function handleSubmit() {
+        // 导入模式不渲染 BasicForm（validateFields 无表单实例会抛错），上传由 UploadDragger 自行处理
+        if (tplType.value === 'import') {
+          createMessage.warning('导入模式请直接上传 JSON 文件，无需点击保存');
+          return;
+        }
         try {
           let params = {};
           const res = await validateFields();

@@ -36,6 +36,21 @@ if ! curl -sf -o /dev/null "${NODERED_URL}/"; then
   exit 1
 fi
 
+# 选择可用的 Python 解释器：Windows Git Bash 下 python3 常是 Microsoft Store 的空壳 alias
+# （静默无输出退出），须探测真实可执行的解释器
+PYTHON_BIN=""
+for candidate in python3 python; do
+  if command -v "${candidate}" >/dev/null 2>&1 \
+     && "${candidate}" -c 'import json, sys; sys.exit(0)' >/dev/null 2>&1; then
+    PYTHON_BIN="${candidate}"
+    break
+  fi
+done
+if [[ -z "${PYTHON_BIN}" ]]; then
+  echo "[ERROR] 未找到可用的 python 解释器（python3/python 均不可用），无法合并 flows"
+  exit 1
+fi
+
 # 同步 settings（标题 EasyAIoT + 演示只读中间件）；compose 已挂载时仍可覆盖本地 data 副本
 if [[ -f "${SETTINGS_FILE}" && -d "${DATA_DIR}" ]]; then
   cp -f "${SETTINGS_FILE}" "${DATA_DIR}/settings.js"
@@ -48,7 +63,7 @@ fi
 MERGED_FILE="$(mktemp /tmp/nodered_seed_XXXXXX.json)"
 trap 'rm -f "${MERGED_FILE}"' EXIT
 
-python3 - "${FLOWS_FILE}" "${NODERED_URL}" "${MERGED_FILE}" <<'PY'
+"${PYTHON_BIN}" - "${FLOWS_FILE}" "${NODERED_URL}" "${MERGED_FILE}" <<'PY'
 import json, sys, urllib.request
 
 flows_file, base, out_file = sys.argv[1], sys.argv[2].rstrip("/"), sys.argv[3]
