@@ -44,8 +44,9 @@
 | ID | 主题 | 状态 | 实现门禁 |
 |---|---|---|---|
 | [M1-LC-01](./M1-LC-01-Inbox接收结果合同任务单.md) | Inbox 新增/重复/碰撞逐消息结果合同 | Implemented / Verified-Local | LC01-01～14 与模块编译验证通过；未提前实现 ACK、审计、DDL、投影或 Store 变更 |
-| [M1-LC-02A](./M1-LC-02A-Collector版本配置应用链任务单.md) | 内部/NODE HMAC、ConfigSnapshot 1.1、iot-node 派发、NODE 原子落盘与 collector 本地应用 | LC02A-0 Approved / Frozen | ADR-017/018 已接受；先交付 02A-0，验证后由 Sol 复核并逐包解锁 02A-1～4 |
-| [M1-LC-02](./M1-LC-02-遥测Topic与产品路由身份收口任务单.md) | canonical 遥测 Topic 与产品路由身份持久化 | Review-Ready / Blocked by LC-02A | Topic 五项技术决策已由 Sol 收敛；ADR-017 Accepted 且 LC-02A Verified-Local 后才能冻结交付 Luna Max |
+| [M1-LC-02A](./M1-LC-02A-Collector版本配置应用链任务单.md) | 内部/NODE HMAC、ConfigSnapshot 1.1、iot-node 派发、NODE 原子落盘与 collector 本地应用 | Implemented / Verified-Local | LC02A-0～4 全部经 Sol 接受；运行期资格仍独立 OPEN |
+| [M1-LC-02](./M1-LC-02-遥测Topic与产品路由身份收口任务单.md) | canonical 遥测 Topic 与产品路由身份持久化 | Implemented / Verified-Local | LC02-10 及 R1～R6 全部 COMPLETE / SOL-ACCEPTED；正式迁移与生产激活仍 OPEN |
+| [M1-LC-03](./M1-LC-03-成功ACK-V1与重启对账任务单.md) | 成功 ACK V1、collector 精确订阅、center 即时发送与重启补发 | Approved / Frozen（实现授权为零） | Sol 已冻结 LC03-01～05；下一步须独立授权 Luna Max 执行 LC03-01 |
 
 ## 状态规则
 
