@@ -1,11 +1,11 @@
 # M1-LC-02：遥测 Topic 与产品路由身份收口任务单
 
-> 状态：Approved / Frozen（`LC02-01A` / `LC02-01A-R1` / `LC02-04A` / `LC02-04B` / `LC02-04C-1` / `LC02-04C-2` / `LC02-05` / `LC02-06` / `LC02-07` / `LC02-08` / `LC02-09-R1` COMPLETE / SOL-ACCEPTED；`LC02-10-R4` IMPLEMENTED / JAVA-PASSED / PG-FAILED / NOT ACCEPTED；`LC02-10` / `LC02-10-R1` / `LC02-10-R2` / `LC02-10-R3` STOPPED / FULL-RETEST-FAILED / NOT ACCEPTED）
-> 版本：1.10.1
-> 日期：2026-08-25
+> 状态：Implemented / Verified-Local（`LC02-01A` / `LC02-01A-R1` / `LC02-04A` / `LC02-04B` / `LC02-04C-1` / `LC02-04C-2` / `LC02-05` / `LC02-06` / `LC02-07` / `LC02-08` / `LC02-09-R1` / `LC02-10` / `LC02-10-R1` / `LC02-10-R2` / `LC02-10-R3` / `LC02-10-R4` / `LC02-10-R5` / `LC02-10-R6` COMPLETE / SOL-ACCEPTED）
+> 版本：1.12.1
+> 日期：2026-08-26
 > 架构负责人：GPT-5.6 Sol
 > 实现执行者：GPT-5.6 Luna（max reasoning，LC02-08 核心实现、LC02-09 首批生产增量、LC02-10-R2 单 literal 与 LC02-10-R4 standalone POSIX fixture 修订）/ GPT-5.6 Sol（R1/R2、LC02-09 原白名单接管、真实容器编排、独立验收及经 owner 授权接管 §24.5、§26.3～§26.5、§27.3～§27.6，并复核 R4 完整模块 skip 归类）
-> 当前交付状态：`LC02-09-R1` 已完成并经 Sol 独立复核为 COMPLETE / SOL-ACCEPTED（Verified-Local）。经 owner 授权，Luna Max 已按 §28.2 完成唯一 standalone POSIX fixture 修订；Linux 直接 1/1、联合 16/16、脱敏 1/1、34-reactor 编译、device 39/39、sink 155/155 与完整 `iot-sink-biz -am` 均通过。完整模块唯一 skip 的 XML testcase 明确属于 §24.4 允许后继真实重跑的 `EmqxTelemetryAclIntegrationTest`，不是 Center 测试 skip。第二轮五个 `bash -n` 通过后，V009 PostgreSQL 合同脚本退出码 1，具体失败阶段未保留，按 §28.5 停工；Inbox PostgreSQL、Java fail-closed 与真实 EMQX未运行。全部保护摘要前后相等且零残留，详见 §28.6。R4 状态为 IMPLEMENTED / JAVA-PASSED / PG-FAILED / NOT ACCEPTED；正式 V009 落库与 MQTT 生产凭据/ACL 激活仍 OPEN / NOT APPROVED
+> 当前交付状态：经 owner 授权与 Sol 独立复核，R6 已全部通过：R5 V009 **79/79** 证据受保护复用且未重跑；Inbox 单次编排顶层退出码 0、9 PASS/0 FAIL、八类 **50/50**；Java fail-closed **11/11**；真实隔离 EMQX **12/12**；Failures/Errors/Skipped、秘密禁出、全部固定/共享/P02保护与资源残留均为 0。`LC02-10` 及 R1～R6 与 M1-LC-02 已转 COMPLETE / SOL-ACCEPTED（Implemented / Verified-Local），详见 §30.6。该结论只关闭本地实现与隔离合同；正式 V009 落库、生产 MQTT broker/ACL/TLS 激活及运行期/发布/现场资格仍 OPEN / NOT APPROVED
 
 ## 1. 任务结论
 
@@ -2716,3 +2716,178 @@ R4 的新增测试文件 SHA-256 应在 §28.2 改动完成后建立为本回合
 V009 失败后立即执行 `finally` 清除两个源密码、`PG_PASSWORD` 与全部 PG/JDBC 临时变量；Inbox PostgreSQL **49/49**、Java fail-closed **11/11**、真实 EMQX **12/12** 均 **NOT RUN**，V011/U011 真实数据库/DDL仍 **NOT AUTHORIZED / NOT RUN**。最终 `sharedEnd == sharedStart`、`p02End == p02Start`，A/C、Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4、R1/脱敏及 R4 测试摘要均未漂移；scoped `git diff --check` 退出 0；R4 容器/网络、两类数据库前缀、遮罩与精确环境变量残留均为 0。未输出秘密值、长度、hash、片段、编码、预览、JDBC URL 或环境清单；未 commit。
 
 结论：R4 唯一测试修订已实现且 Java 门禁通过，但完整关闭在 V009 PostgreSQL 失败，`LC02-10-R4` 转为 **IMPLEMENTED / JAVA-PASSED / PG-FAILED / NOT ACCEPTED**；R3/R2/R1/LC02-10 与 M1-LC-02 继续 STOPPED / NOT ACCEPTED。下一步必须先由 Sol 冻结新的有界 PostgreSQL 诊断重验包，规定失败阶段、退出码和脱敏日志的安全留证方式，再决定是环境处置还是实现任务；未经新冻结和独立授权不得直接重跑 V009、执行后继门禁或修改 SQL/脚本/生产代码。
+
+## 29. `LC02-10-R5` V009 PostgreSQL 安全诊断重验与后继收口冻结单（2026-08-26）
+
+### 29.1 冻结依据、当前事实与复用边界
+
+本节同时依据《EasyAIoT 项目开发宪法》v1.6.0（SHA-256 `76BF30903A5A62C957A75B57E24080AA7132DE6992D56C262EEAFBE7BE553C4D`）、《平台功能计划》v1.5.0（SHA-256 `F0E5734C8FADA6D0E4DAB98F7D12F58940077F9C60AA8DA42AC8EF45C6F69869`）和 §28.6 的真实停工证据冻结。2026-08-26 开工核对时，R4 提交 `32fbc62c7` 是当前 HEAD `528e93736` 的祖先；工作树除现有未跟踪 `DEVICE/.claude/` 外干净。该目录属于并行/本地工具状态，R5 不得读取、清理、暂存、提交或归属。
+
+R4 已在同一保护回合内通过 Linux 1/1、16/16、脱敏 1/1、34-reactor、device 39/39、sink 155/155 和完整 `-am`，随后才在 V009 PostgreSQL 首次执行退出 1；最终全部固定摘要、`sharedStart == sharedEnd`、`p02Start == p02End`、R4 测试 SHA 与零残留均成立。R5 是零实现的诊断续跑包：只要 §29.2 的保护前检完全通过，R4 的 Java 成功证据可以复用，不要求再次消耗完整 Java 回归；任一受保护文件、双基线、镜像、默认迁移语义或 R4 测试摘要漂移，则复用资格失效并立即停工，不得在 R5 内自行扩大为全量重验。
+
+当前 `lc02_v009_contract.sh` SHA-256 仍为 `66D9E9F52DDB11AD943012FFC1C4BFB36135E496616F648A56E86A4840C8162F`。脚本使用 `set -euo pipefail`、稳定 `[lc02-v009][PASS]` / `[lc02-v009][FAIL]` 标签、唯一临时数据库前缀和 EXIT trap；没有 `set -x`，密码只通过进程环境传给 `docker exec`。R4 未保存原始输出，因此不能从退出码 1 推断为凭据、容器、SQL、fixture、保护摘要或产品代码缺陷。R5 不修改脚本，只增加执行编排层的安全留证。
+
+### 29.2 开工保护与环境前检
+
+获得独立执行授权后，必须在读取 `.env` 前完成：
+
+1. 重读双基线并复算 §29.1 两个完整摘要；确认 `git merge-base --is-ancestor 32fbc62c7 HEAD` 成功；记录开工 `git status --short`，确认 LC02 受保护路径没有新增修改；
+2. 复核 Docker Server 仍为 Linux 29.7.2、§25.3 PostgreSQL/EMQX/Maven 三张精确镜像、`postgres-server` 正在运行，且不得重启、重建或修改该容器；
+3. 复核 §28 的 A/C、Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4、R1/脱敏、R4 测试 `A5CA16342A74CD36E954AE03433F411AAE656C0AA2F92111A9058B1BCECB7D46`；记录共享 5 文件 `sharedStart` 与 P02 3 文件 `p02Start`；
+4. 执行 §28.3 的五个 `bash -n`、默认 apply/dry-run/uninstall 隔离和 P02 静态合同；P02 仍只要求正数 PASS_COUNT、`real_database_calls=0`、`real_ddl=0`；
+5. 检查 `lc02_v009_r5*`、`lc02_08_r5*` 数据库/容器/网络前缀和精确 PG/JDBC 环境变量残留为 0。任何既有残留不得由 R5 猜测归属后删除，应停工交回 Sol。
+
+随后按 §26.3 的精确两键、ignored/untracked、唯一非空规则读取本地凭据，只允许输出 `2/2_PRESENT_REDACTED`。不得对 `.env`、秘密值或其派生物计算/输出 hash、长度、片段、编码、预览；不得输出命令行环境、完整 JDBC/PostgreSQL URL、`PGPASSWORD`、连接串或通用环境变量清单。凭据只在 PostgreSQL 阶段导入当前进程，并必须由最外层 `finally` 清除 §26.4 全部精确变量。
+
+### 29.3 V009 单次安全诊断协议
+
+V009 只允许执行一次，不得因失败自动或人工重试。执行编排必须满足：
+
+1. 使用仓库外、随机、仅本回合的临时文本文件承接 stdout/stderr；不得把原始日志写入仓库、Surefire、任务单、终端、聊天、归档或 Git，也不得计算其 hash；
+2. 固定使用 `LC02_V009_PG_ENABLED=true`、`PG_CONTAINER=postgres-server`、`PG_USER=postgres`、当前进程秘密环境变量和唯一前缀 `lc02_v009_r5`，原样调用现有 `lc02_v009_contract.sh`；禁止 `set -x`、`bash -x`、命令回显、管道实时打印或修改脚本；
+3. 记录退出码后，在内存中先检查原始日志不包含两项秘密值，也不包含 `PGPASSWORD=`、`jdbc:postgresql:`、`postgresql://`、authorization/token 或 shell trace 的秘密注入形式。任一命中立即标记 `SECRET_OUTPUT_GUARD_FAILED`，不输出命中内容，并进入清理；
+4. 安全检查通过后，只允许从日志提取：`PASS` 标签数量、最后一个完整 `PASS` 标签的业务说明、首个 `FAIL` 标签冒号前的业务说明，以及以下单一脱敏类别，不得输出 `expected/actual`、SQL、数据库名、临时路径、payload 或原始 stderr：
+   - 工具/容器不存在或未运行：`ENVIRONMENT_UNAVAILABLE`；
+   - PostgreSQL 认证拒绝：`POSTGRES_AUTH_FAILED`；
+   - 连接/传输失败：`POSTGRES_CONNECTION_FAILED`；
+   - 权限拒绝：`POSTGRES_PERMISSION_FAILED`；
+   - SQL/psql/pg_dump 执行失败：`POSTGRES_EXECUTION_FAILED`；
+   - `[FAIL]` 断言标签存在：`V009_CONTRACT_ASSERTION_FAILED`；
+   - 前缀数据库或临时资产清理失败：`CLEANUP_FAILED`；
+   - 无法安全归类：`UNCLASSIFIED_FAILURE`。
+5. 无论成功、失败或分类异常，最内层 `finally` 都必须删除原始日志文件；不得输出其路径、大小、hash 或内容。最外层 `finally` 再清除凭据与 PG/JDBC 变量，并检查数据库前缀、临时目录与日志文件残留为 0。
+
+V009 只有脚本退出码 0、`PASS_ASSERTIONS=79`、FAIL 标签 0、秘密输出防护通过、前缀数据库/临时备份/原始日志/环境变量残留均为 0，才判 **79/79 PASS**。若退出非零，交付只报告稳定阶段标签、脱敏类别、退出码、已通过断言数和清理结果；立即停止，禁止执行 §29.4、修改脚本/SQL/凭据/容器或用第二次运行补证。
+
+### 29.4 V009 通过后的后继关闭顺序
+
+只有 §29.3 V009 **79/79 PASS** 后才按以下顺序继续：
+
+1. 仍使用仓库外临时日志和相同秘密禁出规则，原样执行 Inbox PostgreSQL **49/49**，前缀改为 `lc02_08_r5`；任一非零、failure/error/skip 或清理失败立即停工；
+2. 无条件清除两组源密码、`PG_PASSWORD` 与全部 PG/JDBC 临时变量，并证明精确残留为 0；
+3. 原样执行 Java fail-closed **11/11**，Failures=0、Errors=0、Skipped=0；
+4. 原样执行真实 EMQX **12/12**，Failures=0、Errors=0、Skipped=0，容器/网络/临时凭据/目录残留为 0；
+5. V011/U011 真实数据库/DDL继续 **NOT AUTHORIZED / NOT RUN**。
+
+R5 不重新执行已受保护且可复用的 R4 Java 1/1、16/16、34-reactor、device 39、sink 155 或完整 284；也不得把这种有条件复用解释为永久豁免。若 §29.2 任一保护不成立，必须回 Sol 决定新的全量包。
+
+### 29.5 收尾保护、写入白名单与完成定义
+
+实际写入白名单只有本任务单与 `M1-SDD进度与续作入口.md` 的执行证据；生产、测试、POM、脚本、SQL、配置、`.env`、V011/P02 和其他文档全部只读。不得 commit，除非决策所有者另行明确授权。
+
+收尾必须复算 A/C 与全部既有 LC02 固定摘要，要求 `sharedEnd == sharedStart`、`p02End == p02Start`、R4 测试 SHA 不变；执行两个禁止扫描、scoped `git diff --check`，并证明 `lc02_v009_r5*` / `lc02_08_r5*` 数据库/容器/网络、仓库外临时日志/目录、遮罩、精确 PG/JDBC/EMQX 变量与临时凭据残留全部为 0。范围外 `DEVICE/.claude/` 或其他并行改动只记录开工/收工差异，不得触碰。
+
+只有 §29.2～§29.5 全部通过，Sol 才可接受 `LC02-10-R5`、R4、R3、R2、R1 与 LC02-10，并把 M1-LC-02 转为 Implemented / Verified-Local。该接受仍不批准正式 V009/V011 落库、生产 broker/ACL/TLS 激活、Linux PTY/锁互操作、资源/稳定性压测、Windows 发布资格或现场验证。
+
+以下任一情形立即停工：秘密输出防护命中；无法建立或清除仓库外日志；V009/Inbox 非零或断言数不符；需要第二次 V009；需要修改脚本、SQL、生产或测试；保护摘要/共享/P02 漂移；V011/U011 进入默认链或执行真实 DDL；Java/EMQX failure/error/skip；临时资源或变量不能清零。不得顺手处置。
+
+本节当前状态为 **FROZEN / NOT-YET-AUTHORIZED**。本轮 Sol 只读分析并冻结 R5，没有读取 `.env`、没有运行 Docker/PostgreSQL/Maven/EMQX、没有修改实现/测试/脚本/SQL/配置，也没有 commit。下一步须决策所有者独立授权 GPT-5.6 Luna Max 执行 `LC02-10-R5 §29.2～§29.5`；若 Luna Max 不可用，不得静默替换，须明确报告后再由 owner 决定是否授权 Sol 接管。
+
+### 29.6 Luna Max 执行在 Inbox 计数/退出证据停工（2026-08-26）
+
+决策所有者已明确授权 GPT-5.6 Luna Max 执行 §29.2～§29.5。Luna 完整读取双基线与冻结单后确认：双基线摘要匹配，`32fbc62c7` 为当前 HEAD 祖先；Docker Linux 29.7.2、三张冻结镜像、`postgres-server` 运行状态、A/C、Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4、R1/脱敏与 R4 测试摘要全部通过；`sharedStart=C0D28DB92BCEBE67BEAD498B84F9DA9C9A2F1E4E9E3FF468EAE4AB9ECCC50DD0`，`p02Start=1AB2C4FA56BE22037EE735616EF6E0E3A8898355E81E7E8B40AAF14D7E47520E`。五个 `bash -n`、默认 apply/dry-run/uninstall 隔离、COMMENT/env/README 语义与 P02 正数 PASS/真实 DB=0/真实 DDL=0 均通过。
+
+凭据前检只输出 `2/2_PRESENT_REDACTED`。V009 按 §29.3 只运行一次：退出码 0、PASS 标签 **79**、FAIL 标签 0，最后 PASS 标签为 `end has no LC02 V009 database residue`；秘密/连接串禁出扫描通过，仓库外原始日志已删除，`lc02_v009_r5` 数据库、临时目录、日志和精确 PG/JDBC 变量残留均为 0。因此 V009 本轮结论为 **79/79 PASS**，R4 的 `PG-FAILED` 已由 R5 当前证据替换为 `PG-PASSED-IN-R5`；该结果仍只是隔离合同，不批准正式落库。
+
+随后 Inbox 单次编排的八类 Surefire 结果为：
+
+| 测试类 | Tests | Failures | Errors | Skipped |
+|---|---:|---:|---:|---:|
+| `InboxEnvelopeProductIdentityContractTest` | 4 | 0 | 0 | 0 |
+| `CenterTelemetryIngressHandlerTest` | 7 | 0 | 0 | 0 |
+| `JdbcTelemetryInboxContractTest` | 13 | 0 | 0 | 0 |
+| `JdbcTelemetryInboxProductIdentityContractTest` | 11 | 0 | 0 | 0 |
+| `JdbcTelemetryInboxFailureContractTest` | 1 | 0 | 0 | 0 |
+| `InboxReceiveResultContractTest` | 5 | 0 | 0 | 0 |
+| `TelemetryInboxAutoConfigurationTest` | 5 | 0 | 0 | 0 |
+| `TelemetryStoreBatchContractTest` | 4 | 0 | 0 | 0 |
+| **合计** | **50** | **0** | **0** | **0** |
+
+实际 50 与 §29.4 继承的冻结 49 不相等，Luna 因此正确 STOP，没有重跑 Inbox，也没有执行 Java fail-closed 11/11 或真实 EMQX 12/12。Sol 只读 history/source 定位确认：第 50 项是 `TelemetryInboxAutoConfigurationTest.mqttPropertiesRejectMissingOrUnsafeBrokerIdentityBeforeNetworking()`，由提交 `148ed68af` 于 2026-08-24 加入，属于 LC02-09 broker identity fail-closed 增量；其余七类合计 45，该类从 4 增为 5，故当前总数精确为 50。当前八类源码及 `lc02_08_inbox_product_contract.sh` 与 R4 提交 `32fbc62c7` 均零 diff；Inbox 脚本当前 SHA-256 为 `F61E223CE7C784946188FA2D9A2D9D5D39C01B8D183098D37B7C4C34AEC8173E`，显式要求八类被发现且 0 failure/error/skip，本身未硬编码 49。由此判定任务单计数是历史基线漂移，不是新增测试或实现漂移。
+
+但本轮 Inbox wrapper 没有保留可安全回报的顶层退出码或编排级脱敏摘要；原始日志已按安全规则删除，不能为补证而重跑。八类 Surefire 50/0/0/0 与独立零残留只能证明测试类结果和清理事实，不能证明脚本的所有前后置门禁最终退出 0。因此 Inbox 编排整体仍为 **EXIT-EVIDENCE-NOT-CAPTURED / NOT ACCEPTED**，不得仅凭 Surefire 报告标记 50/50 PASS。
+
+收尾时 `sharedEnd == sharedStart`、`p02End == p02Start`，全部固定摘要与 R4 测试 SHA 一致，两个禁止扫描 0 命中，scoped `git diff --check` 退出 0；R5 数据库/容器/网络/仓库外日志/遮罩/精确 PG/JDBC/EMQX 变量残留均为 0。V011/U011 真实数据库/DDL仍 NOT AUTHORIZED / NOT RUN。执行期间出现 P02-M2-02C1P-G2-03 证据文档与 `assets/c1p-g2/` 等范围外并行变化，R5 只记录、不触碰或归属；`DEVICE/.claude/` 亦保持未触碰。R5 未修改实现/测试/脚本/SQL/配置，未 commit。
+
+结论：`LC02-10-R5` 转为 **STOPPED / INBOX-COUNT-AND-EXIT-EVIDENCE-DRIFT / NOT ACCEPTED**。下一步应由 Sol 冻结最小 `LC02-10-R6`：只修订当前/后继验收计数口径为八类 **50/50**，保留 §21.8 的历史 49/49 作为当时证据而不改写；在全部保护仍一致时复用本轮 V009 79/79，但必须按安全协议重新执行一次 Inbox 并捕获顶层退出码、八类 50/50 与编排清理结果，成功后才执行 Java fail-closed 11/11、真实 EMQX 12/12 和最终保护/零残留。R6 冻结并获得独立授权前，不得直接运行后继门禁或修改测试/脚本。
+
+## 30. `LC02-10-R6` Inbox 50 项基线修订、退出证据与最终关闭冻结单（2026-08-26）
+
+### 30.1 依据、计数更正与证据复用决策
+
+本节同时依据《EasyAIoT 项目开发宪法》v1.6.0（SHA-256 `76BF30903A5A62C957A75B57E24080AA7132DE6992D56C262EEAFBE7BE553C4D`）、《平台功能计划》v1.5.0（SHA-256 `F0E5734C8FADA6D0E4DAB98F7D12F58940077F9C60AA8DA42AC8EF45C6F69869`）和 §29.6 冻结。R6 是零实现、零脚本修改的计数事实修订与后继关闭包，不改变接口、Schema、Topic、安全、部署或产品范围。
+
+§21.8 的 49/49 是 LC02-08 当时的验收记录，作为历史证据保留，不回写为 50。提交 `148ed68af` 随后在 `TelemetryInboxAutoConfigurationTest` 增加 `mqttPropertiesRejectMissingOrUnsafeBrokerIdentityBeforeNetworking()`，形成当前 LC02-09 broker identity fail-closed 保护；当前八类 Surefire 精确为 `4+7+13+11+1+5+5+4=50`。因此从 R6 起，所有当前和后继 Inbox 关闭门禁以八类 **50/50**、Failures=0、Errors=0、Skipped=0 为唯一计数事实；§24～§29 中的 49/49 仅代表旧冻结口径，不再作为 R6 阻断值。
+
+R5 的 V009 单次执行具备退出码 0、79 个 PASS 标签、FAIL=0、秘密禁出、原始日志删除和零数据库/变量残留，且最终固定/共享/P02保护一致。R6 开工若 §30.3 全部保护仍成立，可复用该 **V009 79/79**，不得再次执行 V009；若任一保护漂移，复用立即失效并停工。R5 Inbox 只复用作“当前八类实际为 50”的事实发现，不复用作完成证据，因为顶层退出码缺失。
+
+### 30.2 Inbox 九文件固定保护清单
+
+R6 新增以下 9 文件固定保护；聚合算法沿用 §24.3：“仓库相对路径正序 + 一个空格 + 大写 SHA-256，以 LF 连接并保留末尾 LF，再对 UTF-8 bytes 做 SHA-256”。固定聚合为 `CD9897727D139F8B3EBFC9D178091BF695FFDACC70279B7C8519EB7736E9336A`：
+
+```text
+.scripts/postgresql/td005-migration/tests/lc02_08_inbox_product_contract.sh F61E223CE7C784946188FA2D9A2D9D5D39C01B8D183098D37B7C4C34AEC8173E
+DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/InboxEnvelopeProductIdentityContractTest.java 74A2F30A52F2F5D1EF54D7ECE179BB8CB55DE51DD5D6ACC24183C951EDEBAD89
+DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/InboxReceiveResultContractTest.java AE640AB957DC8C3F1F55FC04FA9EA4D79888BAC38FE18923681129CA3C0B3A75
+DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/jdbc/JdbcTelemetryInboxContractTest.java E2E443812E05D433D52E76577F7772F19BF4279B586DF5379A36F756E1B91C17
+DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/jdbc/JdbcTelemetryInboxFailureContractTest.java AC02BBE5014A77433A37FE28A3A053491604E1D85AD1C2FD80E1847AA100158F
+DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/jdbc/JdbcTelemetryInboxProductIdentityContractTest.java C1B65B2ECD9F73F0A25706786879FE5F2544409A76EE556FB24D77F4EBC10DFF
+DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/route/CenterTelemetryIngressHandlerTest.java 4B38C6B38FFE1294A734CDA000BC31089F1B2ED1A47F63374C939B521403BAAF
+DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/TelemetryInboxAutoConfigurationTest.java 2487B9A5FEDCEE5FA002968083EFF3F71A7276E262A7D91B5592AED5057C5949
+DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/store/TelemetryStoreBatchContractTest.java E0C4F8A25A104C4FD1E3697CD7C6F9CCA7A0D4A6E5846027981FC74C80597EEC
+```
+
+任一单文件或聚合漂移立即停工；R6 不得接受新摘要、修改测试数量、排除类、脚本或 POM。九文件不替代既有 A/C、Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4、R1/脱敏、R4 测试、共享 5 和 P02 3 文件保护，而是追加保护。
+
+### 30.3 开工门禁与 V009 复用资格
+
+获得独立执行授权后，必须重新：
+
+1. 读取双基线、确认 `32fbc62c7` 仍为 HEAD 祖先；记录工作树开工差异，只允许两份进度文档和已识别范围外并行工作，不得触碰 `DEVICE/.claude/`；
+2. 复核 Docker Linux 29.7.2、三张冻结镜像、`postgres-server` 运行、全部既有固定摘要、§30.2 九文件聚合、`sharedStart`、`p02Start`；
+3. 执行五个 `bash -n`、默认 apply/dry-run/uninstall 隔离与 P02 静态正数/真实 DB=0/真实 DDL=0；
+4. 检查 `lc02_v009_r5*`、`lc02_08_r6*` 数据库/容器/网络/临时日志/遮罩和精确 PG/JDBC/EMQX 环境变量残留为 0；
+5. 复核 §29.6 V009 的退出码、79 PASS、FAIL=0、秘密扫描、日志删除和零残留证据均已写入当前任务单，且 A/C/共享/P02/R4/V009资产自 R5 收工没有漂移。
+
+全部成立才报告 `R5_V009_79_REUSE=ELIGIBLE` 并禁止重跑 V009。任一不成立立即停止并由 Sol 决定新的全量包，不得退回 R5 凭据或重新执行 V009补证。
+
+### 30.4 Inbox 单次重验与顶层退出码硬门禁
+
+按 §26.3 精确读取本地两键，只输出 `2/2_PRESENT_REDACTED`，秘密规则完全沿用 §29.2。Inbox 只允许执行一次，固定前缀 `lc02_08_r6`，输出写入仓库外随机临时日志；禁止实时打印、`set -x` / `bash -x`、修改脚本或第二次运行。
+
+wrapper 必须在调用 `lc02_08_inbox_product_contract.sh` 的同一 PowerShell 进程和同一 `try` 作用域中，于任何日志读取/删除前立即执行 `$inboxExit = $LASTEXITCODE`。`$inboxExit` 初始必须为 `$null`；若执行后仍为 `$null`，稳定失败为 `INBOX_TOP_LEVEL_EXIT_NOT_CAPTURED` 并立即清理停工。不得依赖会话句柄、后续 shell、Surefire XML或进程存在性反推顶层退出码。
+
+捕获退出码后按 §29.3 的秘密/连接串禁出规则扫描原始日志；命中只报告 `SECRET_OUTPUT_GUARD_FAILED`，不得输出内容。安全后必须同时证明：
+
+1. `$inboxExit -eq 0`；
+2. 日志中 `[lc02-08][FAIL]` 为 0，`[lc02-08][PASS]` 精确为 9，包含 V009 hash、开工前缀清洁、双夹具、八类直接合同、reactor test-compile、产品身份扫描、scoped diff、显式清理和 EXIT trap 最终残留九个稳定标签；
+3. 八类 Surefire 分项精确为 §29.6 表格的 4/7/13/11/1/5/5/4，总计 **50**，Failures=0、Errors=0、Skipped=0；不得只读取旧报告，报告时间必须属于本次运行；
+4. `lc02_08_r6*` 数据库、Maven/临时目录、仓库外日志和精确 PG/JDBC变量残留均为 0。
+
+无论结果如何，内层 `finally` 删除原始日志且不输出路径/大小/hash/内容，外层 `finally` 清除全部秘密和 PG/JDBC变量。上述任一不满足立即停工，不得重跑、修改脚本/测试或进入 §30.5。
+
+### 30.5 后继 Java、EMQX 与最终完成定义
+
+只有 §30.4 全部通过后，确认全部 PG/秘密变量为 0，再原样执行：
+
+1. Java fail-closed `TelemetryUpstreamTopicParserContractTest` 6/6 + `TelemetryInboxAutoConfigurationTest` 5/5，合计 **11/11**，Failures=0、Errors=0、Skipped=0；
+2. 真实隔离 EMQX **12/12**，Failures=0、Errors=0、Skipped=0，固定镜像/能力画像/随机临时凭据与全部清理合同保持 §23；
+3. 最终复算 §30.2 九文件、A/C、Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4、R1/脱敏、R4测试，要求 `sharedEnd == sharedStart`、`p02End == p02Start`；执行禁止扫描、scoped `git diff --check`，确认数据库/容器/网络/日志/目录/遮罩/精确环境变量/临时凭据残留全为 0。
+
+实际写入白名单只有本任务单和 `M1-SDD进度与续作入口.md` 的执行证据；不得修改或提交其他文件，不得 commit，除非决策所有者另行授权。V011/U011 真实数据库/DDL继续 NOT AUTHORIZED / NOT RUN。
+
+只有 §30.3～§30.5 全部通过，Sol 才可接受 R6/R5/R4/R3/R2/R1/LC02-10，并把 M1-LC-02 转为 Implemented / Verified-Local。该接受不批准正式 V009/V011 落库、生产 broker/ACL/TLS 激活、Linux PTY/锁互操作、资源/稳定性压测、Windows 发布资格或现场验证。
+
+本节当前状态为 **FROZEN / NOT-YET-AUTHORIZED**。本轮 Sol 只重读双基线、审查 R5 证据、建立九文件摘要并冻结 R6；没有读取 `.env`、没有运行 Docker/PostgreSQL/Maven/EMQX、没有修改实现/测试/脚本/SQL/配置，也没有 commit。下一步须决策所有者独立授权 GPT-5.6 Luna Max 执行 `LC02-10-R6 §30.3～§30.5`；若 Luna Max 不可用，不得静默替换，须明确报告后再由 owner 决定是否授权 Sol 接管。
+
+### 30.6 Luna Max 执行与 Sol 最终接受（2026-08-26）
+
+决策所有者两次明确授权 GPT-5.6 Luna Max 执行 §30.3～§30.5。首个回合在运行任何 R6 门禁前因 Luna 用量限制失败，Sol 明确报告限制，没有静默改用其他模型；第二次同模型 max reasoning 授权重试完成全部验收。
+
+§30.3 结果：双基线摘要、`32fbc62c7` 祖先关系、Docker Linux 29.7.2、三张冻结镜像与 `postgres-server` 运行状态通过；§30.2 九文件聚合 `CD9897727D139F8B3EBFC9D178091BF695FFDACC70279B7C8519EB7736E9336A` 及 9 个单文件全部一致；A/C、Inbox/Outbox 25、Store 9、ACK/投影 5、EMQX 4、R1/脱敏、R4测试保护一致；五个 `bash -n` 退出 0，默认 apply/dry-run/uninstall 与 P02 静态隔离通过，P02 真实 DB/DDL 为 0。`sharedStart == sharedEnd == C0D28DB92BCEBE67BEAD498B84F9DA9C9A2F1E4E9E3FF468EAE4AB9ECCC50DD0`，`p02Start == p02End == 1AB2C4FA56BE22037EE735616EF6E0E3A8898355E81E7E8B40AAF14D7E47520E`。R5 V009 的 79 PASS、退出 0、秘密扫描、日志删除和零残留证据完整且保护无漂移，因此 `R5_V009_79_REUSE=ELIGIBLE`；R6 没有重跑 V009。
+
+§30.4 Inbox 只运行一次：凭据前检只报告 `2/2_PRESENT_REDACTED`；wrapper 在同一 PowerShell 进程/`try` 作用域内、日志读取或删除前捕获顶层退出码 **0**；秘密/连接串禁出扫描通过；脚本稳定标签 **9 PASS / 0 FAIL**。八类本轮 Surefire 精确为 4/7/13/11/1/5/5/4，合计 **50**，Failures=0、Errors=0、Skipped=0。初次只读汇总器以宽泛通配符误匹配旧 `TDengineTelemetryStoreBatchContractTest` 报告并报告缺项；执行者没有重跑 Inbox，而是按冻结精确报告文件名确认 `TelemetryStoreBatchContractTest` 为 4/0/0/0。Sol 独立读取本轮报告及时间戳，确认八类结果均属于本次运行。`lc02_08_r6*` 数据库、临时目录、仓库外日志、秘密与 PG/JDBC变量残留均为 0。
+
+§30.5 后继结果：Java fail-closed 中 `TelemetryUpstreamTopicParserContractTest` **6/6**、`TelemetryInboxAutoConfigurationTest` **5/5**，合计 **11/11**；真实隔离 `EmqxTelemetryAclIntegrationTest` **12/12**。两阶段退出码均为 0，Failures=0、Errors=0、Skipped=0；Sol 独立复核的本轮 Surefire 时间戳分别为 2026-08-26 14:58 与 15:00。EMQX 临时凭据防护通过，容器、网络、目录、日志和凭据残留 0；两个禁止扫描 0 命中，scoped `git diff --check` 退出 0；最终数据库、容器、网络、日志、遮罩和精确环境变量残留均为 0。V011/U011 真实数据库/DDL保持 NOT AUTHORIZED / NOT RUN。
+
+本轮未修改实现、测试、POM、脚本、SQL、配置或 `.env`，未 commit。执行期间 P02/WEB/证据文档与 `DEVICE/.claude/` 存在范围外并行变化，R6 只记录、未读取、清理、暂存、提交或归属。Sol 最终结论：`LC02-10-R6`、R5、R4、R3、R2、R1、LC02-10 与 M1-LC-02 全部 **COMPLETE / SOL-ACCEPTED（Implemented / Verified-Local）**。正式 V009/V011 落库、生产 broker/ACL/TLS 激活、`LC02-09-RUNTIME-01`、Linux PTY/锁互操作、资源/稳定性压测、Windows 发布资格和现场验证继续 OPEN，不能由本地接受替代。
