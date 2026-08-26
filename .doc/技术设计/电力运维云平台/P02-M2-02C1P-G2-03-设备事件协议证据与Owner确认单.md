@@ -1,12 +1,13 @@
 # P02-M2-02C1P-G2-03：设备事件协议证据与 Owner 确认单
 
-> 版本：0.1.0
+> 版本：0.2.0
 > 日期：2026-08-26
-> 状态：CONTRACT PREPARED / ALL CURRENT PROTOCOLS DISABLED / WAITING PROTOCOL OWNER / C1 CLOSED
+> 状态：LOCAL VERIFIER PREPARED / ALL CURRENT PROTOCOLS DISABLED / WAITING PROTOCOL OWNER / C1 CLOSED
 > 设计责任：GPT-5.6 Sol
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
-> 上游：[C1P-G2 输入单 0.3.0](./P02-M2-02C1P-G2-责任人输入收集与建议处置单.md)、[ADR-019 0.2.0 Proposed](../../架构决策/电力运维云平台/ADR-019-告警来源身份周期与补偿接入.md)
-> 机器合同：[协议证据 v1 Schema](./assets/c1p-g2/device-event-protocol-evidence-v1.schema.json)、[DRAFT 模板](./assets/c1p-g2/device-event-protocol-evidence-template.json)
+> 上游：[C1P-G2 输入单 0.4.0](./P02-M2-02C1P-G2-责任人输入收集与建议处置单.md)、[ADR-019 0.2.0 Proposed](../../架构决策/电力运维云平台/ADR-019-告警来源身份周期与补偿接入.md)
+> 机器合同：[协议证据 v1 Schema](./assets/c1p-g2/device-event-protocol-evidence-v1.schema.json)、[fixture v1 Schema](./assets/c1p-g2/device-event-protocol-fixture-v1.schema.json)、[DRAFT 模板](./assets/c1p-g2/device-event-protocol-evidence-template.json)
+> 本地验收：在 `WEB/` 目录执行 `pnpm verify:device-event-protocol-evidence -- --file .doc/技术设计/电力运维云平台/assets/c1p-g2/OWNER_EVIDENCE.json`
 
 ## 1. 结论与授权边界
 
@@ -33,7 +34,7 @@
 
 ### 3.1 文档与批准
 
-- `DRAFT` 允许 `protocols=[]/approval=null`，只能作为收集模板；
+- `DRAFT` 必须保持 `approval=null`，允许 `protocols=[]`，只能作为收集模板；
 - `APPROVED/RETIRED` 必须至少列出一个协议，并填写 `ownerRole/approvedBy/approvedAt/decisionRef/contentSha256`；
 - `contentSha256` 使用 RFC 8785 JCS 规范化，计算时把 `approval.contentSha256` 字段从文档中排除；
 - 文档获批不等于 G2-03 关闭：至少一个条目必须为 `ENABLED`，其余协议继续按各自 decision 关闭；
@@ -51,7 +52,19 @@ Schema 对 `ENABLED` 条目强制以下条件：
 6. original、retry、collision、missingRequestId、invalidOccurredAt 五类 fixture 均有仓库路径和 SHA-256；
 7. `reasonCodes=[]`。任一条件不满足只能填 `DISABLED/UNSUPPORTED/OUT_OF_SCOPE` 并给出原因码。
 
-Schema 负责结构与关键布尔门禁；评审器还必须校验：`minUtf8Bytes <= maxUtf8Bytes`、protocolId 唯一、fixture 路径存在且哈希匹配、original/retry 的 requestId/time/canonical hash 相同、collision 的 requestId 相同而 canonical hash 不同、失败样例确实 fail-closed，以及批准哈希正确。
+Schema 负责结构与关键布尔门禁；本地评审器必须校验：`minUtf8Bytes <= maxUtf8Bytes`、protocolId 唯一、fixture/raw capture 路径存在且哈希匹配、original/retry 的 requestId/time/canonical hash 相同、collision 的 requestId 相同而 canonical hash 不同、失败样例确实 fail-closed，以及批准哈希正确。
+
+### 3.3 fixture v1 文件合同
+
+五类 fixture 均为 JSON 文件，并通过 fixture v1 Schema 校验。每份文件必须包含：
+
+- `fixtureType/protocolId/protocolVersion/captureId`；同一协议的五个 captureId 不得重复；
+- `rawArtifact.path/sha256`，指向仓库内脱敏原始报文字节或文本，禁止绝对路径、反斜线和 `..`；
+- `wireIdentity.requestId/occurredAt/canonicalPayloadSha256`，记录从原文得到的身份、时间和规范正文哈希；
+- `processing`，明确接受、重复、碰撞隔离、源事务提交、既有事务核验、失败传播、后端补 ID 和接收时间 fallback；
+- `acknowledgement.mode/afterDurableDecision`，证明 ACK/NACK 在持久化决定之后产生。
+
+本合同的固定语义为：ORIGINAL 必须源事务提交后 ACK；RETRY 必须核验既有事务后 ACK；COLLISION 必须隔离并向 transport 返回失败；MISSING_REQUEST_ID 禁止后端补 ID；INVALID_OCCURRED_AT 禁止接收时间 fallback。所有失败样例均不得提交 source transaction。
 
 ## 4. Owner 提交包
 
@@ -61,10 +74,10 @@ Schema 负责结构与关键布尔门禁；评审器还必须校验：`minUtf8By
 |---|---|
 | 协议规范 | protocolId/version、wire 字段、字符/长度、唯一窗口、时间格式/offset/精度/容差、direct Topic |
 | codec/transport 合同 | 禁止后端补 requestId/occurredAt；禁止脚本改写；失败传播与 commit 后 ACK 时序 |
-| 正例 | 原始上报和完全相同的重试，证明 requestId、occurredAt、canonical hash 稳定 |
+| 正例 | 原始上报和完全相同的重试，提交两份 fixture JSON 及脱敏 raw capture，证明 requestId、occurredAt、canonical hash 稳定 |
 | 碰撞负例 | 同 requestId 异正文，证明进入 collision/quarantine 且不写 source cycle/outbox |
-| 缺失负例 | requestId 缺失，证明拒绝且不生成 backend ID |
-| 时间负例 | 缺 offset、超精度、未来/历史越界或格式非法，证明拒绝且不使用接收时间 |
+| 缺失负例 | requestId 缺失的 fixture/raw capture，证明拒绝且不生成 backend ID |
+| 时间负例 | 缺 offset、超精度、未来/历史越界或格式非法的 fixture/raw capture，证明拒绝且不使用接收时间 |
 | 批准 | ownerRole、approvedBy、approvedAt、decisionRef 和排除 contentSha256 字段后计算的 JCS SHA-256 |
 
 ## 5. Owner 确认区（待填写）
@@ -80,7 +93,18 @@ Schema 负责结构与关键布尔门禁；评审器还必须校验：`minUtf8By
 
 签署 decision 建议仅允许：`APPROVE_EVIDENCE`、`APPROVE_NONE_ENABLED` 或 `REQUEST_CHANGES`。`APPROVE_NONE_ENABLED` 可以关闭本轮盘点责任，但不关闭“至少一个协议可用”的 G2-03 功能门禁，G2-04 继续 `DENY_ALL`。
 
-## 6. 关闭条件与下一步
+## 6. 本地验收命令
+
+```powershell
+cd WEB
+pnpm verify:device-event-protocol-evidence
+pnpm verify:device-event-protocol-evidence -- --self-test
+pnpm verify:device-event-protocol-evidence -- --file .doc/技术设计/电力运维云平台/assets/c1p-g2/OWNER_EVIDENCE.json
+```
+
+默认命令只验证仓库 DRAFT 模板和两份 Schema，不把空模板视为批准。`--file` 只接受仓库相对 JSON 路径；APPROVED 文件没有 ENABLED 协议时可通过文档验收，但输出 `qualification=NO_ENABLED_PROTOCOL`，G2-03 功能门禁仍保持 OPEN。
+
+## 7. 关闭条件与下一步
 
 1. owner 提交通过 v1 Schema 和语义校验的独立证据文档；
 2. Sol 复核代码/协议/fixture 一致性、哈希和 ACK 时序；

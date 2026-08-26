@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easyaiot.local/contracts/device-event-protocol-fixture/v1",
+  "title": "EasyAIoT DEVICE_EVENT protocol fixture v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fixtureType",
+    "protocolId",
+    "protocolVersion",
+    "captureId",
+    "rawArtifact",
+    "wireIdentity",
+    "processing",
+    "acknowledgement"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "fixtureType": {
+      "enum": [
+        "ORIGINAL",
+        "RETRY",
+        "COLLISION",
+        "MISSING_REQUEST_ID",
+        "INVALID_OCCURRED_AT"
+      ]
+    },
+    "protocolId": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+    },
+    "protocolVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "captureId": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+    },
+    "rawArtifact": { "$ref": "#/$defs/artifact" },
+    "wireIdentity": { "$ref": "#/$defs/wireIdentity" },
+    "processing": { "$ref": "#/$defs/processing" },
+    "acknowledgement": { "$ref": "#/$defs/acknowledgement" }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "wireIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "occurredAt", "canonicalPayloadSha256"],
+      "properties": {
+        "requestId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "occurredAt": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "canonicalPayloadSha256": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+          ]
+        }
+      }
+    },
+    "processing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted",
+        "duplicate",
+        "collisionQuarantined",
+        "sourceTransactionCommitted",
+        "existingSourceTransactionVerified",
+        "failurePropagatedToTransport",
+        "backendRequestIdGenerated",
+        "receiveTimeFallbackUsed"
+      ],
+      "properties": {
+        "accepted": { "type": "boolean" },
+        "duplicate": { "type": "boolean" },
+        "collisionQuarantined": { "type": "boolean" },
+        "sourceTransactionCommitted": { "type": "boolean" },
+        "existingSourceTransactionVerified": { "type": "boolean" },
+        "failurePropagatedToTransport": { "type": "boolean" },
+        "backendRequestIdGenerated": { "type": "boolean" },
+        "receiveTimeFallbackUsed": { "type": "boolean" }
+      }
+    },
+    "acknowledgement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "afterDurableDecision"],
+      "properties": {
+        "mode": { "enum": ["ACK", "NACK", "NONE"] },
+        "afterDurableDecision": { "type": "boolean" }
+      }
+    }
+  }
+}
