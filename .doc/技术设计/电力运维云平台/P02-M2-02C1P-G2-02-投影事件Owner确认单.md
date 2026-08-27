@@ -1,17 +1,18 @@
 # P02-M2-02C1P-G2-02：TELEMETRY_PROJECTED_V1 Owner 确认单
 
-> 版本：0.1.0
-> 日期：2026-08-26
-> 状态：PREPARED / UNSIGNED / C1 CLOSED
+> 版本：0.2.0
+> 日期：2026-08-27
+> 状态：MACHINE CONTRACT PREPARED / UNSIGNED / C1 CLOSED
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 输入来源：[C1P-G2 输入单 §4](./P02-M2-02C1P-G2-责任人输入收集与建议处置单.md)、[G2 输入处置记录 §3](./P02-M2-02C1P-G2-输入处置记录.md)
 > Owner 基线：[TD-003 1.0.3 / In Review](./TD-003-遥测Inbox-ACK与时序投影.md)
+> 机器合同：[Owner evidence v1 Schema](./assets/c1p-g2/telemetry-projected-owner-evidence-v1.schema.json)、[空白 DRAFT 模板](./assets/c1p-g2/telemetry-projected-owner-evidence-template.json)
 
 ## 1. 使用规则
 
-本文件是 M1/TD-003 owner 的待签输入，不是执行指令，也不是代码授权。owner 必须填写 §5 并提交受控签署记录；Sol 只核验，不代替 owner 确认外部发布历史。
+本文件是 M1/TD-003 owner 的待签输入，不是执行指令，也不是代码授权。owner 必须从空白 DRAFT 模板复制独立 evidence 文件，填写 §5 并提交受控签署记录；Sol 只核验 Schema、仓库路径、哈希和条件一致性，不代替 owner 确认外部发布历史。
 
-空白、`TBD`、聊天中的同意或仅修改 TD 文档均不构成签署。若任何环境已经发布 `TELEMETRY_PROJECTED_V1`，不得选择原地收紧 v1。
+不得直接覆盖模板。空白、`TBD`、聊天中的同意、仅修改 TD 文档或把 DRAFT 改名为 APPROVED 均不构成签署。若任何环境已经发布 `TELEMETRY_PROJECTED_V1`，不得选择原地收紧 v1。
 
 ## 2. 仓库事实
 
@@ -21,6 +22,7 @@
 4. Inbox API 已保留 productIdentification 和 canonical Envelope bytes，但没有受信 workloadId 字段；
 5. TD-003 Envelope V1 已冻结 `value/valueEncoding/quality/dataPriority/collectedAt/sequence/configVersion`，其中 M1 valueEncoding 固定 `decimal-string`；
 6. 仓库缺少 projection event Schema、publisher/relay 与原子性、重投、字段完整性测试。
+7. [2026-08-12 TD-002/TD-003 协同冻结签字记录](../../开发规范/TD-002-003运维评审签字记录-20260812.md)接受了 TD-003 1.0.1 的 projection outbox 设计方向，但没有确认环境发布历史、v1/v2 选择、本节新增字段、生产 Schema 路径或测试计划，不能替代本 G2-02 evidence。
 
 仓库事实只能证明当前代码未实现/发布该事件，不能证明部署环境历史；publicationHistory 必须由 owner 明确确认。
 
@@ -70,20 +72,23 @@
 
 ## 5. Owner 必填与签署
 
-| 字段 | Owner 填写 |
-|---|---|
-| ownerRole | M1/TD-003 owner |
-| ownerName |  |
-| signedAt | RFC 3339 + 显式 offset |
-| publicationHistory | `NEVER_PUBLISHED`，或逐环境列出首次/最近发布时间和当前消费者 |
-| eventVersionDecision | `EXTEND_V1_BEFORE_FIRST_PUBLISH` / `CREATE_V2` |
-| tdDocumentVersion | 更新后的 TD-003 版本与提交路径 |
-| schemaPath | 版本化生产者 API Schema 路径 |
-| testPlanRef | 可审计测试计划/任务单路径 |
-| decision | `APPROVE_RECOMMENDATION` / `APPROVE_WITH_CHANGES` / `REJECT` |
-| decisionRef | 受控签署记录路径或评审记录 |
+Owner 从 [空白 DRAFT 模板](./assets/c1p-g2/telemetry-projected-owner-evidence-template.json)复制一个独立 JSON 文件并按 [v1 Schema](./assets/c1p-g2/telemetry-projected-owner-evidence-v1.schema.json)填写。模板固定为 `UNCONFIRMED / UNDECIDED / approval=null`，只代表未提交输入。
 
-若 `APPROVE_WITH_CHANGES`，必须逐字段说明差异、兼容影响、消费者迁移、回滚与 C1 所需字段如何等价满足。不得删除 workload/product/value/quality/originalOffset 或以跨后端查询替代。
+| evidence 字段 | Owner 填写 |
+|---|---|
+| `publicationHistory` | `NEVER_PUBLISHED`，或逐环境列出首次/最近发布时间、已发布 v1 和当前消费者；无法确认时只能保留 `UNCONFIRMED/DRAFT` |
+| `eventVersionDecision` | `NEVER_PUBLISHED` 只能选 `EXTEND_V1_BEFORE_FIRST_PUBLISH`；任一环境 `PUBLISHED` 只能选 `CREATE_V2`；v2 必交 migrationPlan |
+| `artifacts.tdDocument` | 更新后的 TD-003 仓库路径、文档版本和 SHA-256 |
+| `artifacts.productionSchema` | 生产者 API 下真实版本化事件 Schema 的路径、事件名、版本和 SHA-256；本 evidence Schema 不能替代它 |
+| `artifacts.testPlan` | 可审计测试计划/任务单路径和 SHA-256 |
+| `artifacts.consumerInventory` | 已发布 v1 时必交消费者清单；从未发布时可为 null |
+| `requiredFields` | 完整列出 §4 的 23 个字段；APPROVED 不允许缺项、别名或额外字段 |
+| `testCoverage` | 完整列出 §6 的 7 个测试域 |
+| `approval` | ownerRole、approvedBy、RFC 3339 显式 offset 时间、decision、仓库内 decisionRef 和 evidence contentSha256 |
+
+`approval.contentSha256` 按既有 G2 规则对 `approval=null` 的 evidence 执行 RFC 8785 JCS 后计算 SHA-256，并使用 `sha256:<64 lowercase hex>`。Schema 只校验格式和条件；Sol 仍需复算哈希并核对 artifact 实际内容。
+
+若 `APPROVE_WITH_CHANGES`，必须在 decisionRef 中逐字段说明差异、兼容影响、消费者迁移、回滚与 C1 所需字段如何等价满足。不得删除 workload/product/value/quality/originalOffset 或以跨后端查询替代。
 
 ## 6. 必交测试计划
 
@@ -97,4 +102,4 @@
 
 ## 7. 当前门禁
 
-本文件保持 `UNSIGNED`。owner 签署、TD/Schema/testPlan 三项证据到位并经 Sol 核验前，G2-02 为 `OPEN-M1`，THRESHOLD adapter、ADR-019 Accepted 和 C1A 继续关闭。
+Owner evidence Schema 和 DRAFT 模板已准备，但当前模板仍为 `UNCONFIRMED / UNDECIDED / approval=null`，不构成责任人输入。owner 的 APPROVED evidence、更新 TD、生产事件 Schema、测试计划及条件性 consumerInventory 到位并经 Sol 复核前，G2-02 保持 `MACHINE-CONTRACT-PREPARED / WAITING M1 OWNER`；THRESHOLD adapter、ADR-019 Accepted 和 C1A 继续关闭。
