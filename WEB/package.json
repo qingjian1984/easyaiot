@@ -47,6 +47,7 @@
     "verify:alarm-event-contracts": "node ./scripts/verify-alarm-event-contracts.mjs",
     "verify:alarm-source-migration-boundaries": "node ./scripts/verify-alarm-source-migration-boundaries.mjs",
     "verify:device-event-protocol-evidence": "node ./scripts/verify-device-event-protocol-evidence.mjs",
+    "verify:device-event-alarm-allowlist-review": "node ./scripts/verify-device-event-alarm-allowlist-review.mjs",
     "verify:td005-auth-allowlist": "node ./build/script/verifyTd005AuthAllowlist.mjs"
   },
   "dependencies": {

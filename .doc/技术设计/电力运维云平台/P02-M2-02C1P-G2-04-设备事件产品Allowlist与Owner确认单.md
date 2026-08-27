@@ -1,8 +1,8 @@
 # P02-M2-02C1P-G2-04：设备事件产品 Allowlist 与 Owner 确认单
 
-> 版本：0.1.0
-> 日期：2026-08-26
-> 状态：CONTRACT PREPARED / WAITING G2-03 / DENY_ALL / WAITING PRODUCT OWNER / C1 CLOSED
+> 版本：0.3.0
+> 日期：2026-08-27
+> 状态：LOCAL VERIFIER PREPARED / WAITING G2-03 / DENY_ALL / WAITING PRODUCT OWNER / C1 CLOSED
 > 设计责任：GPT-5.6 Sol
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 上游：[G2-03 协议证据与 Owner 确认单 0.2.0](./P02-M2-02C1P-G2-03-设备事件协议证据与Owner确认单.md)、[G1-EVENT 输入说明 1.0.0](./assets/c1p-g1/G1-EVENT-产品Allowlist输入说明.md)、[ADR-019 0.2.0 Proposed](../../架构决策/电力运维云平台/ADR-019-告警来源身份周期与补偿接入.md)
@@ -84,10 +84,27 @@ review package 的 `answers` 必须逐项填写，不接受“同上”“按默
 2. `RECOVERED`：唯一命中 recoveredMatcher，与 RAISED correlation 完全相同；
 3. `UNMATCHED`：不得命中任何 mapping，失败码 `DEVICE_EVENT_NOT_ALLOWLISTED`；
 4. `CORRELATION_MISMATCH`：raised/recovered 各自匹配但 correlation 不同，必须拒绝闭合；
-5. `PREDICATE_TYPE_MISMATCH`：只要 mapping 含 predicate 就必填，证明无隐式类型转换；
+5. `PREDICATE_TYPE_MISMATCH`：只要 mapping 含 `EQUALS` predicate 就必填，证明无隐式类型转换；仅含 `EXISTS` 时不适用；
 6. `FIELD_MISSING`：只要 mapping 使用 predicate/correlation/time pointer 就必填，证明缺字段 fail-closed。
 
 fixture 的 `expected` 是待核验预期，不是自证结果；后续本地 verifier 必须重新执行 matcher、JSON Pointer、时间和跨 fixture 校验。
+
+由于 v1 每条 mapping 都必须提供 correlation/time pointer，`FIELD_MISSING` 对所有 COMPLETE/RETIRED mapping 都是必填；`PREDICATE_TYPE_MISMATCH` 仅在 raised 或 recovered matcher 含 `EQUALS` predicate 时必填。
+
+### 6.1 verifier 冻结语义
+
+- 空白 DRAFT 只做 Schema 校验并输出 `qualification=DRAFT_EMPTY`；一旦 DRAFT 提供任一 artifact 或 mappingReview，就必须一次性提供可完整预检的 allowlist、APPROVED G2-03 evidence、mappingReview 和所需 fixture，输出 `DRAFT_PREFLIGHT`，不接受半包静默通过；
+- COMPLETE 必须引用 APPROVED allowlist，RETIRED 必须引用 RETIRED allowlist；两者都必须验证 allowlist/review approval hash、artifact 字节 hash，并调用 G2-03 verifier 复核协议证据；
+- `RAISED` fixture 使用 `event` 表示 raised、`pairedEvent=null`；`RECOVERED` 使用 `event` 表示 recovered、`pairedEvent` 表示对应 raised；两者 correlation 必须相同；
+- `CORRELATION_MISMATCH` 使用 raised `event` 与 recovered `pairedEvent`，两者分别命中但 correlation 必须不同，失败码固定 `DEVICE_EVENT_CORRELATION_MISMATCH`；
+- `UNMATCHED`、`PREDICATE_TYPE_MISMATCH`、`FIELD_MISSING` 必须不能形成任何有效 action，失败码固定 `DEVICE_EVENT_NOT_ALLOWLISTED`；其中 FIELD_MISSING 可先命中 eventIdentifier/matcher，但必须因 predicate、correlation 或 time pointer 缺失而 fail-closed；
+- JSON Pointer 严格执行 RFC 6901；数组索引只能是 `0` 或不带前导零的十进制，`EXISTS` 遇到 JSON null 仍算存在，`EQUALS` 不做类型转换；
+- occurredAt 必须是带 `Z` 或显式 `±HH:MM` offset 且恰好三位毫秒的合法 RFC 3339 字符串；correlation 必须是 1～512 UTF-8 字节非空字符串；
+- 不同 mappingId 的 scope/matcher 可同时命中时拒绝，不定义 PRODUCT_MODEL 优先级；同一 mappingId 的 mappingVersion 与 effectiveFrom 必须严格递增；
+- review mapping 集合必须与 allowlist `(mappingId,mappingVersion)` 集合一一对应，并且每项 protocolId/version 必须命中 APPROVED evidence 中的 ENABLED DIRECT 协议；
+- severity 为 EMERGENCY 时 `emergencyNonIgnorableConfirmed` 必须为 true，其他等级必须为 false；产品回答去除首尾空白后不得为空，也不得使用 `同上`、`按默认`、`TBD`、`TODO` 或 `N/A` 占位。
+
+上述语义已实现于 [G2-04 本地 review verifier](../../../WEB/scripts/verify-device-event-alarm-allowlist-review.mjs)。它通过既有 G2-03 verifier 子进程复核 protocol evidence；自测中的 COMPLETE/APPROVED 数据只写入系统临时目录并在结束时删除，不构成仓库产品输入。
 
 ## 7. hash 与批准顺序
 
@@ -115,8 +132,10 @@ fixture 的 `expected` 是待核验预期，不是自证结果；后续本地 ve
 | G2-03 ENABLED direct 协议 | `0 / OPEN` |
 | production allowlist | `DRAFT / mappings=0 / approval=null` |
 | review package | `DRAFT / mappingReviews=0 / reviewApproval=null` |
-| G2-04 | `CONTRACT-PREPARED / WAITING G2-03 + PRODUCT OWNER` |
+| G2-04 | `LOCAL-VERIFIER-PREPARED / WAITING G2-03 + PRODUCT OWNER` |
 | DEVICE_EVENT runtime | `DENY_ALL` |
 | C1A/C1-C4 | `CLOSED` |
 
-下一步先实现并本地验收 G2-04 review verifier；它只能验证空模板和未来 owner 文件，不能生成产品 mapping。G2-03 没有 ENABLED 协议前，任何 COMPLETE/APPROVED 正例都只能是临时测试数据，不得提交为生产输入。
+本地命令：`pnpm verify:device-event-alarm-allowlist-review -- --file .doc/.../OWNER_REVIEW.json`；默认空模板输出 `qualification=DRAFT_EMPTY`。当前自测通过 38 项，覆盖 DRAFT/COMPLETE、双层批准 hash、artifact 防越界、协议引用、mapping 集合与版本、scope/matcher 歧义、RFC 6901、严格类型、时间/correlation、六类 fixture、产品回答和 CLI fail-closed。
+
+下一步先由设备协议 owner 关闭至少一个 G2-03 direct 协议，再由产品 owner 提交未来 allowlist/review/fixture 并运行本验收器；它只能验证 owner 输入，不能生成产品 mapping。G2-03 没有 ENABLED 协议前，任何 COMPLETE/APPROVED 正例都只能是临时测试数据，不得提交为生产输入。

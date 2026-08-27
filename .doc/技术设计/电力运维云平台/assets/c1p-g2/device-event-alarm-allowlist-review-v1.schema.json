@@ -150,12 +150,19 @@
     },
     "completeFixtures": {
       "type": "object",
-      "required": ["raised", "recovered", "unmatched", "correlationMismatch"],
+      "required": [
+        "raised",
+        "recovered",
+        "unmatched",
+        "correlationMismatch",
+        "fieldMissing"
+      ],
       "properties": {
         "raised": { "$ref": "#/$defs/artifact" },
         "recovered": { "$ref": "#/$defs/artifact" },
         "unmatched": { "$ref": "#/$defs/artifact" },
-        "correlationMismatch": { "$ref": "#/$defs/artifact" }
+        "correlationMismatch": { "$ref": "#/$defs/artifact" },
+        "fieldMissing": { "$ref": "#/$defs/artifact" }
       }
     },
     "mappingReview": {
