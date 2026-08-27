@@ -1,7 +1,7 @@
 # M1-LC-03：成功 ACK V1 与重启对账任务单
 
-> 状态：In Progress（LC03-01、LC03-02、LC03-03 COMPLETE / SOL-ACCEPTED）
-> 版本：1.0.5
+> 状态：In Progress（LC03-01～03 COMPLETE / SOL-ACCEPTED；LC03-04 SOL-FROZEN / NOT-YET-AUTHORIZED）
+> 版本：1.1.0
 > 日期：2026-08-27
 > 架构负责人：GPT-5.6 Sol
 > 计划实现执行者：GPT-5.6 Luna（max reasoning；须逐包独立授权）
@@ -202,7 +202,7 @@ received_at_ms + ack_sent_at_ms + ack_attempts
 | LC03-01 | 共享 ACK V1 类型、codec、Topic parser 与旧 wire 拒绝 | 七字段 DTO、严格 codec、直接合同测试 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
 | LC03-02 | collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用 | subscription coordinator、runtime ordering、SQLite 状态合同 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
 | LC03-03 | V012 候选、center dispatch repository、即时 ACK 与 10 秒扫描 | SQL 候选、JDBC repository、publisher/service/scanner | COMPLETE / SOL-ACCEPTED（2026-08-27，§15.6 含两处偏离修复）；临时 PG 合同脚本已备未执行 |
-| LC03-04 | collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点 | 假服务 fixture、真实隔离 broker/PG、restart reconciliation | FROZEN / NOT-YET-AUTHORIZED（前置 01/02/03 均已接受）；真实隔离 broker/PG 另授权 |
+| LC03-04 | collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点 | 04A 确定性 fixture/假服务组合测试；04B 真实隔离 broker/PG | SOL-FROZEN / NOT-YET-AUTHORIZED（§16）；04A、04B 必须分别授权 |
 | LC03-05 | 全模块回归、保护扫描、文档收口 | Verified-Local 证据 | LOCKED，待 LC03-04 验收 |
 
 LC03-02 与 LC03-03 在 LC03-01 被 Sol 接受后可由 Sol 判断是否并行；LC03-04 必须等待两者均完成。每个包都须由决策所有者独立授权 GPT-5.6 Luna（max reasoning），实现者不得自行进入下一包或 commit。
@@ -235,16 +235,28 @@ LC03-02 与 LC03-03 在 LC03-01 被 Sol 接受后可由 Sol 判断是否并行�
 - `.../telemetry/inbox/mqtt/CenterMqttAckPublisher.java`；
 - `.../telemetry/inbox/mqtt/CenterMqttInboxSubscriber.java`；
 - `.../telemetry/inbox/TelemetryInboxAutoConfiguration.java`；
-- `.doc/技术设计/电力运维云平台/assets/td003-migration/V012__telemetry_inbox_ack_delivery.sql`（新增候选）；
-- `.doc/技术设计/电力运维云平台/assets/td003-migration/U012__telemetry_inbox_ack_delivery.sql`（新增候选）；
-- `.scripts/postgresql/td003-migration/tests/lc03_v012_contract.sh`（新增隔离合同，不接共享 runner）；
+- `.doc/技术设计/电力运维云平台/assets/td005-migration/V012__telemetry_inbox_ack_delivery.sql`（新增候选）；
+- `.doc/技术设计/电力运维云平台/assets/td005-migration/U012__telemetry_inbox_ack_delivery.sql`（新增候选）；
+- `.scripts/postgresql/td005-migration/tests/lc03_v012_contract.sh`（新增隔离合同，不接共享 runner）；
 - 对应直接/真实 JDBC 测试。
 
 ### 7.4 LC03-04～05
 
-- 只允许新增 `iot-sink-biz/src/test` 下 LC03 组合 fixture/E2E；
-- 只允许新增 `.scripts/mqtt/tests/lc03_success_ack_contract.sh` 或任务单后续由 Sol 指定的等价隔离脚本；
-- 本任务单、[技术设计索引](./README.md) 与 [M1 续作入口](./M1-SDD进度与续作入口.md) 的证据回填。
+LC03-04A 只允许新增以下文件，不允许修改任何生产 Java、现有测试、POM、SQL 或配置：
+
+- `DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/ack/Lc03AckE2eFixture.java`；
+- `DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/ack/TelemetryAckRestartReconciliationTest.java`；
+- `DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/ack/TelemetryAckCombinedE2ETest.java`；
+- `DEVICE/iot-sink/iot-sink-biz/src/test/resources/lc03-04/accepted-envelope-v1.json`；
+- `DEVICE/iot-sink/iot-sink-biz/src/test/resources/lc03-04/collision-envelope-v1.json`；
+- `DEVICE/iot-sink/iot-sink-biz/src/test/resources/lc03-04/fixture-manifest.json`。
+
+LC03-04B 只有在决策所有者另行授权真实隔离运行后，才允许新增：
+
+- `DEVICE/iot-sink/iot-sink-biz/src/test/java/com/basiclab/iot/sink/telemetry/inbox/ack/TelemetryAckRealBrokerPostgresE2ETest.java`；
+- `.scripts/mqtt/tests/lc03_success_ack_contract.sh`。
+
+LC03-04/05 共同允许回填本任务单、[技术设计索引](./README.md) 与 [M1 续作入口](./M1-SDD进度与续作入口.md)。现有 LC03-01～03 测试只能回归，禁止为追求计数而修改、排除或重命名。
 
 任何需修改 `TelemetryEnvelope` canonical/hash、V008/V009/V010/V011、TD-006 资产、EMQX 生产 ACL、Docker Compose、NODE、iot-device、TelemetryStore/projector、拒绝审计或告警代码的情况均立即停止并交回 Sol。
 
@@ -285,9 +297,9 @@ LC03-02 与 LC03-03 在 LC03-01 被 Sol 接受后可由 Sol 判断是否并行�
 - collision 与全部入口拒绝在 LC03 中零 ACK；
 - 全部测试 Failures=0、Errors=0、Skipped=0，临时 DB/container/network/file/env residue=0。
 
-## 9. 验收命令候选
+## 9. 历史分包验收命令
 
-每包实施前由 Sol 把实际类名和当前保护摘要回填为最终命令；Luna 不得以找不到候选类为由自行改验收口径。当前冻结的最小命令形态为：
+以下命令保留为 LC03-01～03 历史分包口径；LC03-04 的最终命令、类名、计数和运行隔离以 §16.7～§16.8 为唯一事实。实现者不得自行缩减、增加排除项或改变计数口径。
 
 ```bash
 cd DEVICE
@@ -356,13 +368,13 @@ mvn -pl iot-sink/iot-sink-biz -am -Dmaven.test.skip=false test-compile
 
 ## 12. 当前授权与下一步
 
-LC03-01 已由 GPT-5.6 Luna Max 在冻结白名单内实现，并经 GPT-5.6 Sol 独立协议审查、边界扫描和直接测试复验后接受。LC03-02～05 尚未获得实现、DDL 或运行期执行授权。
+LC03-01、LC03-02、LC03-03 均已完成并经 GPT-5.6 Sol 独立复核为 `COMPLETE / SOL-ACCEPTED`。本次授权仅允许 GPT-5.6 Sol 修正进度漂移并冻结 LC03-04，不构成任何 Java/fixture/脚本实现授权，不构成 V012/U012 真实执行、正式落库或生产环境变更授权。
 
-下一步须由决策所有者独立授权：
+下一步如要进入实现，须由决策所有者独立授权：
 
-> GPT-5.6 Luna Max 执行 M1-LC-03 `LC03-02` collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用。
+> GPT-5.6 Luna Max 执行 M1-LC-03 `LC03-04A` 确定性组合 E2E、fixture 与假服务故障点测试；不得执行 `LC03-04B` 真实隔离 PostgreSQL/EMQX。
 
-LC03-03 也已具备冻结边界，但仍需决策所有者单独授权；LC03-04～05 保持 LOCKED。正式 V009/V012 落库、生产 MQTT broker/ACL/TLS 激活、资源压测、Linux PTY/锁互操作、Windows 发布资格、7 天稳定性和现场验证均继续 OPEN / NOT APPROVED。
+LC03-04B 必须在 04A 实现并经 Sol 复核后再次独立授权；LC03-05 保持 LOCKED。正式 V009/V012 落库、生产 MQTT broker/ACL/TLS 激活、资源压测、Linux PTY/锁互操作、Windows 发布资格、7 天稳定性和现场验证均继续 OPEN / NOT APPROVED。
 
 ## 13. LC03-01 验收记录（2026-08-27）
 
@@ -496,3 +508,180 @@ Sol 在实现者交付后独立执行以下复核，未依赖实现者自报结�
 - **保护扫描**：`git diff --check` exit 0；秘密扫描零命中；生产代码 `/telemetry/**`、collector 侧 wildcard（`#`/`+`/`$queue`/`$share`）零命中（center 上行 `$share` 共享组为 LC02 既有合法设计，任务单 §5.4 明确允许）。
 
 结论：LC03-03 转 `COMPLETE / SOL-ACCEPTED`（含 §15.6 两处偏离修复）。LC03-01/02/03 均已接受；下一步须决策所有者独立授权 `LC03-04`（collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点矩阵；真实隔离 broker/PG 需另行授权）；LC03-05 保持 LOCKED。临时 PostgreSQL 合同（§15.4 脚本）与 `LC03-DB-RUNTIME-01` 正式落库继续 OPEN。
+
+## 16. LC03-04 Sol 最终冻结（2026-08-27）
+
+### 16.1 漂移修正与授权边界
+
+本节取代 §7.4 的泛化边界与 §9 的候选命令，成为 LC03-04 的唯一实现/验收合同。Sol 已确认：
+
+- 当前基线提交为 `fc12af3ce`，LC03-01～03 已分别由提交 `a40a0ed38`、`affe81527`、`78fce83da`/`fc12af3ce` 实现并接受；
+- 原 §12 仍误写“下一步 LC03-02”，原 §7.3 把实际 `td005-migration` 路径误写为 `td003-migration`，已在 1.1.0 修正；
+- 本轮只改任务/进度文档，不新增测试或脚本，不运行 Maven、V012/U012、PostgreSQL、EMQX，不修改生产环境；
+- LC03-04 拆为两个必须独立授权的包：`04A` 只做确定性组合 fixture/假服务测试，`04B` 才做真实隔离 Linux Docker PostgreSQL/EMQX/SQLite；04A 授权不得被解释为 04B 授权；
+- `LC03-DB-RUNTIME-01` 正式落库、默认 migration runner、首装 dump、生产 ACL/TLS/Compose、压测和现场资格均不属于 LC03-04A/04B。
+
+### 16.2 LC03-04A fixture 与假服务编排
+
+04A 的目标是用真实生产类证明重启窗口语义，同时把外部不确定性收敛为可控故障点：
+
+- **真实组件**：进程内 Vert.x MQTT server、`CollectorMqttAckSubscriber`、`CollectorAckSubscriptionCoordinator`、真实临时 SQLite outbox 文件、ACK V1 codec/topic parser、`CenterTelemetryAckService`、`TelemetryAckReconciliationTask`；MQTT 与 SQLite 不得 mock；
+- **持久假服务**：`DurableFakeInbox` 按 messageId + canonical 内容区分 INSERTED/DUPLICATE/COLLISION，并保留首次 `persistedAt/requestId/tenant/product/device`；`DurableFakeAckDispatchPort` 持久保存 attempts/sent 状态；`IdempotentFakeStore` 只保存一个逻辑样本；重建 center 对象时这些持久状态不得清空；
+- **权威注册假服务**：只允许一个确定性 `DeterministicAuthority`，固定把 fixture route 解析到 tenant `1`；不得启动、修改或替代 iot-device 生产服务，不得信任 payload tenant；
+- **故障注入**：`FaultInjectingAckPublisher` 只允许 `DROP_BEFORE_PUBLISH`、`PUBLISH_THEN_FAIL_BEFORE_MARK` 两种单次 barrier；barrier 必须由 latch/future 驱动，不得用 `Thread.sleep` 决定正确性；eventually 上限固定 5 秒；
+- **重启定义**：center 重启仅关闭并重建 service/scanner/subscriber，保留 durable fake state；collector 重启关闭并重建 subscriber/coordinator/writer，复用同一 SQLite 文件；不得把“重新 new 一个空内存对象”宣称为重启恢复；
+- **fixture 固定值**：`fixture-manifest.json` 固定 `tenantId=1`、`productIdentification=lc03-product`、`deviceIdentification=lc03-device`、合法 UUID requestId/messageId、canonical upstream/ack topic、首次 persistedAt；accepted/collision 两个 envelope 使用同一 messageId 但不同 canonical 内容，秘密字段为零；JSON 资源须由生产 codec 读取，禁止测试内另写宽松 parser。
+
+04A 新增两个测试类各固定 3 个 `@Test`，总计 **6/0/0/0，Skipped=0**。缺少 fixture、端口占用、平台差异或超时均必须失败，不得 assumption/skip。
+
+### 16.3 五个组合 E2E 与故障点
+
+| ID | 故障点与动作 | 必须成立的终态 |
+|---|---|---|
+| E2E-01 | 正常 INSERTED：先完成 exact ACK SUBACK，再发布上行，center commit 后即时发送 | SQLite `ACKED`；Inbox=1、Store=1；ACK 为 `ACCEPTED_DURABLE/ACCEPTED_DURABLE/INBOX_COMMITTED`，Topic/requestId/route/persistedAt 全匹配 |
+| E2E-02 | 首个 ACK 在 collector 应用前丢失；collector lease/reclaim 后重发同一 envelope | center 返回 `DUPLICATE` 并再次 ACK；SQLite 最终 `ACKED`；Inbox=1、Store=1，无第二逻辑行 |
+| E2E-03 | center 在 Inbox commit 后、ACK publish 前重启 | 重建 scanner 首次 `scanOnce()` 补发成功，attempts 增加、sent 设置；collector `ACKED`，无漏发 |
+| E2E-04 | center 在 ACK publish 成功后、`markSent` 前重启 | collector 可先 `ACKED`；重建 scanner 允许再发相同业务成功 ACK并最终 mark；重复 ACK 幂等，不回退状态、不增加 Inbox/Store |
+| E2E-05 | collector 在上行 publish 后、ACK 应用前重启 | 同一 SQLite 文件恢复未终态 route；exact SUBACK 成功后才恢复 dispatch；center scanner 或 DUPLICATE 即时路径补发，SQLite 最终 `ACKED` |
+
+另设一个负向测试：collision、错误 Topic/tenant/requestId、畸形 ACK、权威注册失败和 Inbox 失败均为 **零成功 ACK、零 sent mark、零 SQLite 状态推进**；不得借此实现 LC04 的拒绝审计、FINAL/RETRYABLE ACK。
+
+### 16.4 LC03-04B 真实隔离编排
+
+04B 只能在 04A 通过并经 Sol 复核、且决策所有者再次明确授权后执行。唯一入口为 `.scripts/mqtt/tests/lc03_success_ack_contract.sh`，其合同如下：
+
+1. 只使用 Linux Docker `maven:3.9.16-amazoncorretto-17-alpine`、`postgres:18`、`emqx/emqx:5.8.7`；镜像 ID 分别固定为 `53215f45dda1e255693160346acc2a9cc10e3b6a59a19ce3a2fc95c476c1772a`、`3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a`、`556aea6d62134524ecd1fcca53380b460b52995344dce571d484f042d9b15e7d`；Docker 必须报告 `OSType=linux`；
+2. 新建唯一 `lc03-04-*` internal network、临时 PG/EMQX/Maven 容器和仓库外 temp 目录；不复用 `postgres-server`、现有 EMQX、Compose、生产网络或数据库，不暴露宿主端口；
+3. 随机 PG、center、collector 凭据只保存在当前脚本进程/临时挂载，禁止读取 `DEVICE/.env`；Maven 容器必须用仓库外空文件只读覆盖 `/workspace/DEVICE/.env`，并挂载 `/tmp` tmpfs；日志只在仓库外暂存；
+4. 临时 PG 只按 `V008 → V010 → V009 → V012` 建测试库；先执行既有 `lc03_v012_contract.sh`，要求 `SUMMARY PASS=8`，再额外证明带发送痕迹的 U012 卸载拒绝 **1/1**；V011/U011 不运行；
+5. 临时 EMQX 只给 center 身份固定共享上行订阅与 canonical ACK publish，给 collector 身份自身 canonical upstream publish 与 exact ACK subscribe；跨设备、普通/其他共享组、legacy `/telemetry/**`、系统 Topic 和越权 ACK 全拒绝；
+6. `TelemetryAckRealBrokerPostgresE2ETest` 使用真实 `JdbcTelemetryInbox`、`JdbcTelemetryAckDeliveryRepository`、`JdbcTelemetryStore`、`TelemetryProjectionOrchestrator`、真实 EMQX 和真实 collector SQLite，复现 §16.3 五场景 + 一项负向矩阵，共 **6/0/0/0，Skipped=0**；只允许把 iot-device 权威注册替换为固定只读 fixture；
+7. JUnit 仅在脚本显式设置 `LC03_04_E2E_ENABLED=true` 时被 `-Dtest=TelemetryAckRealBrokerPostgresE2ETest` 选中；开关或任一精确变量缺失必须 fail，不得 skip；
+8. `finally` 必须删除全部 `lc03-04-*` container/network/temp/log/mask，清除精确 PG/JDBC/EMQX 环境变量，并验证 PG 数据库/容器/网络/文件/环境 residue 全为 0；秘密扫描在日志删除前完成，只报告 PASS/FAIL，不报告值、长度、hash、片段、编码或 URL。
+
+脚本任一步退出非零、计数不符、出现 skip、秘密扫描命中或残留非零，必须立即停止；同一授权下不重跑、不改断言追计数，交回 Sol 重新冻结。
+
+### 16.5 保护摘要算法
+
+所有摘要在 04A/04B 开工前和收工后各计算一次。文件路径统一为仓库相对路径并把 `\\` 转为 `/`，按 ordinal 升序；每个 manifest 行固定为 `<relative-path>\\t<uppercase-file-SHA256>\\n`，聚合值为该 UTF-8 manifest 字节的 SHA-256。文件缺失、多出或计数变化均直接失败，禁止只比较聚合值。
+
+当前冻结值（基线提交 `fc12af3ce`）：
+
+| 组 | 计数 | 聚合 SHA-256 |
+|---|---:|---|
+| `BASELINES` | 2 | `541645C6F85B6CD203C8965020C122CA8774A1C6F60971C516432CA613D81656` |
+| `LC03_PRODUCTION` | 25 | `E8ED9ABE6FE950F8EFB3BA6E6AFE6E9B464A4AD1A5F3D899CCFA90A5D4B95EFA` |
+| `LC03_DIRECT_TESTS` | 9 | `A11640676A8D0E07B9005C2B50CD41D621C483DD3F6C0D0D6DD5F76D68DA22F2` |
+| `LC03_MIGRATION` | 3 | `AE9917094BF431E584A341869C1E11641BA260FAC40F2CE05D454623AE33D832` |
+| `INBOX_OUTBOX_PRODUCTION` | 73 | `411CB44E1B84071E1F0E29896E6B97EDF07AB46EAF8D40A75CB2A914EC6A55F7` |
+| `STORE_PROJECTOR` | 10 | `CC492C22DE4C34B4DFB11D523AD15E83C0A3F04807F00E9C77DC42C064D7A067` |
+| `BASE_MIGRATIONS` | 5 | `738D9DD72B920B200BDDAD2D36AFE3203F4262D30CF1EB7C1E5829BB169867E8` |
+| `P02_V011` | 3 | `170480FAD8BB731971AA8E8C093C0957B96E1BD9B9B15E5308F25A8C8592B7D3` |
+| `EMQX_LC02` | 4 | `7CD42298B18865123E1CC022F365A7CBAA5C8F45809EAC20E02CE8D8BDA2943F` |
+
+`BASELINES` 精确包含双基线。`LC03_MIGRATION` 精确包含 V012、U012、`lc03_v012_contract.sh`。`BASE_MIGRATIONS` 精确包含 V008、V009、U009、V010、`td005_migration.sh`。`P02_V011` 精确包含 V011、U011、`p02_v011_contract.sh`。`EMQX_LC02` 精确包含 LC02-09 的 `emqx.conf`、`acl.conf`、合同脚本与真实集成测试。
+
+`LC03_PRODUCTION` 精确包含下列 25 个现有文件；04A/04B 收工时不得变化：
+
+```text
+DEVICE/iot-sink/iot-sink-api/src/main/java/com/basiclab/iot/sink/telemetry/ack/TelemetryAckStatus.java
+DEVICE/iot-sink/iot-sink-api/src/main/java/com/basiclab/iot/sink/telemetry/ack/TelemetryAckV1.java
+DEVICE/iot-sink/iot-sink-api/src/main/java/com/basiclab/iot/sink/telemetry/outbox/AckCommand.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/ack/TelemetryAckCodecException.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/ack/TelemetryAckTopicParser.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/ack/TelemetryAckV1Codec.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/config/IotGatewayConfiguration.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/outbox/dispatch/CollectorAckSubscriptionCoordinator.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/outbox/dispatch/CollectorMqttAckSubscriber.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/outbox/dispatch/CollectorMqttProperties.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/outbox/dispatch/VertxCollectorMqttPublisher.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/outbox/sqlite/SqliteOutboxAutoConfiguration.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/outbox/sqlite/SqliteOutboxWriter.java
+DEVICE/iot-sink/iot-sink-biz/src/main/resources/application-collector.yaml
+DEVICE/iot-sink/iot-sink-api/src/main/java/com/basiclab/iot/sink/telemetry/inbox/ack/TelemetryAckDeliveryRow.java
+DEVICE/iot-sink/iot-sink-api/src/main/java/com/basiclab/iot/sink/telemetry/inbox/ack/TelemetryAckDispatchPort.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/inbox/TelemetryInboxAutoConfiguration.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/inbox/ack/CenterTelemetryAckPublisherPort.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/inbox/ack/CenterTelemetryAckService.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/inbox/ack/JdbcTelemetryAckDeliveryRepository.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/inbox/ack/TelemetryAckReconciliationTask.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/inbox/mqtt/CenterMqttAckPublisher.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/inbox/mqtt/CenterMqttInboxSubscriber.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/inbox/route/CenterTelemetryIngressHandler.java
+DEVICE/iot-sink/iot-sink-biz/src/main/java/com/basiclab/iot/sink/telemetry/inbox/route/CenterTelemetryIngressResult.java
+```
+
+`LC03_DIRECT_TESTS` 精确包含现有 `AckCommandContractTest`、`TelemetryAckTopicContractTest`、`TelemetryAckV1ContractTest`、`CollectorAckSubscriptionCoordinatorTest`、`CollectorMqttAckSubscriberV1Test`、`CenterTelemetryAckServiceTest`、`JdbcTelemetryAckDeliveryRepositoryTest`、`TelemetryAckReconciliationTaskTest`、`TelemetryInboxAutoConfigurationTest`。`INBOX_OUTBOX_PRODUCTION` 为 API `telemetry/inbox/**`、API `telemetry/outbox/**`、biz `telemetry/inbox/**`、biz `outbox/**` 下现有生产 Java/YAML/SQL/shell/conf 文件；`STORE_PROJECTOR` 为 API/biz `telemetry/store/**` 生产 Java加 `TelemetryProjectionOrchestrator.java`。两组都必须同时校验计数、manifest 明细和聚合值。
+
+双基线单文件值另固定为：宪法 `76BF30903A5A62C957A75B57E24080AA7132DE6992D56C262EEAFBE7BE553C4D`；平台计划 `F0E5734C8FADA6D0E4DAB98F7D12F58940077F9C60AA8DA42AC8EF45C6F69869`。
+
+### 16.6 静态禁止扫描
+
+开工/收工必须同时满足：
+
+- 新增 LC03-04 文件中 `/telemetry/`、`$queue`、未冻结 `$share`、MQTT `#`/`+` broad collector ACK subscription 零命中；fixture 中 canonical `/iot/...` 不算禁止；
+- `telemetry_ingress_rejection`、`REJECTED_FINAL`、`REJECTED_RETRYABLE`、collision ACK publisher、生产 ACL/Compose/default migration runner 修改零新增；
+- `git diff --check` 通过；白名单外工作树差异开工/收工逐项相等，不得触碰或纳入提交；
+- 任何 `.env`、凭据、token、password、JDBC URL、日志、临时数据库转储不得进入 Git 或输出。
+
+### 16.7 LC03-04A 最终验收命令
+
+命令必须在仓库根目录的 Linux shell 执行；`LC03_M2_REPOSITORY` 必须预先指向仓库外 Maven repository。两个 Maven 容器均使用空 `.env` mask、禁外网和 `/tmp` tmpfs：
+
+```bash
+set -euo pipefail
+LC03_REPO="$(pwd)"
+: "${LC03_M2_REPOSITORY:?must point to an external Maven repository}"
+LC03_EMPTY_ENV="$(mktemp)"
+trap 'rm -f "${LC03_EMPTY_ENV}"' EXIT
+
+docker run --rm --name lc03-04a-direct --network none \
+  -v "${LC03_REPO}:/workspace" \
+  -v "${LC03_M2_REPOSITORY}:/root/.m2" \
+  -v "${LC03_EMPTY_ENV}:/workspace/DEVICE/.env:ro" \
+  --tmpfs /tmp:rw,noexec,nosuid,size=512m \
+  -w /workspace/DEVICE \
+  maven:3.9.16-amazoncorretto-17-alpine \
+  mvn -pl iot-sink/iot-sink-biz -am \
+    -Dmaven.test.skip=false -DfailIfNoTests=false \
+    -Dtest=TelemetryAckRestartReconciliationTest,TelemetryAckCombinedE2ETest test
+
+docker run --rm --name lc03-04a-regression --network none \
+  -v "${LC03_REPO}:/workspace" \
+  -v "${LC03_M2_REPOSITORY}:/root/.m2" \
+  -v "${LC03_EMPTY_ENV}:/workspace/DEVICE/.env:ro" \
+  --tmpfs /tmp:rw,noexec,nosuid,size=512m \
+  -w /workspace/DEVICE \
+  maven:3.9.16-amazoncorretto-17-alpine \
+  mvn -pl iot-sink/iot-sink-biz -am \
+    -Dmaven.test.skip=false -DfailIfNoTests=false \
+    -Dtest=AckCommandContractTest,TelemetryAckTopicContractTest,TelemetryAckV1ContractTest,CollectorAckSubscriptionCoordinatorTest,CollectorMqttAckSubscriberV1Test,OutboxStateMachineTest,CollectorPollingRuntimeTest,CenterTelemetryAckServiceTest,JdbcTelemetryAckDeliveryRepositoryTest,TelemetryAckReconciliationTaskTest,TelemetryInboxAutoConfigurationTest,CenterTelemetryIngressHandlerTest,TelemetryAckRestartReconciliationTest,TelemetryAckCombinedE2ETest test
+
+docker run --rm --name lc03-04a-compile --network none \
+  -v "${LC03_REPO}:/workspace" \
+  -v "${LC03_M2_REPOSITORY}:/root/.m2" \
+  -v "${LC03_EMPTY_ENV}:/workspace/DEVICE/.env:ro" \
+  --tmpfs /tmp:rw,noexec,nosuid,size=512m \
+  -w /workspace/DEVICE \
+  maven:3.9.16-amazoncorretto-17-alpine \
+  mvn -pl iot-sink/iot-sink-biz -am -Dmaven.test.skip=false test-compile
+```
+
+固定判定：直接新测试 **6/0/0/0**；14 类回归 **75/0/0/0**（其中真实 JDBC 类在未选真实环境时为 0 run，不得报告为已通过 PG 合同，但也不得产生 skip）；28 个受影响 reactor `test-compile` 全部 SUCCESS；三个容器、mask、临时文件和精确环境变量 residue=0。若实现新增测试方法导致计数不再为 6/75，必须先交 Sol 修订冻结单，不得自行接受漂移。
+
+### 16.8 LC03-04B 最终验收命令
+
+04B 获独立授权后，唯一允许的执行命令为：
+
+```bash
+bash .scripts/mqtt/tests/lc03_success_ack_contract.sh
+```
+
+脚本必须内建并逐项断言 §16.4，不接受手工拆跑替代。固定结果：V012 候选隔离合同 `SUMMARY PASS=8`；U012 有发送痕迹拒绝 `1/1`；真实 PG/EMQX/SQLite E2E `6/0/0/0`；ACL 正负矩阵全部通过；Failures=0、Errors=0、Skipped=0；全部前缀 residue=0；保护组 start/end 完全相等。正式 V012 落库和生产环境变更仍为 `NOT AUTHORIZED / NOT RUN`。
+
+### 16.9 完成判定与下一授权
+
+- 本次 Sol 工作完成条件只是：任务单 1.1.0、M1 续作入口和技术设计索引一致，文档 diff/链接/状态通过；不得把 LC03-04 标为实现完成；
+- 04A 完成后状态只能转 `LC03-04A COMPLETE / SOL-ACCEPTED；04B NOT-YET-AUTHORIZED`；
+- 只有 04B 的真实隔离证据也由 Sol 接受后，LC03-04 才可整体转 `COMPLETE / SOL-ACCEPTED` 并解锁 LC03-05；
+- 下一条可执行授权文本固定为：`授权 GPT-5.6 Luna Max 执行 M1-LC-03 LC03-04A 确定性组合 E2E、fixture 与假服务故障点测试；不得执行 LC03-04B 真实隔离 PostgreSQL/EMQX。`
