@@ -68,7 +68,7 @@ APP/
 ├── conf/
 │   └── nginx.conf                ← Nginx 生产配置 (9010)
 │
-├── Dockerfile                    ← 多阶段构建 (node:22 → nginx:1.29.2-alpine)
+├── Dockerfile                    ← 多阶段构建 (node:22 → nginx:1.31.4-alpine)
 ├── docker-compose.yaml           ← Docker Compose 部署
 │
 ├── vite-plugins/                 ← 自定义 Vite 插件

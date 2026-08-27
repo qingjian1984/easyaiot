@@ -69,7 +69,7 @@ WEB/
 │   ├── nginx.mini.conf                ← Mini 版 (561 行)
 │   └── nginx.prod-server.conf         ← 生产裸机版 (292 行)
 │
-├── Dockerfile                         ← 多阶段构建 (node:22 → nginx:1.29.2-alpine)
+├── Dockerfile                         ← 多阶段构建 (node:22 → nginx:1.31.4-alpine)
 ├── docker-compose.yaml                ← Docker Compose 部署
 │
 ├── public/                            ← 静态资源
