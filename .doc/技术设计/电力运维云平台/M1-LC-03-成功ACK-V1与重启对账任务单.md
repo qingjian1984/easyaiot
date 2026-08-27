@@ -1,7 +1,7 @@
 # M1-LC-03：成功 ACK V1 与重启对账任务单
 
-> 状态：In Progress（LC03-01、LC03-02 COMPLETE / SOL-ACCEPTED；LC03-03 IMPLEMENTED / DIRECT-TEST-PASSED 待 Sol 复核）
-> 版本：1.0.4
+> 状态：In Progress（LC03-01、LC03-02、LC03-03 COMPLETE / SOL-ACCEPTED）
+> 版本：1.0.5
 > 日期：2026-08-27
 > 架构负责人：GPT-5.6 Sol
 > 计划实现执行者：GPT-5.6 Luna（max reasoning；须逐包独立授权）
@@ -201,8 +201,8 @@ received_at_ms + ack_sent_at_ms + ack_attempts
 | LC03-00 | Sol 合同与任务拆分 | 本任务单、续作入口、索引 | COMPLETE / SOL-FROZEN |
 | LC03-01 | 共享 ACK V1 类型、codec、Topic parser 与旧 wire 拒绝 | 七字段 DTO、严格 codec、直接合同测试 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
 | LC03-02 | collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用 | subscription coordinator、runtime ordering、SQLite 状态合同 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
-| LC03-03 | V012 候选、center dispatch repository、即时 ACK 与 10 秒扫描 | SQL 候选、JDBC repository、publisher/service/scanner | IMPLEMENTED / DIRECT-TEST-PASSED（2026-08-27，待 Sol 复核）；临时 PG 合同脚本已备未执行 |
-| LC03-04 | collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点 | 假服务 fixture、真实隔离 broker/PG、restart reconciliation | LOCKED，待 LC03-02/03 验收 |
+| LC03-03 | V012 候选、center dispatch repository、即时 ACK 与 10 秒扫描 | SQL 候选、JDBC repository、publisher/service/scanner | COMPLETE / SOL-ACCEPTED（2026-08-27，§15.6 含两处偏离修复）；临时 PG 合同脚本已备未执行 |
+| LC03-04 | collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点 | 假服务 fixture、真实隔离 broker/PG、restart reconciliation | FROZEN / NOT-YET-AUTHORIZED（前置 01/02/03 均已接受）；真实隔离 broker/PG 另授权 |
 | LC03-05 | 全模块回归、保护扫描、文档收口 | Verified-Local 证据 | LOCKED，待 LC03-04 验收 |
 
 LC03-02 与 LC03-03 在 LC03-01 被 Sol 接受后可由 Sol 判断是否并行；LC03-04 必须等待两者均完成。每个包都须由决策所有者独立授权 GPT-5.6 Luna（max reasoning），实现者不得自行进入下一包或 commit。
@@ -482,3 +482,17 @@ Sol 在实现者交付后独立执行以下复核，未依赖实现者自报结�
 
 - 新增生产代码 `/telemetry/**`、`#`、`+`、`$queue`、`$share` 零命中（javadoc 否定描述除外）；V011/U011、共享 runner、首装 dump、EMQX ACL、Docker Compose 零 diff；秘密扫描零命中；`git diff --check` 通过；
 - 真实隔离 PostgreSQL 合同（15.4 脚本）未执行，待临时库授权；LC03-04 组合 E2E、LC03-05 回归收口保持 LOCKED；V012 正式落库须另立 `LC03-DB-RUNTIME-01`。
+
+### 15.6 Sol 独立复核（2026-08-27）
+
+Sol 在实现者交付后独立执行以下复核，未依赖实现者自报结果：
+
+- **冻结验收命令复跑**：§15.3 的 12 类命令原样复跑三轮（复核初轮、偏离修复后两轮），最终 59 tests，Failures=0，Errors=0（`JdbcTelemetryAckDeliveryRepositoryTest` 按隔离 PG 未注入口径 0 run）；冻结 `test-compile` 28 reactor `BUILD SUCCESS`；
+- **代码审阅发现并处置两个偏离**：
+  1. *事务边界注释失实*（文档性）：`claimPending` javadoc 声称 SELECT+递增"同一短事务内"，实现实为两条独立语句、锁不跨语句更不跨 publish——行为满足 §5.4（SKIP LOCKED 只用于领取、禁止跨 publish 持锁、多实例重复领取合法），已修正注释如实描述；
+  2. *即时 ACK 未接线*（实质缺口）：`sendImmediateAck` 无任何生产调用方，即时链路实际只有 10 秒扫描器兜底，违背 §2.2"事务返回后由成功 ACK service 从持久行生成 ACK"与 §5.3"即时发送"。Sol 判定属本包应完成未完成部分，已补齐：`CenterTelemetryIngressResult.Accepted` 增加已验证 `tenantId` 字段（handler 从权威注册解析结果传入，不信任 payload）；`CenterMqttInboxSubscriber.onMessage` 在 Inbox 返回后对 `ACCEPTED_DURABLE/DUPLICATE` 条目调用 `sendImmediateAck`（逐条 try/catch，单条失败不影响后续也不影响已提交 Inbox 事实），collision/拒绝零 ACK；AutoConfig 经 `ObjectProvider<CenterTelemetryAckService>` 可选注入避免 bean 环（subscriber→ackService→publisher→subscriber）；
+- **白名单核验**：复核改动涉及 `CenterTelemetryIngressResult.java`、`CenterTelemetryIngressHandler.java`（Accepted 构造补 tenantId 一处）两个 §7.3 未列文件。Sol 按 §7 停工条件 7 判定为实现缺口的最小修复而非越界扩展：两处均为 additive（新字段 + 构造参数），不改变既有拒绝语义、guard 顺序或 canonical hash；已在此记录扩界理由。其余改动均在 §7.3 白名单内；V011/U011、共享 runner、首装 dump、EMQX ACL 零 diff；
+- **装配合同回归**：`TelemetryInboxAutoConfigurationTest` 反射签名同步（新增可选 ObjectProvider 参数），保留"subscriber 工厂不依赖 publisher"的既有断言；该测试 5/5 通过；
+- **保护扫描**：`git diff --check` exit 0；秘密扫描零命中；生产代码 `/telemetry/**`、collector 侧 wildcard（`#`/`+`/`$queue`/`$share`）零命中（center 上行 `$share` 共享组为 LC02 既有合法设计，任务单 §5.4 明确允许）。
+
+结论：LC03-03 转 `COMPLETE / SOL-ACCEPTED`（含 §15.6 两处偏离修复）。LC03-01/02/03 均已接受；下一步须决策所有者独立授权 `LC03-04`（collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点矩阵；真实隔离 broker/PG 需另行授权）；LC03-05 保持 LOCKED。临时 PostgreSQL 合同（§15.4 脚本）与 `LC03-DB-RUNTIME-01` 正式落库继续 OPEN。

@@ -8,9 +8,13 @@ import java.util.Objects;
 public sealed interface CenterTelemetryIngressResult
         permits CenterTelemetryIngressResult.Accepted, CenterTelemetryIngressResult.Rejected {
 
-    record Accepted(InboxReceiveResult inboxResult) implements CenterTelemetryIngressResult {
+    record Accepted(long tenantId, InboxReceiveResult inboxResult)
+            implements CenterTelemetryIngressResult {
         public Accepted {
             Objects.requireNonNull(inboxResult, "inboxResult");
+            if (tenantId <= 0) {
+                throw new IllegalArgumentException("tenantId must be positive");
+            }
         }
     }
 

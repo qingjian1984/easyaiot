@@ -74,6 +74,7 @@ public final class CenterTelemetryIngressHandler {
         // Inbox exceptions are intentionally allowed to propagate as receive
         // failures; they are not security rejections and cannot be ACKed here.
         return new CenterTelemetryIngressResult.Accepted(
+                Long.parseLong(resolved.tenantId()),
                 inbox.receiveEnvelopes(List.of(envelope)));
     }
 

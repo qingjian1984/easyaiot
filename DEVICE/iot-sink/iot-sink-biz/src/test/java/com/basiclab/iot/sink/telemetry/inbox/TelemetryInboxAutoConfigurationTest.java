@@ -42,12 +42,16 @@ class TelemetryInboxAutoConfigurationTest {
 
         Method subscriberFactory = TelemetryInboxAutoConfiguration.class.getMethod(
                 "centerMqttInboxSubscriber", CenterTelemetryIngressHandler.class,
-                TelemetryMqttProperties.class);
+                TelemetryMqttProperties.class,
+                org.springframework.beans.factory.ObjectProvider.class);
         assertEquals(CenterMqttInboxSubscriber.class, subscriberFactory.getReturnType());
         assertTrue(java.util.Arrays.asList(subscriberFactory.getParameterTypes())
                 .contains(CenterTelemetryIngressHandler.class));
         assertTrue(java.util.Arrays.stream(subscriberFactory.getParameterTypes())
                 .noneMatch(type -> type.getName().contains("CenterMqttAckPublisher")));
+        // LC03-03：即时 ACK 经可选 CenterTelemetryAckService 注入，未启用 ack 时为 null。
+        assertTrue(subscriberFactory.getParameterTypes()[2]
+                == org.springframework.beans.factory.ObjectProvider.class);
     }
 
     @Test

@@ -17,9 +17,8 @@ import com.basiclab.iot.sink.telemetry.inbox.route.TelemetryDeviceAuthorityPort;
 import com.basiclab.iot.sink.telemetry.inbox.route.TelemetryUpstreamTopicParser;
 import com.basiclab.iot.sink.telemetry.store.TelemetryStorePort;
 import com.basiclab.iot.sink.telemetry.store.jdbc.JdbcTelemetryStore;
-import io.vertx.mqtt.MqttClient;
 import io.vertx.core.Vertx;
-import io.vertx.mqtt.MqttClientOptions;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -93,7 +92,8 @@ public class TelemetryInboxAutoConfiguration {
     @ConditionalOnProperty(name = "easyaiot.telemetry.mqtt.enabled", havingValue = "true")
     public CenterMqttInboxSubscriber centerMqttInboxSubscriber(
             CenterTelemetryIngressHandler handler,
-            TelemetryMqttProperties mqttProps) {
+            TelemetryMqttProperties mqttProps,
+            ObjectProvider<CenterTelemetryAckService> ackServiceProvider) {
         mqttProps.validateForEnabledSubscriber();
         CenterMqttInboxSubscriber subscriber = new CenterMqttInboxSubscriber(
                 handler,
@@ -102,12 +102,13 @@ public class TelemetryInboxAutoConfiguration {
                 mqttProps.getClientId(),
                 mqttProps.getTopicFilter(),
                 mqttProps.getUsername(),
-                mqttProps.getPassword());
+                mqttProps.getPassword(),
+                ackServiceProvider.getIfAvailable());
         subscriber.start();
         return subscriber;
     }
 
-    /** LC03-03：ACK V1 MQTT 发送器适配（复用上行 subscriber 的 client）。 */
+    /** LC03-03：ACK V1 MQTT 发送器（复用上行 subscriber 的 client）。 */
     @Bean
     @ConditionalOnProperty(name = "easyaiot.telemetry.ack.enabled", havingValue = "true")
     public CenterTelemetryAckPublisherPort centerTelemetryAckPublisherPort(
