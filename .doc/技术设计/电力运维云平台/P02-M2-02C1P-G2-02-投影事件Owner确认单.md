@@ -1,16 +1,16 @@
 # P02-M2-02C1P-G2-02：TELEMETRY_PROJECTED_V1 Owner 确认单
 
-> 版本：0.2.0
+> 版本：0.3.0
 > 日期：2026-08-27
-> 状态：MACHINE CONTRACT PREPARED / UNSIGNED / C1 CLOSED
+> 状态：LOCAL VERIFIER PREPARED / UNSIGNED / C1 CLOSED
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 输入来源：[C1P-G2 输入单 §4](./P02-M2-02C1P-G2-责任人输入收集与建议处置单.md)、[G2 输入处置记录 §3](./P02-M2-02C1P-G2-输入处置记录.md)
 > Owner 基线：[TD-003 1.0.3 / In Review](./TD-003-遥测Inbox-ACK与时序投影.md)
-> 机器合同：[Owner evidence v1 Schema](./assets/c1p-g2/telemetry-projected-owner-evidence-v1.schema.json)、[空白 DRAFT 模板](./assets/c1p-g2/telemetry-projected-owner-evidence-template.json)
+> 机器合同：[Owner evidence v1 Schema](./assets/c1p-g2/telemetry-projected-owner-evidence-v1.schema.json)、[空白 DRAFT 模板](./assets/c1p-g2/telemetry-projected-owner-evidence-template.json)、[本地 verifier](../../../WEB/scripts/verify-telemetry-projected-owner-evidence.mjs)
 
 ## 1. 使用规则
 
-本文件是 M1/TD-003 owner 的待签输入，不是执行指令，也不是代码授权。owner 必须从空白 DRAFT 模板复制独立 evidence 文件，填写 §5 并提交受控签署记录；Sol 只核验 Schema、仓库路径、哈希和条件一致性，不代替 owner 确认外部发布历史。
+本文件是 M1/TD-003 owner 的待签输入，不是执行指令，也不是代码授权。owner 必须从空白 DRAFT 模板复制独立 evidence 文件，填写 §5，运行本地 verifier 并提交受控签署记录；Sol 复核 verifier 结果、Schema、仓库路径、哈希和条件一致性，不代替 owner 确认外部发布历史。
 
 不得直接覆盖模板。空白、`TBD`、聊天中的同意、仅修改 TD 文档或把 DRAFT 改名为 APPROVED 均不构成签署。若任何环境已经发布 `TELEMETRY_PROJECTED_V1`，不得选择原地收紧 v1。
 
@@ -86,7 +86,7 @@ Owner 从 [空白 DRAFT 模板](./assets/c1p-g2/telemetry-projected-owner-eviden
 | `testCoverage` | 完整列出 §6 的 7 个测试域 |
 | `approval` | ownerRole、approvedBy、RFC 3339 显式 offset 时间、decision、仓库内 decisionRef 和 evidence contentSha256 |
 
-`approval.contentSha256` 按既有 G2 规则对 `approval=null` 的 evidence 执行 RFC 8785 JCS 后计算 SHA-256，并使用 `sha256:<64 lowercase hex>`。Schema 只校验格式和条件；Sol 仍需复算哈希并核对 artifact 实际内容。
+`approval.contentSha256` 按既有 G2 规则复制完整 evidence，仅移除 `approval.contentSha256` 字段后执行 RFC 8785 JCS 并计算 SHA-256，使用 `sha256:<64 lowercase hex>`。不得把整个 approval 置为 null。Schema 只校验格式和条件；本地 verifier 与 Sol 均会复算哈希并核对 artifact 实际内容。
 
 若 `APPROVE_WITH_CHANGES`，必须在 decisionRef 中逐字段说明差异、兼容影响、消费者迁移、回滚与 C1 所需字段如何等价满足。不得删除 workload/product/value/quality/originalOffset 或以跨后端查询替代。
 
@@ -100,6 +100,16 @@ Owner 从 [空白 DRAFT 模板](./assets/c1p-g2/telemetry-projected-owner-eviden
 - relay：成功后标记前崩溃、重复发布、租约回收、重试上限和死信；
 - capability：standard/full 同合同，mini 无残留。
 
+### 6.1 本地预检
+
+在 `WEB/` 目录运行：
+
+```bash
+pnpm verify:telemetry-projected-owner-evidence -- --file .doc/技术设计/电力运维云平台/OWNER_EVIDENCE.json
+```
+
+默认不带 `--file` 时只验证仓库内空白 DRAFT 模板，应输出 `qualification=DRAFT_UNCONFIRMED`。APPROVED 包只有在 Schema、artifact 路径/realpath/哈希、批准哈希、TD 版本、生产事件 Schema、发布时间顺序、消费者清单和测试计划全部通过时，才输出 `APPROVED_V1_READY_FOR_SOL_REVIEW` 或 `APPROVED_V2_READY_FOR_SOL_REVIEW`；该结果仍只是提交 Sol 复核的资格，不是 G2-02 自动关闭。
+
 ## 7. 当前门禁
 
-Owner evidence Schema 和 DRAFT 模板已准备，但当前模板仍为 `UNCONFIRMED / UNDECIDED / approval=null`，不构成责任人输入。owner 的 APPROVED evidence、更新 TD、生产事件 Schema、测试计划及条件性 consumerInventory 到位并经 Sol 复核前，G2-02 保持 `MACHINE-CONTRACT-PREPARED / WAITING M1 OWNER`；THRESHOLD adapter、ADR-019 Accepted 和 C1A 继续关闭。
+Owner evidence Schema、DRAFT 模板和本地 verifier 已准备，但当前模板仍为 `UNCONFIRMED / UNDECIDED / approval=null`，不构成责任人输入。owner 的 APPROVED evidence、更新 TD、生产事件 Schema、测试计划及条件性 consumerInventory 到位，通过 verifier 并经 Sol 复核前，G2-02 保持 `LOCAL-VERIFIER-PREPARED / WAITING M1 OWNER`；THRESHOLD adapter、ADR-019 Accepted 和 C1A 继续关闭。
