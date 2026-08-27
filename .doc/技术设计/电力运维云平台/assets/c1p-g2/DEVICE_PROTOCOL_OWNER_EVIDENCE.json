@@ -1,0 +1,417 @@
+{
+  "schemaVersion": "1.0",
+  "canonicalizationVersion": "jcs-rfc8785-v1",
+  "documentStatus": "APPROVED",
+  "revision": 1,
+  "protocols": [
+    {
+      "protocolId": "topic.generic-json",
+      "protocolVersion": "1.0",
+      "transport": "INTERNAL",
+      "codecClass": "com.basiclab.iot.sink.codec.topic.IotTopicDeviceMessageCodec",
+      "directEventTopicPattern": null,
+      "subjectMode": "NOT_APPLICABLE",
+      "requestIdEvidence": {
+        "wireField": "requestId",
+        "deviceGenerated": false,
+        "retryStable": false,
+        "uniquenessScope": "UNKNOWN",
+        "uniquenessWindowSeconds": null,
+        "minUtf8Bytes": 1,
+        "maxUtf8Bytes": 128,
+        "controlCharactersRejected": false
+      },
+      "occurredAtEvidence": {
+        "wireField": "reportTime",
+        "deviceGenerated": false,
+        "format": "UNKNOWN",
+        "originalOffsetPreserved": false,
+        "millisecondPrecision": false,
+        "clockSource": null,
+        "maxFutureSkewSeconds": null,
+        "maxHistoryAgeSeconds": null
+      },
+      "payloadCanonicalization": {
+        "strategy": "UNKNOWN",
+        "rawBytesHashPreserved": false,
+        "scriptTransformAllowed": true
+      },
+      "ackContract": {
+        "ackMode": "NONE",
+        "afterSourceTransactionCommit": false,
+        "failurePropagatedToTransport": false
+      },
+      "fixtures": {
+        "original": null,
+        "retry": null,
+        "collision": null,
+        "missingRequestId": null,
+        "invalidOccurredAt": null
+      },
+      "decision": "DISABLED",
+      "reasonCodes": [
+        "GENERIC_ENVELOPE_PROVENANCE_UNPROVEN",
+        "SCRIPT_TRANSFORM_UNVERSIONED",
+        "COMMIT_ACK_UNPROVEN"
+      ]
+    },
+    {
+      "protocolId": "mqtt.alink",
+      "protocolVersion": "1.0",
+      "transport": "MQTT",
+      "codecClass": "com.basiclab.iot.sink.codec.alink.IotAlinkDeviceMessageCodec",
+      "directEventTopicPattern": null,
+      "subjectMode": "DIRECT",
+      "requestIdEvidence": {
+        "wireField": "id",
+        "deviceGenerated": true,
+        "retryStable": false,
+        "uniquenessScope": "UNKNOWN",
+        "uniquenessWindowSeconds": null,
+        "minUtf8Bytes": 1,
+        "maxUtf8Bytes": 128,
+        "controlCharactersRejected": false
+      },
+      "occurredAtEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "format": "UNKNOWN",
+        "originalOffsetPreserved": false,
+        "millisecondPrecision": false,
+        "clockSource": null,
+        "maxFutureSkewSeconds": null,
+        "maxHistoryAgeSeconds": null
+      },
+      "payloadCanonicalization": {
+        "strategy": "UNKNOWN",
+        "rawBytesHashPreserved": false,
+        "scriptTransformAllowed": true
+      },
+      "ackContract": {
+        "ackMode": "TRANSPORT_ACK",
+        "afterSourceTransactionCommit": false,
+        "failurePropagatedToTransport": false
+      },
+      "fixtures": {
+        "original": null,
+        "retry": null,
+        "collision": null,
+        "missingRequestId": null,
+        "invalidOccurredAt": null
+      },
+      "decision": "DISABLED",
+      "reasonCodes": [
+        "OCCURRED_AT_MISSING",
+        "COMMIT_ACK_UNPROVEN",
+        "RETRY_COLLISION_FIXTURE_MISSING"
+      ]
+    },
+    {
+      "protocolId": "tcp.json",
+      "protocolVersion": "1.0",
+      "transport": "TCP",
+      "codecClass": "com.basiclab.iot.sink.codec.tcp.IotTcpJsonDeviceMessageCodec",
+      "directEventTopicPattern": null,
+      "subjectMode": "DIRECT",
+      "requestIdEvidence": {
+        "wireField": "id",
+        "deviceGenerated": true,
+        "retryStable": false,
+        "uniquenessScope": "UNKNOWN",
+        "uniquenessWindowSeconds": null,
+        "minUtf8Bytes": 1,
+        "maxUtf8Bytes": 128,
+        "controlCharactersRejected": false
+      },
+      "occurredAtEvidence": {
+        "wireField": "timestamp",
+        "deviceGenerated": true,
+        "format": "UNKNOWN",
+        "originalOffsetPreserved": false,
+        "millisecondPrecision": false,
+        "clockSource": null,
+        "maxFutureSkewSeconds": null,
+        "maxHistoryAgeSeconds": null
+      },
+      "payloadCanonicalization": {
+        "strategy": "UNKNOWN",
+        "rawBytesHashPreserved": false,
+        "scriptTransformAllowed": false
+      },
+      "ackContract": {
+        "ackMode": "NONE",
+        "afterSourceTransactionCommit": false,
+        "failurePropagatedToTransport": false
+      },
+      "fixtures": {
+        "original": null,
+        "retry": null,
+        "collision": null,
+        "missingRequestId": null,
+        "invalidOccurredAt": null
+      },
+      "decision": "DISABLED",
+      "reasonCodes": [
+        "OCCURRED_AT_DROPPED",
+        "DIRECT_EVENT_ROUTE_UNVERSIONED",
+        "BUSINESS_ACK_ABSENT"
+      ]
+    },
+    {
+      "protocolId": "tcp.binary",
+      "protocolVersion": "1.0",
+      "transport": "TCP",
+      "codecClass": "com.basiclab.iot.sink.codec.tcp.IotTcpBinaryDeviceMessageCodec",
+      "directEventTopicPattern": null,
+      "subjectMode": "DIRECT",
+      "requestIdEvidence": {
+        "wireField": "messageId",
+        "deviceGenerated": false,
+        "retryStable": false,
+        "uniquenessScope": "UNKNOWN",
+        "uniquenessWindowSeconds": null,
+        "minUtf8Bytes": 1,
+        "maxUtf8Bytes": 128,
+        "controlCharactersRejected": false
+      },
+      "occurredAtEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "format": "UNKNOWN",
+        "originalOffsetPreserved": false,
+        "millisecondPrecision": false,
+        "clockSource": null,
+        "maxFutureSkewSeconds": null,
+        "maxHistoryAgeSeconds": null
+      },
+      "payloadCanonicalization": {
+        "strategy": "UNKNOWN",
+        "rawBytesHashPreserved": false,
+        "scriptTransformAllowed": false
+      },
+      "ackContract": {
+        "ackMode": "NONE",
+        "afterSourceTransactionCommit": false,
+        "failurePropagatedToTransport": false
+      },
+      "fixtures": {
+        "original": null,
+        "retry": null,
+        "collision": null,
+        "missingRequestId": null,
+        "invalidOccurredAt": null
+      },
+      "decision": "DISABLED",
+      "reasonCodes": [
+        "OCCURRED_AT_MISSING",
+        "COMMIT_ACK_UNPROVEN",
+        "BACKEND_ID_GENERATION_POSSIBLE"
+      ]
+    },
+    {
+      "protocolId": "http.versioned-codec",
+      "protocolVersion": "1.0",
+      "transport": "HTTP",
+      "codecClass": "com.basiclab.iot.sink.protocol.http.router.IotHttpUpstreamHandler",
+      "directEventTopicPattern": null,
+      "subjectMode": "DIRECT",
+      "requestIdEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "retryStable": false,
+        "uniquenessScope": "UNKNOWN",
+        "uniquenessWindowSeconds": null,
+        "minUtf8Bytes": 1,
+        "maxUtf8Bytes": 128,
+        "controlCharactersRejected": false
+      },
+      "occurredAtEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "format": "UNKNOWN",
+        "originalOffsetPreserved": false,
+        "millisecondPrecision": false,
+        "clockSource": null,
+        "maxFutureSkewSeconds": null,
+        "maxHistoryAgeSeconds": null
+      },
+      "payloadCanonicalization": {
+        "strategy": "UNKNOWN",
+        "rawBytesHashPreserved": false,
+        "scriptTransformAllowed": false
+      },
+      "ackContract": {
+        "ackMode": "APPLICATION_ACK",
+        "afterSourceTransactionCommit": false,
+        "failurePropagatedToTransport": false
+      },
+      "fixtures": {
+        "original": null,
+        "retry": null,
+        "collision": null,
+        "missingRequestId": null,
+        "invalidOccurredAt": null
+      },
+      "decision": "DISABLED",
+      "reasonCodes": [
+        "TRANSPORT_NOT_IDENTITY_OWNER",
+        "PRECOMMIT_ACK"
+      ]
+    },
+    {
+      "protocolId": "script.rawdata-to-protocol",
+      "protocolVersion": "1.0",
+      "transport": "INTERNAL",
+      "codecClass": "com.basiclab.iot.sink.javascript.JsUtilFunction",
+      "directEventTopicPattern": null,
+      "subjectMode": "NOT_APPLICABLE",
+      "requestIdEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "retryStable": false,
+        "uniquenessScope": "UNKNOWN",
+        "uniquenessWindowSeconds": null,
+        "minUtf8Bytes": 1,
+        "maxUtf8Bytes": 128,
+        "controlCharactersRejected": false
+      },
+      "occurredAtEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "format": "UNKNOWN",
+        "originalOffsetPreserved": false,
+        "millisecondPrecision": false,
+        "clockSource": null,
+        "maxFutureSkewSeconds": null,
+        "maxHistoryAgeSeconds": null
+      },
+      "payloadCanonicalization": {
+        "strategy": "UNKNOWN",
+        "rawBytesHashPreserved": false,
+        "scriptTransformAllowed": true
+      },
+      "ackContract": {
+        "ackMode": "NONE",
+        "afterSourceTransactionCommit": false,
+        "failurePropagatedToTransport": false
+      },
+      "fixtures": {
+        "original": null,
+        "retry": null,
+        "collision": null,
+        "missingRequestId": null,
+        "invalidOccurredAt": null
+      },
+      "decision": "DISABLED",
+      "reasonCodes": [
+        "SCRIPT_TRANSFORM_PROVENANCE_UNPROVEN",
+        "EMPTY_SCRIPT_FALLBACK_RAW_PAYLOAD"
+      ]
+    },
+    {
+      "protocolId": "topic.sub-event",
+      "protocolVersion": "1.0",
+      "transport": "INTERNAL",
+      "codecClass": "com.basiclab.iot.sink.codec.topic.IotTopicDeviceMessageCodec",
+      "directEventTopicPattern": null,
+      "subjectMode": "SUB_DEVICE",
+      "requestIdEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "retryStable": false,
+        "uniquenessScope": "UNKNOWN",
+        "uniquenessWindowSeconds": null,
+        "minUtf8Bytes": 1,
+        "maxUtf8Bytes": 128,
+        "controlCharactersRejected": false
+      },
+      "occurredAtEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "format": "UNKNOWN",
+        "originalOffsetPreserved": false,
+        "millisecondPrecision": false,
+        "clockSource": null,
+        "maxFutureSkewSeconds": null,
+        "maxHistoryAgeSeconds": null
+      },
+      "payloadCanonicalization": {
+        "strategy": "UNKNOWN",
+        "rawBytesHashPreserved": false,
+        "scriptTransformAllowed": true
+      },
+      "ackContract": {
+        "ackMode": "NONE",
+        "afterSourceTransactionCommit": false,
+        "failurePropagatedToTransport": false
+      },
+      "fixtures": {
+        "original": null,
+        "retry": null,
+        "collision": null,
+        "missingRequestId": null,
+        "invalidOccurredAt": null
+      },
+      "decision": "UNSUPPORTED",
+      "reasonCodes": [
+        "SUB_DEVICE_SUBJECT_UNFROZEN"
+      ]
+    },
+    {
+      "protocolId": "collector.modbus-opcua-polling",
+      "protocolVersion": "1.0",
+      "transport": "INTERNAL",
+      "codecClass": "com.basiclab.iot.sink.protocol.polling.AbstractIndustrialPollingProtocol",
+      "directEventTopicPattern": null,
+      "subjectMode": "NOT_APPLICABLE",
+      "requestIdEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "retryStable": false,
+        "uniquenessScope": "UNKNOWN",
+        "uniquenessWindowSeconds": null,
+        "minUtf8Bytes": 1,
+        "maxUtf8Bytes": 128,
+        "controlCharactersRejected": false
+      },
+      "occurredAtEvidence": {
+        "wireField": null,
+        "deviceGenerated": false,
+        "format": "UNKNOWN",
+        "originalOffsetPreserved": false,
+        "millisecondPrecision": false,
+        "clockSource": null,
+        "maxFutureSkewSeconds": null,
+        "maxHistoryAgeSeconds": null
+      },
+      "payloadCanonicalization": {
+        "strategy": "UNKNOWN",
+        "rawBytesHashPreserved": false,
+        "scriptTransformAllowed": false
+      },
+      "ackContract": {
+        "ackMode": "NONE",
+        "afterSourceTransactionCommit": false,
+        "failurePropagatedToTransport": false
+      },
+      "fixtures": {
+        "original": null,
+        "retry": null,
+        "collision": null,
+        "missingRequestId": null,
+        "invalidOccurredAt": null
+      },
+      "decision": "OUT_OF_SCOPE",
+      "reasonCodes": [
+        "TELEMETRY_ONLY"
+      ]
+    }
+  ],
+  "approval": {
+    "ownerRole": "device-protocol-owner",
+    "approvedBy": "Sol",
+    "approvedAt": "2026-08-27T14:06:45+08:00",
+    "decisionRef": "APPROVE_NONE_ENABLED per P02-M2-02C1P-G2-03 v0.2.0 owner decision on 2026-08-27; repository facts verified at commit bdd2ff8aa",
+    "contentSha256": "sha256:aee09ab091b9823c1a565647d98f9f5f14d594f4cd810b3b4f445e3aa0c6e4fa"
+  }
+}

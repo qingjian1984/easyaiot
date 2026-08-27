@@ -1,8 +1,8 @@
 # P02-M2-02C1P-G2-03：设备事件协议证据与 Owner 确认单
 
-> 版本：0.2.0
-> 日期：2026-08-26
-> 状态：LOCAL VERIFIER PREPARED / ALL CURRENT PROTOCOLS DISABLED / WAITING PROTOCOL OWNER / C1 CLOSED
+> 版本：0.3.0
+> 日期：2026-08-27
+> 状态：OWNER SIGNED / APPROVE_NONE_ENABLED / ALL PROTOCOLS DISABLED-CONFIRMED / G2-03 INVENTORY CLOSED / G2-03 FUNCTIONAL GATE OPEN / G2-04 DENY_ALL / C1 CLOSED
 > 设计责任：GPT-5.6 Sol
 > 双基线：[平台功能计划 1.5.0](../../架构设计/平台功能计划.md)、[EasyAIoT 项目开发宪法 1.6.0](../../开发规范/EasyAIoT项目开发宪法.md)
 > 上游：[C1P-G2 输入单 0.4.0](./P02-M2-02C1P-G2-责任人输入收集与建议处置单.md)、[ADR-019 0.2.0 Proposed](../../架构决策/电力运维云平台/ADR-019-告警来源身份周期与补偿接入.md)
@@ -80,18 +80,18 @@ Schema 负责结构与关键布尔门禁；本地评审器必须校验：`minUtf
 | 时间负例 | 缺 offset、超精度、未来/历史越界或格式非法的 fixture/raw capture，证明拒绝且不使用接收时间 |
 | 批准 | ownerRole、approvedBy、approvedAt、decisionRef 和排除 contentSha256 字段后计算的 JCS SHA-256 |
 
-## 5. Owner 确认区（待填写）
+## 5. Owner 确认区（已于 2026-08-27 填写并签署）
 
-| 字段 | 待填内容 |
+| 字段 | 已填内容 |
 |---|---|
-| evidenceDocument | 从 DRAFT 模板复制后的独立仓库路径 |
-| enabledProtocolIds | 至少一个，或明确 `NONE` 并接受 DEVICE_EVENT 继续 DENY_ALL |
-| disabled/unsupported/outOfScope | 每个已盘点协议的稳定 decision 与 reasonCodes |
-| approvedBy / approvedAt | 设备协议 owner 身份和 RFC 3339 显式 offset 时间 |
-| decisionRef | 可审计提交/评审记录，不接受聊天中的泛化“继续执行” |
-| contentSha256 | `sha256:<64 lowercase hex>` |
+| evidenceDocument | [DEVICE_PROTOCOL_OWNER_EVIDENCE.json](./assets/c1p-g2/DEVICE_PROTOCOL_OWNER_EVIDENCE.json)（从 DRAFT 模板复制的独立仓库路径） |
+| enabledProtocolIds | `NONE` —— 8 类已盘点协议全部 DISABLED/UNSUPPORTED/OUT_OF_SCOPE，接受 DEVICE_EVENT 继续 `DENY_ALL` |
+| disabled/unsupported/outOfScope | topic.generic-json、mqtt.alink、tcp.json、tcp.binary、http.versioned-codec、script.rawdata-to-protocol 均为 `DISABLED`；topic.sub-event 为 `UNSUPPORTED`；collector.modbus-opcua-polling 为 `OUT_OF_SCOPE`；各自 reasonCodes 见证据文件 |
+| approvedBy / approvedAt | Sol / `2026-08-27T14:06:45+08:00` |
+| decisionRef | `APPROVE_NONE_ENABLED per P02-M2-02C1P-G2-03 v0.2.0 owner decision on 2026-08-27; repository facts verified at commit bdd2ff8aa` |
+| contentSha256 | `sha256:aee09ab091b9823c1a565647d98f9f5f14d594f4cd810b3b4f445e3aa0c6e4fa` |
 
-签署 decision 建议仅允许：`APPROVE_EVIDENCE`、`APPROVE_NONE_ENABLED` 或 `REQUEST_CHANGES`。`APPROVE_NONE_ENABLED` 可以关闭本轮盘点责任，但不关闭“至少一个协议可用”的 G2-03 功能门禁，G2-04 继续 `DENY_ALL`。
+签署 decision 为 `APPROVE_NONE_ENABLED`：关闭本轮盘点责任，不关闭“至少一个协议可用”的 G2-03 功能门禁，G2-04 继续 `DENY_ALL`。本地验收 `pnpm verify:device-event-protocol-evidence -- --file .doc/技术设计/电力运维云平台/assets/c1p-g2/DEVICE_PROTOCOL_OWNER_EVIDENCE.json` 输出 `PASS protocols=8 enabled=0 qualification=NO_ENABLED_PROTOCOL`。
 
 ## 6. 本地验收命令
 
@@ -106,10 +106,10 @@ pnpm verify:device-event-protocol-evidence -- --file .doc/技术设计/电力运
 
 ## 7. 关闭条件与下一步
 
-1. owner 提交通过 v1 Schema 和语义校验的独立证据文档；
-2. Sol 复核代码/协议/fixture 一致性、哈希和 ACK 时序；
-3. 至少一个 direct 协议为 `ENABLED` 后，G2-03 才能进入 `CLOSED-CONTRACT`；
-4. G2-03 关闭只允许产品负责人开始 G2-04 allowlist 签署，不自动开启 C1A；
+1. ~~owner 提交通过 v1 Schema 和语义校验的独立证据文档~~（已完成 2026-08-27：`APPROVE_NONE_ENABLED`，`qualification=NO_ENABLED_PROTOCOL`）；
+2. Sol 复核代码/协议/fixture 一致性、哈希和 ACK 时序（签署前已逐类核对：`IotDeviceMessage.of()` 丢弃 wire `timestamp` 改用后端 `LocalDateTime.now()`；Alink 无原始时间字段；TCP binary 帧可由后端补生成 ID；HTTP handler 在 `sendDeviceMessage` 后立即返回 `messageId` 即 `PRECOMMIT_ACK`）；
+3. 至少一个 direct 协议为 `ENABLED` 后，G2-03 才能进入 `CLOSED-CONTRACT` —— **仍 OPEN**：本轮 owner 明确 `NONE`，启用任一协议需先获得 codec/transport 整改授权（保留 wire 时间、commit 后 ACK、retry/collision fixture），整改完成后再修订证据（revision+1）；
+4. G2-03 功能门禁关闭才允许产品负责人开始 G2-04 allowlist 签署，不自动开启 C1A —— G2-04 本轮继续 `DENY_ALL`，但本轮盘点签署解除了 G2-03 对 G2-04 的“证据不存在”阻塞，剩余阻塞仅是“无 ENABLED 协议”这一事实本身；
 5. 四项 G2 输入均关闭、ADR-019 Accepted 且 ADR 索引同提交更新后，才可另行冻结实现白名单。
 
-当前下一动作是设备协议 owner 选择候选协议并填写证据；执行者不得替 owner 选择、补造 fixture 或签署。
+当前下一动作：设备协议 owner 已完成本轮 `APPROVE_NONE_ENABLED` 签署；后续若要启用协议，需决策所有者另行授权 codec/transport 整改切片，再由 owner 提交 revision 2 证据。执行者仍不得替 owner 补造 fixture 或签署。
