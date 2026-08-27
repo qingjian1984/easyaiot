@@ -1,7 +1,7 @@
 # M1-LC-03：成功 ACK V1 与重启对账任务单
 
-> 状态：In Progress（LC03-01、LC03-02 COMPLETE / SOL-ACCEPTED）
-> 版本：1.0.3
+> 状态：In Progress（LC03-01、LC03-02 COMPLETE / SOL-ACCEPTED；LC03-03 IMPLEMENTED / DIRECT-TEST-PASSED 待 Sol 复核）
+> 版本：1.0.4
 > 日期：2026-08-27
 > 架构负责人：GPT-5.6 Sol
 > 计划实现执行者：GPT-5.6 Luna（max reasoning；须逐包独立授权）
@@ -201,7 +201,7 @@ received_at_ms + ack_sent_at_ms + ack_attempts
 | LC03-00 | Sol 合同与任务拆分 | 本任务单、续作入口、索引 | COMPLETE / SOL-FROZEN |
 | LC03-01 | 共享 ACK V1 类型、codec、Topic parser 与旧 wire 拒绝 | 七字段 DTO、严格 codec、直接合同测试 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
 | LC03-02 | collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用 | subscription coordinator、runtime ordering、SQLite 状态合同 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
-| LC03-03 | V012 候选、center dispatch repository、即时 ACK 与 10 秒扫描 | SQL 候选、JDBC repository、publisher/service/scanner | FROZEN / NOT-YET-AUTHORIZED；临时 PG 另授权 |
+| LC03-03 | V012 候选、center dispatch repository、即时 ACK 与 10 秒扫描 | SQL 候选、JDBC repository、publisher/service/scanner | IMPLEMENTED / DIRECT-TEST-PASSED（2026-08-27，待 Sol 复核）；临时 PG 合同脚本已备未执行 |
 | LC03-04 | collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点 | 假服务 fixture、真实隔离 broker/PG、restart reconciliation | LOCKED，待 LC03-02/03 验收 |
 | LC03-05 | 全模块回归、保护扫描、文档收口 | Verified-Local 证据 | LOCKED，待 LC03-04 验收 |
 
@@ -451,3 +451,34 @@ Sol 在实现者交付后独立执行以下复核，未依赖实现者自报结�
 - **遗留确认**：deprecated 四参数 `AckCommand` 构造器在主代码中已无调用（仅 `OutboxStateMachineTest` 等 LC04 前过渡测试使用），其清理复核按 LC03-01 §13.1 约定归 LC03-05 回归收口。
 
 结论：LC03-02 转 `COMPLETE / SOL-ACCEPTED`。下一步须决策所有者独立授权 `LC03-03`（V012 候选 + center dispatch repository + 即时 ACK 与 10 秒扫描；临时 PostgreSQL 合同须另行授权）；LC03-04～05 保持 LOCKED。
+
+## 15. LC03-03 实现记录（2026-08-27，待 Sol 复核）
+
+决策所有者于本轮授权 LC03-03（临时 PostgreSQL 合同执行仍单独授权，本包只准备不执行）。
+
+### 15.1 实现结果（§7.3 白名单内）
+
+- **V012/U012 候选**（`assets/td005-migration/`）：`ack_sent_at_ms BIGINT` + `ack_attempts INTEGER NOT NULL DEFAULT 0` + `ck_inbox_ack_attempts_non_negative` CHECK + `idx_inbox_ack_pending` 部分索引 `(received_at_ms,id) WHERE ack_sent_at_ms IS NULL`；全列/约束/索引中文 COMMENT；V009 前置校验、预存在列/索引幂等拒绝；U012 仅在零发送痕迹时可完整卸载。不接 `APPLY_STEPS`、不改 V011/U011、不更新首装 dump；
+- **iot-sink-api** 新增 `telemetry/inbox/ack/TelemetryAckDeliveryRow`（不可变，路由/requestId 缺失即不可发送）与 `TelemetryAckDispatchPort`（claimPending/loadForImmediateAck/markSent）；
+- **iot-sink-biz** 新增 `JdbcTelemetryAckDeliveryRepository`（SQL 只选路由完整且 requestId 非空行；`FOR UPDATE SKIP LOCKED` 仅限领取语句，不跨 publish；markSent 条件更新天然幂等）、`CenterTelemetryAckService`（即时路径：行事实与 Inbox 返回的 requestId/persistedAt 逐项比对，不匹配零 publish；publish 失败/抛出保持 sent NULL）、`TelemetryAckReconciliationTask`（启动即扫一次 + 每 10 秒，每批 ≤1000，逐行 DUPLICATE 补发，单行失败不中断整批，claim 失败保持任务存活）、`CenterTelemetryAckPublisherPort`；
+- **CenterMqttAckPublisher 重写为 ACK V1**：LC03-01 冻结 codec 产出七字段 payload，Topic 只由 `row.route().ackTopic()` 派生；旧四字段 payload 与 `/telemetry/ack/**` 拼接从生产代码移除（javadoc 否定描述除外）；publish Future 确认成功才返回 true；
+- **接线**：`TelemetryInboxAutoConfiguration` 按 `easyaiot.telemetry.ack.enabled`（默认关）装配 dispatch repository、ack service、reconciliation task（`scan-interval-ms`/`batch-size` 可配）；ACK publisher 复用上行 subscriber 的 MQTT client。
+
+### 15.2 直接测试证据
+
+- `CenterTelemetryAckServiceTest`（7 项）：collision/null 状态零 publish；行不可发送 fail-closed；requestId/persistedAt 错配零 publish；成功路径逐字段断言（canonical Topic、code 0/1001、原 persistedAt）；publish 失败与抛出均保持 sent NULL；
+- `TelemetryAckReconciliationTaskTest`（5 项）：启动即扫描；整批 DUPLICATE；claim 异常吸收不外抛；**单行 publish 失败不中断整批（首轮实现被该测试否决后已修正）**；非正参数 fail-fast；
+- `JdbcTelemetryAckDeliveryRepositoryTest`（6 项，隔离 PG 未注入时 NOT_RUN_LOCAL_ENV 跳过）：领取顺序与上限、attempts 递增、markSent 条件幂等、行事实不完整 fail-closed、即时加载路径。
+
+### 15.3 验收命令结果
+
+`mvn -pl iot-sink/iot-sink-biz -am -Dmaven.test.skip=false -DfailIfNoTests=false -Dtest=...` 12 类（LC03-03 三类 + LC03-01/02 回归 + collector 装配）：**59 tests，Failures=0，Errors=0**；`JdbcTelemetryAckDeliveryRepositoryTest` 按 NOT_RUN_LOCAL_ENV 口径 0 run（环境未注入，非宣称通过）；`test-compile` 28 reactor `BUILD SUCCESS`。
+
+### 15.4 隔离合同脚本（创建未执行）
+
+`.scripts/postgresql/td005-migration/tests/lc03_v012_contract.sh`：唯一前缀临时库；覆盖基线迁移、列/默认/COMMENT/部分索引断言、负 attempts CHECK 拒绝、V012 重放拒绝、缺 V009 前置拒绝、U012 干净卸载；`LC03_V012_PG_ENABLED=true` 显式守卫（本轮验证无环境变量时 exit 1 fail-closed），不接共享 runner。
+
+### 15.5 保护边界结果与未执行项
+
+- 新增生产代码 `/telemetry/**`、`#`、`+`、`$queue`、`$share` 零命中（javadoc 否定描述除外）；V011/U011、共享 runner、首装 dump、EMQX ACL、Docker Compose 零 diff；秘密扫描零命中；`git diff --check` 通过；
+- 真实隔离 PostgreSQL 合同（15.4 脚本）未执行，待临时库授权；LC03-04 组合 E2E、LC03-05 回归收口保持 LOCKED；V012 正式落库须另立 `LC03-DB-RUNTIME-01`。

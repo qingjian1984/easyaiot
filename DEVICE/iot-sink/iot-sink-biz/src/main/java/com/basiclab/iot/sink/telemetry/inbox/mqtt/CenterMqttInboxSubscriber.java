@@ -72,6 +72,11 @@ public class CenterMqttInboxSubscriber implements AutoCloseable {
         return handler.handle(topic, payload == null ? null : payload.clone());
     }
 
+    /** LC03-03：ACK V1 发送复用同一 client（同 broker、同凭证域）。 */
+    public MqttClient mqttClient() {
+        return client;
+    }
+
     @Override
     public void close() {
         try {
