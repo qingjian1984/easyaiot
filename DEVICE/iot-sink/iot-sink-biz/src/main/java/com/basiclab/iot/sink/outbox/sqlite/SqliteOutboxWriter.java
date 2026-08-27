@@ -64,7 +64,8 @@ final class SqliteOutboxWriter extends Thread {
             + " in_flight_at_ms = NULL, ack_deadline_at_ms = NULL, updated_at_ms = ?"
             + " WHERE status = 'IN_FLIGHT' AND ack_deadline_at_ms <= ?";
 
-    private static final String ACK_SELECT_SQL = "SELECT id, status, unknown_ack_count"
+    private static final String ACK_SELECT_SQL = "SELECT id, status, unknown_ack_count,"
+            + " request_id, product_identification, device_identification"
             + " FROM telemetry_outbox WHERE message_id = ?";
 
     private static final int UNKNOWN_ACK_THRESHOLD = 12;
@@ -301,14 +302,21 @@ final class SqliteOutboxWriter extends Thread {
     private void executeApplyAck(AckCommand ack) {
         try {
             long now = System.currentTimeMillis();
-            long[] rowInfo = queryAckRow(ack.messageId());
-            if (rowInfo == null) {
+            AckRow row = queryAckRow(ack.messageId());
+            if (row == null) {
                 connection.commit();
                 return;
             }
-            long rowId = rowInfo[0];
-            String currentStatus = rowInfo[1] == 1 ? "IN_FLIGHT" : rowInfo[1] == 2 ? "ACKED" : rowInfo[1] == 3 ? "DEAD_LETTER" : "PENDING";
-            int unknownCount = (int) rowInfo[2];
+            // LC03-02 §4.3-4: requestId and the topic route must both match the
+            // persisted row exactly; any mismatch leaves status, attempts, gap
+            // and route set untouched.
+            if (ack.route() != null && !row.matches(ack)) {
+                connection.commit();
+                return;
+            }
+            long rowId = row.id();
+            String currentStatus = row.status();
+            int unknownCount = row.unknownAckCount();
 
             if ("DEAD_LETTER".equals(currentStatus)) {
                 connection.commit();
@@ -344,19 +352,15 @@ final class SqliteOutboxWriter extends Thread {
         }
     }
 
-    private long[] queryAckRow(String messageId) throws SQLException {
+    private AckRow queryAckRow(String messageId) throws SQLException {
         try (PreparedStatement q = connection.prepareStatement(ACK_SELECT_SQL)) {
             q.setString(1, messageId);
             try (ResultSet rs = q.executeQuery()) {
                 if (!rs.next()) {
                     return null;
                 }
-                long id = rs.getLong(1);
-                String status = rs.getString(2);
-                int unknown = rs.getInt(3);
-                int statusCode = "PENDING".equals(status) ? 0 : "IN_FLIGHT".equals(status) ? 1
-                        : "ACKED".equals(status) ? 2 : "DEAD_LETTER".equals(status) ? 3 : 0;
-                return new long[]{id, statusCode, unknown};
+                return new AckRow(rs.getLong(1), rs.getString(2), rs.getInt(3),
+                        rs.getString(4), rs.getString(5), rs.getString(6));
             }
         }
     }
@@ -476,5 +480,17 @@ final class SqliteOutboxWriter extends Thread {
     }
 
     private record ExistingEnvelope(String contentSha256, String productIdentification) {
+    }
+
+    /** Persisted identity facts for one ACK target row (LC03-02 §4.3). */
+    private record AckRow(long id, String status, int unknownAckCount, String requestId,
+                          String productIdentification, String deviceIdentification) {
+        private boolean matches(AckCommand ack) {
+            return requestId.equals(ack.requestId())
+                    && productIdentification != null
+                    && productIdentification.equals(ack.route().productIdentification())
+                    && deviceIdentification != null
+                    && deviceIdentification.equals(ack.route().deviceIdentification());
+        }
     }
 }

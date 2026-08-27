@@ -1,7 +1,7 @@
 # M1-LC-03：成功 ACK V1 与重启对账任务单
 
-> 状态：In Progress（LC03-01 COMPLETE / SOL-ACCEPTED）
-> 版本：1.0.1
+> 状态：In Progress（LC03-01、LC03-02 COMPLETE / SOL-ACCEPTED）
+> 版本：1.0.3
 > 日期：2026-08-27
 > 架构负责人：GPT-5.6 Sol
 > 计划实现执行者：GPT-5.6 Luna（max reasoning；须逐包独立授权）
@@ -200,7 +200,7 @@ received_at_ms + ack_sent_at_ms + ack_attempts
 |---|---|---|---|
 | LC03-00 | Sol 合同与任务拆分 | 本任务单、续作入口、索引 | COMPLETE / SOL-FROZEN |
 | LC03-01 | 共享 ACK V1 类型、codec、Topic parser 与旧 wire 拒绝 | 七字段 DTO、严格 codec、直接合同测试 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
-| LC03-02 | collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用 | subscription coordinator、runtime ordering、SQLite 状态合同 | FROZEN / NOT-YET-AUTHORIZED |
+| LC03-02 | collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用 | subscription coordinator、runtime ordering、SQLite 状态合同 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
 | LC03-03 | V012 候选、center dispatch repository、即时 ACK 与 10 秒扫描 | SQL 候选、JDBC repository、publisher/service/scanner | FROZEN / NOT-YET-AUTHORIZED；临时 PG 另授权 |
 | LC03-04 | collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点 | 假服务 fixture、真实隔离 broker/PG、restart reconciliation | LOCKED，待 LC03-02/03 验收 |
 | LC03-05 | 全模块回归、保护扫描、文档收口 | Verified-Local 证据 | LOCKED，待 LC03-04 验收 |
@@ -390,3 +390,64 @@ mvn -pl iot-sink/iot-sink-biz -am '-Dmaven.test.skip=false' '-DfailIfNoTests=fal
 - 合计：23 tests，Failures=0，Errors=0，Skipped=0，28 个 reactor 全部 SUCCESS，`BUILD SUCCESS`；
 - 新增生产代码 `/telemetry/**`、`#`、`+`、`$queue`、`$share` 扫描零命中；旧 wire 名称仅存在于 codec 显式拒绝集合及上述 deprecated 进程内兼容桥；秘密与尾随空白扫描零命中，`git diff --check` 通过；
 - 未执行 PostgreSQL、EMQX、V011/U011、生产 DDL、压测或现场验证；并行 P02、WEB、项目介绍与 `DEVICE/.claude/` 工作树差异均未触碰。
+
+## 14. LC03-02 实现记录（2026-08-27）
+
+### 14.1 实现结果
+
+决策所有者于本轮明确授权后，LC03-02 在 §7.2 白名单内完成：
+
+- 新增 `CollectorAckSubscriptionCoordinator`：唯一订阅集合固定为 `TelemetryRouteSetProvider.currentRoutes()`（applied ConfigSnapshot 路由 ∪ PENDING/IN_FLIGHT outbox 路由），逐路由映射 `TelemetryRoute.ackTopic()`；刷新顺序按 §4.2 冻结执行——单次快照 → additions 全部 SUBACK 成功才原子替换 active set → 之后才取消 removals（取消失败仅延迟清理）；任一新增失败保持旧集合并报告稳定码 `ACK_SUBSCRIPTION_NOT_READY`；生产 `refresh()`/`recover()`/`close()` 均不产生 `#`、`+`、`$share`、`$queue`；
+- `CollectorMqttAckSubscriber` 重写为 §4.3 fail-closed 入站关联：Topic 先经 `TelemetryAckTopicParser` 精确解析，payload 经 LC03-01 严格 codec 解出七字段 `AckCommand`（携带 route + observedAtMs），再交 `TelemetryOutboxPort.applyAck`；旧四字段 wire 在 codec 层即被拒绝；日志只保留稳定分类与 messageId/status，不输出 payload 或凭据；
+- `SqliteOutboxWriter.executeApplyAck` 补齐 §4.3 第 4 条：ACK 查询扩展为同行返回 `request_id/product_identification/device_identification`，V1 命令（route 非空）在 requestId 与产品/设备身份任一不匹配时直接 commit 返回，不改状态、attempts、gap 或 route set；deprecated 兼容构造器（route 为 null）保持既有状态机行为供既有测试与 LC04 前过渡；
+- `CollectorMqttProperties` 删除 `ackTopicPrefix`，`application-collector.yaml` 同步移除该配置项（生产配置不再暴露 broad 前缀）；
+- `VertxCollectorMqttPublisher` 增加逐路由就绪门禁（未 SUBACK 路由 publish 返回 false 并报告 `ACK_SUBSCRIPTION_NOT_READY`）与 `whenConnected` 回调；
+- `SqliteOutboxAutoConfiguration` 重排启动顺序：writer（bean 构造期）→ MQTT 连接 → `whenConnected(recover)` 初始精确 SUBACK → `runWhenReady(dispatcher::start)` 才允许 claim/publish；新增 `AckSubscriptionRefreshTask` 以默认 1000ms（可配 `easyaiot.collector.ack-subscription.refresh-interval-ms`）周期刷新订阅集合，与 collector reconcile 1s 节奏对齐，覆盖"配置 APPLIED 后新图首轮询前完成对应 ACK SUBACK"；
+- `IotGatewayConfiguration` 注册 `CollectorTelemetryRouteSetProvider` 为 collector Profile bean（LC02 已实现但此前未装配）。
+
+`OutboxCommand`/`OutboxCommandQueue` 在白名单内但本轮无需改动（diff 为零）。
+
+### 14.2 直接测试证据
+
+新增两个测试类（vertx-mqtt 4.5.13 真实 in-process MQTT server + 真实 SQLite outbox，无 mock broker）：
+
+- `CollectorAckSubscriptionCoordinatorTest`（6 项）：恢复时精确并集订阅且无任何 broad filter；空集合不订阅任何东西；新增 SUBACK 部分失败保持旧集合且 `isReady()=false`；removals 仅在 additions 换新后取消；解绑但有未终态消息的路由保留订阅；`runWhenReady` 在完整 SUBACK 前不触发、之后恰好触发一次；
+- `CollectorMqttAckSubscriberV1Test`（9 项）：ACCEPTED_DURABLE 经真实 MQTT 将 IN_FLIGHT 转 ACKED；DUPLICATE 对 ACKED 行幂等且零 gap；PENDING 行无需 claim 即可被成功 ACK 置 ACKED；requestId 错配不改 SQLite；同 payload 错设备 Topic 不改状态；旧四字段 wire 不可达；畸形 payload 丢弃；DEAD_LETTER 不被成功 ACK 复活；未知 messageId 不建行。
+
+### 14.3 验收命令结果
+
+```powershell
+cd DEVICE
+mvn -pl iot-sink/iot-sink-biz -am '-Dmaven.test.skip=false' '-DfailIfNoTests=false' '-Dtest=CollectorMqttAckSubscriberV1Test,CollectorAckSubscriptionCoordinatorTest,OutboxStateMachineTest,CollectorPollingRuntimeTest,TelemetryAckV1ContractTest,TelemetryAckTopicContractTest,AckCommandContractTest,CollectorSpringContextTest,CollectorTelemetryConfigurationTest,CollectorTelemetryRouteSetProviderTest,CollectorProfileArchitectureTest' test
+```
+
+- 11 类合计 **54 tests，Failures=0，Errors=0，Skipped=0**，`BUILD SUCCESS`（含真实 collector Spring 上下文装配验证 `CollectorSpringContextTest`，确认新增 bean 后 collector 封闭图不变）；
+- 冻结验收命令末条 `mvn -pl iot-sink/iot-sink-biz -am -Dmaven.test.skip=false test-compile` 28 reactor `BUILD SUCCESS`；
+- 测试实现说明：fixture 修正为生产同形 requestId（36 位 UUID，与 `PollingResultMapper.generateMessageId()` 一致）；`-am` 上游无所选测试故机械加 `-DfailIfNoTests=false`，与 LC03-01 同口径。
+
+### 14.4 保护边界结果
+
+- 白名单合规：改动文件为 §7.2 列出的 7 个生产文件 + `application-collector.yaml` + 新增协调器/测试；`OutboxCommand`/`OutboxCommandQueue` 零 diff；
+- 生产代码 `ackTopicPrefix`/`ack-topic-prefix` 配置项零残留（仅注释中说明其移除）；新增生产代码 `/telemetry/**` 仅存在于订阅器 javadoc 的"never reach the writer"否定描述；
+- 新增生产订阅代码 `#`/`+`/`$share`/`$queue` 零命中（协调器 javadoc 否定描述除外）；
+- SQLite Schema/user_version、`TelemetryEnvelope` canonical/hash、V008/V009/V010/V011、LC02 Inbox/Outbox/Store/EMQX 资产、`telemetry_ingress_rejection` 全部零 diff；
+- `git diff --check` 通过（exit 0，仅 CRLF 换行警告）；秘密扫描零命中；
+- 会话开始时已存在的范围外改动（`.doc/` P02 文档、`WEB/package.json`、`WEB/scripts/`、项目介绍 md）未被触碰；本轮未 commit。
+
+### 14.5 未执行项（如实保持 OPEN）
+
+- LC03-04 组合 E2E（真实隔离 EMQX + PG + SQLite 重启故障点矩阵）与 LC03-05 全模块回归未开始，LOCKED 保持；
+- 真实 EMQX 5.8.7 下 collector ACL 对下游 ACK Topic 的授权画像未在本包复验（属 LC03-04）；
+- 未执行任何 PostgreSQL/V012/生产 DDL/部署/现场验证。
+
+### 14.6 Sol 独立复核（2026-08-27）
+
+Sol 在实现者交付后独立执行以下复核，未依赖实现者自报结果：
+
+- **冻结验收命令复跑**：§14.3 的 11 类命令在 HEAD 工作区原样复跑，54 tests，Failures=0，Errors=0，Skipped=0，28 reactor `BUILD SUCCESS`；冻结的最小 4 类命令（`CollectorMqttAckSubscriberV1Test,CollectorAckSubscriptionCoordinatorTest,OutboxStateMachineTest,CollectorPollingRuntimeTest`）独立复跑 22/22 全绿；
+- **代码审阅**：协调器刷新顺序与 §4.2 逐条一致（快照 → additions 全 SUBACK → 原子 swap → removals 取消，失败保持旧集合并报 `ACK_SUBSCRIPTION_NOT_READY`）；订阅器 fail-closed 顺序与 §4.3 一致；`SqliteOutboxWriter` 的 requestId/route 关联校验在 V1 命令路径生效，兼容构造器（route=null）不改既有行为；
+- **白名单核验**：`CollectorTelemetryRouteSetProvider` 与 `TelemetryRouteSetProvider` 均为 LC02 已提交代码（`fb75dbade`，工作区副本与提交版本逐字节一致），非本轮新增；其余改动均在 §7.2 白名单内；`iot-sink-api`、V011/U011、`.scripts/`、`CenterMqttAckPublisher`（LC03-03 范围）零 diff；
+- **保护扫描**：`git diff --check` exit 0；秘密扫描零命中；生产代码 `ackTopicPrefix` 配置项与订阅 wildcard（`#`/`+`/`$share`/`$queue`）零命中；`OutboxCommand`/`OutboxCommandQueue` 零 diff；
+- **遗留确认**：deprecated 四参数 `AckCommand` 构造器在主代码中已无调用（仅 `OutboxStateMachineTest` 等 LC04 前过渡测试使用），其清理复核按 LC03-01 §13.1 约定归 LC03-05 回归收口。
+
+结论：LC03-02 转 `COMPLETE / SOL-ACCEPTED`。下一步须决策所有者独立授权 `LC03-03`（V012 候选 + center dispatch repository + 即时 ACK 与 10 秒扫描；临时 PostgreSQL 合同须另行授权）；LC03-04～05 保持 LOCKED。

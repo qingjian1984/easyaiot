@@ -37,7 +37,8 @@ easyaiot:
       username: ${EASYAIOT_COLLECTOR_MQTT_USERNAME:}
       password: ${EASYAIOT_COLLECTOR_MQTT_PASSWORD:}
       qos: 1
-      ack-topic-prefix: /telemetry/ack/
+      # LC03-02：ACK 订阅集合由 CollectorAckSubscriptionCoordinator 按
+      # “applied 路由 ∪ 未终态 outbox 路由”精确派生，不再配置 ack-topic-prefix。
 
 basiclab:
   iot:

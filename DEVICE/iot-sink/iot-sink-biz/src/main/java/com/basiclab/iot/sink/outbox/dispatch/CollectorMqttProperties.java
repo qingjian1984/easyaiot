@@ -19,7 +19,6 @@ public class CollectorMqttProperties {
     private boolean cleanSession = false;
     private int keepAliveSeconds = 60;
     private int maxInflight = 32;
-    private String ackTopicPrefix = "/telemetry/ack/";
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -41,6 +40,4 @@ public class CollectorMqttProperties {
     public void setKeepAliveSeconds(int keepAliveSeconds) { this.keepAliveSeconds = keepAliveSeconds; }
     public int getMaxInflight() { return maxInflight; }
     public void setMaxInflight(int maxInflight) { this.maxInflight = maxInflight; }
-    public String getAckTopicPrefix() { return ackTopicPrefix; }
-    public void setAckTopicPrefix(String ackTopicPrefix) { this.ackTopicPrefix = ackTopicPrefix; }
 }

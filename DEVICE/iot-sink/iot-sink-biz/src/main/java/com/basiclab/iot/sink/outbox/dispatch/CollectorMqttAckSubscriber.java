@@ -1,98 +1,91 @@
 package com.basiclab.iot.sink.outbox.dispatch;
 
+import com.basiclab.iot.sink.telemetry.ack.TelemetryAckCodecException;
+import com.basiclab.iot.sink.telemetry.ack.TelemetryAckTopicParser;
+import com.basiclab.iot.sink.telemetry.ack.TelemetryAckV1Codec;
 import com.basiclab.iot.sink.telemetry.outbox.AckCommand;
-import com.basiclab.iot.sink.telemetry.outbox.AckResultCode;
 import com.basiclab.iot.sink.telemetry.outbox.TelemetryOutboxPort;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.netty.handler.codec.mqtt.MqttQoS;
+import com.basiclab.iot.sink.telemetry.outbox.TelemetryRoute;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.mqtt.MqttClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-
 /**
- * TD-003 §9 ACK 订阅器：订阅 ACK Topic → 解析 ACK V1 JSON → applyAck。
+ * LC03-02 §4.3 collector-side ACK V1 consumer.
  *
- * <p>ACK V1 payload 格式（TD-003 §9 冻结）：
- * <pre>{@code
- * {"messageId":"uuid","resultCode":"ACCEPTED_DURABLE","errorCode":"OK","observedAt":1691234567890}
- * }</pre>
- *
- * <p>解析失败（畸形/缺字段/未知 resultCode）→ 记日志丢弃，不静默写 outbox。
+ * <p>Inbound association is fail-closed in the frozen order: the topic must
+ * parse as one exact canonical ACK route, the payload must pass the strict
+ * seven-field codec, and the SQLite writer then enforces the
+ * messageId/requestId/route match before any state transition.  The legacy
+ * four-field wire and any {@code /telemetry/**} shape never reach the writer.
  */
 public class CollectorMqttAckSubscriber implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(CollectorMqttAckSubscriber.class);
 
     private final TelemetryOutboxPort outbox;
-    private final ObjectMapper mapper;
+    private final TelemetryAckV1Codec codec;
+    private final TelemetryAckTopicParser topicParser;
     private final MqttClient client;
-    private final String ackTopicFilter;
 
-    public CollectorMqttAckSubscriber(TelemetryOutboxPort outbox,
-                                      MqttClient client,
-                                      String ackTopicFilter) {
+    public CollectorMqttAckSubscriber(TelemetryOutboxPort outbox, MqttClient client) {
         this.outbox = outbox;
-        this.mapper = new ObjectMapper();
         this.client = client;
-        this.ackTopicFilter = ackTopicFilter;
+        this.codec = new TelemetryAckV1Codec();
+        this.topicParser = new TelemetryAckTopicParser();
     }
 
+    /** Registers the inbound handler only; subscriptions belong to the coordinator. */
     public void start() {
-        client.subscribe(ackTopicFilter, 1);
         client.publishHandler(publish -> {
             try {
                 onAckMessage(publish.topicName(), publish.payload());
             } catch (Exception e) {
-                log.warn("ACK message handling error: topic={} error={}",
-                        publish.topicName(), e.getMessage());
+                log.warn("ACK handling error: error={}", e.getClass().getSimpleName());
             }
         });
-        log.info("ACK subscriber started: filter={}", ackTopicFilter);
+        log.info("ACK V1 subscriber handler registered");
     }
 
     private void onAckMessage(String topic, Buffer payload) {
-        String json = payload.toString(StandardCharsets.UTF_8);
+        TelemetryRoute route;
         try {
-            JsonNode node = mapper.readTree(json);
-            String messageId = node.path("messageId").asText(null);
-            String resultCodeStr = node.path("resultCode").asText(null);
-            String errorCode = node.path("errorCode").asText("UNKNOWN");
-            long observedAt = node.path("observedAt").asLong(System.currentTimeMillis());
-
-            if (messageId == null || messageId.isBlank()) {
-                log.warn("ACK missing messageId: topic={} payload={}", topic, json);
-                return;
-            }
-            if (resultCodeStr == null || resultCodeStr.isBlank()) {
-                log.warn("ACK missing resultCode: messageId={}", messageId);
-                return;
-            }
-
-            AckResultCode resultCode;
-            try {
-                resultCode = AckResultCode.valueOf(resultCodeStr);
-            } catch (IllegalArgumentException e) {
-                log.warn("ACK unknown resultCode: messageId={} resultCode={}", messageId, resultCodeStr);
-                return;
-            }
-
-            outbox.applyAck(new AckCommand(messageId, resultCode, errorCode, observedAt));
-            log.debug("ACK applied: messageId={} result={} error={}", messageId, resultCode, errorCode);
-
-        } catch (Exception e) {
-            log.warn("ACK parse failed: topic={} error={}", topic, e.getMessage());
+            route = topicParser.parse(topic);
+        } catch (IllegalArgumentException e) {
+            log.warn("ACK topic rejected: code={}", stableCode(e));
+            return;
         }
+
+        byte[] bytes = payload == null ? null : payload.getBytes().clone();
+        AckCommand command;
+        try {
+            command = codec.decodeCommand(bytes, route, System.currentTimeMillis());
+        } catch (TelemetryAckCodecException e) {
+            log.warn("ACK payload rejected: code={}", e.errorCode());
+            return;
+        }
+
+        try {
+            outbox.applyAck(command);
+            log.debug("ACK applied: messageId={} status={}",
+                    command.messageId(), command.status());
+        } catch (Exception e) {
+            log.warn("ACK apply failed: messageId={} error={}",
+                    command.messageId(), e.getClass().getSimpleName());
+        }
+    }
+
+    private static String stableCode(IllegalArgumentException e) {
+        return e.getMessage() != null ? e.getMessage() : "ACK_TOPIC_INVALID";
     }
 
     @Override
     public void close() {
         try {
-            client.unsubscribe(ackTopicFilter);
+            client.publishHandler(null);
         } catch (Exception ignore) {
+            // Best-effort handler cleanup; subscriptions are owned elsewhere.
         }
     }
 }

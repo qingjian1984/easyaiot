@@ -55,6 +55,18 @@ public class IotGatewayConfiguration {
         return new CollectorTelemetryWriter(telemetryOutboxPort, Duration.ofSeconds(5));
     }
 
+    /**
+     * LC03-02：唯一 ACK 订阅集合来源（applied ConfigSnapshot 路由 ∪ 未终态
+     * outbox 路由），供 CollectorAckSubscriptionCoordinator 精确订阅派生。
+     */
+    @Bean
+    @Profile("collector")
+    public com.basiclab.iot.sink.telemetry.outbox.TelemetryRouteSetProvider collectorTelemetryRouteSetProvider(
+            PollingConfigProvider provider, TelemetryOutboxPort telemetryOutboxPort) {
+        return new com.basiclab.iot.sink.protocol.polling.CollectorTelemetryRouteSetProvider(
+                provider, telemetryOutboxPort);
+    }
+
     @Bean
     @Profile("collector")
     public LocalFilePollingConfigProvider collectorPollingConfigProvider(
