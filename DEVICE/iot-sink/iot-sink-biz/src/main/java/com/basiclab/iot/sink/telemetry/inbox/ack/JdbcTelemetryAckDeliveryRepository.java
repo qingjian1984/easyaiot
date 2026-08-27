@@ -61,8 +61,12 @@ public final class JdbcTelemetryAckDeliveryRepository implements TelemetryAckDis
     }
 
     /**
-     * 领取一批待发行并逐行递增尝试计数（同一短事务内）。
-     * 递增不跨 publish——提交后调用方才执行 MQTT 发送。
+     * 领取一批待发行并逐行递增尝试计数。
+     *
+     * <p>领取 SELECT（含 {@code FOR UPDATE SKIP LOCKED}）在单条语句的
+     * 行锁范围内完成，锁不跨语句、不跨 publish；attempts 递增是领取后
+     * 的独立 UPDATE。多实例并发下同一行可能被重复领取——§5.4 明确允许
+     * 重复 ACK，由 collector 幂等吸收。
      */
     @Override
     public List<TelemetryAckDeliveryRow> claimPending(int limit) {
