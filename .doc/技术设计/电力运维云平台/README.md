@@ -1,6 +1,6 @@
 # EasyAIoT 电力运维云平台 Technical Design 索引
 
-> 索引版本：1.14.1
+> 索引版本：1.14.2
 > 日期：2026-08-27
 > 上游基线：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[PRD-02 1.2.2](../../产品需求/电力运维云平台/PRD-02-监控告警与安全控制.md)、[M1 Spec 集合基线 1.4.0](../../规格/电力运维云平台/M1-SPEC评审冻结记录.md)、[PRD-02 M2-M3 Spec 专项评审](../../规格/电力运维云平台/M2-M3-SPEC评审记录.md)、[PRD-02 SDD 评审处置](../../开发规范/PRD-02-SDD方案设计评审处置记录.md)、[ADR 决策集](../../架构决策/电力运维云平台/README.md)
 > 续作入口：[M1 SDD 进度与续作入口](./M1-SDD进度与续作入口.md)、[PRD-02 SDD 进度与续作入口](./PRD-02-SDD进度与续作入口.md)
@@ -46,7 +46,7 @@
 | [M1-LC-01](./M1-LC-01-Inbox接收结果合同任务单.md) | Inbox 新增/重复/碰撞逐消息结果合同 | Implemented / Verified-Local | LC01-01～14 与模块编译验证通过；未提前实现 ACK、审计、DDL、投影或 Store 变更 |
 | [M1-LC-02A](./M1-LC-02A-Collector版本配置应用链任务单.md) | 内部/NODE HMAC、ConfigSnapshot 1.1、iot-node 派发、NODE 原子落盘与 collector 本地应用 | Implemented / Verified-Local | LC02A-0～4 全部经 Sol 接受；运行期资格仍独立 OPEN |
 | [M1-LC-02](./M1-LC-02-遥测Topic与产品路由身份收口任务单.md) | canonical 遥测 Topic 与产品路由身份持久化 | Implemented / Verified-Local | LC02-10 及 R1～R6 全部 COMPLETE / SOL-ACCEPTED；正式迁移与生产激活仍 OPEN |
-| [M1-LC-03](./M1-LC-03-成功ACK-V1与重启对账任务单.md) | 成功 ACK V1、collector 精确订阅、center 即时发送与重启补发 | In Progress（LC03-01 SOL-ACCEPTED） | 共享 ACK V1 直接合同 23/23；下一步须独立授权 Luna Max 执行 LC03-02 |
+| [M1-LC-03](./M1-LC-03-成功ACK-V1与重启对账任务单.md) | 成功 ACK V1、collector 精确订阅、center 即时发送与重启补发 | In Progress（LC03-01/02 SOL-ACCEPTED；LC03-03 IMPLEMENTED / DIRECT-TEST-PASSED 待 Sol 复核） | LC03-02 冻结 4 类 22/22 + 完整 11 类 54/54；LC03-03 直接验收 12 类 59/59（JDBC 类 NOT_RUN_LOCAL_ENV）；V012/U012 候选与隔离合同脚本已备未执行；LC03-04/05 LOCKED |
 
 ## 状态规则
 
