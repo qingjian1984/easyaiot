@@ -1,8 +1,8 @@
 # M1 SDD 进度与续作入口
 
-> 检查点日期：2026-08-25
+> 检查点日期：2026-08-27
 > Git 分支：`cfdqiot`（LC02 验收证据基线提交 `849f524eb`；本文件不宣称本地后续提交已经推送）
-> 当前阶段：OPEN03 门禁 1/2/3/6 已 CLOSED-LOCAL；LC02A-0～4 与 M1-LC-02 全链已 Implemented / Verified-Local。R6 证据已由 Sol 接受并以提交 `849f524eb` 独立保存。M1-LC-03 成功 ACK V1 与重启对账已由 Sol 冻结为 `LC03-01～05`，当前仅 `LC03-00 COMPLETE / SOL-FROZEN`，全部实现、测试、DDL 与运行期授权仍为零；下一步须独立授权 Luna Max 执行 LC03-01。正式 V009/V012 落库、生产 MQTT broker/ACL/TLS、`LC02-09-RUNTIME-01` 和发布/现场资格仍 OPEN / NOT APPROVED；TQ 查询/展示面已部署上线，MQTT→Inbox 真实容器链路已打通（见 2026-08-24 记录）
+> 当前阶段：OPEN03 门禁 1/2/3/6 已 CLOSED-LOCAL；LC02A-0～4 与 M1-LC-02 全链已 Implemented / Verified-Local。R6 证据已由 Sol 接受并以提交 `849f524eb` 独立保存。M1-LC-03 的 `LC03-01` 共享 ACK V1 合同已由 Luna Max 实现并经 Sol 独立复验为 `COMPLETE / SOL-ACCEPTED`（23/23）；`LC03-02` 与 `LC03-03` 已冻结但未授权，下一步须独立授权 Luna Max 执行 LC03-02。正式 V009/V012 落库、生产 MQTT broker/ACL/TLS、`LC02-09-RUNTIME-01` 和发布/现场资格仍 OPEN / NOT APPROVED；TQ 查询/展示面已部署上线，MQTT→Inbox 真实容器链路已打通（见 2026-08-24 记录）
 > 说明：本文件用于下次会话恢复上下文；状态以各正式文档为准
 
 ## 当前快照与下一步（2026-08-13）
@@ -82,7 +82,7 @@
 - **Sol 收敛结果**：ConfigSnapshot 升级为 1.1 并由服务端固化产品身份；历史 V2 outbox 只接受中心受控清单回填；ACK 精确订阅集合取“已应用路由 ∪ 未终态 outbox 路由”；V009 使用可空 expand；安全证据由 broker ACL 与 center 注册事实校验分层提供。
 - **前置事实已关闭**：TD-001 设计的 NODE `/workload/collector/config`、iot-node 发布单派发器和 collector 本地 `PollingConfigProvider` 已通过 [M1-LC-02A](./M1-LC-02A-Collector版本配置应用链任务单.md) 与 OPEN03-01～08A/S1 顺序落地并完成本地验收；运行期资格仍独立保持 OPEN。
 - **安全事实**：现有微服务只透传用户/租户 Header，`iot-node` 还存在全路径放行；NODE 只有可重放的单值 Agent Token，且仓库基线中存在本地凭据文件。已新增 [ADR-018](../../架构决策/电力运维云平台/ADR-018-控制面内部服务与NODE请求认证.md)，把内部服务 HMAC 与节点 HMAC 分域，禁止 token-only 降级；凭据值不得在文档或输出中复述。
-- **LC02 证据已提交，M1-LC-03 已由 Sol 冻结（2026-08-26）**：两份 LC02 进度文档已独立提交为 `849f524eb`。Sol 依据双基线、ADR-003/017、TD-002/003 和当前代码事实新增 [M1-LC-03 成功 ACK V1 与重启对账任务单](./M1-LC-03-成功ACK-V1与重启对账任务单.md) 1.0.0，将工作拆为 `LC03-01 共享 ACK 合同 → LC03-02 collector 精确订阅/成功应用 → LC03-03 center V012/即时发送/10秒扫描 → LC03-04 组合重启 E2E → LC03-05 回归收口`。ACK 仅对 Inbox `ACCEPTED_DURABLE/DUPLICATE` 发送；collision、拒绝审计及 FINAL/RETRYABLE ACK 继续锁在 LC04。当前仅设计冻结，所有实现/测试/DDL 授权为零；下一步须 owner 独立授权 GPT-5.6 Luna Max 执行 LC03-01。正式 V009/V012 落库与生产 broker/ACL/TLS 激活必须分别获得部署授权；`LC02-09-RUNTIME-01`、Linux PTY/锁互操作、资源压测、Windows 发布资格和现场证据继续锁定/OPEN。
+- **LC02 证据已提交，M1-LC-03 已由 Sol 冻结（2026-08-26）**：两份 LC02 进度文档已独立提交为 `849f524eb`。Sol 依据双基线、ADR-003/017、TD-002/003 和当前代码事实新增 [M1-LC-03 成功 ACK V1 与重启对账任务单](./M1-LC-03-成功ACK-V1与重启对账任务单.md)，将工作拆为 `LC03-01 共享 ACK 合同 → LC03-02 collector 精确订阅/成功应用 → LC03-03 center V012/即时发送/10秒扫描 → LC03-04 组合重启 E2E → LC03-05 回归收口`。ACK 仅对 Inbox `ACCEPTED_DURABLE/DUPLICATE` 发送；collision、拒绝审计及 FINAL/RETRYABLE ACK 继续锁在 LC04。2026-08-27，LC03-01 已由 GPT-5.6 Luna Max 在白名单内实现，Sol 独立复跑 3 类直接合同测试 23/23 全绿并接受；下一步须 owner 独立授权 Luna Max 执行 LC03-02。正式 V009/V012 落库与生产 broker/ACL/TLS 激活必须分别获得部署授权；`LC02-09-RUNTIME-01`、Linux PTY/锁互操作、资源压测、Windows 发布资格和现场证据继续锁定/OPEN。
 - **历史更正**：下方既有记录中的 `/telemetry/ack/...` 只代表当时测试代码事实，不再是目标架构或后续实现授权。
 
 **M1 采集主线编码侧 + 本地验证全部闭环；B 类部署前硬化完成（2026-08-13）**：设备/RS485 → Poller → SQLite Outbox → MQTT QoS1 → 中心 Inbox → TelemetryStore（standard PG / full TDengine）全链路代码实现 + 验证完成；4 项硬化（EMQX 凭证 / MQTT 配置块 / SHA-256 子表名 / 共享 codec + 补零契约修复）见下「编码侧硬化」段。

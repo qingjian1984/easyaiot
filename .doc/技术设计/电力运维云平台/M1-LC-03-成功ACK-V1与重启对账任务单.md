@@ -1,8 +1,8 @@
 # M1-LC-03：成功 ACK V1 与重启对账任务单
 
-> 状态：Approved / Frozen（实现授权为零）
-> 版本：1.0.0
-> 日期：2026-08-26
+> 状态：In Progress（LC03-01 COMPLETE / SOL-ACCEPTED）
+> 版本：1.0.1
+> 日期：2026-08-27
 > 架构负责人：GPT-5.6 Sol
 > 计划实现执行者：GPT-5.6 Luna（max reasoning；须逐包独立授权）
 > 双基线：EasyAIoT 项目开发宪法 1.6.0 / 平台功能计划 1.5.0
@@ -199,9 +199,9 @@ received_at_ms + ack_sent_at_ms + ack_attempts
 | ID | 边界 | 主要产物 | 状态 |
 |---|---|---|---|
 | LC03-00 | Sol 合同与任务拆分 | 本任务单、续作入口、索引 | COMPLETE / SOL-FROZEN |
-| LC03-01 | 共享 ACK V1 类型、codec、Topic parser 与旧 wire 拒绝 | 七字段 DTO、严格 codec、直接合同测试 | FROZEN / NOT-YET-AUTHORIZED |
-| LC03-02 | collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用 | subscription coordinator、runtime ordering、SQLite 状态合同 | LOCKED，待 LC03-01 验收 |
-| LC03-03 | V012 候选、center dispatch repository、即时 ACK 与 10 秒扫描 | SQL 候选、JDBC repository、publisher/service/scanner | LOCKED，待 LC03-01 验收；临时 PG 另授权 |
+| LC03-01 | 共享 ACK V1 类型、codec、Topic parser 与旧 wire 拒绝 | 七字段 DTO、严格 codec、直接合同测试 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
+| LC03-02 | collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用 | subscription coordinator、runtime ordering、SQLite 状态合同 | FROZEN / NOT-YET-AUTHORIZED |
+| LC03-03 | V012 候选、center dispatch repository、即时 ACK 与 10 秒扫描 | SQL 候选、JDBC repository、publisher/service/scanner | FROZEN / NOT-YET-AUTHORIZED；临时 PG 另授权 |
 | LC03-04 | collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点 | 假服务 fixture、真实隔离 broker/PG、restart reconciliation | LOCKED，待 LC03-02/03 验收 |
 | LC03-05 | 全模块回归、保护扫描、文档收口 | Verified-Local 证据 | LOCKED，待 LC03-04 验收 |
 
@@ -356,10 +356,37 @@ mvn -pl iot-sink/iot-sink-biz -am -Dmaven.test.skip=false test-compile
 
 ## 12. 当前授权与下一步
 
-当前仅完成 Sol 的需求拆解、接口合同、架构边界、子任务顺序、文件白名单和验收矩阵冻结；**没有授予任何实现、测试、DDL 或运行期执行权限**。
+LC03-01 已由 GPT-5.6 Luna Max 在冻结白名单内实现，并经 GPT-5.6 Sol 独立协议审查、边界扫描和直接测试复验后接受。LC03-02～05 尚未获得实现、DDL 或运行期执行授权。
 
 下一步须由决策所有者独立授权：
 
-> GPT-5.6 Luna Max 执行 M1-LC-03 `LC03-01` 共享 ACK V1 合同与直接测试。
+> GPT-5.6 Luna Max 执行 M1-LC-03 `LC03-02` collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用。
 
-LC03-01 被 Sol 验收前，LC03-02～05 保持 LOCKED。正式 V009/V012 落库、生产 MQTT broker/ACL/TLS 激活、资源压测、Linux PTY/锁互操作、Windows 发布资格、7 天稳定性和现场验证均继续 OPEN / NOT APPROVED。
+LC03-03 也已具备冻结边界，但仍需决策所有者单独授权；LC03-04～05 保持 LOCKED。正式 V009/V012 落库、生产 MQTT broker/ACL/TLS 激活、资源压测、Linux PTY/锁互操作、Windows 发布资格、7 天稳定性和现场验证均继续 OPEN / NOT APPROVED。
+
+## 13. LC03-01 验收记录（2026-08-27）
+
+### 13.1 实现结果
+
+- `iot-sink-api` 新增不可变 `TelemetryAckV1`、`TelemetryAckStatus`，并将共享 `AckCommand` 扩展为九字段进程内命令；
+- `iot-sink-biz` 新增严格 UTF-8/JSON codec 与 canonical ACK Topic parser；codec 固定 ACK V1 七字段语义，拒绝重复 key、错误类型、未知版本、非法身份、非法成功三元组及旧四字段 wire；
+- Topic parser 从 `IotDeviceTopicEnum.PROPERTY_DOWNSTREAM_REPORT_ACK` 取得模板，并以 `TelemetryRoute.ackTopic()` 做 canonical 回环校验，不引入旧 Topic 或 wildcard/shared filter；
+- 为保持 LC03-02 迁移前现有 SQLite 调用方可编译，`AckCommand` 暂留 deprecated 四参数进程内兼容构造器及旧只读视图；它不解析旧 wire，须在 LC03-02 完成调用方迁移后再次复核清理。
+
+### 13.2 Sol 独立验证
+
+Windows PowerShell 需把两个 `-D` 参数作为完整字符串传给 Maven；由于 `-am` 上游模块没有所选测试，机械增加 `-DfailIfNoTests=false`，测试类选择与冻结口径不变：
+
+```powershell
+cd DEVICE
+mvn -pl iot-sink/iot-sink-biz -am '-Dmaven.test.skip=false' '-DfailIfNoTests=false' '-Dtest=TelemetryAckV1ContractTest,TelemetryAckTopicContractTest,AckCommandContractTest' test
+```
+
+结果：
+
+- `AckCommandContractTest`：5/0/0/0；
+- `TelemetryAckTopicContractTest`：4/0/0/0；
+- `TelemetryAckV1ContractTest`：14/0/0/0；
+- 合计：23 tests，Failures=0，Errors=0，Skipped=0，28 个 reactor 全部 SUCCESS，`BUILD SUCCESS`；
+- 新增生产代码 `/telemetry/**`、`#`、`+`、`$queue`、`$share` 扫描零命中；旧 wire 名称仅存在于 codec 显式拒绝集合及上述 deprecated 进程内兼容桥；秘密与尾随空白扫描零命中，`git diff --check` 通过；
+- 未执行 PostgreSQL、EMQX、V011/U011、生产 DDL、压测或现场验证；并行 P02、WEB、项目介绍与 `DEVICE/.claude/` 工作树差异均未触碰。
