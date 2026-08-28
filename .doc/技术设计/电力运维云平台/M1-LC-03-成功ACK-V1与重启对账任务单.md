@@ -769,3 +769,37 @@ bash .scripts/mqtt/tests/lc03_success_ack_contract.sh
 ### 19.3 续作入口
 
 决策所有者选定路径后：路径 1 → Sol 修订任务单后重跑 §16.7 三段；路径 2 → 在目标宿主执行 §16.7 原命令。达成 6/0/0/0 后继续第二段（14 类 75/0/0/0）、第三段（28-reactor test-compile）、收工复算与 §16.5 start/end 比对。
+
+## 19. LC03-04A 第三次暂停检查点（2026-08-28，交接 Codex Sol）
+
+### 19.1 状态总览
+
+六个 04A 文件已创建且未提交（生产代码零改动）。**本机 Windows 全绿：直接 6/0/0/0、14 类回归 75/0/0/0、test-compile SUCCESS。容器（§16.7 三段禁网验收）稳定卡在 5/6**：仅 `TelemetryAckCombinedE2ETest.e2e01InsertedImmediateAckReachesCollector` 在容器内 `TimeoutException`，e2e02/03/负向/restart 三项均过。用户指示暂停并保存，供 Codex Sol 续作。
+
+### 19.2 已完成工作（在 §18 基础上新增）
+
+1. **容器 Maven 仓库环境全部打通**（这是 §18.2 的主障碍）：
+   - 仓库外 `LC03_M2_REPOSITORY` = `C:/Users/青见/lc03-m2-repo`（约 750MB，由联网容器 `mvn dependency:go-offline` 填充；iot-gb28181 的 `no.ecc.vectortile` 缺失为无关模块，不影响 iot-sink）；
+   - 手工修复的仓库缺陷：`bcutil-jdk18on`/`bcprov-jdk18on` 补 1.80.2 JAR（central，走 Clash 代理 7890）+ 裸 `maven-metadata.xml`（locale 排序对范围版本 `[1.80,1.81)` 解析必需）+ 清 `resolver-status.properties` + `_remote.repositories` 归一为 `local-repo=`；
+   - `surefire-junit-platform`/`surefire-providers`/`junit-platform-launcher` 三个 go-offline 漏拉的构件已从 central 补齐（含删除 `.lastUpdated` 失败标记）；
+   - 容器内 settings：`/tmp/lc03-mirror-settings.xml`（宿主 `/tmp` 下）把 `*` 镜像到 `file:///root/.m2/repository`——`-o` 离线模式会因 `_remote.repositories` 来源校验拒绝解析，必须用 file mirror。
+2. **Git Bash 路径问题**：需 `MSYS_NO_PATHCONV=1` + `-w //workspace/DEVICE`（双斜杠）+ `cygpath -w` 转换所有 Windows 挂载源路径。
+3. **noexec 问题链**：§16.7 的 `--tmpfs /tmp:rw,noexec,nosuid` 与 SQLite JDBC native 库解压后 dlopen 冲突 → 去 noexec 无效（Docker Desktop gVisor 对 tmpfs 仍拒绝）→ `/dev/shm` 也是 noexec → **最终可行方案：bind mount 宿主 `C:/Users/青见/lc03-tmpdir:/tmp`**（可执行、仓库外、用后可清）。此为对 §16.7 冻结命令的环境性偏离，语义等价（仍禁网/空 .env mask/仓库外临时）。
+4. **e2e01 容器超时分析**：失败模式为测试开始后 Vert.x eventloop-0 阻塞 2.3s（Netty 网络接口枚举 Mac 警告在前），`awaitSqliteStatus` 的 5s eventually 预算被冷启动吃掉。已尝试 fixture `startCollector()` 尾部加 `runOnContext` 预热 tick——**无效**（阻塞发生在测试方法内）。本机 6/6 与容器 5/6 差异纯环境性能。
+
+### 19.3 未决问题（Codex Sol 决策点）
+
+**e2e01 容器内 TimeoutException（5/6）**。选项：
+- A. 提高 fixture await deadline（如 5s→15s）：**违反 §16.2"eventually 上限固定 5 秒"冻结**，需 Sol 修订冻结单（记录理由：容器冷启动不属于业务事件等待）；
+- B. 保持 5s、按"容器 5/6 + 本机 6/6"判定接受：**违反 §16.7"6/0/0/0"冻结**，同样需修订；
+- C. 调整 e2e01 使耗时路径（如 Netty 初始化、类加载）在 @BeforeEach 完成（把 fixture 构造与 startCollector 全部计入预热，测试方法只做纯断言路径）：不改任何冻结数值，但需验证容器内效果；
+- D. 给 Vertx 实例设置 `maxEventLoopExecuteTime` 更大值（fixture 内 Vertx Options 可配）：消除 BlockedThreadChecker 警告但不消除真实阻塞，可能无效。
+建议从 C 开始（语义最干净），C 无效再评估 A（附修订理由）。
+
+### 19.4 续作步骤（Codex Sol）
+
+1. 读双基线 + 本任务单 §7.4、§16～§19；
+2. 复算九组 manifest（`C:\Users\青见\lc03_manifest_verify.py`，规则：locale 排序 = ASCII 大小写不敏感 + 中文目录拼音序）确认无漂移；
+3. 选 §19.3 路径修复 e2e01 容器超时；
+4. 三段验收（用 §19.2 成熟命令形态：`MSYS_NO_PATHCONV=1 docker run --rm --network none -v <repo>:/workspace -v C:/Users/青见/lc03-m2-repo:/root/.m2/repository -v /tmp/lc03-mirror-settings.xml:/root/.m2/settings.xml:ro -v <empty-env>:/workspace/DEVICE/.env:ro -v C:/Users/青见/lc03-tmpdir:/tmp -w //workspace/DEVICE maven:3.9.16-amazoncorretto-17-alpine mvn -s /root/.m2/settings.xml ...`）收集 6/0/0/0、75/0/0/0、28-reactor；
+5. 收工 manifest 复算 + §16.6 扫描 + 清 `DEVICE/D：tools：repository` 目录桩（昨日容器失败残留）与 `~/lc03-tmpdir` 内容；六个文件提交归档。
