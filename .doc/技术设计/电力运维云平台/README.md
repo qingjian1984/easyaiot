@@ -1,7 +1,7 @@
 # EasyAIoT 电力运维云平台 Technical Design 索引
 
-> 索引版本：1.14.4
-> 日期：2026-08-27
+> 索引版本：1.14.7
+> 日期：2026-08-28
 > 上游基线：[PRD-01 1.2.0](../../产品需求/电力运维云平台/PRD-01-站点设备与数据采集.md)、[PRD-02 1.2.2](../../产品需求/电力运维云平台/PRD-02-监控告警与安全控制.md)、[M1 Spec 集合基线 1.4.0](../../规格/电力运维云平台/M1-SPEC评审冻结记录.md)、[PRD-02 M2-M3 Spec 专项评审](../../规格/电力运维云平台/M2-M3-SPEC评审记录.md)、[PRD-02 SDD 评审处置](../../开发规范/PRD-02-SDD方案设计评审处置记录.md)、[ADR 决策集](../../架构决策/电力运维云平台/README.md)
 > 续作入口：[M1 SDD 进度与续作入口](./M1-SDD进度与续作入口.md)、[PRD-02 SDD 进度与续作入口](./PRD-02-SDD进度与续作入口.md)
 
@@ -38,6 +38,7 @@
 | [P02-M2-02 评审](./P02-M2-02-专项冻结评审记录.md) | 告警 DDL、Schema、Inbox/Outbox 与迁移边界 | Conditional Freeze / Local Tasks Only | 整体未冻结；只解锁 02A/02B 本地任务 |
 | [P02-M2-02A](./P02-M2-02A-告警迁移资产与临时库合同任务单.md) | V011/U011 review-only runner 与临时库合同 | [Implemented / Static-Verified](./P02-M2-02A-本地静态验收记录.md) | 58 项假命令合同通过；临时库合同 NOT RUN，任何真实 DDL 须另行授权 |
 | [P02-M2-02B](./P02-M2-02B-告警持久化与可靠事件任务单.md) | 正式 Schema、持久化、同事务编排和 Relay fake | Approved / Frozen for Local No-Transport Implementation | 禁止生产 transport、旧来源、API 与 capability |
+| [P02-M2-02C1P-G2-03R1C](./P02-M2-02C1P-G2-03R1C-TCP-JSON最小集成前置审计与设计冻结记录.md) | `tcp.json` 真实调用链、跨模块 durable boundary、ACK/故障与分包白名单 | Preflight Complete / Conditional Design Freeze | B-01～B-06 未关闭；runtime、DDL、transport、协议启用均未授权 |
 
 ## M1 本地收口任务包
 
@@ -46,7 +47,7 @@
 | [M1-LC-01](./M1-LC-01-Inbox接收结果合同任务单.md) | Inbox 新增/重复/碰撞逐消息结果合同 | Implemented / Verified-Local | LC01-01～14 与模块编译验证通过；未提前实现 ACK、审计、DDL、投影或 Store 变更 |
 | [M1-LC-02A](./M1-LC-02A-Collector版本配置应用链任务单.md) | 内部/NODE HMAC、ConfigSnapshot 1.1、iot-node 派发、NODE 原子落盘与 collector 本地应用 | Implemented / Verified-Local | LC02A-0～4 全部经 Sol 接受；运行期资格仍独立 OPEN |
 | [M1-LC-02](./M1-LC-02-遥测Topic与产品路由身份收口任务单.md) | canonical 遥测 Topic 与产品路由身份持久化 | Implemented / Verified-Local | LC02-10 及 R1～R6 全部 COMPLETE / SOL-ACCEPTED；正式迁移与生产激活仍 OPEN |
-| [M1-LC-03](./M1-LC-03-成功ACK-V1与重启对账任务单.md) | 成功 ACK V1、collector 精确订阅、center 即时发送与重启补发 | In Progress（LC03-01/02/03 SOL-ACCEPTED；LC03-04 SOL-FROZEN） | 任务单 1.1.0 §16 已固定 04A 确定性组合 E2E/fixture/五故障点与 04B 真实隔离 PG/EMQX 双授权、保护摘要及最终命令；两包均 NOT-YET-AUTHORIZED，本轮未执行 V012/PG/EMQX 或生产变更；LC03-05 LOCKED |
+| [M1-LC-03](./M1-LC-03-成功ACK-V1与重启对账任务单.md) | 成功 ACK V1、collector 精确订阅、center 即时发送与重启补发 | In Progress（LC03-01/02/03 SOL-ACCEPTED；LC03-04A IMPLEMENTED / 容器验收环境受阻） | 04A 六文件已实现：本地 6/0/0/0 + 回归 75/0/0/0；容器稳定 5/6（e2e01 容器专属超时，§19）；待决策所有者选重冻结预算或换宿主；04B/PG/EMQX/V012/生产变更 NOT-AUTHORIZED，LC03-05 LOCKED |
 
 ## 状态规则
 

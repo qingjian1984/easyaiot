@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "fixtureId": "lc03-04-e2e-v1",
+  "tenantId": "1",
+  "productIdentification": "lc03-product",
+  "deviceIdentification": "lc03-device",
+  "requestId": "b1c2d3e4-0000-4000-8000-000000000001",
+  "messageId": "2ca80f25-4b6c-443f-a114-1b3df0a8cdf9",
+  "collisionRequestId": "b1c2d3e4-0000-4000-8000-000000000002",
+  "upstreamTopic": "/iot/lc03-product/lc03-device/property/upstream/report",
+  "ackTopic": "/iot/lc03-product/lc03-device/property/downstream/report/ack",
+  "firstPersistedAtMs": 1753900800000,
+  "propertyCode": "voltage-a",
+  "siteCode": "site-lc03",
+  "acceptedValue": "220.5",
+  "collisionValue": "221.0",
+  "secrets": []
+}

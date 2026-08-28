@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0",
+  "canonicalizationVersion": "jcs-rfc8785-v1",
+  "messageId": "2ca80f25-4b6c-443f-a114-1b3df0a8cdf9",
+  "requestId": "b1c2d3e4-0000-4000-8000-000000000002",
+  "tenantId": "1",
+  "siteCode": "site-lc03",
+  "deviceIdentification": "lc03-device",
+  "propertyCode": "voltage-a",
+  "value": "221.0",
+  "valueEncoding": "decimal-string",
+  "quality": "GOOD",
+  "dataPriority": "NORMAL_TELEMETRY",
+  "collectedAt": "2026-07-30T16:00:00Z",
+  "sentAt": "2026-07-30T16:00:00Z",
+  "sequence": 1,
+  "source": "modbus-rtu",
+  "configVersion": 1
+}

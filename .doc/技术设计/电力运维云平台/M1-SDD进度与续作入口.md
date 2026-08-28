@@ -1,8 +1,8 @@
 # M1 SDD 进度与续作入口
 
-> 检查点日期：2026-08-27
+> 检查点日期：2026-08-28
 > Git 分支：`cfdqiot`（LC02 验收证据基线提交 `849f524eb`；本文件不宣称本地后续提交已经推送）
-> 当前阶段：OPEN03 门禁 1/2/3/6 已 CLOSED-LOCAL；LC02A-0～4 与 M1-LC-02 全链已 Implemented / Verified-Local。R6 证据已由 Sol 接受并以提交 `849f524eb` 独立保存。M1-LC-03 的 `LC03-01`、`LC03-02`、`LC03-03` 均已实现并经 Sol 独立复核为 `COMPLETE / SOL-ACCEPTED`：LC03-01 23/23；LC03-02 完整 54/54、冻结直接集 22/22；LC03-03 三轮 12 类 59/59 + test-compile SUCCESS（真实 JDBC 按 NOT_RUN_LOCAL_ENV 为 0 run），并完成 `claimPending` 注释纠偏与即时 ACK ingress 接线修复（任务单 1.1.0 §15.6）。2026-08-27，Sol 已在 §16 修正进度/路径漂移并最终冻结 `LC03-04`：04A 只允许确定性组合 E2E、fixture 与假服务五故障点测试；04B 才允许真实隔离 Linux Docker PostgreSQL/EMQX/SQLite，二者必须分别授权。当前状态 `LC03-04 SOL-FROZEN / NOT-YET-AUTHORIZED`，本轮未实现测试/脚本、未运行 V012/U012/PG/EMQX、未改生产环境；LC03-05 保持 LOCKED。临时 V012 合同、正式 V009/V012 落库、生产 MQTT broker/ACL/TLS、`LC02-09-RUNTIME-01` 和发布/现场资格仍 OPEN / NOT APPROVED；TQ 查询/展示面已部署上线，MQTT→Inbox 真实容器链路已打通（见 2026-08-24 记录）
+> 当前阶段：OPEN03 门禁 1/2/3/6 已 CLOSED-LOCAL；LC02A-0～4 与 M1-LC-02 全链已 Implemented / Verified-Local。M1-LC-03 的 LC03-01～03 均已 `COMPLETE / SOL-ACCEPTED`。LC03-04A 已由 Sol 按 §17.4 续作**实现完毕**：九组 start manifest 复算全 OK（逆向出 locale 排序规则）、§7.4 六个文件全部创建（fixture/两测试类各 3 项/三个 JSON 资源，含无场景副作用的启动预热探针）、本地直接 6/0/0/0 + 14 类回归 75/0/0/0 全绿；§16.7 容器验收完成外部 M2 仓库建设（`~/lc03-m2-repo`，补齐 go-offline 遗漏构件）与两项环境适配（overlay tmpdir、file-mirror settings）后**稳定 5/6**——唯 e2e01 在容器内因首次场景 eventloop ~3 秒停顿吃掉 §16.2 冻结的 5 秒 eventually 预算超时（非测试/生产缺陷，本地持续 6/6，两种预热缓解无效）。按 §16.7 纪律未续跑第二/三段。当前状态 `LC03-04A IMPLEMENTED / CONTAINER-5of6-ENV-BLOCKED`（任务单 1.1.2 §19 检查点），**待决策所有者二选一**：重冻结容器预算（10s）或换 Linux 宿主重跑。六个 04A 文件未提交；LC03-04B、PG/EMQX、V012/U012、正式落库、生产变更和 LC03-05 仍禁止/锁定；TQ 查询/展示面已部署上线，MQTT→Inbox 真实容器链路已打通（见 2026-08-24 记录）
 > 说明：本文件用于下次会话恢复上下文；状态以各正式文档为准
 
 ## 当前快照与下一步（2026-08-13）

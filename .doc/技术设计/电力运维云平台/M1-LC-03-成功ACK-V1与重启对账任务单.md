@@ -1,8 +1,8 @@
 # M1-LC-03：成功 ACK V1 与重启对账任务单
 
-> 状态：In Progress（LC03-01～03 COMPLETE / SOL-ACCEPTED；LC03-04 SOL-FROZEN / NOT-YET-AUTHORIZED）
-> 版本：1.1.0
-> 日期：2026-08-27
+> 状态：In Progress（LC03-01～03 COMPLETE / SOL-ACCEPTED；LC03-04A IMPLEMENTED / CONTAINER-5of6-ENV-BLOCKED（§19，待决策所有者选定路径）；LC03-04B NOT-AUTHORIZED）
+> 版本：1.1.2
+> 日期：2026-08-28
 > 架构负责人：GPT-5.6 Sol
 > 计划实现执行者：GPT-5.6 Luna（max reasoning；须逐包独立授权）
 > 双基线：EasyAIoT 项目开发宪法 1.6.0 / 平台功能计划 1.5.0
@@ -202,7 +202,7 @@ received_at_ms + ack_sent_at_ms + ack_attempts
 | LC03-01 | 共享 ACK V1 类型、codec、Topic parser 与旧 wire 拒绝 | 七字段 DTO、严格 codec、直接合同测试 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
 | LC03-02 | collector 精确订阅、启动/APPLIED 门禁与成功 ACK 关联应用 | subscription coordinator、runtime ordering、SQLite 状态合同 | COMPLETE / SOL-ACCEPTED（2026-08-27） |
 | LC03-03 | V012 候选、center dispatch repository、即时 ACK 与 10 秒扫描 | SQL 候选、JDBC repository、publisher/service/scanner | COMPLETE / SOL-ACCEPTED（2026-08-27，§15.6 含两处偏离修复）；临时 PG 合同脚本已备未执行 |
-| LC03-04 | collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点 | 04A 确定性 fixture/假服务组合测试；04B 真实隔离 broker/PG | SOL-FROZEN / NOT-YET-AUTHORIZED（§16）；04A、04B 必须分别授权 |
+| LC03-04 | collector↔EMQX↔center↔PG↔SQLite 组合 E2E 与重启故障点 | 04A 确定性 fixture/假服务组合测试；04B 真实隔离 broker/PG | 04A IMPLEMENTED：本地 6/0/0/0、容器稳定 5/6（e2e01 容器专属超时，§19 待决策路径）；04B NOT-YET-AUTHORIZED |
 | LC03-05 | 全模块回归、保护扫描、文档收口 | Verified-Local 证据 | LOCKED，待 LC03-04 验收 |
 
 LC03-02 与 LC03-03 在 LC03-01 被 Sol 接受后可由 Sol 判断是否并行；LC03-04 必须等待两者均完成。每个包都须由决策所有者独立授权 GPT-5.6 Luna（max reasoning），实现者不得自行进入下一包或 commit。
@@ -685,3 +685,87 @@ bash .scripts/mqtt/tests/lc03_success_ack_contract.sh
 - 04A 完成后状态只能转 `LC03-04A COMPLETE / SOL-ACCEPTED；04B NOT-YET-AUTHORIZED`；
 - 只有 04B 的真实隔离证据也由 Sol 接受后，LC03-04 才可整体转 `COMPLETE / SOL-ACCEPTED` 并解锁 LC03-05；
 - 下一条可执行授权文本固定为：`授权 GPT-5.6 Luna Max 执行 M1-LC-03 LC03-04A 确定性组合 E2E、fixture 与假服务故障点测试；不得执行 LC03-04B 真实隔离 PostgreSQL/EMQX。`
+
+## 17. LC03-04A 暂停检查点（2026-08-27）
+
+### 17.1 调度与授权事实
+
+- 决策所有者已授权 GPT-5.6 Luna Max 执行 LC03-04A，并明确禁止 LC03-04B；两个 Luna Max 代理实例均长时间没有 checkpoint、工具输出或文件写入，已被安全中断，没有静默替换为其他模型；
+- 决策所有者随后明确授权 GPT-5.6 Sol 接管 LC03-04A，继续禁止 LC03-04B；Sol 已开始保护/API 前检，但在新增文件前按决策所有者要求暂停并保存进度；
+- 此暂停不撤销 LC03-04A 授权，但任何续作模型仍必须完整遵守 §7.4、§16.2～§16.7；04B、正式 V012 落库和生产环境变更仍未授权。
+
+### 17.2 已完成前检
+
+- 当前检查点 HEAD 为 `74eb61285`，`4eff90c96` 与 `fc12af3ce` 均为其 ancestor；
+- 双基线仍为宪法 1.6.0 / 平台计划 1.5.0，单文件 SHA-256 分别保持 `76BF30903A5A62C957A75B57E24080AA7132DE6992D56C262EEAFBE7BE553C4D`、`F0E5734C8FADA6D0E4DAB98F7D12F58940077F9C60AA8DA42AC8EF45C6F69869`；
+- `fc12af3ce..HEAD` 未观察到 LC03 生产、既有直接测试或 V012/U012/LC03 migration 保护路径修改；§16.5 九组摘要仍须由续作模型在真正开工前完整复算，不能把本条路径 diff 核对替代 manifest 门禁；
+- Sol 已读取并确认可复用接口：真实进程内 Vert.x MQTT server、`CollectorMqttAckSubscriber`、`CollectorAckSubscriptionCoordinator`、真实 `SqliteTelemetryOutbox`、`CenterTelemetryIngressHandler`、`CenterTelemetryAckService`、`TelemetryAckReconciliationTask`；确定性 fake 只承担 authority、durable Inbox/dispatch/store 与两种 fault barrier。
+
+### 17.3 尚未执行与零产物
+
+- §7.4 的 3 个 Java 测试/fixture 与 3 个 JSON 资源均尚未创建；LC03-04A 源码 diff 为零；
+- §16.7 的直接 6 项、14 类 75 项回归和 28-reactor `test-compile` 均 `NOT RUN`；
+- PostgreSQL、EMQX、V012/U012、`.scripts/mqtt/tests/lc03_success_ack_contract.sh`、`TelemetryAckRealBrokerPostgresE2ETest` 和生产环境变更全部 `NOT RUN / NOT CREATED`；
+- 工作树存在 P02/TD-003/events/`.claude` 等并行范围外改动，LC03 续作不得触碰、归属或提交它们，实际清单须在下一次开工重新读取。
+
+### 17.4 下一次直接续作入口
+
+下一模型从以下步骤继续，不需重新设计 LC03-04：
+
+1. 完整读取双基线、根 `AGENTS.md`、本任务单 §7.4 与 §16～§17；
+2. 重新读取工作树并完整复算 §16.5 九组 start manifest；任一漂移立即 STOP；
+3. 只新增 §7.4 的六个 04A 文件，按 §16.2～§16.3 实现两个类各 3 个测试；
+4. 严格执行 §16.7 三段 Linux Docker 禁网验收并收集 `6/0/0/0`、`75/0/0/0`、28-reactor SUCCESS；
+5. 复算保护 start/end、静态禁止扫描和零残留，交 Sol 独立复核；不得进入 §16.8。
+
+## 18. LC03-04A 第二次暂停检查点（2026-08-27，用户主动中止）
+
+### 18.1 已完成（本轮 Sol 接管执行）
+
+- **§17.4 步骤 2 完成**：九组 start manifest 全部复算通过。关键发现：§16.5 冻结聚合值的排序规则是 **locale 排序**（ASCII 大小写不敏感 + 中文目录拼音序，即 zh_CN/en locale 的 `sort` 行为），不是字节序。BASELINES 需 [计划, 宪法] 顺序、LC03_PRODUCTION 需 case-insensitive 排序；九组均在复现规则下逐组匹配冻结值，无漂移。复算脚本存于 `C:\Users\青见\lc03_manifest_verify.py`（工具性质，未入仓库）；
+- **§7.4 六个 04A 文件全部创建**：三个 JSON 资源（fixture-manifest 固定 tenantId=1/lc03-product/lc03-device/合法 UUID/canonical Topic/首次 persistedAt，accepted 与 collision 同 messageId 不同 canonical 内容）+ `Lc03AckE2eFixture`（真实 Vert.x MQTT server + 真实 SQLite outbox 文件 + 生产 collector subscriber/coordinator/ack service/scanner/codec；DurableFakeInbox/DispatchPort/Store 跨重启保留；FaultInjectingAckPublisher 两种单次 barrier 由 latch 驱动；ACK 经 server 端 endpoint 下发给 collector 精确订阅）+ 两个测试类各 3 项；
+- **直接验收（本机 Windows）**：`TelemetryAckRestartReconciliationTest` 3/3 + `TelemetryAckCombinedE2ETest` 3/3 = **6/0/0/0**，覆盖 §16.3 E2E-01～05 全部五个场景与负向矩阵（collision/requestId/persistedAt 错配/null 状态/未知 messageId → 零成功 ACK、零 sent mark、SQLite 停留 PENDING）；
+- **14 类回归（本机 Windows）**：**75/0/0/0**（JDBC 类 0 run 非 skip），与 §16.7 冻结计数完全一致；
+- **§16.6 静态禁止扫描**：六个新文件 `/telemetry/`、`$queue`、`$share`、broad wildcard、拒绝审计关键词零命中；`git diff --check` 通过；未修改任何生产 Java/现有测试/POM/SQL/配置。
+
+### 18.2 受阻项（§16.7 三段 Docker 禁网验收 NOT RUN）
+
+本机 Docker（Linux 29.7.2）+ 冻结镜像 `maven:3.9.16-amazoncorretto-17-alpine`（ID `53215f45dda1` 与 §16.4 一致）可用，但容器内 Maven 依赖解析受阻：
+
+1. 项目 POM 声明 `huaweicloud` 仓库，本机 `~/.m2` 构件的 `_remote.repositories` 元数据不含该来源，`-o` 离线模式拒绝解析；
+2. 改用容器内 settings.xml 把 `*` 镜像到 `file:///root/.m2/repository` 后，`bcpkix-jdk18on-1.80.pom` 的范围依赖 `bcutil-jdk18on:[1.80,1.81)` 解析失败——本机仓库 `bcutil-jdk18on/1.80/` 缺 JAR（已从 central 补齐 JAR + 裸 `maven-metadata.xml`，并清理 `resolver-status.properties` 陈旧错误缓存），第四次尝试进行中被用户中止；
+3. 已清理全部 `lc03-04a-*` 容器，无残留。
+
+**评估**：这是本机 Maven 仓库元数据与容器隔离解析的环境性问题，不是测试/代码缺陷（同命令本机全绿）。§16.5 的 `LC03_M2_REPOSITORY`（仓库外独立 Maven repository）正是为此设计——用完整独立仓库（曾在联网容器内执行过 `mvn dependency:go-offline` 的）即可规避本机元数据问题。
+
+### 18.3 下一次续作入口
+
+1. 准备仓库外 `LC03_M2_REPOSITORY`：联网容器内对 DEVICE 执行 `mvn dependency:go-offline`（或等价 populate），确保范围版本元数据完整；
+2. 重跑 §16.7 三段命令（direct 6、regression 75、test-compile 28-reactor），收集完整输出；
+3. 收工复算九组 manifest（用 §18.1 的 locale 排序规则）+ §16.6 扫描 + 零残留；
+4. 交 Sol 独立复核（含对本轮六个新文件代码审阅与 §16.2 逐条核对），转 `LC03-04A COMPLETE / SOL-ACCEPTED`。
+
+六个新文件未提交（工作区），生产代码零改动；LC03-04B 仍 NOT-AUTHORIZED。
+
+## 19. LC03-04A 第三次暂停检查点（2026-08-28，环境性受阻）
+
+### 19.1 §18.3 续作步骤执行结果
+
+1. **外部 M2 仓库就绪**：`~/lc03-m2-repo`（~750MB）由联网容器 `dependency:go-offline` 填充；随后补齐 go-offline 遗漏的三个关键构件（均从 central 直取）：`bcutil-jdk18on-1.80.jar`（范围 `[1.80,1.81)` 解析）、`bcprov-jdk18on-1.80.2.jar`、`surefire-junit-platform-3.0.0-M5`（jar+pom）、`surefire-providers-3.0.0-M5.pom`、`junit-platform-launcher-1.8.2`；并为 bouncycastle 三构件补裸 `maven-metadata.xml`、清理 `resolver-status.properties` 陈旧错误缓存、统一 `_remote.repositories` 来源标记。本机 settings.xml 的 `localRepository=D:\tools\repository` 是 §18.2 挂载冲突根源，容器内一律用注入的 file-mirror settings 绕开；
+2. **容器内运行环境两项偏离（已记录，未改 §16.7 命令语义）**：a) SQLite JDBC 需解压 native `.so` 到可执行目录，本 Docker Desktop 对 tmpfs/shm 一律 noexec、gVisor 对 Windows bind-mount 的 .so 间歇拒绝 dlopen——最终以 `-Djava.io.tmpdir=/root/lc03-tmp`（容器 overlay FS，容器内 mkdir 预建）落 SQLite 临时文件后测试可运行；b) 无网络下 `-o` 因 `_remote.repositories` 元数据拒绝解析，改用 `file:///root/.m2/repository` 镜像 settings（禁网语义不变）；
+3. **§16.7 第一段（direct）容器结果：稳定 5/6**——`TelemetryAckRestartReconciliationTest` 3/3 全绿；`TelemetryAckCombinedE2ETest` 中 e2e02、negative 全绿，**唯 e2e01 在容器内超时**（本地持续 6/6）。四轮复现一致。故障特征：e2e01 期间 Vert.x eventloop-0 被阻塞约 2.2–3.6 秒（BlockedThreadChecker 记录），吃掉 §16.2 冻结的 5 秒 eventually 预算后 `awaitSqliteStatus` 超时；e2e02 起全部正常。已尝试两种缓解均无效：(a) fixture 启动时 eventloop tick 预热；(b) 首次发布全路径预热（真实 server→collector 投递一条未知 messageId 探针 + SQLite writer 线程 append 探针，均无场景副作用）。第三种缓解（context-hop 发布）亦未改变。surefire 报告计数 2 而非 3 的显示差异源于 surefire 3.0.0-M5 的 RunListenerAdapter 在首测失败时类加载边界缺陷（PojoStackTraceWriter CNFE）吞掉报告行——测试本体确实执行且失败于 TimeoutException，非未执行；
+4. **§16.7 第二/三段未执行**：第一段未达 6/0/0/0 判定，按 §16.7"任一失败立即停止"不再续跑；
+5. 工作区并行提示：G2-03R1 TCP-JSON 会话的未提交文件（`codec/tcp`、`deviceevent/**`、`g2-03r1a` 资源）与 LC03 无关，本轮一次容器编译失败（文件半写竞态）后自行恢复，未触碰。
+
+### 19.2 Sol 判定与请求决策
+
+- **非测试/生产缺陷**：同命令本机 Windows 持续 6/6；容器内 e2e02～05、negative 均过；e2e01 失败模式为容器专属的首次场景 eventloop 停顿（gVisor/Docker Desktop 环境），两次语义无关的预热缓解无效，根因不在被测合同；
+- **不篡改结果**：按 §16.7 纪律，5/6 不得报告为通过；§16.2 的 5 秒 eventually 为冻结值，Sol 不擅自放宽；
+- **两条可行路径，请决策所有者选择**：
+  1. **重冻结容器预算**：Sol 出 1.1.2 修订——容器内（且仅容器内）eventually 上限调至 10 秒（本地保持 5 秒），理由为环境冷启动不属于被测语义；随后重跑三段；
+  2. **换执行宿主**：在性能正常的 Linux CI/主机按 §16.7 原命令重跑（现有外部 M2 仓库可复用）；
+- 六个 04A 文件保持未提交（含本轮新增的预热探针与 context-hop，均无场景副作用）；生产代码零改动；九组 manifest 本轮复算仍全 OK。
+
+### 19.3 续作入口
+
+决策所有者选定路径后：路径 1 → Sol 修订任务单后重跑 §16.7 三段；路径 2 → 在目标宿主执行 §16.7 原命令。达成 6/0/0/0 后继续第二段（14 类 75/0/0/0）、第三段（28-reactor test-compile）、收工复算与 §16.5 start/end 比对。
